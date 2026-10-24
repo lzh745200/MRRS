@@ -1,28 +1,37 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.0
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.1
 
-![Version](https://img.shields.io/badge/version-1.18.0-blue)
+![Version](https://img.shields.io/badge/version-1.18.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.17）
+## 本版亮点（v1.18.1）
 
-- **介质链路治理**：数据包/授权包/权限包/配置包四类导入统一**整包查重（SHA256）+ 导入台账 + 回执**，
-  同一包重复导入默认 409 拦截、可显式放行；**来源单位码核对**防"上级/邻县包导进本单位"后数据挂错组织树
-- **系统自检**：`GET /api/v1/self-check` + 设置页卡片，一次体检 6 项（单位码 / 组织层级 / 待审核账号 /
-  账号锁定 / PII 密钥指纹 / 介质导入近况）
-- **W27 全栈收敛**：三类包完整性校验（checksum 强制 + Ed25519 验签）、经费禁止自批、
-  跨机业务键修复（修复同组织两台机器导入时记录被覆写/丢弃的 P0 缺陷）、迁移 r36~r41
+- **登录页务实化改造**：修掉「注册账户」死链（默认不开放自助注册却无条件显示，现已按 `public-config` 显隐、
+  取不到即隐藏）；被锁定/限流时显示**倒计时并禁用按钮**；失败即清空密码并聚焦；CapsLock 提示；
+  2FA 满 6 位自动提交；背景 12 张 3.51MB 轮播 → 1 张静态图（**净减 3.16MB**）
+- **顺手修掉的真 bug**：`authStore.login` 读 `data.message` 而 FastAPI 返回 `detail` →
+  后端中文错误文案全部丢失（用户看到 `Request failed with status code 423`），已按
+  `detail → message → err.message` 取值并透出 `httpStatus`
+- **R35 三层对齐门禁**：一次比对 **前端 API 路径 ↔ 后端路由**、**ORM 模型 ↔ 数据库 schema**、
+  **前端 TS interface ↔ 后端 Pydantic 字段**，专治"单测全绿、真机全废"；上线即抓到两处契约漂移
+  （行业模型列名与 `r42` 迁移不一致、数据上报 schema 字段名与 service 返回不一致）并已修复
+- **100% 覆盖率门禁真绿复验**：发现 `backend/.coveragerc` 被误删导致 `fail_under=100` 静默失效
+  （12/12 段"通过"实为 99%），恢复后补齐 7 处缺口，现为 **45,782 语句 / 11,376 分支，Miss 0 / BrPart 0**
+- **离线可靠性**：备份携带 PII 密钥指纹（跨机恢复 409 + 显式放行 + 审计）、备份启动补跑、
+  `OFFLINE_MODE` 统一开关、`/health` 暴露时钟漂移与 WAL 状态
+- **介质链路治理**（v1.17.0 起）：四类包统一**整包查重（SHA256）+ 导入台账 + 回执**、
+  **来源单位码核对**防包导错组织树、`GET /api/v1/system/self-check` 一次体检 6 项
 
 ## 项目状态
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **14,404 用例**, 1 skipped（本机分段实测；CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **7,020 passed**（339 文件）, 0 失败 |
+| 后端测试 | **14,577 用例**, 1 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **7,023 passed**（329 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -36,16 +45,18 @@
 | Sass | 1.101.0（modern-compiler API） |
 | 角色体系 | 4 核心角色 (super_admin/admin/user/viewer) |
 | UI 设计系统 | **UI v2.0**：主题 3 套（军绿默认 / 深色大屏 / 户外高对比）+ 显示偏好 4 档（字号/密度/高对比/简化，localStorage `ui:prefs`）+ 统一 Token/组件类 |
-| 前端质量门禁 | 视觉回归基线 10 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 345→305（57 个文件；目标 ≤200） |
+| 前端质量门禁 | 视觉回归基线 10 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 **146**（40 个文件；基线 345 → 146，只紧不松） |
 
 | 预防门禁 | 6 个棘轮扫描器（os._exit / 上传限长 / 无界读 / 子进程编码 / 目录替换 / 周期任务注册）接入 CI，NEW=0 |
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-24（v1.17.3）— 后端 14,404 用例（1 skipped）+ 行/分支覆盖率 100.00%
-> （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，最终段由 `.coveragerc` fail_under=100 单一来源判定）；
-> 前端 **329 文件 / 6,995 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
-> flake8 0 / 6 项棘轮门禁 NEW=0（另加 2 道 W18 防腐门禁）/ vue-tsc 0 / eslint 0 / 硬编码色 154（棘轮 154/154）/ 版本单一来源一致 / Alembic 单 head（61 版本）
+> **上次全量验证**: 2026-10-24（v1.18.1）— 后端 14,577 用例（1 skipped）+ 行/分支覆盖率 **100.00%**
+> （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，最终段由 `.coveragerc` fail_under=100
+> 单一来源判定；45,782 语句 / 11,376 分支，Miss 0 / BrPart 0）；
+> 前端 **329 个 `.test.ts` / 7,023 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
+> flake8 0 / vue-tsc 0 / eslint 0 / 硬编码色 146（棘轮 146/146）/ 版本单一来源一致 /
+> Alembic 单 head（62 版本）/ 门禁脚本全绿（含三层对齐、零断言棘轮、同步覆盖率、菜单对齐、单 head 迁移）
 
 ## 快速开始
 
@@ -209,7 +220,7 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 
 ```
 ├── backend/app/              # 后端（FastAPI，376 个 py / 12 万+ 行）
-│   ├── api/v1/               # API 接口层（100 个路由模块文件 = 55 顶层 + 5 子包；849 个端点）
+│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 子包；849 个端点）
 │   ├── core/                 # 核心：config, security, database, transaction, cache, maintenance(维护闸门)
 │   ├── models/               # SQLAlchemy 数据模型（64 个文件 / 124 张表，含 W22 新增 household/media/consumption）
 │   ├── services/             # 业务逻辑层（107 个服务文件 / 5 个子包，含 ocr_service / household_service / media_service）

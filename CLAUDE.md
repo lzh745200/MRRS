@@ -66,7 +66,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,424 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,577 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -168,6 +168,23 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   门禁：`scripts/check_menu_alignment.py` 规则 A~E（路径可解析 / `meta.menuKey` 合法 / 无孤儿 key / 路径不重复 / 板块唯一）、
   `scripts/check_console_tab_mapping.py`（后端 console tab key ↔ 前端 `TAB_COMPONENTS` 双向一致，
   防"有菜单无组件"功能静默消失）、`src/utils/navLinks.ts` + `nav-links.test.ts`（导航 path 必须可解析）。
+- **三层对齐门禁** (2026-10-24, R35): `scripts/check_stack_alignment.py` 比对
+  **前端接口层 ↔ 后端路由/Pydantic ↔ 数据库 schema** 三层，防"单测绿、真机废"的契约漂移
+  （v1.17.2 的 `/api/v1/system/self-check` 恒 404、`OrganizationCreate` 漏 `code` 字段即此类 ——
+  单测用 MagicMock 传 `data` 不会暴露）。三条轴：
+  - **A 路径**：`frontend/src/api/*.ts` 的调用路径必须命中后端真实路由
+    （归一化：剥查询串 → `${x}`/`{x}` 统一为 `{}` → 去掉 `/api/v1`；注释里的示例路径不计）。
+  - **B 模型↔库**：ORM 模型声明的表/列必须与数据库一致。基线固定为
+    **"临时空库 + `alembic upgrade head`"**，**不读本机开发库** —— 否则本地脏数据会让门禁结果漂移，CI 也跑不了。
+  - **C 字段**：前端 TS interface 与后端 Pydantic 字段必须一致。
+    配对方式是**按 URL 解析到端点 + `response_model` 同名**（不是按类名）——
+    仓库存在大量**同名不同契约**的类（前端 `types/organization.ts` 的 `DataPackageManifest` 与后端
+    `schemas/data_package.py` 的同名类完全是两回事；`AggregateQuery`/`MonitorSnapshot`/`Fund` 同理），
+    按类名配对会产生大量假阳性。字段名经 `CamelToSnakeMiddleware` 的规则归一为 snake_case 后比较。
+  - 门禁自身：`--json` 输出纯 JSON（应用启动日志改道 stderr），单测
+    `backend/tests/unit/test_stack_alignment_gate_r35.py`（含负向用例：注入坏路径必须被抓到并非 0 退出）。
+  - **新增/修改端点或前端 api 函数后必须跑这个门禁**，否则 CI 的 `Stack alignment check` 会拦。
+
 - **W22 功能迭代** (2026-10-18, v1.14.0):
   - **一户一档**：新表 `households` / `household_members` / `household_risk_records`；API `/households/*`；
     预警规则（连续未走访 >90 天且非一般户→medium；大病/住房不安全/突发困难→high，服务层实时计算不落库）；

@@ -201,7 +201,7 @@ function header(s, kicker, title) {
     color: TEXT, fontFace: F, margin: 0 });
   s.addText(String(pageNo).padStart(2, "0"), { x: W - 1.0, y: H - 0.55, w: 0.5, h: 0.3,
     fontSize: 11, color: MUTED, fontFace: F, align: "right", margin: 0 });
-  s.addText("帮扶管理信息系统 v1.17.2", { x: M, y: H - 0.55, w: 4, h: 0.3,
+  s.addText("帮扶管理信息系统 v1.18.1", { x: M, y: H - 0.55, w: 4, h: 0.3,
     fontSize: 10.5, color: MUTED, fontFace: F, margin: 0 });
 }
 function card(s, x, y, w, h, fill = BG) {
@@ -279,7 +279,7 @@ function sectionSlide(num, title, sub, items) {
     { text: "多机协同 · 军工级安全", options: {} },
   ], { x: 1.0, y: 4.75, w: 6, h: 0.85, fontSize: 16, color: LIGHT, fontFace: F,
     paraSpaceAfter: 6, margin: 0 });
-  s.addText("V1.17.2  |  2026-10-24  |  FastAPI + Vue 3 + Electron + SQLite", {
+  s.addText("V1.18.1  |  2026-10-24  |  FastAPI + Vue 3 + Electron + SQLite", {
     x: 1.0, y: 6.35, w: 10, h: 0.4, fontSize: 12.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 
@@ -297,7 +297,7 @@ function sectionSlide(num, title, sub, items) {
     ["02", "技术架构", "技术栈 · UI v2.0 · R35 精细化 · 分层设计"],
     ["03", "功能模块", "六大板块 · 一户一档入口迁移 · 影像库/消费帮扶/OCR"],
     ["04", "安全体系", "四角色权限 · PII 加密 · 审计合规"],
-    ["05", "质量工程", "20,809 项自动化测试 · 视觉回归 · CI/CD"],
+    ["05", "质量工程", "21,600 项自动化测试 · 视觉回归 · CI/CD"],
     ["06", "部署运行", "双平台安装包 · 备份升级 · 版本历程"],
   ];
   toc.forEach((t, i) => {
@@ -371,17 +371,17 @@ sectionSlide("01", "系统概述", "SYSTEM OVERVIEW", [
 {
   const s = p.addSlide();
   header(s, "01 系统概述", "一眼看懂：系统规模");
-  stat(s, 0.55, 2.1, 3.0, "13,942", "后端自动化测试用例");
-  stat(s, 3.9, 2.1, 3.0, "6,867", "前端自动化测试用例");
+  stat(s, 0.55, 2.1, 3.0, "14,577", "后端自动化测试用例");
+  stat(s, 3.9, 2.1, 3.0, "7,023", "前端自动化测试用例");
   stat(s, 7.25, 2.1, 3.0, "104", "菜单 key（含 16 legacy）");
   stat(s, 10.6, 2.1, 2.4, "144", "业务页面视图");
   s.addShape(p.shapes.LINE, { x: M, y: 3.95, w: W - 2 * M, h: 0, line: { color: "D8E0DA", width: 1 } });
-  stat(s, 0.55, 4.35, 3.0, "100", "API 路由模块（55 顶层 + 5 子包）", PRIMARY_L);
-  stat(s, 3.9, 4.35, 3.0, "107", "后端服务文件（5 子包）", PRIMARY_L);
-  stat(s, 7.25, 4.35, 3.0, "122", "数据表（模型计数）", PRIMARY_L);
+  stat(s, 0.55, 4.35, 3.0, "52", "API 路由模块（52 顶层 + 5 子包）", PRIMARY_L);
+  stat(s, 3.9, 4.35, 3.0, "112", "后端服务文件（5 子包）", PRIMARY_L);
+  stat(s, 7.25, 4.35, 3.0, "118", "数据表（模型计数）", PRIMARY_L);
   stat(s, 10.6, 4.35, 2.4, "4", "用户角色", PRIMARY_L, 40);
   // 页脚数据来源：按框宽/框高自适应字号（原固定 12pt 在 12.3×0.4in 内需 2 行，超出 1.31×）
-  const noteP06 = "数据来源：2026-10-24（v1.17.2）—— 后端 14,404 用例（1 skipped）/ 行+分支 100%；前端 329 文件 / 6,995 用例（12 组 glob 100%）；UI 主题 3 套 · 显示偏好 4 档 · R35 表格规范 117/117 · 硬编码色 154（棘轮 154/154）";
+  const noteP06 = "数据来源：2026-10-24（v1.18.1）—— 后端 14,577 用例（1 skipped）/ 行+分支 100%；前端 329 文件 / 7,023 用例（12 组 glob 100%）；UI 主题 3 套 · 显示偏好 4 档 · R35 表格规范 117/117 · 硬编码色 154（棘轮 154/154）";
   const sizeP06 = fitFontSize(noteP06, 12.3, 0.4, 12, 9);
   fitNote("P06 数据来源", 12, sizeP06);
   s.addText(noteP06, {
@@ -404,8 +404,8 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   const cols = [
     ["桌面壳层", "Electron", ["Windows x64 NSIS 安装包", "麒麟 V10 ARM64 DEB", "托盘 / 自启 / 锁屏 / 快捷键", "后端进程托管与健康检查"]],
     ["前端", "Vue 3 + TypeScript", ["Element Plus + Pinia + Vue Router", "UI v2.0 设计 Token（3 套主题 · 显示偏好 4 档）+ R35 精细化层", "144 个视图 · 32 个共享组件", "Axios 统一信封 + CSRF + 离线 Mock"]],
-    ["后端", "FastAPI (Python 3.11)", ["100 个路由模块（55 顶层 + 5 子包）", "107 个服务（5 个子包）", "SQLAlchemy 2.x + Alembic（54 版本单 head）", "依赖登记表单一事实源（三级自检）"]],
-    ["数据", "SQLite", ["单文件数据库，随备份带走", "WAL 并发 + 外键强制", "EncryptedText 列透明加密", "122 张表 · 54 个迁移版本"]],
+    ["后端", "FastAPI (Python 3.11)", ["52 个路由模块（+ 5 子包）", "112 个服务（5 个子包）", "SQLAlchemy 2.x + Alembic（62 版本单 head）", "依赖登记表单一事实源（三级自检）"]],
+    ["数据", "SQLite", ["单文件数据库，随备份带走", "WAL 并发 + 外键强制", "EncryptedText 列透明加密", "118 张表 · 62 个迁移版本"]],
   ];
   cols.forEach((c, i) => {
     const x = M + i * 3.18;
@@ -456,7 +456,7 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     "32 个共享组件（含 common/ 6 个 UI v2 通用组件）",
     "9 个 Pinia store + 15 个组合式函数（含 useUiPrefs 显示偏好）",
     "18 个 SCSS：tokens 单源 + 全局模板（card/states/dialog/ui-v2/ui-refine…）",
-    "331 个测试文件 / 6,867 个用例（12 组 glob 100%）",
+    "329 个测试文件 / 7,023 个用例（12 组 glob 100%）",
     "后端 v2 菜单单一源：侧栏 / 移动端 / 权限面板全部数据驱动（Ctrl+K / 收藏 / 最近访问）",
     "覆盖率门禁（行 + 分支 100%）+ lint --max-warnings=0 + vue-tsc 三重 CI 门禁",
   ], 0.82, 2.55, 5.4, 3.9, { size: 11.5, gap: 6 });
@@ -566,6 +566,7 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     "PII 密钥跨机迁移：/system/pii-key 查看指纹 / 导出 / 导入（只记指纹不记密钥本体）",
     "ARM64 离线 OCR 出包门禁：真实识别冒烟 + 载荷断言，保持零外部依赖",
     "新门禁：console tab ↔ TAB_COMPONENTS 双向一致、文档数字漂移、安全审计覆盖棘轮",
+    "R35 三层对齐门禁：前端 API 路径 ↔ 后端路由、ORM 模型 ↔ 数据库 schema、前后端字段，一次跑通三轴",
     "修复：R33 单位授权两个 tab 因漏加组件映射而不可见（契约 28 → 30）",
     "本版移出 R35 删表迁移：升级演练暴露数据丢失 / 升级中断风险，schema 维持 r34 head",
   ], 7.17, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
@@ -593,6 +594,56 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
     "全仓契约审计：412 条前端路径 vs 720 条后端路由，零错位",
     "死代码清理：6 个未接入组件 + barrel + 3 个一次性脚本（ErrorBoundary 经核实仍在用）",
   ], 7.17, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
+}
+
+/* 10g v1.17.3 安装包可用性：只在真机出现的问题 */
+{
+  const s = p.addSlide();
+  header(s, "02 技术架构", "v1.17.3：安装包可用性 —— 只在真机出现");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("两处真机缺陷", { x: 0.82, y: 2.05, w: 4.5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "打包后端找不到前端 → 桌面白屏：onedir 布局 _MEIPASS = _internal，前端在 <resources>/frontend（与 backend 同级）",
+    "原候选表缺「自 _MEIPASS 上溯三级」：漏传 FRONTEND_DIST_PATH 时访问 / 返回 404",
+    "启动日志误报「关键文件缺失」：对 4 个 .py 做存在性检查，打包后源码已编译进 exe → 每次刷 4 条 WARNING",
+    "修法：新增两条目录候选（_MEIPASS 上溯三级 / 冻结 exe 上溯四级）",
+    "修法：sys.frozen 时跳过源码检查并记 INFO，开发态逻辑原样保留",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("离线安装包实测（空 %APPDATA%）", { x: 7.17, y: 2.05, w: 5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "自动建库：data / data_sync / uploads / archives / cache / logs / offline_tiles",
+    "/health 200，status=ok，migration.at_head=true",
+    "出厂口令登录 200，must_change_password=true",
+    "访问 / 修复后 200 且含 id=app（修复前 404）",
+    "启动日志不再出现「关键文件缺失」误报",
+    "结论：空环境首装即可用，不依赖外部环境变量",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 11.5, gap: 8 });
+}
+
+/* 10h v1.18.1 登录门面与"门禁真绿"复验 */
+{
+  const s = p.addSlide();
+  header(s, "02 技术架构", "v1.18.1：登录门面与门禁真绿复验");
+  card(s, M, 1.8, 6.0, 4.9);
+  s.addText("登录页重构（务实优先）", { x: 0.82, y: 2.05, w: 5, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "注册入口死链：SELF_REGISTER_MODE 默认 off，而前端从未调用已存在的 public-config",
+    "修法：按 public_config 显隐，取不到配置即隐藏（fail-closed），不给必然失败的按钮",
+    "锁定/限流可见化：423/429 显示倒计时并禁用按钮（后端透出 lockout_minutes / max_failed_attempts）",
+    "失败即清空密码并聚焦；CapsLock 提示；2FA 满 6 位自动提交（防重复触发）",
+    "背景 12 张 3.51MB 轮播 → 1 张静态（-3.16MB）：首屏更快、气质更庄重",
+    "顺带修：authStore 读 data.message 而非 detail → 后端中文错误文案全部丢失",
+  ], 0.82, 2.55, 5.4, 3.9, { size: 11, gap: 7 });
+  card(s, 6.85, 1.8, 6.0, 4.9);
+  s.addText("门禁真绿：从「段数通过」到「阈值生效」", { x: 7.17, y: 2.05, w: 5.2, h: 0.4, fontSize: 16, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
+  bullets(s, [
+    "发现 backend/.coveragerc 被误删 → fail_under=100 静默失效，12/12 段「通过」实为 99%",
+    "恢复配置后补齐 7 处缺口：repr×2 / 备份元信息 / 增量指纹 / 无组织字段模型 / 单位码 409 / 临时包清理",
+    "模型↔库漂移：r42 迁移要求 tea、cactus 改名为 supported_village_id，模型没跟上 → 已对齐",
+    "调度器断言口径：R36 新增 _schedule_backup_catchup，旧计数漏算 → 改通用正则匹配",
+    "结果：后端 12/12 段 + 100.00%（0 缺失 / 0 分支）、前端 332 文件 / 7,023 用例 + 四项 100%",
+  ], 7.17, 2.55, 5.4, 3.9, { size: 11, gap: 7 });
 }
 
 /* 11 后端架构 */
@@ -632,11 +683,11 @@ sectionSlide("02", "技术架构", "TECHNICAL ARCHITECTURE", [
   card(s, M, 1.8, 5.9, 4.9);
   s.addText("模型与迁移", { x: 0.82, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
   bullets(s, [
-    "64 个模型文件 / 122 张表：村、一户一档、项目、资金、影像、消费台账…",
+    "64 个模型文件 / 118 张表：村、一户一档、项目、资金、影像、消费台账…",
     "v1.14.0 数据迁移：+5 新表（households 三表 / photo_archives / consumption_records），−4 旧表（villages/villagers/industries/sentiment_news）",
     "TimestampMixin：created_at / updated_at / sync_version 自动维护",
     "SoftDeleteMixin：is_active 软删 + deleted_by 审计列",
-    "Schema 权威来源 = models/ + Alembic 54 版本单 head（init.sql 已删除）",
+    "Schema 权威来源 = models/ + Alembic 62 版本单 head（init.sql 已删除）",
   ], 0.82, 2.55, 5.3, 3.9, { size: 12.5, gap: 8 });
   card(s, 6.75, 1.8, 6.1, 4.9);
   s.addText("完整性守护", { x: 7.07, y: 2.05, w: 3, h: 0.4, fontSize: 15, bold: true, color: PRIMARY, fontFace: F, margin: 0 });
@@ -1276,7 +1327,7 @@ sectionSlide("04", "安全体系", "SECURITY & COMPLIANCE", [
 
 /* ════════ 31 章节页：质量工程 ════════ */
 sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
-  "20,809 项自动化测试（后端 13,942 + 前端 6,867）",
+  "21,600 项自动化测试（后端 14,577 + 前端 7,023）",
   "三重前端门禁 + 双重后端门禁",
   "CI/CD 流水线（PR Checks 7 作业）",
   "AI 代码深度审查（376 文件 / 918 条发现）",
@@ -1302,7 +1353,7 @@ sectionSlide("05", "质量工程", "QUALITY ENGINEERING", [
     showLegend: false, chartArea: { fill: { color: BG } },
   });
   // 数据来源脚注：缩短措辞 + 按框自适应（原固定 11pt 在 6.6×0.35in 内超出 1.38×）
-  const noteP32 = "数据来源：2026-10-24 实测（v1.17.2）· 后端 14,404 / 前端 6,995 用例（329 文件）· 覆盖率 100% · 视觉回归 10 页";
+  const noteP32 = "数据来源：2026-10-24 实测（v1.18.1）· 后端 14,577 / 前端 7,023 用例（329 文件）· 覆盖率 100% · 视觉回归 10 页";
   const sizeP32 = fitFontSize(noteP32, 6.6, 0.45, 11, 9);
   fitNote("P32 数据来源", 11, sizeP32);
   s.addText(noteP32, { x: 0.7, y: 6.2, w: 6.6, h: 0.45,
@@ -1473,7 +1524,7 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   });
   // 摘要条下移压缩：底边 6.85in，避开页脚文字带（体检器对 y ≥ 495pt 的页脚另有卡片归属判定）
   card(s, M, 5.9, 12.33, 0.95, PRIMARY_T);
-  s.addText("净效果：13,942 后端用例（行+分支覆盖率 100%）+ 6,867 前端用例全绿（331 文件）+ 10 页视觉回归基线；Windows x64 与麒麟 ARM64 离线安装包由 GitHub Actions 自动构建并发布 Release（发布前强制校验 tag commit 的 PR Checks 全绿）", {
+  s.addText("净效果：14,577 后端用例（行+分支覆盖率 100%）+ 7,023 前端用例全绿（329 文件）+ 三层对齐门禁 + 10 页视觉回归基线；Windows x64 与麒麟 ARM64 离线安装包由 GitHub Actions 自动构建并发布 Release（发布前强制校验 tag commit 的 PR Checks 全绿）", {
     x: 0.82, y: 5.9, w: 11.6, h: 0.95, fontSize: 13.5, bold: true, color: TEXT,
     fontFace: F, valign: "middle", margin: 0 });
 }
@@ -1511,9 +1562,9 @@ sectionSlide("06", "部署运行", "DEPLOYMENT & OPERATION", [
   const tThanks = autoBox("谢谢观看", 11, 1.45, 54, 1.6, 36, true, 0, "P41 谢谢观看");
   s.addText("谢谢观看", { x: 0.96, y: 3.0, w: 11, h: tThanks.h, fontSize: tThanks.size, bold: true,
     color: "FFFFFF", fontFace: F, margin: 0 });
-  s.addText("帮扶管理信息系统 v1.17.2  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
+  s.addText("帮扶管理信息系统 v1.18.1  ·  仓库：github.com/lzh745200/MRRS  ·  完整文档见 docs/ 目录", {
     x: 1.0, y: 4.55, w: 11, h: 0.45, fontSize: 13.5, color: LIGHT, fontFace: F, margin: 0 });
-  s.addText("13,942 后端用例 + 6,867 前端用例全绿守护 · 10 页视觉回归基线 · 双平台离线交付", {
+  s.addText("14,577 后端用例 + 7,023 前端用例全绿守护 · 三层对齐门禁 · 10 页视觉回归基线 · 双平台离线交付", {
     x: 1.0, y: 5.05, w: 11, h: 0.45, fontSize: 13.5, color: "8FA298", fontFace: F, margin: 0 });
 }
 

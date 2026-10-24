@@ -5,6 +5,83 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.1] - 2026-10-24 — 登录门面重构 / 三层对齐门禁 / 门禁真绿复验
+
+> 本批包含三块：① 登录页 UI 务实化改造（修死链与不可见错误）；② R35 三层对齐门禁落地并修掉它抓出的漂移；
+> ③ 复验时发现 `backend/.coveragerc` 被误删导致 100% 覆盖率门禁**静默失效**，恢复后补齐全部缺口。
+
+### Added
+
+- **登录页公开配置扩展**：`GET /api/v1/auth/public-config` 新增 `lockout_minutes` / `max_failed_attempts`
+  （纯策略参数）。前端据此显示「锁定 30 分 00 秒」倒计时与"再错几次会被锁"，用户不再只是看到一行字。
+  **刻意不返回**组织名/单位码（登录前不泄露部署单位身份）与"全局 2FA 开关"
+  （本系统 2FA 是按用户开启，硬造一个恒 false 的字段只会误导调用方）。
+- **三层对齐门禁** `scripts/check_stack_alignment.py` + CI job + 自测
+  `tests/unit/test_stack_alignment_gate_r35.py`（含负向用例）：比对 **前端 API 路径 ↔ 后端路由**、
+  **ORM 模型 ↔ 数据库 schema**（基线为"临时空库 + `alembic upgrade head`"，不读本机开发库）、
+  **前端 TS interface ↔ 后端 Pydantic 字段**（按 URL 解析端点 + `response_model` 配对，避免同名不同契约的假阳性）。
+- **迁移 `r42_align_stack_columns_001`**：`tea_plantations` / `cactus_fruit_plots` 的
+  `village_id` → `supported_village_id`（索引名同步）；补齐 `households.remarks`、`projects.region_code`
+  两个"库里有、模型没声明"的列。
+- **覆盖率回归测试** `tests/unit/test_coverage_restore_after_merge.py`（12 例）：补 `repr` 可安全输出、
+  备份元信息三种入参形态、增量包指纹有/无、无组织字段模型的过滤分支、单位码 409 阻断、
+  密钥不一致时临时包清理的三个分支。
+
+### Changed
+
+- **登录页重构**（`frontend/src/views/auth/LoginEnhanced.vue`）：
+  - 背景 **12 张 3.51MB 轮播 → 1 张静态图**（净减 3.16MB，Electron 冷启动首屏更快，气质更庄重）；
+  - 错误按 401 / 403（未激活、未授权本机）/ 423 / 429 **分色展示**，423 与 429 显示倒计时并禁用提交按钮；
+  - 登录失败**清空密码并聚焦**（多人共用一台机器的政务场景）；**CapsLock 提示**；**2FA 满 6 位自动提交**（防重复触发）；
+  - 新增「首次使用？」三步引导（机器码 → 权限包 → 通行码注册），未开启自助注册时改为说明文案；
+  - 控件统一 44px、聚焦显示**左侧金色竖条**、卡片一次入场动效（`prefers-reduced-motion` 下关闭）；
+  - 8 处硬编码色值收敛进 Design Token，硬编码色棘轮 **154 → 146** 并收紧基线。
+- **`authStore.login` 错误传播修正**：原先只读 `err.response.data.message`，而 FastAPI 返回 `detail` ——
+  于是 423「账户已锁定，请30分钟后再试」这类**中文文案全部丢失**，用户看到的是 `Request failed with status code 423`。
+  现按 `detail → message → err.message` 顺序取值，并新增可选 `httpStatus`（纯增量信息，不改变既有返回语义）。
+- **`MessageCenter` 契约对齐**：`MessageListResponse` 按后端实际改为 `total_pages`（无 `unread_count`），
+  列表页改为直接调用独立的未读数端点（原代码读已删除字段，`vue-tsc` 报错且永远走 fallback）。
+- **`system/backup.py`**：去掉 `BackupKeyMismatchError` 分支里**不可达**的 `if file_path:`（该分支只可能由
+  `restore_backup(file_path, ...)` 抛错进入，此时 `file_path` 必已赋值）。
+- 文档与 PPT 同步至 v1.18.1（PPT 新增「登录门面与门禁真绿复验」一页，全部数字按实测刷新）。
+
+### Fixed
+
+- **注册入口死链**：`SELF_REGISTER_MODE` 默认 `off`，但登录页**无条件显示**"注册账户"，
+  而前端从未调用后端早已提供的 `public-config`。现按配置显隐，**取不到配置即隐藏**（fail-closed）。
+- **100% 覆盖率门禁静默失效**：`backend/.coveragerc` 在工作区被误删，`fail_under=100` 不再生效 ——
+  分段执行器报告的 12/12「全绿」实际只有 99%。已恢复配置并补齐 7 处缺口，现为
+  **TOTAL 45,782 语句 / 11,376 分支，Miss 0 / BrPart 0**。
+- **行业模型与库列名漂移**：`r42` 迁移注释写明"模型列名改为 `supported_village_id`"，但 `app/models/industry.py`
+  未改，导致三层对齐门禁 B 轴报 4 条不一致。已按迁移声明的意图改名（全仓无其它引用）。
+- **调度器断言口径漏算**：`test_coverage_gap_batch8.py` 按源码里
+  `_schedule_daily/_schedule_interval/_schedule_weekly` 的调用点数推导 Timer 数，R36 新增的
+  `_schedule_backup_catchup()`（一次性补跑，同样 1 个 Timer）未被计入 → 断言恒 16 而实得 17。
+  改为通用正则匹配任意 `_schedule_<name>(`，今后新增调度入口无需再改测试。
+- **备份上传恢复的临时包泄漏**：密钥指纹不一致（409）时未清理已落盘的临时包 ——
+  每次跨机误导入都会在备份目录留下一个可能上 GB 的残包。现按"存在则删除、删除失败只记日志"处理，
+  并保留 409 语义（不因清理失败退化成 500）。
+- **数据上报 schema 与 service 实际返回不一致**（R35 三层对齐 C 轴）：`subordinate dashboard` 声明为
+  `unreported_count` / `statistics`，而 service 返回 `not_reported_count` / `pending_review_count` /
+  `overdue_count` / `report_rate`；Pydantic `extra=ignore` 会把差异吞掉。已对齐。
+
+### Fixed（交付前逐维复验补齐）
+
+- **三层对齐门禁在 CI 里跑不起来**：原先放在 `static-analysis` 作业，而该作业只装 `alembic` 与几个
+  lint 工具，门禁需要 `import app.main`（fastapi/sqlalchemy/pydantic）并用 alembic 起临时库 ——
+  实测 `EXIT=2 No module named 'fastapi'`，该 step 必然恒红。现改为独立 `stack-alignment` 作业，
+  自己安装 `backend/requirements.txt`，并加注释说明为何不能放回 static-analysis。
+  （已验证：仅装 requirements.txt 时 `app` 可 import —— 全仓只有 `prophet`/`redis` 两个未在清单里的
+  导入，且都是 `try/except ImportError` 保护的可选依赖。）
+- **门禁临时参照库泄漏**：B 轴每次运行都会建一个 ~2.8MB 的 SQLite 库，但只用 `mkdtemp` 从不清理 ——
+  实测已在 `backend/` 累积 **78 个目录 / 206MB**。现加 `finally: shutil.rmtree`（失败路径同样清理），
+  并补单测 `test_gate_leaves_no_reference_db_dirs` 锁死。
+- **`r42` 迁移用了 SQLite 不支持的语法**：索引改名写成 `ALTER INDEX ... RENAME TO`（PostgreSQL 语法）。
+  该分支在当前迁移链上不可达（新库由基线 `create_all` 直接按模型建表、老库 w22 已先 drop 旧索引），
+  但保留错误实现等于埋雷。现改为方言无关的 `DROP INDEX` + `CREATE INDEX`。
+- **`DataReportStatistics` 前端缺少 `pending`**：后端 `schemas/data_report.py` 有该字段、前端
+  `types/organization.ts` 没有。三层对齐门禁补上「response_model 同名配对」规则后立刻抓到。
+
 ## [1.18.0] - 2026-10-24 — 离线加固批次：告警开关 / 误导口径 / 备份可迁移 / 麒麟数据目录 / 长期运行可靠性
 
 > 本批来自"系统还有什么问题"体检结论的第 1、2 批；所有改动均有红→绿测试与门禁记录。

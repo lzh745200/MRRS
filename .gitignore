@@ -449,3 +449,13 @@ resources/map-tiles/MANIFEST.json
 backend/_e2e*.py
 frontend/logs-*.txt
 
+
+# 会话产物 / 大体积交付物（不入库：deliverables 单个已达 600MB+）
+deliverables/
+.scratch/
+gate_old.json
+gate_out.json
+gate_stderr.txt
+/logs/
+/projects/
+docs/agents/workspace.yaml
