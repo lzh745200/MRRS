@@ -116,10 +116,12 @@
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { useDirtyGuard } from '@/composables/useDirtyGuard'
+import { useFormDraft } from '@/composables/useFormDraft'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getOrganization,
   getOrganizations,
@@ -150,6 +152,28 @@ const formData = reactive({
   address: '',
   description: '',
 })
+
+// ── ③ 录入效率：草稿自动保存 + 未保存离开拦截（组织编辑页）──────────────
+const draftKey = isEdit.value
+  ? `organization:edit:${safeRouteParam(route.params.id)}`
+  : 'organization:edit:new'
+const {
+  hasDraft,
+  restore: restoreDraft,
+  clear: clearDraft,
+  flush: flushDraft,
+} = useFormDraft(formData, { key: draftKey })
+
+// 初始化（loadData 回填 / 草稿恢复）完成后由 onMounted 复位，避免回填被当成用户修改
+const isDirty = ref(false)
+const stopDirtyWatch = watch(
+  formData,
+  () => {
+    isDirty.value = true
+  },
+  { deep: true }
+)
+useDirtyGuard(isDirty)
 
 const rules: FormRules = {
   code: [
@@ -259,6 +283,9 @@ const handleSubmit = async () => {
         })
         ElMessage.success('创建成功')
       }
+      // 提交成功：清掉草稿并复位脏标记（否则下次进来会"复活"已提交的数据）
+      clearDraft()
+      isDirty.value = false
       pushSafe('/organizations')
     } catch (error) {
       logger.error('保存失败:', error)
@@ -269,11 +296,34 @@ const handleSubmit = async () => {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadParentOptions()
   if (isEdit.value) {
-    loadData()
+    await loadData()
   }
+
+  // ③ 有未提交草稿时先问再恢复：不静默覆盖后端刚拉回来的数据
+  if (hasDraft.value) {
+    try {
+      await ElMessageBox.confirm('检测到上次未提交的草稿，是否恢复？', '恢复草稿', {
+        confirmButtonText: '恢复',
+        cancelButtonText: '忽略',
+        type: 'info',
+      })
+      restoreDraft()
+      ElMessage.success('已恢复草稿')
+    } catch {
+      clearDraft()
+    }
+  }
+
+  isDirty.value = false
+})
+
+onBeforeUnmount(() => {
+  stopDirtyWatch()
+  // 离开前立刻落盘一次（防抖窗口内离开也不能丢）
+  flushDraft()
 })
 </script>
 

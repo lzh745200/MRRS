@@ -15,6 +15,7 @@ import { nextTick } from 'vue'
 
 const {
   ElMessage,
+  mockConfirm,
   mockGetOrganization,
   mockGetOrganizations,
   mockCreateOrganization,
@@ -24,6 +25,7 @@ const {
   logError,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+  mockConfirm: vi.fn(),
   mockGetOrganization: vi.fn(),
   mockGetOrganizations: vi.fn(),
   mockCreateOrganization: vi.fn(),
@@ -33,12 +35,16 @@ const {
   logError: vi.fn(),
 }))
 
+// ③ 离开拦截（useDirtyGuard）会 import onBeforeRouteLeave：只 mock useRoute 会让 setup 直接抛错。
 vi.mock('vue-router', () => ({
   useRoute: () => routeBox,
+  onBeforeRouteLeave: vi.fn(),
 }))
 
 vi.mock('element-plus', () => ({
   ElMessage,
+  // ③ 草稿恢复询问：默认按"用户取消"返回，避免测试挂起
+  ElMessageBox: { confirm: mockConfirm },
   type: {},
 }))
 
@@ -456,6 +462,73 @@ describe('编辑模式', () => {
     switchStub.vm.$emit('change', false)
     await nextTick()
     expect((wrapper.vm as any).formData.is_active).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+// ③ 草稿自动保存与离开拦截（组织编辑页，2026-10-26）
+describe('③ 草稿与离开拦截', () => {
+  const DRAFT_KEY = 'form:draft:organization:edit:new'
+
+  function seedDraft(data: Record<string, unknown>) {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, savedAt: Date.now() }))
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('有草稿 + 用户确认 → 回填表单并提示', async () => {
+    seedDraft({ name: '草稿组织', contact_person: '草稿联系人' })
+    mockConfirm.mockResolvedValue('confirm')
+
+    const wrapper = mountComp()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.formData.name).toBe('草稿组织')
+    expect(vm.formData.contact_person).toBe('草稿联系人')
+    expect(ElMessage.success).toHaveBeenCalledWith('已恢复草稿')
+    wrapper.unmount()
+  })
+
+  it('有草稿 + 用户忽略 → 丢弃草稿且不污染表单', async () => {
+    seedDraft({ name: '不要了' })
+    mockConfirm.mockRejectedValue(new Error('cancel'))
+
+    const wrapper = mountComp()
+    await flushPromises()
+
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
+    expect((wrapper.vm as any).formData.name).toBe('')
+    wrapper.unmount()
+  })
+
+  it('卸载时立刻落盘（防抖窗口内离开也不丢）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(wrapper.vm as any).formData.name = '离开前填的组织'
+    await nextTick()
+
+    wrapper.unmount()
+
+    const raw = localStorage.getItem(DRAFT_KEY)
+    expect(raw).not.toBeNull()
+    expect(JSON.parse(raw as string).data.name).toBe('离开前填的组织')
+  })
+
+  it('创建成功后清掉草稿（不复活已提交数据）', async () => {
+    seedDraft({ name: '旧草稿' })
+    mockConfirm.mockResolvedValue('confirm')
+    mockCreateOrganization.mockResolvedValue({ code: 200 })
+
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleSubmit()
+    await flushPromises()
+
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
     wrapper.unmount()
   })
 })

@@ -201,6 +201,18 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（③ third 页面接入：组织编辑页草稿 + 离开拦截）
+
+- `views/organization/Edit.vue` 接入 ③：草稿键按模式隔离（`organization:edit:new` / `:id`）；
+  `onMounted` 先 `await loadData()` 再询问恢复草稿（**不静默覆盖**刚拉回的数据）；
+  离开时 `flush()` 落盘；提交成功 `clear()` + 复位脏标记。
+- 与政策编辑页一致的实现取舍：**setup 即注册 deep watcher**，初始化完成后复位 `isDirty`，
+  而不是造"初始化后才注册 watcher"的可选链（那会留下永不进入的分支）。
+- 一次真实回归：该页 17 个测试**全红** —— 测试里 `vue-router` mock 只有 `useRoute`，
+  而 `useDirtyGuard` 需要 `onBeforeRouteLeave`；补齐 mock 后全绿（同时把 `ElMessageBox.confirm`
+  提升为可断言的 hoisted mock）。这类"接入即红"正是必须跑页面测试的原因。
+- 测试：该页 **17 → 21 例**（草稿恢复/忽略/卸载落盘/提交清草稿），覆盖率 **100/100/100/100**。
+
 ### Added（⑤ 接入活体页面：转账凭证新建对话框）
 
 - `views/funds/TransferVoucher.vue` 的新建对话框接入 `OcrVoucherSuggest`：
