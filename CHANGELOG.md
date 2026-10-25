@@ -201,6 +201,25 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（③ 批量新增执行器 `useBulkCreate` + 即时校验审计）
+
+- **`composables/useBulkCreate.ts`**：`BulkPasteDialog` 只负责"拿到二维数组"，
+  真正落地要靠各页调自己的 create 接口。把它抽成执行器，是为了不让每个页面各写一遍
+  而重复出三类毛病：
+  1. **不逐条 try/catch** → 第 5 条失败整批中断，前 4 条已入库但用户以为全失败；
+  2. **不给失败明细** → 用户不知补哪几条，只能全量重来，而重来会重复入库；
+  3. **`Promise.all` 一把打出去** → 离线 SQLite 被写锁撞得满屏 500。
+  因此固定为：**串行执行**（离线单机串行比并发安全）、逐条收集 `{row,index,message}`、
+  单条失败不中断整批、`running` 由 `finally` 复位、`summarize()` 统一话术
+  （"已新增 N 条，失败 M 条（第 2、5 行）"）。`extractErrorMessage` 兼容
+  `string / Error.message / {message|detail|msg}` 四种形态。
+- **即时校验审计（结论：无需改动）**：全站 `views/**` 共 **94** 条 `required: true` 规则，
+  **全部已带 `trigger`**（blur/change）——即"提交时才报错"的情况在视图层已不存在，
+  ③ 的"即时校验"项由既有实现覆盖，本轮不再动它（避免为改而改引入风险）。
+- 测试：`useBulkCreate.test.ts` **11 例**（串行顺序、单条失败不中断、全失败逐条收集、
+  空输入不发请求、`running` 复位、两种摘要话术、错误信息四形态），文件覆盖率
+  **100/100/100/100**。
+
 ### Added（④ 顶栏「数据同步状态」胶囊 + 台账抽屉）
 
 - **`composables/useSyncStatus.ts`**：只读 `/data-sync/logs`（**不新增后端接口**），

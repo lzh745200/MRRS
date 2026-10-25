@@ -35,9 +35,9 @@ jobs:
       - name: Reset coverage data
         run: rm -f backend/.coverage
 
-      - name: "Nightly backend tests (1/6: integration + security)"
+      - name: "Nightly backend tests (1/6: integration + security + tests root)"
         env: { SEG_JUNIT: "1" }
-        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg1-integration-security --mode first tests/integration tests/security
+        run: cd backend && bash ../scripts/ci_backend_test_segment.sh --name seg1-integration-security --mode first tests/integration tests/security tests/test_*.py
 
       - name: "Nightly backend tests (2/6: unit api)"
         env: { SEG_JUNIT: "1" }

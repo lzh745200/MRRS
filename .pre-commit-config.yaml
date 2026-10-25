@@ -119,6 +119,16 @@ repos:
         always_run: true
         stages: [pre-push]
 
+      # 2026-10-25 事故教训：Nightly 的 6 段测试分组漏了 backend/tests/*.py 根目录，
+      # 导致 permission_packs 夜间覆盖率 38%、Nightly 恒红而 PR Checks 全绿。
+      - id: check-nightly-test-parity
+        name: nightly test coverage parity (PR Checks vs Nightly grouping)
+        entry: python scripts/check_nightly_test_parity.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
 # CI workflows:
 # - pre-commit 阶段: ruff (快速)、trailing-whitespace、YAML/JSON 检查
 # - pre-push 阶段: flake8, bandit, vue-tsc (全量质量门禁)
