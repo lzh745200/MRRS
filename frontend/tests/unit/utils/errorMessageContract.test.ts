@@ -58,6 +58,12 @@ describe('statusFallbackMessage', () => {
     [429, '操作过于频繁，请稍后再试'],
     [500, '服务器繁忙，请稍后重试'],
     [503, '服务器繁忙，请稍后重试'],
+    // 405 / 408 / 504 / 413 是拦截器「按状态码兜底」实际会走到的分支。
+    // CI 曾只因缺这几个用例让 src/utils 覆盖率掉到 99.91%（lines 99.91 / branches 99.61）。
+    [405, '该操作不被支持'],
+    [408, '请求超时，请稍后重试'],
+    [504, '请求超时，请稍后重试'],
+    [413, '提交内容过大，请减小后重试'],
   ])('状态 %s → 中文兜底', (status, expected) => {
     expect(statusFallbackMessage(status)).toBe(expected)
   })
@@ -91,16 +97,22 @@ describe('extractServerMessage', () => {
   })
 
   it('detail 数组里混入字符串也能读', () => {
-    expect(extractServerMessage(axiosError(422, { detail: ['第一条', '第二条'] }))).toBe('第一条；第二条')
+    expect(extractServerMessage(axiosError(422, { detail: ['第一条', '第二条'] }))).toBe(
+      '第一条；第二条'
+    )
   })
 
   it('errors 数组（本仓库 422 信封）也能读', () => {
     const data = { errors: [{ msg: '密码不能为空' }, { msg: '用户名长度不能少于 3 个字符' }] }
-    expect(extractServerMessage(axiosError(422, data))).toBe('密码不能为空；用户名长度不能少于 3 个字符')
+    expect(extractServerMessage(axiosError(422, data))).toBe(
+      '密码不能为空；用户名长度不能少于 3 个字符'
+    )
   })
 
   it('嵌套 error.message 也能读', () => {
-    expect(extractServerMessage(axiosError(500, { error: { message: '服务异常' } }))).toBe('服务异常')
+    expect(extractServerMessage(axiosError(500, { error: { message: '服务异常' } }))).toBe(
+      '服务异常'
+    )
   })
 
   it('纯文本响应体可读；HTML 不读', () => {
@@ -135,7 +147,9 @@ describe('getErrorMessage 核心契约', () => {
   })
 
   it('优先使用拦截器挂载的 userMessage', () => {
-    const err = Object.assign(axiosError(422, { detail: '服务端 detail' }), { userMessage: '拦截器文案' })
+    const err = Object.assign(axiosError(422, { detail: '服务端 detail' }), {
+      userMessage: '拦截器文案',
+    })
     expect(getErrorMessage(err)).toBe('拦截器文案')
   })
 
@@ -147,7 +161,10 @@ describe('getErrorMessage 核心契约', () => {
   })
 
   it('服务端中文字符串 detail 直接采用（后端 422 已中文化）', () => {
-    const err = axiosError(422, { message: '请求参数验证失败：密码不能为空', detail: '请求参数验证失败：密码不能为空' })
+    const err = axiosError(422, {
+      message: '请求参数验证失败：密码不能为空',
+      detail: '请求参数验证失败：密码不能为空',
+    })
     expect(getErrorMessage(err)).toBe('请求参数验证失败：密码不能为空')
   })
 
@@ -159,9 +176,9 @@ describe('getErrorMessage 核心契约', () => {
     expect(getErrorMessage(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }))).toBe(
       '请求超时，请检查网络后重试'
     )
-    expect(getErrorMessage(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' }))).toBe(
-      '网络连接失败，请检查网络后重试'
-    )
+    expect(
+      getErrorMessage(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' }))
+    ).toBe('网络连接失败，请检查网络后重试')
   })
 
   it('无信息时用传入 fallback', () => {

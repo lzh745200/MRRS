@@ -277,7 +277,10 @@ describe('api/request — response 成功拦截器', () => {
   })
 
   it('展开对象 payload 到顶层', () => {
-    const response = { config: makeConfig(), data: { code: 200, data: { name: 'test', value: 42 } } }
+    const response = {
+      config: makeConfig(),
+      data: { code: 200, data: { name: 'test', value: 42 } },
+    }
     handlers.response(response)
     expect(response.data.name).toBe('test')
     expect(response.data.value).toBe(42)
@@ -376,14 +379,20 @@ describe('api/request — response 错误拦截器', () => {
   })
 
   it('400 无 detail 但带 message → 挂载 message', async () => {
-    const error = { response: { status: 400, data: { message: '请求被拒绝' } }, config: makeConfig() }
+    const error = {
+      response: { status: 400, data: { message: '请求被拒绝' } },
+      config: makeConfig(),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(error.userMessage).toBe('请求被拒绝')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
   it('400 detail 为对象 → 挂载通用请求失败消息', async () => {
-    const error = { response: { status: 400, data: { detail: { field: 'x' } } }, config: makeConfig() }
+    const error = {
+      response: { status: 400, data: { detail: { field: 'x' } } },
+      config: makeConfig(),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
@@ -425,7 +434,10 @@ describe('api/request — response 错误拦截器', () => {
   })
 
   it('403 非 CSRF → 显示服务端 detail', async () => {
-    const error = { response: { status: 403, data: { detail: '无操作权限' } }, config: makeConfig() }
+    const error = {
+      response: { status: 403, data: { detail: '无操作权限' } },
+      config: makeConfig(),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(error.userMessage).toBe('无操作权限')
     expect(mockElMessage.error).not.toHaveBeenCalled()
@@ -453,14 +465,20 @@ describe('api/request — response 错误拦截器', () => {
   })
 
   it('404 带 detail → 挂载 detail', async () => {
-    const error = { response: { status: 404, data: { detail: '记录已删除' } }, config: makeConfig() }
+    const error = {
+      response: { status: 404, data: { detail: '记录已删除' } },
+      config: makeConfig(),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(error.userMessage).toBe('记录已删除')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
   it('404 带 message → 挂载 message', async () => {
-    const error = { response: { status: 404, data: { message: '资源被移除' } }, config: makeConfig() }
+    const error = {
+      response: { status: 404, data: { message: '资源被移除' } },
+      config: makeConfig(),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(error.userMessage).toBe('资源被移除')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
@@ -531,6 +549,21 @@ describe('api/request — response 错误拦截器', () => {
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(error.userMessage).toBe('非法值')
+    expect(mockElMessage.warning).not.toHaveBeenCalled()
+  })
+
+  it('未登记的状态码（418）→ 走 HTTP 状态模板兜底，不下发 axios 原文', async () => {
+    // _buildUserMessage 的最后一条按状态分支：statusFallbackMessage 返回空串时用
+    // 「请求失败（HTTP <status>），请稍后重试」兜底。CI 曾因缺此用例让 src/api
+    // 覆盖率 branches 掉到 99.9%（净缺口就在 request.ts:273）。
+    const error = {
+      response: { status: 418, data: {} },
+      message: 'Request failed with status code 418',
+      config: makeConfig(),
+    }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('请求失败（HTTP 418），请稍后重试')
+    expect(error.userMessage).not.toContain('Request failed')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
@@ -613,7 +646,9 @@ describe('api/request — 401 与 refresh 续期', () => {
     const error = { response: { status: 401, data: {} } }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
+    expect(mockElMessage.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true })
+    )
     expect(mockAxiosPost).not.toHaveBeenCalled()
   })
 
@@ -624,12 +659,17 @@ describe('api/request — 401 与 refresh 续期', () => {
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
+    expect(mockElMessage.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true })
+    )
   })
 
   it('401 登录端点 → 不触发 refresh（防无限循环）', async () => {
     authState.refreshToken = 'refresh-1'
-    const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/auth/login' }) }
+    const error = {
+      response: { status: 401, data: {} },
+      config: makeConfig({ url: '/auth/login' }),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
     expect(mockAxiosPost).not.toHaveBeenCalled()
@@ -637,7 +677,10 @@ describe('api/request — 401 与 refresh 续期', () => {
 
   it('401 refresh 端点 → 不触发 refresh', async () => {
     authState.refreshToken = 'refresh-1'
-    const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/auth/refresh' }) }
+    const error = {
+      response: { status: 401, data: {} },
+      config: makeConfig({ url: '/auth/refresh' }),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAxiosPost).not.toHaveBeenCalled()
   })
@@ -686,7 +729,9 @@ describe('api/request — 401 与 refresh 续期', () => {
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data3' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
+    expect(mockElMessage.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true })
+    )
     expect(mockAxiosPost).not.toHaveBeenCalled()
   })
 
@@ -696,7 +741,9 @@ describe('api/request — 401 与 refresh 续期', () => {
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data4' }) }
     await expect(handlers.responseR(error)).rejects.toThrow('Refresh response missing access_token')
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
+    expect(mockElMessage.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true })
+    )
   })
 
   it('401 refresh 期间后续 401 排队，成功后统一用新 token 重发', async () => {
@@ -742,7 +789,9 @@ describe('api/request — 401 与 refresh 续期', () => {
     await expect(p1).rejects.toThrow('refresh boom')
     await expect(p2).rejects.toThrow('refresh boom')
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
+    expect(mockElMessage.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true })
+    )
   })
 })
 
@@ -766,20 +815,32 @@ describe('api/request — 封装方法参数透传', () => {
   it('get(url, params) → GET + params，返回已解包 body', async () => {
     mockInst.request.mockResolvedValueOnce({ data: ['a'] })
     const result = await get('/list', { page: 1 })
-    expect(mockInst.request).toHaveBeenCalledWith({ method: 'GET', url: '/list', params: { page: 1 } })
+    expect(mockInst.request).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/list',
+      params: { page: 1 },
+    })
     expect(result).toEqual(['a'])
   })
 
   it('get(url) 无参数时 params 为 undefined', async () => {
     mockInst.request.mockResolvedValueOnce({ data: {} })
     await get('/list')
-    expect(mockInst.request).toHaveBeenCalledWith({ method: 'GET', url: '/list', params: undefined })
+    expect(mockInst.request).toHaveBeenCalledWith({
+      method: 'GET',
+      url: '/list',
+      params: undefined,
+    })
   })
 
   it('post(url, data) → POST + data', async () => {
     mockInst.request.mockResolvedValueOnce({ data: { id: 1 } })
     const result = await post('/items', { name: 'n' })
-    expect(mockInst.request).toHaveBeenCalledWith({ method: 'POST', url: '/items', data: { name: 'n' } })
+    expect(mockInst.request).toHaveBeenCalledWith({
+      method: 'POST',
+      url: '/items',
+      data: { name: 'n' },
+    })
     expect(result).toEqual({ id: 1 })
   })
 
@@ -847,7 +908,11 @@ describe('api/request — 封装方法参数透传', () => {
   it('put(url, data) → PUT + data', async () => {
     mockInst.request.mockResolvedValueOnce({ data: { ok: true } })
     const result = await put('/items/1', { name: 'n2' })
-    expect(mockInst.request).toHaveBeenCalledWith({ method: 'PUT', url: '/items/1', data: { name: 'n2' } })
+    expect(mockInst.request).toHaveBeenCalledWith({
+      method: 'PUT',
+      url: '/items/1',
+      data: { name: 'n2' },
+    })
     expect(result).toEqual({ ok: true })
   })
 
@@ -861,7 +926,11 @@ describe('api/request — 封装方法参数透传', () => {
   it('patch(url, data) → PATCH + data', async () => {
     mockInst.request.mockResolvedValueOnce({ data: { patched: true } })
     const result = await patch('/items/1', { flag: 1 })
-    expect(mockInst.request).toHaveBeenCalledWith({ method: 'PATCH', url: '/items/1', data: { flag: 1 } })
+    expect(mockInst.request).toHaveBeenCalledWith({
+      method: 'PATCH',
+      url: '/items/1',
+      data: { flag: 1 },
+    })
     expect(result).toEqual({ patched: true })
   })
 
@@ -939,7 +1008,7 @@ describe('api/request — parseContentDisposition', () => {
   })
 
   it('filename* 解码结果为空时回退', () => {
-    const headers = { 'content-disposition': 'attachment; filename*=UTF-8\'\'' }
+    const headers = { 'content-disposition': "attachment; filename*=UTF-8''" }
     const result = parseContentDisposition(headers, 'fb.bin')
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
@@ -1121,7 +1190,10 @@ describe('api/request — MODE=development 分支', () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
     // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
-    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
+    vi.stubGlobal('setTimeout', ((fn: any) => {
+      fn()
+      return 0
+    }) as any)
     await import('@/api/request')
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
@@ -1145,7 +1217,10 @@ describe('api/request — MODE=development 分支', () => {
     const location: any = { pathname: '/login', href: '' }
     vi.stubGlobal('location', location)
     // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
-    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
+    vi.stubGlobal('setTimeout', ((fn: any) => {
+      fn()
+      return 0
+    }) as any)
     await import('@/api/request')
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
@@ -1156,7 +1231,10 @@ describe('api/request — MODE=development 分支', () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
     // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
-    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
+    vi.stubGlobal('setTimeout', ((fn: any) => {
+      fn()
+      return 0
+    }) as any)
     await import('@/api/request')
     const error = {
       response: { status: 401, data: {} },
@@ -1170,10 +1248,16 @@ describe('api/request — MODE=development 分支', () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
     // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
-    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
+    vi.stubGlobal('setTimeout', ((fn: any) => {
+      fn()
+      return 0
+    }) as any)
     authState.refreshToken = 'refresh-1'
     await import('@/api/request')
-    const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/auth/login' }) }
+    const error = {
+      response: { status: 401, data: {} },
+      config: makeConfig({ url: '/auth/login' }),
+    }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockAxiosPost).not.toHaveBeenCalled()
     expect(mockAuthStorage.clear).toHaveBeenCalled()
@@ -1184,14 +1268,19 @@ describe('api/request — MODE=development 分支', () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
     // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
-    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
+    vi.stubGlobal('setTimeout', ((fn: any) => {
+      fn()
+      return 0
+    }) as any)
     authState.refreshToken = 'refresh-1'
     mockAxiosPost.mockRejectedValueOnce(new Error('refresh down'))
     await import('@/api/request')
     const error = { response: { status: 401, data: {} }, config: makeConfig({ url: '/data' }) }
     await expect(handlers.responseR(error)).rejects.toThrow('refresh down')
     expect(mockAuthStorage.clear).toHaveBeenCalled()
-    expect(mockElMessage.error).toHaveBeenCalledWith(expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true }))
+    expect(mockElMessage.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '登录已过期，请重新登录', grouping: true })
+    )
     expect(location.href).toBe('/login')
   })
 
@@ -1199,7 +1288,10 @@ describe('api/request — MODE=development 分支', () => {
     const location: any = { pathname: '/workbench', href: '' }
     vi.stubGlobal('location', location)
     // 跳转带 600ms 延迟（提示可读）；单测中让 timer 立即触发以断言最终 href，延迟语义由专项用例验证
-    vi.stubGlobal('setTimeout', ((fn: any) => { fn(); return 0 }) as any)
+    vi.stubGlobal('setTimeout', ((fn: any) => {
+      fn()
+      return 0
+    }) as any)
     const m = await import('@/api/request')
     m.freezeRequests()
     try {
