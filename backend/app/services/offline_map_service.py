@@ -167,7 +167,11 @@ def scan_tiles_dir(root: Path) -> Dict[str, Any]:
     total_tiles = 0
     total_bytes = 0
     zoom_levels: set = set()
-    bounds: Optional[List[float]] = None
+    # 按 zoom 分组累计覆盖范围：最终取**最细 zoom**（明细瓦片）的并集。
+    # 为什么不能跨 zoom 合并：z5/z6 概览瓦片按全球网格对齐，外沿远大于辖区
+    # （实测 z5 会把贵州撑到 101.25~112.5°E），拿它做前端 maxBounds 会允许拖出
+    # 大片空白。最细 zoom 才是真正的"数据覆盖"；单市州包同样得该市州范围。
+    bounds_by_zoom: Dict[int, List[float]] = {}
 
     if not root.is_dir():
         return {
@@ -189,14 +193,22 @@ def scan_tiles_dir(root: Path) -> Dict[str, Any]:
         zoom_levels.add(zoom_level)
         # 仅对合法缩放级累计 bounds（避免异常目录名触发巨大的 1<<z 运算）
         tile_scale = (1 << zoom_level) if 0 <= zoom_level <= MAX_TILE_ZOOM else None
+        zoom_bounds: Optional[List[float]] = None
         for x_dir in z_dir.iterdir():
             if not x_dir.is_dir():
                 continue
-            zoom_tiles, zoom_bytes, bounds = _scan_x_dir(
-                x_dir, zoom_level, tile_scale, bounds
+            zoom_tiles, zoom_bytes, zoom_bounds = _scan_x_dir(
+                x_dir, zoom_level, tile_scale, zoom_bounds
             )
             total_tiles += zoom_tiles
             total_bytes += zoom_bytes
+        if zoom_bounds is not None:
+            bounds_by_zoom[zoom_level] = _merge_bounds(
+                bounds_by_zoom.get(zoom_level), zoom_bounds
+            )
+    bounds: Optional[List[float]] = (
+        bounds_by_zoom[max(bounds_by_zoom)] if bounds_by_zoom else None
+    )
 
     return {
         "total_tiles": total_tiles,

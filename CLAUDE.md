@@ -85,6 +85,7 @@ cd backend && .venv/Scripts/python.exe scripts/check_dir_replace.py
 cd backend && .venv/Scripts/python.exe scripts/check_scheduler_registration.py
 python scripts/check_hardcoded_styles.py          # 前端硬编码色值棘轮（只紧不松）
 python scripts/check_changelog.py                 # 更新日志时效性（当前版本必须已记录）
+npm run test:electron                             # Electron 外壳单测（10 例；CI 的 Linux+Windows 两侧都跑）
 
 # lint-staged：仅检查 git 暂存文件（加速提交）
 cd frontend && npx lint-staged
@@ -136,8 +137,13 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   **23 处目标**（含 8 个 optional 项）由 `node scripts/sync-version.js --write` 单源同步，
   `--check` 为 CI 门禁。⚠️ 旧脚本 `scripts/sync_version.py` 只覆盖 6 类文件且**无校验能力**，
   仅被构建流水线按 tag 使用，不要把它当作唯一同步手段
-- **发布流程**：本地门禁全绿 → 提交推送 → `git tag v<版本> && git push origin v<版本>`
-  → Actions 自动产出 **Windows x64 安装包** 与 **麒麟 ARM64 deb** 并发布 Release（两个安装包）
+- **发布流程**：本地门禁全绿 → 提交推送 → **确认 main 的 PR Checks 已绿** →
+  `git tag v<版本> && git push origin v<版本>`
+  → Actions 自动产出 **Windows x64 安装包** 与 **麒麟 ARM64 deb** 并发布 Release（两个安装包）。
+  两个构建工作流的"发布前置门禁"（`scripts/check_release_gate.py`）会轮询该 commit 的
+  PR Checks 结论，等待上限 **90 分钟**（2026-10-25 由 30 上调：本仓 PR Checks 实测
+  17.4~30.2 分钟，原值 30 与最慢一次压线，正常"推 main 立刻打 tag"会超时变红）。
+  该约束由 `electron/tests/ci-wiring.test.js` 守卫（等待预算 <60 分钟即测试失败）。
 - **更新日志必须及时** (2026-10-25): `CHANGELOG.md` 是唯一账本 —— **每次改动在同一个提交里**
   更新当前版本段（`## [x.y.z] - <日期> — <一句话主题>`），写清「改了什么 / 为什么 / 怎么验证」，
   不要留到发版前补（v1.18.1 就漏记了 4 条最贵的踩坑：E2E 选择器失效、Release 正文 0 字符、

@@ -5,6 +5,27 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.5] - 2026-10-25 — 修正 1.18.4 的 bbox 补丁未生效（真正取最细 zoom）
+
+> **1.18.4 的事故**：声称"取最细 zoom"，但源码编辑未命中实际结构（`scan_tiles_dir`
+> 已重构为 `_scan_x_dir` 委托），补丁实际 no-op；真机验证 bbox 仍是
+> `[101.25, 21.94, 112.5, 31.95]`（z5 概览瓦片外沿）。**本版真正实现并验证**。
+
+### Fixed
+
+- `scan_tiles_dir` 改为**按 zoom 分组累计**（每个 z 目录单独合并 `_scan_x_dir` 的 bounds，
+  存 `bounds_by_zoom`），最终 `bounds` 取 `bounds_by_zoom[max(...)]`。
+- 实测（`resources/map-tiles`，5,623 张 z5–12）：
+  `bounds = [103.53515625, 24.5271348225978, 109.6875, 29.22889003019423]` —— 贵州辖区量级；
+  修正前为 `[101.25, 21.94, 112.5, 31.95]`。
+- 多包叠加语义不变：同一 zoom 内仍为各包并集（有 22 项 bbox 测试覆盖，含贵阳+遵义并集用例）。
+
+### Tests
+
+- `test_tile_info_coverage_bbox.py` / `test_map_tile_info_diagnostics.py` /
+  `test_offline_map_service.py` / `test_tiles_pipeline.py` 合计 **163 passed**；flake8 0。
+- 真机（打包后端）复验：`tile-info.bbox` 为上述辖区量级；覆盖区内瓦片 200、区外 404。
+
 ## [1.18.4] - 2026-10-25 — 瓦片覆盖 bbox 取最细 zoom（修正 1.18.3 概览瓦片撑大 maxBounds）
 
 > 1.18.3 的实测 bbox 取"所有 zoom 的并集"，但 **z5 概览瓦片按全球网格对齐**，
@@ -61,6 +82,27 @@
   全量前端套件重跑无失败输出。
 - 本地安装包 `MRRS-Setup-1.18.3-x64.exe` 打包后实测：`/map/tile-info.bbox` 为实测并集，
   覆盖区内瓦片 200、区外 404 且前端透明不回退。
+
+### Fixed（2026-10-25 追加：交付链两处"看着绿、其实没跑"）
+
+- **electron 外壳单测长期不在版本库里**：`.gitignore` 的 `*.test.js` 通配只给
+  `backend/tests/` 与 `frontend/**` 开了白名单，**漏了 `electron/tests/`** ——
+  `file-chunk.test.js`、`path-guard.test.js` 一直"磁盘上有、库里没有"，
+  CI 与全新 clone 都拿不到（`worker-pool.test.js` 只因早于该规则才侥幸入库）。
+  已补 `!electron/tests/**` 并入库 3 个文件；其中 `path-guard` 正是 **Windows 路径语义**
+  （盘符/UNC/`..` 规范化/大小写）用例，缺它等于这块完全没测。
+  审计口径：全仓磁盘 357 个测试文件，此前 **354 入库 / 3 未入库**，现全部入库。
+- **electron 单测此前无人执行（孤儿测试）**：`package.json` 新增 `test:electron`
+  （Node 内置 runner，零第三方依赖），并接进 **两个** CI 作业 ——
+  `frontend-check`（Linux）与 `windows-smoke`（Windows，该作业新增 `setup-node`）。
+  Windows 侧必须有：Linux 全绿对路径语义毫无证明力（v1.12.3 编码崩溃、v1.12.6 GBK 管道均属此类）。
+- **发布门禁等待预算与实测压线**：`build-arm64.yml` 两处 `check_release_gate.py --timeout-minutes`
+  由 **30 → 90**。本仓 PR Checks 实测 **17.4 / 22.6 / 30.2 / 30.2 分钟**，原值 30 与最慢一次正好压线；
+  正常发布流程「推 main → 立刻打 tag」时该步骤只比 PR Checks 晚 1~2 分钟起跑，**必然超时变红**
+  （v1.18.1 能成功是因为人工先等 CI 绿再打 tag，属规避而非解决）。
+- **接线守卫** `electron/tests/ci-wiring.test.js`（4 例）：断言 `test:electron` 存在、
+  两个作业都执行它、`windows-smoke` 配了 `setup-node`、两个构建工作流的门禁等待 ≥ 60 分钟。
+  已实证"能红"：把 arm64 临时改回 30 → 该测试 **EXIT=1**，还原 → **EXIT=0**。
 
 ## [1.18.2] - 2026-10-25 — 瓦片底图“加载失败已切回矢量”根治（边缘 404 不再整体回退）
 
