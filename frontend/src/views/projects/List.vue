@@ -316,11 +316,7 @@ const stats = reactive({
 
 // 分页
 // ⑥ 每页条数：选项含后端硬上限 200，且按业务域记忆（见 composables/usePageSize.ts）
-const {
-  pageSize: prefPageSize,
-  options: pageSizeOptions,
-  setPageSize,
-} = usePageSize('projects')
+const { pageSize: prefPageSize, options: pageSizeOptions, setPageSize } = usePageSize('projects')
 
 const pagination = reactive({
   page: 1,
