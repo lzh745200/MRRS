@@ -22,7 +22,10 @@ test.describe('Village Lifecycle', () => {
       .first()
     if (await addBtn.isVisible()) {
       await addBtn.first().click()
-      await expect(page.locator('.el-dialog, .el-drawer, form').first()).toBeVisible({
+      // 顶栏新增了「数据同步台账」抽屉（DOM 中排在前面且默认隐藏）：
+      // 旧选择器 .el-dialog, .el-drawer, form 的 .first() 会命中那个隐藏抽屉 → 超时。
+      // 只断言**可见**的对话框/表单，避免被隐藏同类元素污染。
+      await expect(page.locator('.el-dialog:visible, .el-drawer:visible, form:visible').first()).toBeVisible({
         timeout: 5000,
       })
     }
