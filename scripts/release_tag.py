@@ -99,7 +99,7 @@ def validate_tag(tag: str) -> tuple[bool, str]:
 def changelog_recorded() -> tuple[bool, str]:
     """复用 changelog 门禁脚本，避免两套口径。"""
     proc = _run([sys.executable, str(ROOT / "scripts" / "check_changelog.py")])
-    return proc.returncode == 0, (proc.stdout + proc.stderr).strip()[-400:]
+    return proc.returncode == 0, ((proc.stdout or "") + (proc.stderr or "")).strip()[-400:]
 
 
 def ci_green(sha: str, wait_minutes: int, repo: str) -> tuple[bool, str]:
@@ -115,7 +115,7 @@ def ci_green(sha: str, wait_minutes: int, repo: str) -> tuple[bool, str]:
         repo,
     ]
     proc = _run(cmd)
-    return proc.returncode == 0, (proc.stdout + proc.stderr).strip()[-400:]
+    return proc.returncode == 0, ((proc.stdout or "") + (proc.stderr or "")).strip()[-400:]
 
 
 def main(argv: list[str] | None = None) -> int:
