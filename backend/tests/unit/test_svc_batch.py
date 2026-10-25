@@ -67,7 +67,7 @@ def test_h10():
 
     assert ANALYTICS_CACHE_PREFIX == "analytics:"
     assert DEFAULT_PAGE_SIZE == 20
-    assert MAX_PAGE_SIZE == 100
+    assert MAX_PAGE_SIZE == 200
 
 
 def test_h11():

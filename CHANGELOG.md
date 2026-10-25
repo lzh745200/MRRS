@@ -50,6 +50,18 @@
   = **100.00%**（45955/45955 语句、11450/11450 分支）；前端 **334 文件 / 7138 用例**
   全 PASS、覆盖率四项 100%（`--maxWorkers=2` 避免并发抢 worker 导致
   `The service is no longer running` 假失败）；`flake8 app/ + scripts/` = 0。
+- **⑥ 分页上限改造引入的 6 处回归**（本版修复；12 段复验时 seg10/seg12 各挂 1/5 例）：
+  - **直接调用崩溃**：`auth/users.py` / `feedback.py` / `machine_code.py` 把
+    `page_size: int = 20` 改成 `Query(DEFAULT_PAGE_SIZE, ...)` 后，HTTP 路径正常，
+    但**测试/内部代码直接调用端点**时拿到的是 `Query` 对象，
+    `(page - 1) * page_size` 抛 `TypeError: unsupported operand type(s) for *: 'int' and 'Query'`
+    （`test_coverage_gaps_final` 1 例 + `test_v1129_gap_users_super_admin` 2 例）。
+    修法：`app/utils/pagination.py` 新增 `coerce_page_param()`，三处端点调用前归一成 int，
+    HTTP 校验（`ge=1, le=MAX_PAGE_SIZE`）与门禁口径都不变。
+  - **常量断言漏改**：`MAX_PAGE_SIZE` 100→200 后，`test_core_constants.py` /
+    `test_core_full_coverage.py` / `test_svc_batch.py` 仍断言 100 → 3 例失败。断言已同步 200。
+  - **验证**：上述 5 个测试文件 **285 passed**；`check_pagination_cap.py` OK；
+    `flake8` 改动文件 0；seg10/seg12 重跑见下方结论。
 
 ### Added
 
@@ -113,6 +125,24 @@
   把本次 4 个前端文件还原成 HEAD 版本后**同样失败**，属本机环境问题
   （残留 esbuild 服务进程锁住临时二进制 + Defender 实时扫描；CI 为 Linux runner 不受影响）。
   本机如需出包，先 `Get-Process esbuild | Stop-Process` 并清空 `%TEMP%\esbuild-*` 后重试。
+
+### Fixed（补充）
+
+- **`tests/unit/test_svc_batch.py::test_h10` 断言过期**：`MAX_PAGE_SIZE` 已由 100 调整为 200
+  （分页硬上限收口），该断言仍写 100；本地只跑相关套件未触及，CI 的 seg10 才红并被
+  `check_release_gate.py` 拒绝出包。已更新为 200。
+
+### Added
+
+- **`scripts/release_tag.py`（唯一发布入口）**：一次校验"main 分支 + 工作区干净 + tag 与
+  `package.json` 版本一致 + CHANGELOG 已记录 + 目标 commit 的 PR Checks 绿"，通过后才
+  `git tag && git push`；默认 dry-run，支持 `--sha`（main 被他人推进时仍发布自己验证过的提交）。
+- **`scripts/check_constants_sync.py`（常量↔字面量门禁）**：扫描 `backend/tests`、`docs` 中
+  `CONST == 字面量` 与 `backend/app/core/constants.py` 是否一致，专防"常量改了、测试没改"；
+  已接入 `.pre-commit-config.yaml` 的 **pre-push** 阶段。
+- **`docs/agents/ci-failure-lessons.md`**：2026-10-25 一整天 CI 红灯（PR Checks / Nightly /
+  v1.18.4 / v1.18.5 tag 构建）的根因分类、已落地防线与发布纪律。
+- 单测：`test_check_constants_sync.py`（10 项）、`test_release_tag_gate.py`（9 项）。
 
 ## [1.18.5] - 2026-10-25 — 修正 1.18.4 的 bbox 补丁未生效（真正取最细 zoom）
 

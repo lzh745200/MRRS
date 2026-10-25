@@ -108,6 +108,17 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+      # 2026-10-25 事故教训：MAX_PAGE_SIZE 100→200 后测试仍断言 100，
+      # 本地只跑相关套件没发现，CI seg10 才红 → PR Checks 红 → 发布被拒。
+      # 本 hook 在 push 前机械扫描"常量 vs 测试/文档字面量"漂移。
+      - id: check-constants-sync
+        name: check constants vs test/doc literals (constant drift guard)
+        entry: python scripts/check_constants_sync.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
 # CI workflows:
 # - pre-commit 阶段: ruff (快速)、trailing-whitespace、YAML/JSON 检查
 # - pre-push 阶段: flake8, bandit, vue-tsc (全量质量门禁)
