@@ -4,69 +4,395 @@
     "path": "/dashboard",
     "title": "工作台",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "supported-villages",
     "path": "/supported-villages",
     "title": "帮扶村管理",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "projects",
     "path": "/projects",
     "title": "帮扶项目管理",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "funds",
     "path": "/funds",
     "title": "经费管理",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "households",
     "path": "/households",
     "title": "一户一档",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "media",
     "path": "/media",
     "title": "影像库",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "consumption",
     "path": "/consumption",
     "title": "消费帮扶",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "system-console",
     "path": "/system/console/org",
     "title": "系统管理",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "data-verify",
     "path": "/data-verify",
     "title": "数据校验",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
   },
   {
     "name": "bigscreen",
     "path": "/bigscreen",
     "title": "帮扶成效大屏",
     "contentPresent": true,
-    "landmarksHit": [true]
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-org-users-orgs",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-org-roles",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-org-menus",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-org-system-permission-packs",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-org-organizations",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-org-system-org-grant",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-org-system-grant-import",
+    "path": "/system/console/org",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-security-audit",
+    "path": "/system/console/security",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-security-zero-trust",
+    "path": "/system/console/security",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-security-secrets",
+    "path": "/system/console/security",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-security-data-tier",
+    "path": "/system/console/security",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-security-encryption",
+    "path": "/system/console/security",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-security-machine-code",
+    "path": "/system/console/security",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-ops-system-overview",
+    "path": "/system/console/ops",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-ops-health-check",
+    "path": "/system/console/ops",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-ops-monitor",
+    "path": "/system/console/ops",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-ops-cache",
+    "path": "/system/console/ops",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-ops-tasks",
+    "path": "/system/console/ops",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-ops-environment",
+    "path": "/system/console/ops",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-ops-error-reports",
+    "path": "/system/console/ops",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-storage-backup",
+    "path": "/system/console/storage",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-storage-chunked-upload",
+    "path": "/system/console/storage",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-storage-map-tiles",
+    "path": "/system/console/storage",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-storage-control-package",
+    "path": "/system/console/storage",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-storage-config-package",
+    "path": "/system/console/storage",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-settings-update-logs",
+    "path": "/system/console/settings",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-about-about",
+    "path": "/system/console/about",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-about-feedback",
+    "path": "/system/console/about",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-about-help",
+    "path": "/system/console/about",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "console-about-admin-dashboard",
+    "path": "/system/console/about",
+    "title": "系统管理",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "form-policy-create",
+    "path": "/policies/create",
+    "title": "添加政策",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "form-project-create",
+    "path": "/projects/create",
+    "title": "添加项目",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "form-school-create",
+    "path": "/schools/create",
+    "title": "添加学校",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
+  },
+  {
+    "name": "form-fund-create",
+    "path": "/funds/create",
+    "title": "经费登记",
+    "contentPresent": true,
+    "landmarksHit": [
+      true
+    ]
   }
 ]

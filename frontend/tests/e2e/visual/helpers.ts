@@ -105,6 +105,91 @@ export const VISUAL_BASELINES: VisualBaseline[] = [
   },
 ]
 
+/**
+ * ⑨ 视觉回归扩容（2026-10-26）：从 10 页扩到「30 个 console tab + 4 个核心表单」。
+ *
+ * 为什么覆盖 console 的每一个 tab：系统管理 6 个聚合页共 30 个 tab，此前只有
+ * `/system/console/org` 一个落地页在基线上 —— 任一 tab 的组件映射坏掉（菜单有、组件缺）
+ * 都不会被视觉回归发现，而这类故障的表现正是"点进去白屏"。
+ *
+ * 为什么覆盖新增表单：录入态是最容易被 UI 改造打破的界面（栅格、校验、字段布局），
+ * 且没有列表页那种"至少还有表格"的兜底观感。
+ */
+const CONSOLE_TAB_BASELINES: Array<[group: string, tab: string]> = [
+  ['org', 'users-orgs'],
+  ['org', 'roles'],
+  ['org', 'menus'],
+  ['org', 'system-permission-packs'],
+  ['org', 'organizations'],
+  ['org', 'system-org-grant'],
+  ['org', 'system-grant-import'],
+  ['security', 'audit'],
+  ['security', 'zero-trust'],
+  ['security', 'secrets'],
+  ['security', 'data-tier'],
+  ['security', 'encryption'],
+  ['security', 'machine-code'],
+  ['ops', 'system-overview'],
+  ['ops', 'health-check'],
+  ['ops', 'monitor'],
+  ['ops', 'cache'],
+  ['ops', 'tasks'],
+  ['ops', 'environment'],
+  ['ops', 'error-reports'],
+  ['storage', 'backup'],
+  ['storage', 'chunked-upload'],
+  ['storage', 'map-tiles'],
+  ['storage', 'control-package'],
+  ['storage', 'config-package'],
+  ['settings', 'update-logs'],
+  ['about', 'about'],
+  ['about', 'feedback'],
+  ['about', 'help'],
+  ['about', 'admin-dashboard'],
+]
+
+const FORM_BASELINES: VisualBaseline[] = [
+  {
+    name: 'form-policy-create',
+    path: '/policies/create',
+    pathPrefix: '/policies',
+    title: '添加政策',
+    requiredAnyOf: [['form', 'card']],
+  },
+  {
+    name: 'form-project-create',
+    path: '/projects/create',
+    pathPrefix: '/projects',
+    title: '添加项目',
+    requiredAnyOf: [['form', 'card']],
+  },
+  {
+    name: 'form-school-create',
+    path: '/schools/create',
+    pathPrefix: '/schools',
+    title: '添加学校',
+    requiredAnyOf: [['form', 'card']],
+  },
+  {
+    name: 'form-fund-create',
+    path: '/funds/create',
+    pathPrefix: '/funds',
+    title: '经费登记',
+    requiredAnyOf: [['form', 'card']],
+  },
+]
+
+VISUAL_BASELINES.push(
+  ...CONSOLE_TAB_BASELINES.map(([group, tab]) => ({
+    name: `console-${group}-${tab}`,
+    path: `/system/console/${group}?tab=${tab}`,
+    pathPrefix: '/system/console',
+    title: '系统管理',
+    requiredAnyOf: [['table', 'empty', 'card', 'form', 'tabs', 'controls']],
+  })),
+  ...FORM_BASELINES
+)
+
 /** 采集到的页面结构（供断言与快照） */
 export interface PageStructure {
   /** 实际路由 pathname（去掉 query） */

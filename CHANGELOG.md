@@ -201,6 +201,24 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（⑨ 视觉回归从 10 页扩到 44 页：30 个 console tab + 4 个核心表单）
+
+- **补齐 30 个 console tab**：系统管理 6 个聚合页共 30 个 tab，此前只有
+  `/system/console/org` 一个落地页在基线上 —— 任一 tab 的组件映射坏掉（菜单有、组件缺）
+  都不会被视觉回归发现，而这类故障的表现正是"点进去白屏"。
+  现按 `menus.py` 的 console 定义生成 30 条基线（`/system/console/<group>?tab=<key>`），
+  与 `check_console_tab_mapping.py` 的静态门禁形成"静态 + 运行时"双保险。
+- **补齐 4 个核心表单**：`/policies/create`（添加政策）、`/projects/create`（添加项目）、
+  `/schools/create`（添加学校）、`/funds/create`（经费登记）——
+  录入态是最容易被 UI 改造打破的界面，且没有列表页"至少还有表格"的兜底观感。
+  注：组织没有独立 create 路由（新建走列表页对话框），故未纳入。
+- 实现：`helpers.ts` 里以常量表生成基线（避免手写 34 段重复对象），
+  `VISUAL_BASELINES.push(...)` 追加；标题取自 router `meta.title`（稳定契约）。
+- 验证（本地跑，`webServer` 自起后端 + 前端）：`UPDATE_VISUAL_BASELINE=1` 采集 **44 passed**；
+  随后**不带更新标志**复跑 **44 passed**，确认基线自洽（不是"更新完就绿"的自欺）。
+- 顺带：`src/components.d.ts` 由 unplugin-vue-components 自动补上本轮三个新组件
+  （`CommonBulkPasteDialog` / `FundsOcrVoucherSuggest` / `NavSyncStatusCapsule`），一并提交。
+
 ### Added（③ third 页面接入：组织编辑页草稿 + 离开拦截）
 
 - `views/organization/Edit.vue` 接入 ③：草稿键按模式隔离（`organization:edit:new` / `:id`）；
