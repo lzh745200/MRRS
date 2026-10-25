@@ -24,6 +24,33 @@
 - **`frontend/package.json` 补 `engines`**：`node: ^20.19.0 || >=22.12.0`
   （对齐 Vite 7 的实际要求；本机实测 Node 25.2.1）。此前无任何约束。
 
+### Fixed（2026-10-25 复验：0 失败 0 跳过）
+
+- **密码哈希改 bcrypt 直连**（`app/core/security.py`）：passlib 1.7.4 在 bcrypt 5.x 下
+  后端探测失败，且**失败状态在进程内永久缓存** —— 大批量收集时随机抛
+  `passlib.exc.MissingBackendError`，使 `test_soft_delete_coverage` / `test_supported_village_api`
+  直接收集失败、覆盖率失真。改用 `bcrypt.hashpw/checkpw` 直连后产物格式不变
+  （`$2b$<cost>$`），历史哈希零迁移；`pwd_context` 仅兼容保留。
+- **MANIFEST bbox 只校验长度不校验数值**（`api/v1/map.py`）：`["x",1,2,3]` 这类非法 bbox
+  会被当作 Leaflet bounds 传给前端，地图表现为不显示 / 异常缩放。新增 `_valid_bbox()`
+  校验「4 个有限数值」，并排除 `bool` / `NaN` / `±inf`。
+- **消除唯一 skip**（`tests/unit/test_offline_log_path_w18.py`）：打包态日志路径改写回归
+  原先用 `skipif` 跳过开发机 —— 等于该核心回归永不在本地验证。改为
+  `monkeypatch` `sys.frozen=True`，与真实打包态走同一分支。
+- **BaseChart 主题重建入口显式暴露**（`components/common/BaseChart.vue`）：
+  `rebuildForTheme` 仅靠全局自定义事件触发，多套件并行时覆盖归属漂移
+  （单跑 100%、全量 99.8%）；`defineExpose` 暴露 `rebuild()` 后可直测。
+- **覆盖率门禁两处失效根治**（`scripts/run_backend_tests_segmented.py`）：
+  ① `.coveragerc` 缺失时 **fail-fast**（历史：被清理分片误删 → `fail_under` 静默失效，
+  门禁假绿）；② 覆盖率判定从「末段内联 report」改为「**全部段跑完后统一 report**」，
+  并支持 `--cov-unique`（每段独立 `data_file` + `combine`）—— 多会话并发下固定文件名
+  会互相覆盖，实测 12 段全 PASS 却只 report 出 53%；清理分片一律精确匹配，
+  **绝不用 `.coverage*`**（会把 `.coveragerc` 一起删掉）。
+- **复验口径**：后端 12 段全 PASS / 0 failed / 0 skipped，对累积数据 `coverage report`
+  = **100.00%**（45955/45955 语句、11450/11450 分支）；前端 **334 文件 / 7138 用例**
+  全 PASS、覆盖率四项 100%（`--maxWorkers=2` 避免并发抢 worker 导致
+  `The service is no longer running` 假失败）；`flake8 app/ + scripts/` = 0。
+
 ### Added
 
 - **CI 增补 `scripts/` flake8 步骤**（`.github/workflows/pr-checks.yml` 的 `lint` 作业）：
