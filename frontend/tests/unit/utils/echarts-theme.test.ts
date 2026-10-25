@@ -16,6 +16,10 @@ import {
   REVITALIZATION_GREEN,
   BADGE_GOLD,
   themeColor,
+  syncPaletteFromTokens,
+  refreshMilitaryTheme,
+  chartThemeRevision,
+  ECHARTS_THEME_CHANGED,
 } from '@/utils/echarts-theme'
 
 describe('utils/echarts-theme', () => {
@@ -96,6 +100,54 @@ describe('utils/echarts-theme', () => {
     it('document 不可用时回退 fallback', () => {
       vi.stubGlobal('document', undefined)
       expect(themeColor('--color-text-primary', '#abcdef')).toBe('#abcdef')
+    })
+  })
+
+  describe('调色板跟随 Token（① 主题切换图表跟随）', () => {
+    afterEach(() => {
+      document.documentElement.style.removeProperty('--color-primary')
+      document.documentElement.style.removeProperty('--color-success')
+      document.documentElement.style.removeProperty('--color-warning')
+      document.documentElement.style.removeProperty('--color-danger')
+      document.documentElement.style.removeProperty('--color-gold')
+    })
+
+    it('syncPaletteFromTokens 用 Token 值原地替换调色板（不换引用）', () => {
+      const ref0 = COLOR_PALETTE
+      document.documentElement.style.setProperty('--color-primary', '#111111')
+      document.documentElement.style.setProperty('--color-success', '#222222')
+
+      syncPaletteFromTokens()
+
+      expect(COLOR_PALETTE).toBe(ref0) // 引用不变，既有 COLOR_PALETTE[i] 调用点无需改动
+      expect(COLOR_PALETTE[0]).toBe('#111111')
+      expect(COLOR_PALETTE[1]).toBe('#222222')
+    })
+
+    it('未纳入 Token 体系的索引保留原字面量（不编近似值）', () => {
+      syncPaletteFromTokens()
+      expect(COLOR_PALETTE[3]).toBe('#3b82f6')
+      expect(COLOR_PALETTE[13]).toBe('#14b8a6')
+    })
+
+    it('Token 缺失时回退内置字面量', () => {
+      document.documentElement.style.removeProperty('--color-danger')
+      syncPaletteFromTokens()
+      expect(COLOR_PALETTE[6]).toBe('#ef4444')
+    })
+
+    it('refreshMilitaryTheme 重新注册并递增版本号、派发事件', () => {
+      const before = chartThemeRevision.value
+      const handler = vi.fn()
+      window.addEventListener(ECHARTS_THEME_CHANGED, handler)
+
+      refreshMilitaryTheme()
+
+      expect(registerThemeMock).toHaveBeenCalledTimes(2) // 两个主题各注册一次
+      expect(chartThemeRevision.value).toBe(before + 1)
+      expect(handler).toHaveBeenCalledTimes(1)
+
+      window.removeEventListener(ECHARTS_THEME_CHANGED, handler)
     })
   })
 })

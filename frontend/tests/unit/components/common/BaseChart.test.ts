@@ -35,7 +35,9 @@ describe('common/BaseChart.vue', () => {
 
     expect(initMock).toHaveBeenCalledTimes(1)
     const domEl = wrapper.find('.base-chart').element
-    expect(initMock).toHaveBeenCalledWith(domEl, '')
+    // theme 留空时跟随 DOM 主题（getCurrentTheme）：无 data-theme 时为 'militaryTech'。
+    // 固定 '' 会让大屏/户外高对比主题下图表沿用浅色轴线与文字（2026-10-25 修）。
+    expect(initMock).toHaveBeenCalledWith(domEl, 'militaryTech')
     expect(echartsInstance.setOption).toHaveBeenCalledWith(option)
     expect(echartsInstance.on).toHaveBeenCalledWith('click', expect.any(Function))
 
@@ -156,5 +158,36 @@ describe('common/BaseChart.vue', () => {
     await flushPromises()
     wrapper.unmount()
     expect(echartsInstance.dispose).toHaveBeenCalledTimes(1)
+  })
+
+  // ① 主题切换图表跟随：registerTheme 只影响之后 init 的实例，
+  // 已存在的实例必须 dispose + 重建才会换色（2026-10-25）。
+  it('主题切换事件 → dispose 旧实例并按新主题重建', async () => {
+    const wrapper = mount(BaseChart, { props: { option } })
+    await flushPromises()
+    expect(initMock).toHaveBeenCalledTimes(1)
+
+    document.documentElement.setAttribute('data-theme', 'dark-bigscreen')
+    window.dispatchEvent(new CustomEvent('mrrs:echarts-theme-changed'))
+    await flushPromises()
+
+    expect(echartsInstance.dispose).toHaveBeenCalledTimes(1)
+    expect(initMock).toHaveBeenCalledTimes(2)
+    // 重建时按当前 DOM 主题取暗色主题
+    expect(initMock).toHaveBeenLastCalledWith(wrapper.find('.base-chart').element, 'militaryTechDark')
+
+    document.documentElement.removeAttribute('data-theme')
+    wrapper.unmount()
+  })
+
+  it('卸载后移除主题监听（不再因事件重建）', async () => {
+    const wrapper = mount(BaseChart, { props: { option } })
+    await flushPromises()
+    wrapper.unmount()
+    const callsAfterUnmount = initMock.mock.calls.length
+
+    window.dispatchEvent(new CustomEvent('mrrs:echarts-theme-changed'))
+    await flushPromises()
+    expect(initMock.mock.calls.length).toBe(callsAfterUnmount)
   })
 })

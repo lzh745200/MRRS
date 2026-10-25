@@ -14,6 +14,7 @@
  */
 
 import type { EChartsCoreOption } from 'echarts/core'
+import { shallowRef } from 'vue'
 // 直接从 echarts/core 导入，避免与 @/utils/echarts 形成循环导入
 // （echarts.ts 顶层会调用本模块的 registerMilitaryTheme()）
 import * as echarts from 'echarts/core'
@@ -23,7 +24,7 @@ import * as echarts from 'echarts/core'
 // ============================================================================
 
 /** 品牌色板 —— 16 色，覆盖饼图/柱图等多系列场景 */
-const COLOR_PALETTE = [
+const COLOR_PALETTE_FALLBACK: readonly string[] = [
   '#1e4d8c', // 品牌蓝（主）
   '#2d6a4f', // 振兴绿
   '#b8960c', // 点缀金
@@ -41,6 +42,52 @@ const COLOR_PALETTE = [
   '#e11d48', // 玫红
   '#64748b', // 石板灰
 ]
+
+/**
+ * 调色板与设计 Token 的对应关系（索引与 `COLOR_PALETTE` 对齐）。
+ * `null` 表示该色无对应 Token，保留原字面量 —— 与其编一个近似值造成"看着变了其实没变"，
+ * 不如明确标注"未纳入 Token 体系"。
+ */
+const PALETTE_TOKEN_NAMES: readonly (string | null)[] = [
+  '--color-primary',
+  '--color-success',
+  '--color-gold',
+  null,
+  null,
+  '--color-warning',
+  '--color-danger',
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+]
+
+/**
+ * **实时**调色板：内容由 `syncPaletteFromTokens()` 原地替换（不换引用），
+ * 因此 `COLOR_PALETTE[5]` 这类既有调用点无需改动，也能在主题切换后拿到新值。
+ */
+const COLOR_PALETTE: string[] = [...COLOR_PALETTE_FALLBACK]
+
+/**
+ * 主题版本号：主题切换时自增。图表页把 `option` 写成 computed 时读一下它，
+ * 即可在切换主题后**重新计算**颜色（否则 option 里存的是旧色值字面量）。
+ * `shallowRef` 足够——只需版本变化触发重算，不需要深响应。
+ */
+export const chartThemeRevision = shallowRef(0)
+
+/** 把 Token 值灌进调色板（原地替换；无 DOM 环境自动回退字面量）。 */
+export function syncPaletteFromTokens(): void {
+  const next = COLOR_PALETTE_FALLBACK.map((fallback, index) => {
+    const token = PALETTE_TOKEN_NAMES[index]
+    return token ? themeColor(token, fallback) : fallback
+  })
+  COLOR_PALETTE.splice(0, COLOR_PALETTE.length, ...next)
+}
 
 // ============================================================================
 // 主题配置
@@ -509,10 +556,32 @@ let isThemeRegistered = false
 export function registerMilitaryTheme(): void {
   if (isThemeRegistered) return
 
+  // 调色板先与当前主题的 Token 同步，再注册 —— 否则注册进去的永远是字面量色值，
+  // 切换"户外高对比"时图表仍是军绿，这就是 2026-10-25 修掉的那个观感缺陷。
+  syncPaletteFromTokens()
+
   echarts.registerTheme('militaryTech', militaryTechTheme as unknown as EChartsCoreOption)
   echarts.registerTheme('militaryTechDark', militaryTechDarkTheme as unknown as EChartsCoreOption)
 
   isThemeRegistered = true
+}
+
+/** 主题切换事件名：图表组件监听它 → dispose + 重建，让新主题立即生效。 */
+export const ECHARTS_THEME_CHANGED = 'mrrs:echarts-theme-changed'
+
+/**
+ * 主题切换后调用：同步调色板 → 重新注册主题 → 通知所有图表重建。
+ *
+ * 为什么必须重建：`echarts.registerTheme` 只影响**之后** `init` 的实例，
+ * 已存在的实例不会因为重新注册而变色。所以事件里各组件自行 dispose + init。
+ */
+export function refreshMilitaryTheme(): void {
+  isThemeRegistered = false
+  registerMilitaryTheme()
+  chartThemeRevision.value += 1
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent(ECHARTS_THEME_CHANGED))
+  }
 }
 
 /**

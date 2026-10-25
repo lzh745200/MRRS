@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { refreshMilitaryTheme } from '@/utils/echarts-theme'
 
 /** 主题持久化 localStorage 键 */
 export const THEME_STORAGE_KEY = 'theme'
@@ -65,6 +66,9 @@ export function readStoredTheme(): string {
  * 将主题应用到 DOM：
  * - 'default' → 移除 data-theme 属性（渲染 :root 军绿默认主题）
  * - 其他值 → 设置 data-theme，匹配 tokens.scss 的 [data-theme="..."]
+ *
+ * 写完 `data-theme` 后必须 `refreshMilitaryTheme()`：ECharts 主题是**注册时的快照**，
+ * 不刷新就永远是切换前那套颜色（2026-10-25 修的观感缺陷：切到"户外高对比"图表仍军绿）。
  */
 export function applyThemeToDom(theme: string): void {
   if (theme === DEFAULT_THEME) {
@@ -72,6 +76,7 @@ export function applyThemeToDom(theme: string): void {
   } else {
     document.documentElement.setAttribute('data-theme', theme)
   }
+  refreshMilitaryTheme()
 }
 
 export const useConfigStore = defineStore('config', () => {

@@ -26,6 +26,21 @@
   `test_offline_map_service.py` / `test_tiles_pipeline.py` 合计 **163 passed**；flake8 0。
 - 真机（打包后端）复验：`tile-info.bbox` 为上述辖区量级；覆盖区内瓦片 200、区外 404。
 
+### Changed（图表主题跟随设计 Token）
+
+- **ECharts 调色板与主题改为 Token 驱动且可刷新**：`echarts-theme.ts` 新增
+  `PALETTE_TOKEN_NAMES`（16 色索引对齐；`null` = 未纳入 Token 体系，保留原字面量而不编近似值）、
+  `syncPaletteFromTokens()`（**原地 `splice`** 替换 `COLOR_PALETTE` 内容，6 个视图的
+  `COLOR_PALETTE[i]` 调用点无需改动）、`refreshMilitaryTheme()`
+  （重注册 + 递增 `chartThemeRevision` + 派发 `ECHARTS_THEME_CHANGED`）。
+  背景：`registerTheme` 只影响**之后** `init` 的实例，原实现切到"户外高对比"后图表仍是军绿 ——
+  而强光现场最需要看清的恰恰是图表。
+- **主题切换单一入口接线**：`applyThemeToDom()` 写完 `data-theme` 后调用 `refreshMilitaryTheme()`。
+- **`BaseChart.vue` 主题事件重建**：监听事件 → `dispose()` + 重新 `init`；`theme` 留空时
+  改用 `getCurrentTheme()`（跟随 `data-theme`），不再固定浅色。移除重建路径中永不进入的
+  `unmounted` 守卫（监听在 `onUnmounted` 已先移除），避免覆盖率黑洞。
+- 测试：`echarts-theme.test.ts` 9→13、`BaseChart.test.ts` 11→13；三文件覆盖率 100/100/100/100。
+
 ### Changed（CI 治理：让"验证过"可被证明，让"红了"能照着修）
 
 - **main 不再被后续推送取消运行**：`pr-checks.yml` 的 `concurrency.cancel-in-progress`
