@@ -19,6 +19,7 @@ declare module 'vue' {
     CommonMoneyText: typeof import('./components/common/MoneyText.vue')['default']
     CommonPageHeader: typeof import('./components/common/PageHeader.vue')['default']
     CommonStatsCard: typeof import('./components/common/StatsCard.vue')['default']
+    CommonVirtualList: typeof import('./components/common/VirtualList.vue')['default']
     DataPackageExportDialog: typeof import('./components/dataPackage/ExportDialog.vue')['default']
     DataPackageExportEncryptedDialog: typeof import('./components/dataPackage/ExportEncryptedDialog.vue')['default']
     DataPackageImportDialog: typeof import('./components/dataPackage/ImportDialog.vue')['default']
