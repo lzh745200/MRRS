@@ -49,8 +49,11 @@ class TestParseConstants:
         }
 
     def test_missing_file_raises(self, tmp_path):
-        with pytest.raises(FileNotFoundError):
+        # 断言消息里带路径：只写 pytest.raises 上下文属于"零断言"，
+        # 会被 scripts/check_no_assert_tests.py 的棘轮判为新增违规。
+        with pytest.raises(FileNotFoundError) as ei:
             mod.parse_constants(tmp_path / "nope.py")
+        assert "nope.py" in str(ei.value)
 
 
 class TestCheck:
