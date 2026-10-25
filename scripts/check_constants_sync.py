@@ -114,7 +114,11 @@ def check(constants: Dict[str, Any], dirs: List[Path]) -> List[str]:
             expected = constants[name]
             actual = _literal(raw)
             if actual != expected:
-                rel = path.relative_to(ROOT).as_posix()
+                try:
+                    rel = path.relative_to(ROOT).as_posix()
+                except ValueError:
+                    # pytest tmp_path 位于仓库外（Linux /tmp）：不能直接 relative_to
+                    rel = path.as_posix()
                 line_no = text[: match.start()].count("\n") + 1
                 problems.append(
                     f"{rel}:{line_no}: {name} 断言为 {raw}，但 constants.py 里是 {expected!r}"
