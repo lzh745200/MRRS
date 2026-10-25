@@ -135,6 +135,28 @@
   `test_offline_map_service.py` / `test_tiles_pipeline.py` 合计 **163 passed**；flake8 0。
 - 真机（打包后端）复验：`tile-info.bbox` 为上述辖区量级；覆盖区内瓦片 200、区外 404。
 
+### Added（③ 录入效率包基座：草稿自动保存 + 批量粘贴解析）
+
+- **`composables/useFormDraft.ts`（表单草稿自动保存）**：本次改动中最能直接省人力的一个 ——
+  现场录到一半被电话/查台账打断，原来一离开页面输入全丢（这类表单普遍 10+ 字段）。
+  - 按业务键隔离（`form:draft:policies:edit:new` / `...:42`），新建与编辑互不污染；
+  - **空表单不落盘**（`isBlankForm`）——否则开一次表单留一条垃圾，localStorage 5MB 很快见底；
+  - **TTL 默认 7 天**，过期自动丢弃并清理，不复活半年前的脏数据；
+  - 存储不可用/配额满/JSON 损坏/结构不符 一律静默降级为 null，绝不抛错；
+  - 恢复是**显式动作**（`restore()`），不静默覆盖用户刚输入的内容；
+  - 仅在组件实例内注册 `onUnmounted` 清理（`getCurrentInstance()` 守卫），避免脱离 setup
+    调用时 Vue 告警。
+- **`utils/parsePastedTable.ts`（Excel 粘贴解析）**：现场数据多数先在 Excel/WPS 整理好，
+  逐条手敲是最费时的一步。解析器处理了真实形态：`\r\n`/裸 `\r`、行尾多余制表符、
+  空白行、**双引号包裹且含制表符/换行的单元格**（`""` 还原为引号）；
+  并设行列上限（默认 500×50，超限**不静默截断**而是返回 `exceeded` 让页面提示分批粘贴）。
+  另提供 `findFirstMismatchedRow()`：列数不符返回首个行号，供预览标红 ——
+  **不做自动补空**（错位比缺行更难发现）。
+- 测试：`useFormDraft.test.ts` **23 例**、`parsePastedTable.test.ts` **17 例**；
+  两文件覆盖率 **100/100/100/100**（含分支）；`vue-tsc` 0、eslint 0 error。
+- 说明：本批交付的是**可复用基座**；接入具体表单页（并配 `useDirtyGuard` 铺开）在下一批完成 ——
+  目前全仓只有 `projects/Edit.vue` 一个页面接了离开拦截。
+
 ### Fixed（⑥ 分页硬上限：4 处裸分页 + 1 处 500 上限）
 
 - **`page_size` 有 4 处完全没有上限**（`machine_code` / `organization` / `auth/users` / `feedback`
