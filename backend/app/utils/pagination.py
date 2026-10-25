@@ -39,6 +39,20 @@ def clamp_offset_limit(skip: int, limit: int, max_page_size: int = MAX_PAGE_SIZE
     return max(skip, 0), min(max(limit, 1), max_page_size)
 
 
+def coerce_page_param(value: int, default: int) -> int:
+    """把端点参数归一成 int。
+
+    FastAPI 只在 HTTP 请求路径上把 ``Query(...)`` 默认值解析成 int；测试或内部
+    代码**直接调用**端点函数时拿到的是 ``Query`` 实例，`(page - 1) * page_size`
+    会抛 ``TypeError: unsupported operand type(s)``（2026-10-25 分页上限改造
+    后 `test_coverage_gaps_final` / `test_v1129_gap_users_super_admin` 实测崩溃）。
+    统一在此回落默认值，避免每个端点各写一套 isinstance 判断。
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return default
+    return value
+
+
 # ============================================================================
 # 1. Cursor 编码与解码 (用于 Keyset 分页)
 # ============================================================================

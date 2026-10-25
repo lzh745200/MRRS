@@ -14,8 +14,6 @@ T050：军规合规终检 —— PII 三通道扫描器
 
 输出零高危即视为通过发布门禁。
 """
-import io
-import os
 import re
 import sys
 from pathlib import Path

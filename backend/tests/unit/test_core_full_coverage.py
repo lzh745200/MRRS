@@ -561,7 +561,7 @@ class TestConstants:
     def test_pagination_constants(self):
         from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
         assert DEFAULT_PAGE_SIZE == 20
-        assert MAX_PAGE_SIZE == 100
+        assert MAX_PAGE_SIZE == 200
 
     def test_http_constants(self):
         from app.core.constants import HTTP_CLIENT_CLOSED_REQUEST

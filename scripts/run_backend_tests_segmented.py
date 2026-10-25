@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import glob
 import os
 import subprocess
@@ -231,10 +232,25 @@ def main():
 
         cov_config_path = BACKEND_DIR / f".coveragerc.gate.{stamp}"
         cov_config_path.write_text(_rc_with_data_file(cov_file_arg), encoding="utf-8")
+        # --cov-unique 会生成 .coveragerc.gate.* / .coveragerc.seg.* / .covseg.* 中间文件，
+        # 属于纯粹的本机临时产物：跑完（含异常退出）必须自行清理，否则每次跑全量都会
+        # 在 backend/ 下留下一堆未跟踪文件（2026-10-25 实测一次 12 段留 13 个）。
+        _temp_paths: list[Path] = [cov_config_path]
+
+        def _cleanup_temp_cov_files() -> None:
+            for _p in _temp_paths:
+                try:
+                    _p.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        atexit.register(_cleanup_temp_cov_files)
         for idx, _seg in enumerate(SEGMENTS, 1):
             seg_data = f".covseg.{stamp}.{idx}"
             seg_rc = BACKEND_DIR / f".coveragerc.seg.{stamp}.{idx}"
             seg_rc.write_text(_rc_with_data_file(seg_data), encoding="utf-8")
+            _temp_paths.append(seg_rc)
+            _temp_paths.append(BACKEND_DIR / seg_data)
             seg_rcs.append((seg_data, str(seg_rc)))
     data_file = (BACKEND_DIR / cov_file_arg) if cov_file_arg else COVERAGE_FILE
     if not args.keep_coverage and data_file.exists():
@@ -308,6 +324,12 @@ def main():
                     print(f"  {line.strip()[:200]}")
             print("=" * 70)
             return 1
+    # 清理 --cov-unique 生成的临时 rc（数据文件本身保留供复核/排障）
+    for _data, _rc in seg_rcs:
+        try:
+            Path(_rc).unlink(missing_ok=True)
+        except OSError:
+            pass
     print("全部段通过；覆盖率门禁已在上面按 .coveragerc(fail_under) 统一判定")
     if args.cov_file.strip():
         print(f"覆盖率数据文件: backend/{args.cov_file.strip()}（独立文件，不受其他会话清理影响）")

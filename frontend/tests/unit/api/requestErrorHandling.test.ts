@@ -306,6 +306,38 @@ describe('api/request — 拦截器未覆盖分支', () => {
       expect(mockElMessage.error).not.toHaveBeenCalled()
     })
 
+    // e11d27c 把"按状态码兜底"收敛到 statusFallbackMessage（与 getErrorMessage 同一出口）。
+    // 该出口有两条分支：认得的状态码 → 中文文案；不认识的 4xx → 返回空串，
+    // 由 _buildUserMessage 拼 `请求失败（HTTP <status>）` 兜底。后者此前无用例。
+    it('未登记的 4xx（418）→ 走 HTTP 状态兜底文案，不下发 axios 原文', async () => {
+      const error = {
+        response: { status: 418, data: {} },
+        message: 'Request failed with status code 418',
+        config: makeConfig(),
+      }
+      await expect(handlers.responseR(error)).rejects.toBe(error)
+      expect(error.userMessage).toBe('请求失败（HTTP 418），请稍后重试')
+      expect(error.userMessage).not.toContain('Request failed')
+    })
+
+    it('405 / 413 → 用 statusFallbackMessage 的具体文案', async () => {
+      const e405 = {
+        response: { status: 405, data: {} },
+        message: 'Request failed with status code 405',
+        config: makeConfig(),
+      }
+      await expect(handlers.responseR(e405)).rejects.toBe(e405)
+      expect(e405.userMessage).toBe('该操作不被支持')
+
+      const e413 = {
+        response: { status: 413, data: {} },
+        message: 'Request failed with status code 413',
+        config: makeConfig(),
+      }
+      await expect(handlers.responseR(e413)).rejects.toBe(e413)
+      expect(e413.userMessage).toBe('提交内容过大，请减小后重试')
+    })
+
     it('422 数组 detail → 提取首条字段错误', async () => {
       const error = {
         response: {

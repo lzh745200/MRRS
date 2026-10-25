@@ -29,6 +29,11 @@ __pycache__/
 .coverage
 .coverage.*
 .coverage_*
+# 分段执行器的隔离覆盖率产物（--cov-unique）：临时 rc 与分片数据
+backend/.coveragerc.gate.*
+backend/.coveragerc.seg.*
+backend/.covseg.*
+backend/.coverage.gate.*
 htmlcov/
 coverage.xml
 *.cover

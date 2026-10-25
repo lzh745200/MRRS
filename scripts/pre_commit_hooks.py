@@ -1,16 +1,20 @@
 """Cross-platform pre-commit hooks (replaces bash-only hooks)."""
-import subprocess, sys
+import subprocess
+import sys
+
 
 def run(args, **kwargs):
     result = subprocess.run(args, **kwargs)
     sys.exit(result.returncode)
+
 
 if __name__ == "__main__":
     hook = sys.argv[1]
     python = sys.executable
 
     if hook == "check_dockerfile_tail":
-        import pathlib, re
+        import pathlib
+        import re
         failed = [
             str(f) for f in pathlib.Path(".").glob("docker/Dockerfile*")
             if re.search(r"RUN .* 2>&1$", f.read_text(encoding="utf-8"), re.MULTILINE)

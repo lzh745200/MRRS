@@ -77,7 +77,8 @@ def clean_pattern(root: Path, pattern: str, description: str) -> int:
         size = get_dir_size(d)
         if size > 0:
             total += size
-            print(f"  {'[DRY]' if DRY_RUN else '[DEL]'} {description}: {size_fmt(size)} ({d.relative_to(PROJECT_ROOT)})")
+            label = "[DRY]" if DRY_RUN else "[DEL]"
+            print(f"  {label} {description}: {size_fmt(size)} ({d.relative_to(PROJECT_ROOT)})")
             if not DRY_RUN:
                 shutil.rmtree(d, ignore_errors=True)
     return total
@@ -169,7 +170,11 @@ def main():
                     b.unlink(missing_ok=True)
 
         # DB 快照文件（保留最近 3 个）
-        snapshots = sorted(data_dir.glob("rural_revitalization.db.snapshot_*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        snapshots = sorted(
+            data_dir.glob("rural_revitalization.db.snapshot_*"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
         if len(snapshots) > 3:
             for s in snapshots[3:]:
                 print(f"  {'[DRY]' if DRY_RUN else '[DEL]'} Old DB snapshot: {s.name}")
@@ -178,7 +183,11 @@ def main():
                     s.unlink(missing_ok=True)
 
         # DB 恢复前备份（保留最近 2 个）
-        restore_baks = sorted(data_dir.glob("rural_revitalization_before_restore_*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+        restore_baks = sorted(
+            data_dir.glob("rural_revitalization_before_restore_*.db"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
         if len(restore_baks) > 2:
             for r in restore_baks[2:]:
                 print(f"  {'[DRY]' if DRY_RUN else '[DEL]'} Old restore backup: {r.name}")
@@ -212,7 +221,7 @@ def main():
     print("=" * 60)
     if DRY_RUN:
         print(f"  可释放: {size_fmt(TOTAL_FREED)}")
-        print(f"  执行: python scripts/cleanup.py --execute")
+        print("  执行: python scripts/cleanup.py --execute")
     else:
         print(f"  已释放: {size_fmt(TOTAL_FREED)}")
     print("=" * 60)

@@ -22,7 +22,7 @@ from app.services.user_service import VALID_ROLES
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, normalize_role
 from app.core.transaction import safe_commit
 from app.core.response import success_response
-from app.utils.pagination import clamp_offset_limit
+from app.utils.pagination import clamp_offset_limit, coerce_page_param
 from app.utils.upload_helper import read_upload_with_limit
 
 logger = logging.getLogger(__name__)
@@ -398,6 +398,7 @@ async def list_users(
     # (page-1)*page_size / limit 可被 page_size=-1 或超大值一次拉全表
     # （既是 DoS 面也是信息暴露面）。与 feedback/rbac/data_sync 同口径，
     # 用仓库唯一分页钳制入口收敛，避免再各处 max(skip, 0) 各写一遍。
+    page_size = coerce_page_param(page_size, DEFAULT_PAGE_SIZE)
     offset, page_size = clamp_offset_limit((page - 1) * page_size, page_size)
     users = query.options(joinedload(User.organization)).offset(offset).limit(page_size).all()
 

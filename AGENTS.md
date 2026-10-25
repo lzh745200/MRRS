@@ -555,7 +555,7 @@ Every new feature must verify:
 
 | Purpose | Path |
 |---------|------|
-| Version number | 单一事实源 = 根 `package.json` 的 `version` → `node scripts/sync-version.js --write` 同步到 `backend/app/core/config.py` 的 `Settings.PROJECT_VERSION` 等 23 处目标（含 8 个 optional；`--check` 为 CI 门禁） |
+| Version number | 单一事实源 = 根 `package.json` 的 `version` → `node scripts/sync-version.js --write` 同步到 `backend/app/core/config.py` 的 `Settings.PROJECT_VERSION` 等 22 处目标（含 8 个 optional；`--check` 为 CI 门禁） |
 | DB schema source | `backend/app/models/` + `backend/alembic/versions/` |
 | Baseline migration | `backend/alembic/versions/012_consolidate_baseline.py` |
 | API router registry | `backend/app/api/v1/__init__.py` → `_BUSINESS_MODULES` |

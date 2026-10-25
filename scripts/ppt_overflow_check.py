@@ -188,7 +188,6 @@ def parse_slide(xml_bytes: bytes):
     return analyze_slide(xml_bytes)
 
 
-
 def main(path: str, threshold: float = 1.0):
     z = zipfile.ZipFile(path)
     names = [n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)]
@@ -203,7 +202,11 @@ def main(path: str, threshold: float = 1.0):
         bad.sort(key=lambda i: -(i[5] / i[6]))
         print(f"\n=== 第 {idx} 页：{len(bad)} 处溢出 ===")
         for name, bx, by, bw, bh, req, avail, ref, sample in bad:
-            print(f"  [{req / avail:4.2f}x] 超出{ref} {name} 位置({bx:.0f},{by:.0f}) {bw:.0f}x{bh:.0f}pt  需{req:.1f}/可用{avail:.1f}pt")
+            print(
+                f"  [{req / avail:4.2f}x] 超出{ref} {name} "
+                f"位置({bx:.0f},{by:.0f}) {bw:.0f}x{bh:.0f}pt  "
+                f"需{req:.1f}/可用{avail:.1f}pt"
+            )
             print(f"          文本: {sample}")
         bad_total += len(bad)
     print(f"\n>>> 合计溢出文本框: {bad_total}")

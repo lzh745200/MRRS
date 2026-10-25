@@ -57,8 +57,9 @@ def main():
     expected_literal = "$PROFILE\\AppData\\Roaming\\" + app_name
     if expected_literal not in hook:
         errors.append(
-            "NSIS 钩子未出现期望的 userData 字面量 " + expected_literal +
-            "（Electron app.name=" + app_name + "）——安装期注册表/卸载期删除会与真实目录漂移"
+            "NSIS 钩子未出现期望的 userData 字面量 "
+            + expected_literal
+            + "（Electron app.name=" + app_name + "）——安装期注册表/卸载期删除会与真实目录漂移"
         )
     if re.search(r"WriteRegStr[^\n]*UserDataPath[^\n]*\$APPDATA", hook):
         errors.append(
@@ -93,8 +94,9 @@ def main():
         return 1
 
     print(
-        "[gate:userdata_path] OK: app.name=" + app_name +
-        " | NSIS 注册表/兜底目录/卸载清理 三处一致"
+        "[gate:userdata_path] OK: app.name="
+        + app_name
+        + " | NSIS 注册表/兜底目录/卸载清理 三处一致"
     )
     return 0
 

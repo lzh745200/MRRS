@@ -397,3 +397,57 @@ class TestServeTile:
         with patch("app.api.v1.map.TILES_DIR", mock_tiles):
             resp = client.get(f"{BASE}/tiles/1/2/3.png")
             assert resp.status_code == 400
+
+
+# ── _valid_bbox 防御分支 ─────────────────────────────────────────────
+# 该函数把外部传入的 bbox 转成 Leaflet bounds。只校验长度不够：
+# bool 是 int 子类，NaN 与 ±inf 都是"看起来合法"的 float，但它们传给前端
+# 后表现为地图不显示 / 异常缩放。以下用例逐个钉死三类拒绝分支。
+# 注意：offline_map_service 另有一个同名 _valid_bbox（已有测试），两者不可混。
+
+
+class TestValidBbox:
+    @staticmethod
+    def _fn():
+        from app.api.v1.map import _valid_bbox
+
+        return _valid_bbox
+
+    def test_accepts_four_finite_numbers(self):
+        fn = self._fn()
+        assert fn([103.6, 24.6, 109.6, 29.2]) is True
+        assert fn((103.6, 24.6, 109.6, 29.2)) is True
+        assert fn([0, 0, 0, 0]) is True
+        assert fn([-179.9, -89.9, 179.9, 89.9]) is True
+
+    def test_rejects_wrong_length_or_container(self):
+        fn = self._fn()
+        assert fn([1, 2, 3]) is False
+        assert fn([1, 2, 3, 4, 5]) is False
+        assert fn("not-a-list") is False
+        assert fn(None) is False
+
+    def test_rejects_bool_even_though_bool_is_int_subclass(self):
+        """True/False 是 int 子类，不显式排除就会被当成坐标 1/0。"""
+        fn = self._fn()
+        assert fn([True, 24.6, 109.6, 29.2]) is False
+        assert fn([103.6, False, 109.6, 29.2]) is False
+        assert fn([103.6, 24.6, 109.6, True]) is False
+
+    def test_rejects_non_numeric(self):
+        fn = self._fn()
+        assert fn(["103.6", 24.6, 109.6, 29.2]) is False
+        assert fn([None, 24.6, 109.6, 29.2]) is False
+        assert fn([{}, 24.6, 109.6, 29.2]) is False
+
+    def test_rejects_nan(self):
+        """NaN != NaN 是最便宜的 NaN 判定；NaN 角点会让 bounds 失效。"""
+        fn = self._fn()
+        assert fn([float("nan"), 24.6, 109.6, 29.2]) is False
+        assert fn([103.6, float("nan"), 109.6, 29.2]) is False
+
+    def test_rejects_infinity(self):
+        fn = self._fn()
+        assert fn([float("inf"), 24.6, 109.6, 29.2]) is False
+        assert fn([103.6, float("-inf"), 109.6, 29.2]) is False
+        assert fn([103.6, 24.6, 109.6, float("inf")]) is False

@@ -33,10 +33,13 @@ const {
   validateMock: vi.fn(),
 }))
 
-vi.mock('vue-router', () => ({ useRoute: () => routeBox }))
+// ③ 离开拦截（useDirtyGuard）会 import onBeforeRouteLeave：只 mock useRoute 会让 setup 直接抛错。
+vi.mock('vue-router', () => ({ useRoute: () => routeBox, onBeforeRouteLeave: vi.fn() }))
 
 vi.mock('element-plus', () => ({
   ElMessage,
+  // ③ 草稿恢复询问：默认按"用户取消"返回，避免测试挂起
+  ElMessageBox: { confirm: vi.fn(() => Promise.reject(new Error('cancel'))) },
   ElForm: {},
 }))
 

@@ -11,7 +11,7 @@
 | 05:13 | v1.18.5 tag 构建失败 | 同上；且该 tag commit 的 PR Checks 被后续 push 取消 |
 | 07:06 | Nightly Full Test 失败 | 后端全量覆盖率 `99.82 < 100`、前端 `src/utils` / `src/api` 覆盖率缺口（99.9/99.53） |
 | 12:55 | PR Checks 失败 | 前端覆盖率缺口（`src/utils` 99.91 / `src/api` 99.9）；后端 `MAX_PAGE_SIZE` 断言过期 |
-| 13:10 | PR Checks 失败 | `tests/unit/test_svc_batch.py::test_h10` 仍断言 `MAX_PAGE_SIZE == 100`（常量已改 200） |
+| 13:10 | PR Checks 失败 | `tests/unit/test_svc_batch.py::test_h10` 仍断言常量等于旧值 100（`constants.py` 已改为 200） |
 
 ## 二、根因分类（按代价排序）
 

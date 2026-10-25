@@ -22,7 +22,7 @@ class TestConstants:
 
     def test_page_size_constants(self):
         assert DEFAULT_PAGE_SIZE == 20
-        assert MAX_PAGE_SIZE == 100
+        assert MAX_PAGE_SIZE == 200
 
     def test_http_client_closed_request(self):
         assert HTTP_CLIENT_CLOSED_REQUEST == 499

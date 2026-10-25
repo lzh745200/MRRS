@@ -176,6 +176,24 @@ describe('isAdminUser / canViewDeleted', () => {
     expect(canViewDeleted()).toBe(false)
     spy.mockRestore()
   })
+
+  // 组件传 store 中的响应式用户档案时，判定必须只看入参、不回读会话存储
+  // （否则切换用户/权限变更后判定滞后）。此前所有用例都不传参，该分支零覆盖。
+  it('显式传入用户档案 → 以入参为准，且不读 AuthStorage', () => {
+    const spy = vi.spyOn(AuthStorage, 'getUser')
+    sessionStorage.clear()
+
+    expect(isAdminUser({ role: 'admin' })).toBe(true)
+    expect(isAdminUser({ role: 'super_admin' })).toBe(true)
+    expect(isAdminUser({ role: 'user', is_superuser: true })).toBe(true)
+    expect(isAdminUser({ role: 'user' })).toBe(false)
+    expect(isAdminUser({})).toBe(false)
+    expect(isAdminUser(null)).toBe(false)
+
+    // 入参存在时不得回读会话存储
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
 })
 
 describe('管理员快捷权限分支', () => {
