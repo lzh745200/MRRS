@@ -6,6 +6,8 @@
     >
       <div class="header-actions">
         <el-button type="primary" data-testid="create-btn" @click="openCreate">新建记录</el-button>
+        <!-- ③ 批量粘贴：从 Excel 台账整块粘贴，逐行校验后批量新增（逐条报告失败行） -->
+        <el-button data-testid="paste-btn" @click="pasteVisible = true">批量粘贴</el-button>
         <el-button :loading="exporting" data-testid="export-xlsx-btn" @click="exportData('xlsx')">
           导出 Excel
         </el-button>
@@ -256,6 +258,15 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- ③ 批量粘贴弹窗：粘贴 → 预览 → 逐行校验 → 批量新增 -->
+    <BulkPasteDialog
+      v-model:visible="pasteVisible"
+      title="批量粘贴台账"
+      :columns="CONSUMPTION_PASTE_COLUMNS"
+      hint="从 Excel 选中区域复制后粘贴；列顺序：品类(农产品/畜禽/手工/其他)、品名、数量、单位、金额、购买方、销售方、年度、日期"
+      @confirm="onPasteConfirm"
+    />
   </div>
 </template>
 
@@ -268,6 +279,9 @@ import { getErrorMessage } from '@/utils/getErrorMessage'
 import { getYearOptions } from '@/utils/yearOptions'
 import { unwrapList } from '@/utils/unwrapList'
 import { getSupportedVillages } from '@/api/supportedVillage'
+import BulkPasteDialog from '@/components/common/BulkPasteDialog.vue'
+import { useBulkCreate } from '@/composables/useBulkCreate'
+import { CONSUMPTION_PASTE_COLUMNS, buildConsumptionPayloads } from '@/utils/consumptionPaste'
 import {
   CONSUMPTION_CATEGORY_LABELS,
   CONSUMPTION_SELLER_TYPE_LABELS,
@@ -315,6 +329,44 @@ const villageOptions = ref<SelectOption[]>([])
 // ── 统计 ──
 const statsLoading = ref(false)
 const stats = ref<ConsumptionStatistics>({})
+
+// ── ③ 批量粘贴 ──
+const pasteVisible = ref(false)
+const { run: runBulkCreate, summarize: summarizeBulk } = useBulkCreate<
+  ConsumptionRecordPayload,
+  ConsumptionRecordPayload
+>(
+  (payload) => createConsumptionRecord(payload),
+  (payload) => payload
+)
+
+/** 粘贴确认：逐行校验 → 串行新增 → 汇总成功/失败 → 刷新列表与统计 */
+async function onPasteConfirm(rows: string[][]): Promise<void> {
+  const { payloads, errors } = buildConsumptionPayloads(rows, {
+    // form.year 是必填 number（表单默认当年），不写 `|| CURRENT_YEAR` 这种永不进入的兜底
+    year: form.year,
+    supportedVillageId: form.supported_village_id,
+  })
+
+  if (errors.length > 0) {
+    const detail = errors
+      .slice(0, 3)
+      .map((e) => `第 ${e.index} 行：${e.message}`)
+      .join('；')
+    const suffix = errors.length > 3 ? ` 等 ${errors.length} 行` : ''
+    ElMessage.warning(`以下行未导入 —— ${detail}${suffix}`)
+  }
+
+  if (payloads.length === 0) return
+
+  const result = await runBulkCreate(payloads)
+  if (result.failures.length === 0) {
+    ElMessage.success(summarizeBulk(result))
+  } else {
+    ElMessage.error(summarizeBulk(result))
+  }
+  await Promise.all([loadRecords(), loadStatistics()])
+}
 
 // ── 新建/编辑 ──
 const dialogVisible = ref(false)

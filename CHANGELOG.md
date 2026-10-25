@@ -201,6 +201,26 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（③ 收口：消费帮扶台账「批量粘贴」上岗）
+
+- **`utils/consumptionPaste.ts`**：把粘贴出的二维数组翻译成 `ConsumptionRecordPayload`，
+  **逐行报告失败**（哪一行、为什么）而不是整体失败 —— 否则用户只能全量重来，而重来会重复入库。
+  - 列顺序固定 9 列：品类 / 品名 / 数量 / 单位 / 金额 / 购买方 / 销售方 / 年度 / 日期；
+  - **品类同时接受中文标签与枚举值**（现场写"农产品"，接口要 `agriculture`）；
+  - 金额去千分位与 `¥￥元`；年度空/非法回退默认年（年份写错不值得阻断整批）；
+  - 日期 `YYYY-MM-DD` / `YYYY/M/D` / `YYYY年M月D日` 三种写法归一；
+  - 必填只校验"能确定的"三项（品类可识别、品名非空、金额为正），
+    其余列缺失留空 —— 台账本来就常有空列，因缺一列整批拒绝会让功能不可用；
+  - 行号 1 基，与预览表格 `#` 一致；行数组短于列数时按空串处理（Excel 省略行尾空格）。
+- **`views/consumption/List.vue` 接入**：工具栏新增「批量粘贴」→ `BulkPasteDialog`
+  （9 列声明）→ 逐行校验 → `useBulkCreate` **串行**新增 → 汇总提示（失败行号进消息）→ 刷新列表与统计。
+  失败原因超 3 行时提示带"等 N 行"，避免消息被截断成一句看不懂的话。
+- 又一次删掉"永不进入的兜底"：`year: form.year || CURRENT_YEAR` 里 `form.year` 是必填 number，
+  该 `||` 分支永远走不到 —— 留着只会拉低覆盖率。
+- 测试：`consumptionPaste` **18 例**（含短行、空品类/空金额文案、逐行报错、默认年回退）、
+  页面 **9 → 16 例**（打开弹窗、全部成功、部分失败、全部失败、`update:visible` 写路径、超 3 行提示）；
+  两文件覆盖率均 **100/100/100/100**；lint / tsc / 色值棘轮全绿。
+
 ### Added（⑥ 首个页面接入：项目列表的每页条数记忆）
 
 - `views/projects/List.vue` 的 `pagination.pageSize` 改为来自 `usePageSize('projects')`：

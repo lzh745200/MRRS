@@ -146,6 +146,13 @@ const ElCardStub = {
 }
 
 const stubs = {
+  // ③ 批量粘贴弹窗：这里只验证"页面如何消费粘贴结果"，粘贴解析另有专门测试
+  BulkPasteDialog: {
+    name: 'BulkPasteDialog',
+    props: ['visible', 'columns', 'title', 'hint'],
+    emits: ['confirm', 'update:visible'],
+    template: '<div class="bulk-paste-stub" />',
+  },
   'el-button': ElButtonStub,
   'el-select': ElSelectStub,
   'el-option': ElOptionStub,
@@ -617,5 +624,112 @@ describe('删除与导出', () => {
     await vm.exportData('csv')
     expect(mocks.ElMessage.error).toHaveBeenCalledWith('导出失败A')
     expect(vm.exporting).toBe(false)
+  })
+})
+
+// ③ 批量粘贴接入（2026-10-26）
+describe('批量粘贴台账', () => {
+  function dialogOf(wrapper: any) {
+    return wrapper.findComponent({ name: 'BulkPasteDialog' })
+  }
+
+  it('按钮打开弹窗，列声明与解析器一致', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    await findBtn(wrapper, 'paste-btn').trigger('click')
+    await flushPromises()
+
+    const dialog = dialogOf(wrapper)
+    expect(dialog.props('visible')).toBe(true)
+    expect(dialog.props('columns')).toHaveLength(9)
+  })
+
+  it('全部合法 → 逐条新增并提示成功、刷新列表与统计', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mocks.getConsumptionRecords.mockClear()
+
+    dialogOf(wrapper).vm.$emit('confirm', [
+      ['农产品', '土鸡蛋', '10', '斤', '200', '某局', '某社', '2026', '2026-03-01'],
+      ['畜禽', '土鸡', '', '', '300', '', '', '', ''],
+    ])
+    await flushPromises()
+
+    expect(mocks.createConsumptionRecord).toHaveBeenCalledTimes(2)
+    expect(mocks.ElMessage.success).toHaveBeenCalledWith('已新增 2 条')
+    expect(mocks.getConsumptionRecords).toHaveBeenCalled()
+  })
+
+  it('部分行不合法 → 先提示未导入行号，再新增其余行', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+
+    dialogOf(wrapper).vm.$emit('confirm', [
+      ['未知品类', '甲', '', '', '100', '', '', '', ''],
+      ['农产品', '乙', '', '', '100', '', '', '', ''],
+    ])
+    await flushPromises()
+
+    expect(mocks.ElMessage.warning).toHaveBeenCalled()
+    const warning = mocks.ElMessage.warning.mock.calls[0][0] as string
+    expect(warning).toContain('第 1 行')
+    expect(mocks.createConsumptionRecord).toHaveBeenCalledTimes(1)
+  })
+
+  it('弹窗回传 update:visible=false 会关闭弹窗（v-model 双向绑定的写路径）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    await findBtn(wrapper, 'paste-btn').trigger('click')
+    await flushPromises()
+    expect(dialogOf(wrapper).props('visible')).toBe(true)
+
+    dialogOf(wrapper).vm.$emit('update:visible', false)
+    await flushPromises()
+    expect(dialogOf(wrapper).props('visible')).toBe(false)
+  })
+
+  it('全部不合法 → 只提示、不调用新增', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    mocks.createConsumptionRecord.mockClear()
+
+    dialogOf(wrapper).vm.$emit('confirm', [['未知品类', '甲', '', '', '100', '', '', '', '']])
+    await flushPromises()
+
+    expect(mocks.createConsumptionRecord).not.toHaveBeenCalled()
+  })
+
+  it('新增失败 → 汇总里带失败行号并用 error 提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    mocks.createConsumptionRecord
+      .mockResolvedValueOnce({ id: 1 })
+      .mockRejectedValueOnce({ detail: '重复记录' })
+
+    dialogOf(wrapper).vm.$emit('confirm', [
+      ['农产品', '甲', '', '', '100', '', '', '', ''],
+      ['农产品', '乙', '', '', '100', '', '', '', ''],
+    ])
+    await flushPromises()
+
+    expect(mocks.ElMessage.error).toHaveBeenCalled()
+    expect(mocks.ElMessage.error.mock.calls[0][0]).toContain('失败 1 条')
+  })
+
+  it('失败原因超过 3 行时提示带"等 N 行"', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+
+    dialogOf(wrapper).vm.$emit('confirm', [
+      ['x', 'a', '', '', '1', '', '', '', ''],
+      ['x', 'b', '', '', '1', '', '', '', ''],
+      ['x', 'c', '', '', '1', '', '', '', ''],
+      ['x', 'd', '', '', '1', '', '', '', ''],
+    ])
+    await flushPromises()
+
+    const warning = mocks.ElMessage.warning.mock.calls[0][0] as string
+    expect(warning).toContain('等 4 行')
   })
 })
