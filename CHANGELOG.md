@@ -201,6 +201,25 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（⑤ 经费凭证 OCR「字段级建议」——把"识别完还得自己抄"接上）
+
+- **发现**：后端 `POST /funds/ocr-voucher`（`{text, amount, date, confidence, engine}`）早已实现，
+  但**前端零调用** —— 现场实际是"识别完还得自己抄进表单"，等于该功能不存在。
+- **`api/funds.ts`**：新增 `ocrVoucher(file)`（multipart，走既有 `post` 封装）与
+  `OcrVoucherResult` 类型；**不吞错**，503 交给调用方给出友好提示。
+- **`utils/ocrSuggestion.ts`**：把识别结果拆成**逐字段建议**而非整段文本。
+  - `classifyConfidence`：≥0.85 高置信 / ≥0.6 需核对 / <0.6 低置信（缺失按最低档，宁让人核对）；
+  - `normalizeOcrAmount`：去千分位与 `¥￥元`、取首个数字串；
+  - `normalizeOcrDate`：兼容 `2024-01-02 / 2024/1/2 / 2024年1月2日` → `YYYY-MM-DD`，非法月日拒绝；
+  - `buildOcrSuggestions`：**只列识别出值的字段**（避免整列"—"让人误以为识别失败），
+    并标出"与当前值相同"（无需采纳）。
+- **`components/funds/OcrVoucherSuggest.vue`**：上传凭证图片 → 逐行显示
+  「字段 / 当前值 → 识别值 / 置信度标签」→ 逐条采纳或忽略，支持"全部采纳"。
+  取舍：**不一次性覆盖表单** —— 覆盖错了更麻烦，且用户不知道改了哪几个字段。
+  503 引擎不可用时提示"请手工录入"，不阻断经费业务（ARM64 侧本就降级）。
+- 测试：`ocrSuggestion` **14 例**、`OcrVoucherSuggest` **13 例**，两文件覆盖率
+  **100/100/100/100**；funds 相关三套件联合 **78 passed**；lint/tsc/色值棘轮全绿。
+
 ### Added（③ 批量新增执行器 `useBulkCreate` + 即时校验审计）
 
 - **`composables/useBulkCreate.ts`**：`BulkPasteDialog` 只负责"拿到二维数组"，

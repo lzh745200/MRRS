@@ -64,6 +64,15 @@ export interface WorkflowRequest {
 }
 
 const FUNDS_BASE = '/funds'
+
+/** OCR 凭证识别结果（后端 /funds/ocr-voucher） */
+export interface OcrVoucherResult {
+  text?: string
+  amount?: number | string | null
+  date?: string | null
+  confidence?: number | null
+  engine?: string | null
+}
 const BUDGETS_BASE = '/fund-budgets'
 
 export const fundApi = {
@@ -257,5 +266,18 @@ export const fundApi = {
   },
   async deleteTransaction(transactionId: number) {
     return del(`${BUDGETS_BASE}/transactions/${transactionId}`)
+  },
+
+  // ── ⑤ OCR 凭证识别（2026-10-25）────────────────────────────────────────
+  /**
+   * 识别经费凭证图片 → `{text, amount, date, confidence, engine}`。
+   *
+   * 后端在引擎不可用时返回 503（前端提示手工录入，不阻断经费业务）；
+   * 因此这里**不吞错**，交给调用方按 503 给出友好提示。
+   */
+  async ocrVoucher(file: File): Promise<OcrVoucherResult> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return post(`${FUNDS_BASE}/ocr-voucher`, formData)
   },
 }
