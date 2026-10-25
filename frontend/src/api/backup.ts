@@ -36,15 +36,38 @@ export async function createBackup(data: CreateBackupPayload) {
   return post(BASE, data)
 }
 
-export async function restoreBackup(filename: string, password?: string) {
-  return post(`${BASE}/restore`, { filename, password })
+/**
+ * 恢复备份。
+ *
+ * @param filename 备份文件名
+ * @param password 加密备份的解密密码
+ * @param allowKeyMismatch 备份的 PII 密钥指纹与本机不一致时是否强制恢复。
+ *   默认 false：后端返回 409 并提示"敏感字段将不可读"；只有用户在界面上
+ *   显式确认（危险勾选 + 二次确认）后才允许置 true。**严禁默认 true。**
+ */
+export async function restoreBackup(
+  filename: string,
+  password?: string | null,
+  allowKeyMismatch = false
+) {
+  return post(`${BASE}/restore`, {
+    filename,
+    password,
+    allow_key_mismatch: allowKeyMismatch,
+  })
 }
 
-/** 上传任意备份包并恢复（支持加密备份，password 为可选解密密码） */
-export async function uploadRestoreBackup(file: File, password?: string) {
+/**
+ * 上传任意备份包并恢复（支持加密备份，password 为可选解密密码）。
+ *
+ * `allowKeyMismatch` 语义同 restoreBackup：跨密钥备份默认 409，
+ * 仅用户显式确认后以 FormData 字段 `allow_key_mismatch=true` 强制恢复。
+ */
+export async function uploadRestoreBackup(file: File, password?: string, allowKeyMismatch = false) {
   const formData = new FormData()
   formData.append('file', file)
   if (password) formData.append('password', password)
+  formData.append('allow_key_mismatch', allowKeyMismatch ? 'true' : 'false')
   return post(`${BASE}/upload-restore`, formData)
 }
 

@@ -19,6 +19,7 @@ import {
   getBackupList,
   createBackup,
   restoreBackup,
+  uploadRestoreBackup,
   deleteBackup,
   getBackupStats,
   getBackupDirs,
@@ -54,8 +55,43 @@ describe('api/backup', () => {
     expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', {
       filename: 'backup-2024.zip',
       password: 'secret',
+      allow_key_mismatch: false,
     })
     expect(result).toBe(body)
+  })
+
+  it('restoreBackup 透传 allowKeyMismatch=true（仅显式强制恢复时）', async () => {
+    mockPost.mockResolvedValue({ success: true })
+    await restoreBackup('backup-2024.zip', 'secret', true)
+    expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', {
+      filename: 'backup-2024.zip',
+      password: 'secret',
+      allow_key_mismatch: true,
+    })
+  })
+
+  it('uploadRestoreBackup 以 FormData 上报 file/password/allow_key_mismatch', async () => {
+    mockPost.mockResolvedValue({ success: true })
+    const file = new File(['zip'], 'pkg.zip')
+    await uploadRestoreBackup(file, 'pw', true)
+
+    const [url, payload] = mockPost.mock.calls.at(-1)!
+    expect(url).toBe('/system/backup/upload-restore')
+    expect(payload).toBeInstanceOf(FormData)
+    const form = payload as FormData
+    expect(form.get('file')).toBe(file)
+    expect(form.get('password')).toBe('pw')
+    expect(form.get('allow_key_mismatch')).toBe('true')
+  })
+
+  it('uploadRestoreBackup 默认 allow_key_mismatch=false 且不带空密码', async () => {
+    mockPost.mockResolvedValue({ success: true })
+    await uploadRestoreBackup(new File(['zip'], 'pkg.zip'))
+
+    const [, payload] = mockPost.mock.calls.at(-1)!
+    const form = payload as FormData
+    expect(form.get('password')).toBeNull()
+    expect(form.get('allow_key_mismatch')).toBe('false')
   })
 
   it('deleteBackup 调用 DELETE /system/backup/{filename}', async () => {
@@ -112,6 +148,7 @@ describe('api/backup', () => {
     expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', {
       filename: 'backup-2024.zip',
       password: undefined,
+      allow_key_mismatch: false,
     })
   })
 })

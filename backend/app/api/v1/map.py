@@ -699,9 +699,14 @@ async def get_tile_info():
     诊断字段（2026-10-25 现场排障新增，均为只读、只增不删）：
     - ``source``：瓦片目录来源 ``env`` / ``meipass`` / ``dev``；
     - ``reason``：不可用原因 ``dir_missing`` / ``no_tiles``，可用时为 ``None``；
-    - ``bbox``：瓦片覆盖范围 ``[minLon, minLat, maxLon, maxLat]``，优先取 MANIFEST
-      的 ``region.bbox`` / ``bbox``，缺失时回退贵州全省 bbox。前端据此把视图限制在
-      有覆盖的范围内，避免边缘 404 被误判为"瓦片加载失败"。
+    - ``bbox``：瓦片覆盖范围 ``[minLon, minLat, maxLon, maxLat]``，优先级为
+      **扫描实测 bounds → MANIFEST 的 ``region.bbox`` / ``bbox`` → 贵州全省兜底**。
+      前端据此把视图限制在有覆盖的范围内，避免边缘 404 被误判为"瓦片加载失败"。
+
+      为什么实测优先（P0，2026-10-25）：多包叠加导入时 MANIFEST 只是**最后导入的那个
+      包**。若先导贵阳、再导遵义，MANIFEST.region.bbox 只剩遵义，前端 ``maxBounds``
+      会把贵阳瓦片挡在视野外（数据在库却看不到）。实测 bounds 来自磁盘上真实存在的
+      瓦片集合，天然等于"多包并集"，与 MANIFEST 无关。
     """
     dir_name = _tiles_dir_public_name()
     source = _TILES_DIR_SOURCE
@@ -732,7 +737,9 @@ async def get_tile_info():
         "manifest": manifest,
         "source": source,
         "reason": None if tile_count > 0 else "no_tiles",
-        "bbox": _manifest_bbox(manifest) or list(PROVINCE_BBOX),
+        # 实测 bounds（多包并集）优先；取不到时才用 MANIFEST 元数据；
+        # 都没有则回退贵州全省 bbox。
+        "bbox": stats.get("bounds") or _manifest_bbox(manifest) or list(PROVINCE_BBOX),
     }
     if zoom_levels:
         data["minZoom"] = zoom_levels[0]

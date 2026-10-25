@@ -155,43 +155,38 @@ async def list_backups(current_user=Depends(get_current_user)):
     return ok_list(backups, len(backups))
 
 
-@router.post("/restore")
+@router.post("/restore", deprecated=True)
 async def restore_backup(
-    filename: str = Query(..., description="备份文件名"),
+    filename: str = Query(..., description="备份文件名（该端点已停用，仅保留参数以给出明确错误）"),
     current_user=Depends(get_current_user),
 ):
-    """恢复数据库备份"""
+    """【已停用，恒返回 410 Gone】旧的管理员直连恢复端点。
+
+    历史实现直接 ``shutil.copy2(backup_path, db_path)`` 覆盖数据库文件，绕过：
+
+    - 维护窗口（``maintenance_window()``：恢复期间写请求不拦截、在途请求不收敛）；
+    - 备份包完整性与 schema 版本校验（不同版本库覆盖后可能起不来）；
+    - 备份 PII 密钥指纹闸门（可把不同密钥机器的老库覆盖进来，令 9 列 AES-SIV
+      密文永久不可解，且用户毫无感知）。
+
+    前端零调用（全仓仅旧测试在用），故不保留兼容分支，直接下线并给出替代路径；
+    保留路由与 ``require_admin`` 是为了让未认证/非管理员仍然先拿到 401/403，
+    而不是把"端点已停用"泄露给未授权调用方。
+
+    正规入口：``POST /api/v1/system/backup/restore``（或上传恢复
+    ``POST /api/v1/system/backup/upload-restore``）。
+    """
     require_admin(current_user, error_message="仅超级管理员可执行此操作")
 
-    # 安全检查：防止路径遍历攻击
-    if ".." in filename or "/" in filename or "\\" in filename or filename.startswith("."):
-        raise HTTPException(status_code=400, detail="无效的文件名")
-
-    try:
-        db_path = get_database_path()
-        backup_dir = get_backup_directory()
-        backup_path = backup_dir / filename
-
-        # 确保文件在实际备份目录内（防御：realpath 检查）
-        if not str(backup_path.resolve()).startswith(str(backup_dir.resolve())):
-            raise HTTPException(status_code=400, detail="无效的文件名")
-
-        # 直接操作，让异常自然抛出
-        try:
-            # 备份当前数据库
-            if db_path.exists():
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                safety_backup = db_path.parent / f"{db_path.stem}_before_restore_{timestamp}.db"
-                shutil.copy2(db_path, safety_backup)
-
-            # 恢复备份
-            shutil.copy2(backup_path, db_path)
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="备份文件不存在")
-
-        return success_response(message="数据库恢复成功")
-    except Exception:  # pragma: no cover - 未知异常兜底：业务分支未列明的意外异常统一转 500，正常路径不可达
-        raise HTTPException(status_code=500, detail="恢复失败，请稍后重试或联系管理员")
+    logger.warning(
+        "已下线的旧恢复端点被调用（filename=%s，操作人=%s），已拒绝",
+        filename,
+        getattr(current_user, "username", "unknown"),
+    )
+    raise HTTPException(
+        status_code=410,
+        detail="该端点已停用，请使用 备份管理 → 恢复备份（带维护窗口/完整性/密钥指纹校验）",
+    )
 
 
 @router.delete("/backups/{filename}")

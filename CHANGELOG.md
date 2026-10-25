@@ -5,6 +5,45 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.3] - 2026-10-25 — 多包瓦片覆盖并集 / 旧恢复端点下线 / 跨密钥恢复 UI / 签名门禁
+
+> 本批收口「系统还有什么问题」第 0~3 批：数据一致性 1 项、安全 1 项、体验 1 项、交付链 2 项。
+
+### Fixed
+
+- **多包叠加导入后覆盖范围被最后导入包限制（P0）**：`MANIFEST.json` 是"最后导入包"，
+  `region.bbox` 只有该市州；`/map/tile-info.bbox` 改为**磁盘实测并集**（`scan_tiles_dir` 顺带
+  累计 `_tile_lonlat_bounds`，常量级运算不额外遍历），MANIFEST 仅作回退。先导贵阳再导遵义，
+  前端 `maxBounds` 现在覆盖两者并集（此前贵阳瓦片被挡在视野外）。
+
+### Changed
+
+- **旧管理员恢复端点下线（安全）**：`POST /api/v1/system/admin/restore` 改为 **410 Gone**，
+  删除 `shutil.copy2` 覆盖数据库逻辑（测试断言 `shutil.copy2`/`get_database_path`/
+  `get_backup_directory` 均未被调用），保留 `require_admin`（401/403 优先）与 `filename` 参数契约
+  （端点数 849 不变，标 `deprecated`），统一走 `/api/v1/system/backup/restore`
+  （维护窗口 + 完整性 + 密钥指纹校验）。
+- **跨密钥恢复有 UI 入口**：前端恢复遇 409 且 detail 含"密钥"→ 展示危险勾选 +
+  `confirmDanger` 二次确认 → 带 `allow_key_mismatch=true` 重试一次；取消不重试、不抛错。
+  上传恢复（FormData）同样支持。
+
+### Added
+
+- **CI 签名门禁**：`build-windows.yml` 新增 `Verify installer signature` —— 配置 `CSC_LINK`
+  时 `Status` 必须 `Valid` 否则构建失败；未配置则 `::warning::` + Step Summary 标注"未签名，
+  以 SHA256SUMS 为准"。
+- 文档：API 文档标注该端点停用；瓦片指南补"边缘 404/诊断字段"排障；代码签名文档补 CI 接线；
+  离线加固文档遗留项标记完成。
+
+### Tests / 验证
+
+- 后端：新增 `test_tile_info_coverage_bbox.py`（多包并集/实测优先/非法值回退）+ 停用端点用例，
+  相关套件 **262 passed**；flake8 0。
+- 前端：`BackupManagementKeyMismatch.test.ts`（17）+ `backup.test.ts`（13）**30 passed**；
+  全量前端套件重跑无失败输出。
+- 本地安装包 `MRRS-Setup-1.18.3-x64.exe` 打包后实测：`/map/tile-info.bbox` 为实测并集，
+  覆盖区内瓦片 200、区外 404 且前端透明不回退。
+
 ## [1.18.2] - 2026-10-25 — 瓦片底图“加载失败已切回矢量”根治（边缘 404 不再整体回退）
 
 > **现场症状**：地图可视化切到「瓦片底图」后立即提示「瓦片底图加载失败，已切回矢量地图」。

@@ -86,15 +86,88 @@ class TilePackageError(ValueError):
 # ==================== 目录扫描 / MANIFEST ====================
 
 
+def _tile_lonlat_bounds(z: int, x: int, y: int) -> Tuple[float, float, float, float]:
+    """XYZ 瓦片 → 经纬度包围盒 ``(min_lon, min_lat, max_lon, max_lat)``。
+
+    Web Mercator 反算（与 Leaflet/OSM 一致）：经度线性，纬度经 sinh 反变换。
+    ``x``/``y`` 的合法性由调用方保证（``0 <= x,y < 2**z``）。
+    """
+    scale = float(1 << z)
+    min_lon = x / scale * 360.0 - 180.0
+    max_lon = (x + 1) / scale * 360.0 - 180.0
+    max_lat = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * y / scale))))
+    min_lat = math.degrees(math.atan(math.sinh(math.pi * (1.0 - 2.0 * (y + 1.0) / scale))))
+    return min_lon, min_lat, max_lon, max_lat
+
+
+def _merge_bounds(
+    bounds: Optional[List[float]], tile_box: Tuple[float, float, float, float]
+) -> List[float]:
+    """把单瓦片包围盒并入累计覆盖范围（``None`` 表示尚未累计任何瓦片）。"""
+    if bounds is None:
+        return list(tile_box)
+    return [
+        min(bounds[0], tile_box[0]),
+        min(bounds[1], tile_box[1]),
+        max(bounds[2], tile_box[2]),
+        max(bounds[3], tile_box[3]),
+    ]
+
+
+def _scan_x_dir(
+    x_dir: Path, zoom_level: int, tile_scale: Optional[int], bounds: Optional[List[float]]
+) -> Tuple[int, int, Optional[List[float]]]:
+    """扫描单个 ``<z>/<x>/`` 目录，返回 ``(瓦片数, 字节数, bounds)``。
+
+    坐标不可解析或越界的瓦片**仍计入数量**（保持既有行为），只是不参与 ``bounds``；
+    这样脏目录/脏文件名不会让 tile-info 的计数口径发生变化。
+    """
+    tiles = 0
+    total_bytes = 0
+    tile_x: Optional[int] = None
+    if tile_scale is not None:
+        try:
+            parsed_x = int(x_dir.name)
+        except ValueError:
+            parsed_x = None
+        if parsed_x is not None and 0 <= parsed_x < tile_scale:
+            tile_x = parsed_x
+    for tile_file in x_dir.iterdir():
+        if tile_file.suffix != ".png":
+            continue
+        try:
+            total_bytes += tile_file.stat().st_size
+        except OSError:
+            # 扫描期间文件被并发删除/占用：跳过该文件而非中断统计
+            continue
+        tiles += 1
+        if tile_x is None:
+            continue
+        try:
+            tile_y = int(tile_file.stem)
+        except ValueError:
+            continue
+        if not 0 <= tile_y < tile_scale:
+            continue
+        bounds = _merge_bounds(bounds, _tile_lonlat_bounds(zoom_level, tile_x, tile_y))
+    return tiles, total_bytes, bounds
+
+
 def scan_tiles_dir(root: Path) -> Dict[str, Any]:
-    """扫描瓦片目录（``<z>/<x>/<y>.png`` 布局），返回计数/体积/缩放级别。
+    """扫描瓦片目录（``<z>/<x>/<y>.png`` 布局），返回计数/体积/缩放级别/覆盖范围。
 
     目录不存在、扫描中被删除、或某个文件 ``stat`` 失败时跳过而不是抛异常，
     保证 ``/map/tile-info`` 与 ``/offline-map/status`` 在瓦片仓未就绪时也返回零值。
+
+    同时顺带累计**真实覆盖范围** ``bounds``（``[min_lon, min_lat, max_lon, max_lat]``，
+    无瓦片/坐标不可解析时为 ``None``）。多包叠加导入后 ``MANIFEST`` 只剩最后导入包的
+    元数据（``region.bbox`` 只覆盖该包），前端若拿它做 ``maxBounds`` 会把先前导入的
+    瓦片挡在视野外（P0：数据在库却看不到）。实测 bounds 只做常量级运算，不额外遍历目录。
     """
     total_tiles = 0
     total_bytes = 0
     zoom_levels: set = set()
+    bounds: Optional[List[float]] = None
 
     if not root.is_dir():
         return {
@@ -102,6 +175,7 @@ def scan_tiles_dir(root: Path) -> Dict[str, Any]:
             "total_bytes": 0,
             "total_size_mb": 0.0,
             "zoom_levels": [],
+            "bounds": None,
         }
 
     for z_dir in root.iterdir():
@@ -113,24 +187,23 @@ def scan_tiles_dir(root: Path) -> Dict[str, Any]:
             # 非缩放层目录（如 tmp/、README）直接跳过
             continue
         zoom_levels.add(zoom_level)
+        # 仅对合法缩放级累计 bounds（避免异常目录名触发巨大的 1<<z 运算）
+        tile_scale = (1 << zoom_level) if 0 <= zoom_level <= MAX_TILE_ZOOM else None
         for x_dir in z_dir.iterdir():
             if not x_dir.is_dir():
                 continue
-            for tile_file in x_dir.iterdir():
-                if tile_file.suffix != ".png":
-                    continue
-                try:
-                    total_bytes += tile_file.stat().st_size
-                except OSError:
-                    # 扫描期间文件被并发删除/占用：跳过该文件而非中断统计
-                    continue
-                total_tiles += 1
+            zoom_tiles, zoom_bytes, bounds = _scan_x_dir(
+                x_dir, zoom_level, tile_scale, bounds
+            )
+            total_tiles += zoom_tiles
+            total_bytes += zoom_bytes
 
     return {
         "total_tiles": total_tiles,
         "total_bytes": total_bytes,
         "total_size_mb": round(total_bytes / (1024 * 1024), 2),
         "zoom_levels": sorted(zoom_levels),
+        "bounds": bounds,
     }
 
 

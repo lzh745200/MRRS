@@ -59,6 +59,7 @@ def regular_client(client):
 class TestGetSystemInfo:
     def _fix_query_count(self, mock_db):
         original_query = mock_db.query
+
         def fixed_query(model):
             q = original_query(model)
             q.count.return_value = len(mock_db._storage.get(model, []))
@@ -116,7 +117,8 @@ class TestCreateBackup:
         with patch("app.api.v1.system.admin.get_database_path") as gdp, \
              patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
              patch("shutil.copy2") as copy2:
-            db_p = MagicMock(spec=Path); db_p.exists.return_value = True
+            db_p = MagicMock(spec=Path)
+            db_p.exists.return_value = True
             bk_dir = MagicMock(spec=Path)
             bk_file = MagicMock(spec=Path)
             bk_file.stat.return_value.st_size = 512
@@ -129,6 +131,7 @@ class TestCreateBackup:
             data = resp.json()
             assert data["success"] is True
             assert data["data"]["size"] == 512
+            copy2.assert_called_once()
 
     def test_file_not_found(self, auth_client, mock_db):
         from app.core.database import get_db
@@ -137,7 +140,8 @@ class TestCreateBackup:
         with patch("app.api.v1.system.admin.get_database_path") as gdp, \
              patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
              patch("shutil.copy2", side_effect=FileNotFoundError):
-            db_p = MagicMock(spec=Path); db_p.exists.return_value = True
+            db_p = MagicMock(spec=Path)
+            db_p.exists.return_value = True
             bk_dir = MagicMock(spec=Path)
             gdp.return_value = db_p
             gbdir.return_value = bk_dir
@@ -152,7 +156,8 @@ class TestCreateBackup:
 
         with patch("app.api.v1.system.admin.get_database_path") as gdp, \
              patch("app.api.v1.system.admin.get_backup_directory") as gbdir:
-            db_p = MagicMock(spec=Path); db_p.exists.return_value = True
+            db_p = MagicMock(spec=Path)
+            db_p.exists.return_value = True
             bk_dir = MagicMock(spec=Path)
             bk_dir.mkdir.side_effect = PermissionError("access denied")
             gdp.return_value = db_p
@@ -199,105 +204,52 @@ class TestListBackups:
             assert resp.json()["data"]["total"] == 0
 
 
-class TestRestoreBackup:
-    def test_success(self, auth_client, mock_db):
+class TestRestoreBackupRetired:
+    """旧 admin 直连恢复端点已下线：恒 410，且不得再有任何文件覆盖路径。
+
+    下线理由：历史实现直接 ``shutil.copy2`` 覆盖数据库文件，绕过维护窗口、
+    备份包完整性/schema 校验与 PII 密钥指纹闸门；前端零调用。
+    """
+
+    def test_admin_gets_410(self, auth_client, mock_db):
         from app.core.database import get_db
         auth_client.app.dependency_overrides[get_db] = lambda: mock_db
 
-        with patch("app.api.v1.system.admin.get_database_path") as gdp, \
-             patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
-             patch("shutil.copy2") as copy2:
-            db_p = MagicMock(spec=Path)
-            db_p.exists.return_value = True
-            db_p.parent = MagicMock()
-            db_p.stem = "rural_revitalization"
-            bk_dir = MagicMock(spec=Path)
-            bk_dir.resolve.return_value = Path("C:/backups")
-            bk_file = MagicMock(spec=Path)
-            bk_file.resolve.return_value = Path("C:/backups/backup_2024.db")
-            bk_dir.__truediv__.return_value = bk_file
-            gdp.return_value = db_p
-            gbdir.return_value = bk_dir
+        resp = auth_client.post("/api/v1/system/admin/restore?filename=backup_2024.db")
 
-            resp = auth_client.post("/api/v1/system/admin/restore?filename=backup_2024.db")
-            assert resp.status_code == 200
-            assert resp.json()["success"] is True
+        assert resp.status_code == 410
+        detail = resp.json()["detail"]
+        assert "已停用" in detail
+        assert "备份管理" in detail
+        assert "密钥指纹" in detail
 
-    def test_path_traversal(self, auth_client):
-        resp = auth_client.post("/api/v1/system/admin/restore?filename=../etc/passwd")
-        assert resp.status_code == 400
-        assert "无效的文件名" in resp.json()["detail"]
-
-    def test_path_traversal_slash(self, auth_client):
-        resp = auth_client.post("/api/v1/system/admin/restore?filename=sub/dir/file.db")
-        assert resp.status_code == 400
-
-    def test_path_traversal_backslash(self, auth_client):
-        resp = auth_client.post("/api/v1/system/admin/restore?filename=sub\\dir\\file.db")
-        assert resp.status_code == 400
-
-    def test_path_traversal_dot(self, auth_client):
-        resp = auth_client.post("/api/v1/system/admin/restore?filename=.hidden.db")
-        assert resp.status_code == 400
-
-    def test_realpath_check_fail(self, auth_client, mock_db):
-        from app.core.database import get_db
-        auth_client.app.dependency_overrides[get_db] = lambda: mock_db
-
-        with patch("app.api.v1.system.admin.get_database_path") as gdp, \
+    def test_no_file_overwrite_happens(self, auth_client):
+        """覆盖逻辑必须已删除：任何路径解析/拷贝函数都不得被调用。"""
+        with patch("shutil.copy2") as copy2, \
+             patch("app.api.v1.system.admin.get_database_path") as gdp, \
              patch("app.api.v1.system.admin.get_backup_directory") as gbdir:
-            db_p = MagicMock(spec=Path)
-            bk_dir = MagicMock(spec=Path)
-            bk_dir.resolve.return_value = Path("C:/backups")
-            bk_file = MagicMock(spec=Path)
-            bk_file.resolve.return_value = Path("C:/outside/something.db")
-            bk_dir.__truediv__.return_value = bk_file
-            gdp.return_value = db_p
-            gbdir.return_value = bk_dir
-
-            resp = auth_client.post("/api/v1/system/admin/restore?filename=something.db")
-            assert resp.status_code == 500
-            assert "恢复失败" in resp.json()["detail"]
-
-    def test_backup_not_found(self, auth_client, mock_db):
-        from app.core.database import get_db
-        auth_client.app.dependency_overrides[get_db] = lambda: mock_db
-
-        with patch("app.api.v1.system.admin.get_database_path") as gdp, \
-             patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
-             patch("shutil.copy2", side_effect=FileNotFoundError):
-            db_p = MagicMock(spec=Path)
-            db_p.exists.return_value = False
-            bk_dir = MagicMock(spec=Path)
-            bk_dir.resolve.return_value = Path("C:/backups")
-            bk_file = MagicMock(spec=Path)
-            bk_file.resolve.return_value = Path("C:/backups/bk.db")
-            bk_dir.__truediv__.return_value = bk_file
-            gdp.return_value = db_p
-            gbdir.return_value = bk_dir
-
             resp = auth_client.post("/api/v1/system/admin/restore?filename=bk.db")
-            assert resp.status_code == 500
-            assert "恢复失败" in resp.json()["detail"]
 
-    def test_general_exception(self, auth_client, mock_db):
-        from app.core.database import get_db
-        auth_client.app.dependency_overrides[get_db] = lambda: mock_db
+        assert resp.status_code == 410
+        copy2.assert_not_called()
+        gdp.assert_not_called()
+        gbdir.assert_not_called()
 
-        with patch("app.api.v1.system.admin.get_database_path") as gdp, \
-             patch("app.api.v1.system.admin.get_backup_directory") as gbdir:
-            db_p = MagicMock(spec=Path)
-            bk_dir = MagicMock(spec=Path)
-            bk_dir.resolve.return_value = Path("C:/backups")
-            bk_file = MagicMock(spec=Path)
-            bk_file.resolve.side_effect = PermissionError("blocked")
-            bk_dir.__truediv__.return_value = bk_file
-            gdp.return_value = db_p
-            gbdir.return_value = bk_dir
+    def test_hostile_filenames_also_410(self, auth_client):
+        """参数不再参与文件解析：路径遍历同样只得到 410（无文件访问）。"""
+        for name in ("../etc/passwd", "sub/dir/file.db", "sub\\dir\\file.db", ".hidden.db"):
+            resp = auth_client.post(f"/api/v1/system/admin/restore?filename={name}")
+            assert resp.status_code == 410
 
-            resp = auth_client.post("/api/v1/system/admin/restore?filename=bk.db")
-            assert resp.status_code == 500
-            assert "恢复失败" in resp.json()["detail"]
+    def test_missing_filename_is_422(self, auth_client):
+        """参数仍为必填（保留在 OpenAPI，便于调用方得到明确的 422 而非静默 410）。"""
+        resp = auth_client.post("/api/v1/system/admin/restore")
+        assert resp.status_code == 422
+
+    def test_unauthenticated_401(self, client):
+        """未认证优先 401：不把"端点已停用"暴露给未授权调用方。"""
+        resp = client.post("/api/v1/system/admin/restore?filename=x.db")
+        assert resp.status_code == 401
 
 
 class TestDeleteBackup:
@@ -373,8 +325,12 @@ class TestSystemConfig:
 
         with patch("app.services.system_config_service.SystemConfigService") as MockSvc:
             svc = MagicMock()
-            svc.get.side_effect = lambda k, d: {"system_name": "Test", "max_login_attempts": "5",
-                "session_timeout": "480", "password_expiry_days": "90"}.get(k, d)
+            svc.get.side_effect = lambda k, d: {
+                "system_name": "Test",
+                "max_login_attempts": "5",
+                "session_timeout": "480",
+                "password_expiry_days": "90",
+            }.get(k, d)
             MockSvc.return_value = svc
 
             resp = auth_client.get("/api/v1/system/admin/config")

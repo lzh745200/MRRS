@@ -1050,7 +1050,7 @@
 | GET | `/system/admin/info` | 获取系统信息 | 管理员/登录 |
 | POST | `/system/admin/backup` | 创建数据库备份 | 管理员/登录 |
 | GET | `/system/admin/backups` | 获取备份列表 | 管理员/登录 |
-| POST | `/system/admin/restore` | 恢复数据库备份 | 管理员/登录 |
+| POST | `/system/admin/restore` | ~~恢复数据库备份~~ **已停用（410，v1.18.3）**：改用 `/system/backup/restore`（带维护窗口/完整性/密钥指纹校验） | 管理员/登录 |
 | DELETE | `/system/admin/backups/{filename}` | 删除备份文件 | 管理员/登录 |
 | GET | `/system/admin/config` | 获取系统配置（从 system_configs 表读取，回退到默认值） | 管理员/登录 |
 | PUT | `/system/admin/config` | 更新系统配置（持久化到 system_configs 表） | 管理员/登录 |

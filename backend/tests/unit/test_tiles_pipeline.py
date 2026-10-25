@@ -107,6 +107,7 @@ class TestScanTilesDir:
             "total_bytes": 0,
             "total_size_mb": 0.0,
             "zoom_levels": [],
+            "bounds": None,
         }
 
     def test_counts_tiles_and_ignores_noise(self, tmp_path):

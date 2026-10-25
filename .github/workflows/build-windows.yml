@@ -426,6 +426,32 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "7z 列举失败 (exit $LASTEXITCODE)" }
           python scripts/verify_package_no_tests.py --listing $listing
 
+      # 10.45 签名状态门禁（2026-10-25）：
+      #   electron-builder 已在配置了 CSC_LINK/CSC_KEY_PASSWORD 时自动签名；
+      #   本步骤把"到底签没签"变成可见证据：
+      #   - 有证书 secret（CSC_LINK 非空）→ 必须 Valid，否则构建失败（防止"以为签了其实没签"）；
+      #   - 无证书 secret → 明确告警并写入 Step Summary，Release 由 SHA256SUMS 承担完整性链。
+      - name: Verify installer signature
+        shell: pwsh
+        env:
+          SIGN_EXPECT_SIGNED: ${{ secrets.CSC_LINK != '' && '1' || '0' }}
+        run: |
+          $exe = Get-ChildItem "dist/electron/*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "dist/electron/*.exe not found" }
+          $sig = Get-AuthenticodeSignature -LiteralPath $exe.FullName
+          $line = "Authenticode: status=$($sig.Status) signer=$($sig.SignerCertificate.Subject)"
+          Write-Host $line
+          if ($env:SIGN_EXPECT_SIGNED -eq '1') {
+            if ($sig.Status -ne 'Valid') {
+              Write-Host "::error::期望签名但校验未通过：$($sig.Status)（检查 CSC_LINK/CSC_KEY_PASSWORD 与时间戳服务）"
+              throw "installer signature invalid: $($sig.Status)"
+            }
+            Write-Host "签名校验通过（Valid）"
+          } else {
+            Write-Warning "未配置代码签名证书（CSC_LINK），安装包未签名；完整性以 SHA256SUMS 为准"
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "> ⚠️ 本构建未做代码签名（未配置 CSC_LINK），请以 SHA256SUMS 校验完整性。"
+          }
+
       # 10.5 生成产物 SHA256 清单（军队分发完整性链，W6-T5）
       - name: Generate SHA256SUMS
         shell: pwsh

@@ -3,8 +3,8 @@
 覆盖：
 - 目录不存在 → ``reason="dir_missing"`` + 默认贵州 bbox；
 - 目录存在但无瓦片 → ``reason="no_tiles"``；
-- 可用时 → ``reason=None``，``bbox`` 优先取 MANIFEST 的 ``region.bbox`` / 顶层 ``bbox``，
-  缺失时回退贵州全省 bbox；
+- 可用时 → ``reason=None``，``bbox`` 优先取**扫描实测 bounds**（多包并集），
+  坐标不可解析时才回退 MANIFEST 的 ``region.bbox`` / 顶层 ``bbox``，最后回退贵州全省 bbox；
 - ``source`` 反映瓦片目录解析来源（env / meipass / dev）；
 - 原有字段（available/tileCount/zoomLevels/totalBytes/dir/manifest）不回归。
 """
@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +23,17 @@ import app.api.v1.map as map_mod
 BASE = "/api/v1/map"
 PROVINCE_BBOX = [103.6, 24.6, 109.6, 29.2]
 PNG = b"\x89PNG\r\n\x1a\n" + b"tile"
+
+
+def _tile_bounds(z: int, x: int, y: int):
+    """XYZ 瓦片经纬度包围盒 ``[min_lon, min_lat, max_lon, max_lat]``。"""
+    n = float(1 << z)
+    return [
+        x / n * 360.0 - 180.0,
+        math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 1) / n)))),
+        (x + 1) / n * 360.0 - 180.0,
+        math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n)))),
+    ]
 
 
 def _write_tiles(root: Path, zooms=(5,), count_per_zoom=1) -> None:
@@ -50,20 +62,23 @@ class TestTileInfoDiagnostics:
         assert data["reason"] == "no_tiles"
         assert data["bbox"] == PROVINCE_BBOX
 
-    def test_available_without_manifest_uses_province_bbox(self, client, tmp_path):
+    def test_available_uses_measured_bounds_when_no_manifest(self, client, tmp_path):
         _write_tiles(tmp_path, zooms=(5,), count_per_zoom=2)
         with patch.object(map_mod, "TILES_DIR", tmp_path):
             data = client.get(f"{BASE}/tile-info").json()["data"]
         assert data["available"] is True
         assert data["reason"] is None
         assert data["manifest"] is None
-        assert data["bbox"] == PROVINCE_BBOX
+        expected = _tile_bounds(5, 25, 13)
+        expected[1] = _tile_bounds(5, 25, 14)[1]  # 两瓦片纵向并集
+        assert data["bbox"] == pytest.approx(expected, abs=1e-6)
         assert data["tileCount"] == 2
         assert data["zoomLevels"] == [5]
 
-    def test_manifest_region_bbox_takes_priority(self, client, tmp_path):
+    def test_measured_bounds_take_priority_over_manifest_region(self, client, tmp_path):
+        """新优先级：实测 bounds 优先于 MANIFEST.region.bbox（多包叠加回归）。"""
         _write_tiles(tmp_path)
-        bbox = [106.0, 25.1, 108.5, 26.9]
+        manifest_bbox = [106.0, 25.1, 108.5, 26.9]
         manifest = {
             "schemaVersion": 1,
             "provider": "osm-qiannan",
@@ -71,16 +86,20 @@ class TestTileInfoDiagnostics:
             "zoomLevels": [5],
             "zoom": {"min": 5, "max": 5},
             "bbox": [103.6, 24.6, 109.6, 29.2],
-            "region": {"name": "黔南", "bbox": bbox},
+            "region": {"name": "黔南", "bbox": manifest_bbox},
         }
         (tmp_path / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
         with patch.object(map_mod, "TILES_DIR", tmp_path):
             data = client.get(f"{BASE}/tile-info").json()["data"]
         assert data["available"] is True
-        assert data["bbox"] == bbox
+        assert data["bbox"] == pytest.approx(_tile_bounds(5, 25, 13), abs=1e-6)
+        assert data["bbox"] != manifest_bbox
 
-    def test_manifest_top_level_bbox_used_when_region_missing(self, client, tmp_path):
-        _write_tiles(tmp_path)
+    def test_manifest_bbox_used_when_bounds_unavailable(self, client, tmp_path):
+        """坐标目录不可解析（无实测 bounds）时才回退 MANIFEST bbox。"""
+        bad = tmp_path / "5" / "not-a-number"
+        bad.mkdir(parents=True)
+        (bad / "13.png").write_bytes(PNG)
         bbox = [104.0, 25.0, 107.0, 27.0]
         manifest = {"schemaVersion": 1, "provider": "osm", "tileCount": 1, "bbox": bbox}
         (tmp_path / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -89,7 +108,10 @@ class TestTileInfoDiagnostics:
         assert data["bbox"] == bbox
 
     def test_invalid_manifest_bbox_falls_back_to_province(self, client, tmp_path):
-        _write_tiles(tmp_path)
+        # 坐标不可解析 → 无实测 bounds；MANIFEST bbox 非法 → 回退贵州全省
+        bad = tmp_path / "5" / "not-a-number"
+        bad.mkdir(parents=True)
+        (bad / "13.png").write_bytes(PNG)
         manifest = {"schemaVersion": 1, "provider": "osm", "bbox": ["bad", 1]}
         (tmp_path / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
         with patch.object(map_mod, "TILES_DIR", tmp_path):

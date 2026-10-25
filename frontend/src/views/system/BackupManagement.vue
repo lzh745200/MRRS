@@ -263,9 +263,31 @@
           />
         </el-form-item>
       </el-form>
+      <el-alert
+        v-if="keyMismatchDetail"
+        class="key-mismatch-alert"
+        type="error"
+        :closable="false"
+        title="备份来自不同密钥的机器（409），已拒绝自动恢复"
+        :description="keyMismatchDetail"
+      />
+      <el-checkbox v-model="restoreForm.allowKeyMismatch" class="key-mismatch-check">
+        {{ KEY_MISMATCH_DANGER_LABEL }}
+      </el-checkbox>
       <template #footer>
         <el-button @click="restoreDialogVisible = false">取消</el-button>
-        <el-button type="danger" :loading="restoring" @click="confirmRestore"> 确认恢复 </el-button>
+        <el-button
+          v-if="keyMismatchDetail"
+          type="danger"
+          :disabled="!restoreForm.allowKeyMismatch"
+          :loading="restoring"
+          @click="forceRestoreWithKeyMismatch"
+        >
+          强制恢复（密钥不一致）
+        </el-button>
+        <el-button v-else type="danger" :loading="restoring" @click="confirmRestore()">
+          确认恢复
+        </el-button>
       </template>
     </el-dialog>
     <!-- 导入备份包对话框 -->
@@ -307,13 +329,34 @@
           />
         </el-form-item>
       </el-form>
+      <el-alert
+        v-if="importKeyMismatchDetail"
+        class="key-mismatch-alert"
+        type="error"
+        :closable="false"
+        title="备份包来自不同密钥的机器（409），已拒绝自动恢复"
+        :description="importKeyMismatchDetail"
+      />
+      <el-checkbox v-model="importForm.allowKeyMismatch" class="key-mismatch-check">
+        {{ IMPORT_KEY_MISMATCH_DANGER_LABEL }}
+      </el-checkbox>
       <template #footer>
         <el-button @click="importDialogVisible = false">取消</el-button>
         <el-button
+          v-if="importKeyMismatchDetail"
+          type="danger"
+          :disabled="!importForm.allowKeyMismatch"
+          :loading="importing"
+          @click="forceImportRestoreWithKeyMismatch"
+        >
+          强制导入并恢复（密钥不一致）
+        </el-button>
+        <el-button
+          v-else
           type="danger"
           :loading="importing"
           :disabled="!importFile"
-          @click="confirmImportRestore"
+          @click="confirmImportRestore()"
         >
           确认导入并恢复
         </el-button>
@@ -330,10 +373,23 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post, put, del } from '@/api/request'
 import { useBackupSchedule } from '@/composables/useBackupSchedule'
-import { uploadRestoreBackup } from '@/api/backup'
+import { uploadRestoreBackup, restoreBackup } from '@/api/backup'
+import { useDangerConfirm } from '@/composables/useDangerConfirm'
 import { AuthStorage } from '@/utils/authStorage'
 
 import { format } from '@/utils'
+
+// 危险操作二次确认（全站统一语义：确认 true / 取消 false，绝不抛错）
+const { confirmDanger } = useDangerConfirm()
+
+/**
+ * 跨密钥恢复（v1.18.0 `allow_key_mismatch`）危险勾选文案。
+ * 必须点名"不可读"风险，且默认不勾；只有用户显式确认后才允许强制恢复。
+ */
+const KEY_MISMATCH_DANGER_LABEL =
+  '我确认：该备份来自不同密钥的机器，恢复后敏感字段（身份证号/联系电话等）可能不可读'
+const IMPORT_KEY_MISMATCH_DANGER_LABEL =
+  '我确认：该备份包来自不同密钥的机器，恢复后敏感字段（身份证号/联系电话等）可能不可读'
 // 普通用户只读：仅 admin/super_admin 可执行备份写操作（后端 require_admin 双重把关）。
 // 无用户信息时保持按钮可见（后端权限兜底），兼容未注入用户态的旧测试场景。
 const canOperateBackup = computed(() => {
@@ -400,7 +456,9 @@ const backupForm = ref({
   include_uploads: true,
   password: '',
 })
-const restoreForm = ref({ password: '' })
+const restoreForm = ref({ password: '', allowKeyMismatch: false })
+/** 409 密钥不一致时后端 detail；非空即进入"强制恢复（密钥不一致）"分支 */
+const keyMismatchDetail = ref('')
 
 // ── 备份目标目录（U盘/移动硬盘） ──
 const targetLoading = ref(false)
@@ -631,30 +689,89 @@ async function handleDelete(row: any) {
 
 function handleRestore(row: any) {
   restoreTarget.value = row
-  restoreForm.value.password = ''
+  restoreForm.value = { password: '', allowKeyMismatch: false }
+  keyMismatchDetail.value = ''
   restoreDialogVisible.value = true
 }
 
-async function confirmRestore() {
+/** 提取后端可读错误信息（409 detail 优先，其次拦截器挂载的 userMessage） */
+function serverMessage(e: any): string {
+  const detail = e?.response?.data?.detail
+  if (typeof detail === 'string' && detail) return detail
+  if (typeof e?.userMessage === 'string' && e.userMessage) return e.userMessage
+  return ''
+}
+
+/**
+ * 是否"备份 PII 密钥指纹与本机不一致"：后端以 **409 + detail 含「密钥」** 表达。
+ * 只有这一类 409 才允许进入强制恢复；其它 409/错误一律按普通失败处理（fail-safe）。
+ */
+function isKeyMismatchError(e: any): boolean {
+  return e?.response?.status === 409 && serverMessage(e).includes('密钥')
+}
+
+/**
+ * 恢复备份。
+ * 默认**不带** `allow_key_mismatch`；捕获 409 密钥不一致后不静默强制，
+ * 改为在弹窗内展示后端 detail 等待用户勾选 + 二次确认。
+ */
+async function confirmRestore(options: { forceKeyMismatch?: boolean } = {}) {
   if (!restoreTarget.value) return
+  const force = options.forceKeyMismatch === true
+  if (force && !restoreForm.value.allowKeyMismatch) {
+    ElMessage.warning('请先勾选「我确认：该备份来自不同密钥的机器…」再强制恢复')
+    return
+  }
   restoring.value = true
   try {
-    const res = await post('/system/backup/restore', {
-      filename: restoreTarget.value.file_name,
-      password: restoreForm.value.password || null,
-    })
+    const res = await restoreBackup(
+      restoreTarget.value.file_name,
+      restoreForm.value.password || null,
+      force
+    )
     if (res?.success !== false) {
       ElMessage.success('系统恢复成功，请重新登录')
       restoreDialogVisible.value = false
+      keyMismatchDetail.value = ''
+      restoreForm.value.allowKeyMismatch = false
       setTimeout(() => {
         window.location.href = '/login'
       }, 2000)
     }
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '恢复失败')
+    if (isKeyMismatchError(e)) {
+      // 不静默强制：记录后端 detail，等用户勾选危险项并二次确认
+      keyMismatchDetail.value = serverMessage(e)
+      restoreForm.value.allowKeyMismatch = false
+      return
+    }
+    ElMessage.error(serverMessage(e) || '恢复失败')
   } finally {
     restoring.value = false
   }
+}
+
+/**
+ * 密钥不一致强制恢复：危险勾选 + `confirmDanger` 二次确认 → 带参重试**一次**。
+ * 取消（confirmDanger 返回 false）→ 不重试、不抛错、弹窗状态保持。
+ */
+async function forceRestoreWithKeyMismatch() {
+  if (!restoreTarget.value) return
+  if (!restoreForm.value.allowKeyMismatch) {
+    ElMessage.warning('请先勾选「我确认：该备份来自不同密钥的机器…」再强制恢复')
+    return
+  }
+  const detail = keyMismatchDetail.value || '备份来自不同密钥的机器。'
+  const ok = await confirmDanger({
+    title: '确认强制恢复（密钥不一致）',
+    message:
+      `${detail}\n\n` +
+      '恢复后，备份中的身份证号/联系电话等敏感字段在本机可能永久不可读；' +
+      '建议先导入原机器的 PII 密钥。仅当确认必须在本机恢复时继续。',
+    confirmButtonText: '强制恢复',
+  })
+  if (!ok) return
+  await confirmRestore({ forceKeyMismatch: true })
 }
 
 // ── 导入备份包恢复 ──
@@ -662,35 +779,76 @@ const importDialogVisible = ref(false)
 const importing = ref(false)
 const importFile = ref<File | null>(null)
 const importFileList = ref<any[]>([])
-const importForm = ref({ password: '' })
+const importForm = ref({ password: '', allowKeyMismatch: false })
+/** 上传恢复 409 密钥不一致时后端 detail；非空即进入强制导入分支 */
+const importKeyMismatchDetail = ref('')
 
 function onImportFileChange(uploadFile: any) {
   importFile.value = uploadFile?.raw ?? null
 }
 
-async function confirmImportRestore() {
+/** 上传导入恢复：默认不带 allow_key_mismatch，409 密钥不一致见 forceImportRestoreWithKeyMismatch */
+async function confirmImportRestore(options: { forceKeyMismatch?: boolean } = {}) {
   if (!importFile.value) {
     ElMessage.warning('请先选择备份包文件')
     return
   }
+  const force = options.forceKeyMismatch === true
+  if (force && !importForm.value.allowKeyMismatch) {
+    ElMessage.warning('请先勾选「我确认：该备份包来自不同密钥的机器…」再强制导入恢复')
+    return
+  }
   importing.value = true
   try {
-    const res = await uploadRestoreBackup(importFile.value, importForm.value.password || undefined)
+    const res = await uploadRestoreBackup(
+      importFile.value,
+      importForm.value.password || undefined,
+      force
+    )
     if (res?.success !== false) {
       ElMessage.success('导入恢复成功，系统将重新登录')
       importDialogVisible.value = false
       importFile.value = null
       importFileList.value = []
-      importForm.value.password = ''
+      importForm.value = { password: '', allowKeyMismatch: false }
+      importKeyMismatchDetail.value = ''
       setTimeout(() => {
         window.location.href = '/login'
       }, 2000)
     }
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '导入恢复失败')
+    if (isKeyMismatchError(e)) {
+      importKeyMismatchDetail.value = serverMessage(e)
+      importForm.value.allowKeyMismatch = false
+      return
+    }
+    ElMessage.error(serverMessage(e) || '导入恢复失败')
   } finally {
     importing.value = false
   }
+}
+
+/** 上传恢复的密钥不一致强制路径：危险勾选 + 二次确认 → 带参重试一次 */
+async function forceImportRestoreWithKeyMismatch() {
+  if (!importFile.value) {
+    ElMessage.warning('请先选择备份包文件')
+    return
+  }
+  if (!importForm.value.allowKeyMismatch) {
+    ElMessage.warning('请先勾选「我确认：该备份包来自不同密钥的机器…」再强制导入恢复')
+    return
+  }
+  const detail = importKeyMismatchDetail.value || '备份包来自不同密钥的机器。'
+  const ok = await confirmDanger({
+    title: '确认强制导入并恢复（密钥不一致）',
+    message:
+      `${detail}\n\n` +
+      '恢复后，备份包中的身份证号/联系电话等敏感字段在本机可能永久不可读；' +
+      '建议先导入原机器的 PII 密钥。仅当确认必须在本机恢复时继续。',
+    confirmButtonText: '强制导入并恢复',
+  })
+  if (!ok) return
+  await confirmImportRestore({ forceKeyMismatch: true })
 }
 
 async function handleDownload(row: any) {
@@ -777,6 +935,14 @@ onMounted(() => {
 }
 .backup-status {
   margin-bottom: 20px;
+}
+/* 跨密钥恢复：危险勾选 + 后端 409 detail 的红框提示 */
+.key-mismatch-alert {
+  margin-top: 16px;
+}
+.key-mismatch-check {
+  margin-top: 16px;
+  white-space: normal;
 }
 .auto-backup-card {
   margin-bottom: 20px;

@@ -716,6 +716,7 @@ describe('恢复备份', () => {
     expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', {
       filename: 'enc.zip',
       password: 'pw123',
+      allow_key_mismatch: false,
     })
     expect(ElMessage.success).toHaveBeenCalledWith('系统恢复成功，请重新登录')
     expect(vm.restoreDialogVisible).toBe(false)
@@ -734,6 +735,7 @@ describe('恢复备份', () => {
     expect(mockPost).toHaveBeenCalledWith('/system/backup/restore', {
       filename: 'plain.zip',
       password: null,
+      allow_key_mismatch: false,
     })
     vi.useRealTimers()
   })
