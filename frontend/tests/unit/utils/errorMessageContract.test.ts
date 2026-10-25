@@ -169,4 +169,14 @@ describe('getErrorMessage 核心契约', () => {
     expect(getErrorMessage(null, '自定义兜底')).toBe('自定义兜底')
     expect(getErrorMessage({}, '自定义兜底')).toBe('自定义兜底')
   })
+
+  it('只有状态码、没有 message 时用状态码兜底', () => {
+    // 真实形态：某些封装层 reject 一个裸对象（无 message / 无 code）
+    expect(getErrorMessage({ response: { status: 503 } })).toBe('服务器繁忙，请稍后重试')
+    expect(getErrorMessage({ status: 409 })).toBe('数据冲突，请刷新后重试')
+  })
+
+  it('状态码无对应文案时仍回落 fallback', () => {
+    expect(getErrorMessage({ response: { status: 418 } }, '自定义兜底')).toBe('自定义兜底')
+  })
 })
