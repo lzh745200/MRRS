@@ -117,6 +117,11 @@ onUnmounted(() => {
 defineExpose({
   getChart: () => chartInstance,
   resize: resizeChart,
+  // 主题切换的同一入口（dispose + 按当前 DOM 主题重建）。
+  // 对外暴露是为了让调用方在"已知主题变化但事件未发出"时按需刷新，
+  // 也让该路径可被直接测试 —— 只靠全局自定义事件触发时，多套件并行下
+  // 该函数的覆盖归属会漂移（实测：单跑 100%、全量 99.8%）。
+  rebuild: rebuildForTheme,
 })
 </script>
 

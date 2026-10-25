@@ -154,3 +154,35 @@ class TestTileServeUnaffected:
             resp = client.get(f"{BASE}/tiles/12/1/1.png")
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
+
+
+class TestManifestBboxHelper:
+    """_manifest_bbox 纯函数分支：region.bbox 优先 / 顶层 bbox 回退 / 全非法返回 None。"""
+
+    def test_region_bbox_preferred(self):
+        from app.api.v1.map import _manifest_bbox
+
+        assert _manifest_bbox({"region": {"bbox": [1.0, 2.0, 3.0, 4.0]}, "bbox": [9, 9, 9, 9]}) == [1.0, 2.0, 3.0, 4.0]
+
+    def test_region_bbox_invalid_falls_back_to_top_level(self):
+        """region.bbox 长度不对 → 继续看顶层 bbox（分支 182->184）。"""
+        from app.api.v1.map import _manifest_bbox
+
+        assert _manifest_bbox({"region": {"bbox": [1, 2]}, "bbox": [5.0, 6.0, 7.0, 8.0]}) == [5.0, 6.0, 7.0, 8.0]
+
+    def test_top_level_bbox_invalid_returns_none(self):
+        """两级 bbox 都不合法 → None（分支 185->187）。"""
+        from app.api.v1.map import _manifest_bbox
+
+        assert _manifest_bbox({"region": {"bbox": "oops"}, "bbox": ["x", 1, 2, 3]}) is None
+
+    def test_non_dict_manifest_returns_none(self):
+        from app.api.v1.map import _manifest_bbox
+
+        assert _manifest_bbox(None) is None
+        assert _manifest_bbox([1, 2, 3, 4]) is None
+
+    def test_tuple_bbox_converted_to_list(self):
+        from app.api.v1.map import _manifest_bbox
+
+        assert _manifest_bbox({"bbox": (1, 2, 3, 4)}) == [1, 2, 3, 4]

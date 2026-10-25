@@ -30,12 +30,14 @@ INJECTED_FILE = INJECTED_DIR + r"\\app.log"
 
 
 class TestFrozenLogPath:
-    @pytest.mark.skipif(
-        not getattr(sys, "frozen", False),
-        reason="路径改写只在打包态（sys.frozen）触发；开发机验证参数透传",
-    )
-    def test_absolute_log_file_is_respected_when_frozen(self):
-        """核心缺陷回归：Electron 注入的绝对路径必须原样保留。"""
+    def test_absolute_log_file_is_respected_when_frozen(self, monkeypatch):
+        """核心缺陷回归：Electron 注入的绝对路径必须原样保留（打包态）。
+
+        原先用 skipif 跳过开发机，等于这条**核心回归永远只在 CI 打包环境**才验证，
+        本地改动无法自查。改为在测试内 monkeypatch sys.frozen=True ——
+        Settings 构造期读的就是该标志，与真实打包态走同一分支。
+        """
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
         s = _make_settings(LOG_DIR=INJECTED_DIR, LOG_FILE=INJECTED_FILE)
         assert s.LOG_DIR == INJECTED_DIR
         assert s.LOG_FILE == INJECTED_FILE

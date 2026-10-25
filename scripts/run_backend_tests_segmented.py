@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import glob
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -59,7 +58,16 @@ SEGMENTS = [
     ("seg06-unit-root-p", ["tests/unit/test_p*.py", "tests/unit/test_t*.py", "tests/unit/test_u*.py"], False),
     ("seg07-unit-root-w", ["tests/unit/test_w*.py", "tests/unit/test_y*.py", "tests/unit/test_z*.py"], False),
     ("seg08-unit-root-b", ["tests/unit/test_b*.py", "tests/unit/test_d*.py"], False),
-    ("seg09-unit-root-g", ["tests/unit/test_g*.py", "tests/unit/test_h*.py", "tests/unit/test_j*.py", "tests/unit/test_l*.py"], False),
+    (
+        "seg09-unit-root-g",
+        [
+            "tests/unit/test_g*.py",
+            "tests/unit/test_h*.py",
+            "tests/unit/test_j*.py",
+            "tests/unit/test_l*.py",
+        ],
+        False,
+    ),
     ("seg10-unit-root-m", ["tests/unit/test_m*.py", "tests/unit/test_q*.py", "tests/unit/test_s*.py"], False),
     ("seg11-tests-root", ["tests/test_*.py"], False),
     ("seg12-unit-root-c", ["tests/unit/test_c*.py", "tests/unit/test_r*.py", "tests/unit/test_v*.py"], True),
@@ -85,7 +93,7 @@ def resolve_targets(patterns, backend_dir: Path):
     return resolved
 
 
-def run_segment(index, name, patterns, is_final, keep_logs):
+def run_segment(index, name, patterns, is_final, keep_logs, cov_file=None, cov_config=None):
     targets = resolve_targets(patterns, BACKEND_DIR)
     if not targets:
         print(f"[{index:02d}/12] {name}: 无匹配目标，跳过")
@@ -103,12 +111,26 @@ def run_segment(index, name, patterns, is_final, keep_logs):
         "--reruns", "2", "--reruns-delay", "1",
     ]
     if is_final:
-        # 末段输出报表；覆盖率阈值仍由 backend/.coveragerc 的 fail_under 单一来源判定
-        args += ["--cov-report=term-missing", "--cov-report=json:coverage-branch.json"]
+        # 末段输出报表；但**不在此处判定阈值** —— 多会话并发时，段内读到的可能是
+        # 被别的进程中途改写的残缺数据（历史症状：每段都 PASS，末段却报 53%）。
+        # 真正的 fail_under 判定放到全部段跑完之后统一执行（见 main）。
+        args += [
+            "--cov-report=term-missing",
+            "--cov-report=json:coverage-branch.json",
+            "--cov-fail-under=0",
+        ]
     else:
         args += ["--cov-report=", "--cov-fail-under=0"]
 
     env = dict(os.environ)
+    # 多会话并发：把覆盖率数据写到独立文件，避免彼此的 --cov-append 互相覆盖。
+    # 症状：每段都 PASS，但最终 report 只有 50~75%（仿佛分片丢失）。
+    # 注意：pytest-cov **不读** COVERAGE_FILE 环境变量，必须走 --cov-config 的
+    # [run] data_file（实测：仅设 env 时数据仍写默认 .coverage）。
+    if cov_config:
+        args += [f"--cov-config={cov_config}"]
+    if cov_file:
+        env["COVERAGE_FILE"] = cov_file
     env.setdefault("PYTHONUTF8", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
     # 与 CI 一致：崩溃时打出 Python 级栈便于定位
@@ -147,6 +169,21 @@ def main():
     parser.add_argument("--keep-logs", action="store_true", help="保留每段日志到 logs/pytest-segments/")
     parser.add_argument("--fresh", action="store_true", help="运行前清理 .coverage（默认清理）")
     parser.add_argument("--keep-coverage", action="store_true", help="保留既有 .coverage 继续追加")
+    parser.add_argument(
+        "--cov-file",
+        default="",
+        help="覆盖率数据文件（相对 backend）。多会话并发时用独立文件",
+    )
+    parser.add_argument(
+        "--cov-unique",
+        action="store_true",
+        help="自动生成含 PID 与时间戳的覆盖率数据文件（多会话并发时彻底避免同名覆盖）",
+    )
+    parser.add_argument(
+        "--skip-coverage-gate",
+        action="store_true",
+        help="跳过跑完后的统一覆盖率判定（仅排障用）",
+    )
     args = parser.parse_args()
 
     if args.list:
@@ -158,8 +195,51 @@ def main():
         print(f"找不到 backend 目录: {BACKEND_DIR}", file=sys.stderr)
         return 1
 
-    if not args.keep_coverage and COVERAGE_FILE.exists():
-        COVERAGE_FILE.unlink()
+    # 覆盖率门禁依赖 backend/.coveragerc 的 fail_under；文件缺失时 pytest-cov 退回默认
+    # 配置，门禁会【静默失效】（历史踩坑：清理分片误删它）。此处 fail-fast。
+    coveragerc = BACKEND_DIR / ".coveragerc"
+    if not coveragerc.is_file():
+        print(
+            "错误: backend/.coveragerc 缺失 —— 覆盖率门禁会静默失效。恢复: git checkout -- backend/.coveragerc",
+            file=sys.stderr,
+        )
+        return 2
+
+    cov_file_arg = args.cov_file.strip()
+    cov_config_path = None
+    seg_rcs: list[tuple[str, str]] = []
+    if args.cov_unique:
+        # 每段写**自己的**数据文件，全部跑完后 coverage combine 合并。
+        # 实测两条路都不可靠：--cov-append 在多段独立进程下只留最后一段；
+        # [run] parallel 会被 pytest-cov 覆盖。故直接每段一个 data_file。
+        stamp = f"{os.getpid()}-{time.strftime('%Y%m%d-%H%M%S')}"
+        cov_file_arg = f".coverage.gate.{stamp}"
+        base_rc = coveragerc.read_text(encoding="utf-8")
+
+        def _rc_with_data_file(target: str) -> str:
+            """把 data_file 插进 [run] 段（coverage 不允许它出现在别的段）。"""
+            ls = base_rc.splitlines()
+            out_ls, ok = [], False
+            for one in ls:
+                out_ls.append(one)
+                if not ok and one.strip() == "[run]":
+                    out_ls.append(f"data_file = {target}")
+                    ok = True
+            if not ok:
+                out_ls = ["[run]", f"data_file = {target}", ""] + ls
+            return "\n".join(out_ls) + "\n"
+
+        cov_config_path = BACKEND_DIR / f".coveragerc.gate.{stamp}"
+        cov_config_path.write_text(_rc_with_data_file(cov_file_arg), encoding="utf-8")
+        for idx, _seg in enumerate(SEGMENTS, 1):
+            seg_data = f".covseg.{stamp}.{idx}"
+            seg_rc = BACKEND_DIR / f".coveragerc.seg.{stamp}.{idx}"
+            seg_rc.write_text(_rc_with_data_file(seg_data), encoding="utf-8")
+            seg_rcs.append((seg_data, str(seg_rc)))
+    data_file = (BACKEND_DIR / cov_file_arg) if cov_file_arg else COVERAGE_FILE
+    if not args.keep_coverage and data_file.exists():
+        data_file.unlink()
+        # 精确匹配 .coverage.*；**不要**用 .coverage*（会连 .coveragerc 一起删）
         for stale in BACKEND_DIR.glob(".coverage.*"):
             stale.unlink(missing_ok=True)
 
@@ -179,7 +259,10 @@ def main():
     for i, (name, patterns, is_final) in enumerate(SEGMENTS, 1):
         if selected != SEGMENTS and SEGMENTS[i - 1] not in selected:
             continue
-        code = run_segment(i, name, patterns, is_final, args.keep_logs)
+        _seg_rc = seg_rcs[i - 1][1] if seg_rcs else None
+        code = run_segment(
+            i, name, patterns, is_final, args.keep_logs, cov_file_arg or None, _seg_rc
+        )
         if code != 0:
             failures.append(name)
 
@@ -189,7 +272,45 @@ def main():
         print(f"失败段 ({len(failures)}): {', '.join(failures)}")
         print("=" * 70)
         return 1
-    print("全部段通过；覆盖率门禁由最后一段按 .coveragerc(fail_under) 判定")
+
+    # 覆盖率门禁：全部段跑完后，对**累积数据**统一判定一次。
+    # 与"末段内联报告"相比，这里读的是所有段写入完毕后的最终文件，
+    # 不会被并发会话的中途读写打断（历史症状：末段报 53%）。
+    if not args.skip_coverage_gate:
+        env_cov = dict(os.environ)
+        _cov_target = args.cov_file.strip()
+        if _cov_target:
+            env_cov["COVERAGE_FILE"] = _cov_target
+        _rc_for_report = str(cov_config_path) if cov_config_path else ".coveragerc"
+        # 每段一个独立 data_file → 先 combine 成一份，再 report。
+        _seg_files = [d for d, _rc in seg_rcs]
+        combine_cmd = [sys.executable, "-m", "coverage", "combine", f"--rcfile={_rc_for_report}"]
+        if _seg_files:
+            combine_cmd += _seg_files
+        combine = subprocess.run(
+            combine_cmd,
+            cwd=str(BACKEND_DIR), env=env_cov, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+        )
+        if combine.returncode != 0:
+            print(f"覆盖率 combine 失败: {(combine.stderr or '').strip()[:150]}")
+        report = subprocess.run(
+            [sys.executable, "-m", "coverage", "report", f"--rcfile={_rc_for_report}"],
+            cwd=str(BACKEND_DIR), env=env_cov, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+        )
+        tail = [ln for ln in (report.stdout or "").splitlines() if ln.strip()][-1:] or [""]
+        print(f"覆盖率门禁: {tail[0].strip()[:150]}")
+        if report.returncode != 0:
+            out = (report.stdout or "") + (report.stderr or "")
+            for line in out.splitlines():
+                if "Coverage failure" in line or line.startswith("TOTAL"):
+                    print(f"  {line.strip()[:200]}")
+            print("=" * 70)
+            return 1
+    print("全部段通过；覆盖率门禁已在上面按 .coveragerc(fail_under) 统一判定")
+    if args.cov_file.strip():
+        print(f"覆盖率数据文件: backend/{args.cov_file.strip()}（独立文件，不受其他会话清理影响）")
     print("=" * 70)
     return 0
 

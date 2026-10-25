@@ -120,6 +120,8 @@ from app.core.config import settings as _config  # noqa: E402
 # 哈希轮数由 settings.BCRYPT_ROUNDS 提供（此前该配置零消费，R28 低危项）；
 # 默认 12 与 passlib bcrypt 默认一致，故默认配置下哈希产物与既有库完全兼容
 # （bcrypt 哈希自带 cost 前缀，校验时按哈希内 cost 进行，调高只影响新哈希）。
+# 兼容保留：内部已改用 bcrypt 直连（见 _hash_bcrypt / _verify_bcrypt）。
+# 保留该对象是为了不打断任何外部/测试引用，**新增代码请勿再依赖它**。
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
@@ -146,9 +148,28 @@ def _truncate_password(password: str) -> str:
     return password
 
 
+def _hash_bcrypt(password: str) -> str:
+    """bcrypt 直连哈希（替代 passlib，规避其后端版本探测的不稳定性）。
+
+    产物格式与 passlib 完全一致（`$2b$<cost>$`），历史哈希无需迁移。
+    """
+    import bcrypt as _bcrypt_impl
+
+    encoded = _truncate_password(password).encode("utf-8")
+    return _bcrypt_impl.hashpw(encoded, _bcrypt_impl.gensalt(rounds=_config.BCRYPT_ROUNDS)).decode("ascii")
+
+
+def _verify_bcrypt(plain_password: str, hashed_password: str) -> bool:
+    """bcrypt 直连校验；哈希格式非法时抛 ValueError（由调用方转成 False）。"""
+    import bcrypt as _bcrypt_impl
+
+    encoded = _truncate_password(plain_password).encode("utf-8")
+    return _bcrypt_impl.checkpw(encoded, hashed_password.encode("utf-8"))
+
+
 def get_password_hash(password: str) -> str:
     """生成密码哈希"""
-    return pwd_context.hash(_truncate_password(password))
+    return _hash_bcrypt(password)
 
 
 def hash_password(password: str) -> str:
@@ -159,9 +180,9 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """校验密码"""
     try:
-        return pwd_context.verify(_truncate_password(plain_password), hashed_password)
+        return _verify_bcrypt(plain_password, hashed_password)
     except ValueError:
-        return False  # passlib正常错误：密码格式不匹配
+        return False  # 哈希格式不匹配（非 bcrypt 产物 / 空串 / 非 ASCII）
     except Exception as e:
         logger.critical("密码验证模块故障，可能影响所有用户登录: %s", e, exc_info=True)
         raise

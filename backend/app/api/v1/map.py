@@ -172,6 +172,27 @@ def _resolve_tiles_dir() -> Path:
 TILES_DIR = _resolve_tiles_dir()
 
 
+def _valid_bbox(value) -> bool:
+    """bbox 必须是「4 个有限数值」的序列。
+
+    只校验长度是不够的：["x", 1, 2, 3] 这类非法值会被当作 Leaflet bounds 传给
+    前端，地图初始化拿到含字符串的角点后表现为不显示 / 异常缩放。
+    bool 是 int 子类，需显式排除（true / false 不能当坐标）。
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return False
+    for item in value:
+        if isinstance(item, bool):
+            return False
+        if not isinstance(item, (int, float)):
+            return False
+        if item != item:  # NaN
+            return False
+        if item in (float("inf"), float("-inf")):
+            return False
+    return True
+
+
 def _manifest_bbox(manifest) -> Optional[list]:
     """从 MANIFEST 取覆盖 bbox：region.bbox 优先，其次顶层 bbox。"""
     if not isinstance(manifest, dict):
@@ -179,10 +200,10 @@ def _manifest_bbox(manifest) -> Optional[list]:
     region = manifest.get("region")
     if isinstance(region, dict):
         bbox = region.get("bbox")
-        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+        if _valid_bbox(bbox):
             return list(bbox)
     bbox = manifest.get("bbox")
-    if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+    if _valid_bbox(bbox):
         return list(bbox)
     return None
 

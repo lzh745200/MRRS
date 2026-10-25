@@ -174,9 +174,25 @@ describe('common/BaseChart.vue', () => {
     expect(echartsInstance.dispose).toHaveBeenCalledTimes(1)
     expect(initMock).toHaveBeenCalledTimes(2)
     // 重建时按当前 DOM 主题取暗色主题
-    expect(initMock).toHaveBeenLastCalledWith(wrapper.find('.base-chart').element, 'militaryTechDark')
+    expect(initMock).toHaveBeenLastCalledWith(
+      wrapper.find('.base-chart').element,
+      'militaryTechDark'
+    )
 
     document.documentElement.removeAttribute('data-theme')
+    wrapper.unmount()
+  })
+
+  it('暴露的 rebuild() 直接重建实例（不经全局事件，覆盖归属确定）', async () => {
+    const wrapper = mount(BaseChart, { props: { option } })
+    await flushPromises()
+    expect(initMock).toHaveBeenCalledTimes(1)
+    echartsInstance.dispose.mockClear()
+    ;(wrapper.vm as any).rebuild()
+    await flushPromises()
+
+    expect(echartsInstance.dispose).toHaveBeenCalledTimes(1)
+    expect(initMock).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
 

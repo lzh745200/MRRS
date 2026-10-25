@@ -53,14 +53,20 @@ class TestTruncatePassword:
 
 
 class TestVerifyPasswordException:
+    """verify_password 的异常分支（内部实现为 bcrypt 直连 _verify_bcrypt）。"""
+
     def test_value_error_returns_false(self):
-        with patch.object(sec.pwd_context, "verify", side_effect=ValueError("bad")):
-            assert sec.verify_password("x", "y") is False  # 行 144-145
+        with patch.object(sec, "_verify_bcrypt", side_effect=ValueError("bad")):
+            assert sec.verify_password("x", "y") is False
+
+    def test_malformed_hash_returns_false(self):
+        # 真实路径：非 bcrypt 产物 → bcrypt.checkpw 抛 ValueError → 转 False
+        assert sec.verify_password("x", "not-a-valid-hash") is False
 
     def test_generic_exception_reraises(self):
-        with patch.object(sec.pwd_context, "verify", side_effect=RuntimeError("boom")):
+        with patch.object(sec, "_verify_bcrypt", side_effect=RuntimeError("boom")):
             with pytest.raises(RuntimeError):
-                sec.verify_password("x", "y")  # 行 146-148 critical + raise
+                sec.verify_password("x", "y")
 
 
 # ─────────────────────────── generate_password (154,156) ───────────────────────────
