@@ -46,6 +46,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Windows 控制台默认 GBK；打印非 ASCII 会 UnicodeEncodeError 并让门禁"假红"。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):  # pragma: no cover
+    pass
 TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
 
@@ -124,6 +131,11 @@ def main(argv: list[str] | None = None) -> int:
         "--repo", default="lzh745200/MRRS", help="owner/repo（默认本仓库）"
     )
     parser.add_argument("--apply", action="store_true", help="真正打 tag 并推送（默认 dry-run）")
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="工作区有他人 WIP 改动的逃生口：tag 指向已推送 commit，脏文件不会进入发布内容；其余校验仍然生效",
+    )
     args = parser.parse_args(argv)
 
     tag = args.tag or f"v{read_version()}"
@@ -137,8 +149,8 @@ def main(argv: list[str] | None = None) -> int:
     if branch != "main":
         problems.append(f"当前分支是 {branch}，发布必须从 main 切")
 
-    if not is_worktree_clean():
-        problems.append("工作区不干净：先提交或 stash，避免把未提交改动当已发布")
+    if not is_worktree_clean() and not args.allow_dirty:
+        problems.append("工作区不干净：先提交或 stash（若脏文件是他人 WIP，可加 --allow-dirty，tag 仍只指向已推送 commit）")
 
     if tag_exists_locally(tag):
         problems.append(f"本地已存在 tag {tag}（不允许重打已发布版本）")
@@ -153,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[release] tag={tag} commit={sha[:8]} branch={branch} dry-run={not args.apply}")
     if problems:
         for p in problems:
-            print(f"  ✗ {p}")
+            print(f"  [FAIL] {p}")
         return 1
 
     ok_ci, detail = ci_green(sha, args.wait_minutes, args.repo)
