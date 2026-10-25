@@ -51,7 +51,7 @@ ROOT = Path(__file__).resolve().parent.parent
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):  # pragma: no cover
+except (AttributeError, ValueError):  # pragma: no cover - 仅旧解释器无 reconfigure
     pass
 TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
