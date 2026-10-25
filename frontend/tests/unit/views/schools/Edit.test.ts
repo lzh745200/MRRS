@@ -1,4 +1,4 @@
-﻿/**
+/**
  * views/schools/Edit.vue 覆盖率攻坚（四指标 100%）
  * 覆盖：新增/编辑模式、loadData 全分支、附件管理（加载/上传成功失败/删除/下载）、
  * getFileIcon/formatFileSize 全分支、onRegionChange、handleSubmit 全分支、
@@ -8,9 +8,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const { ElMessage, getMock, postMock, putMock, delMock, pushSafeMock, routeBox, logError, validateMock, authBox } =
+const { ElMessage, mockConfirm, getMock, postMock, putMock, delMock, pushSafeMock, routeBox, logError, validateMock, authBox } =
   vi.hoisted(() => ({
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+    mockConfirm: vi.fn(),
     getMock: vi.fn(),
     postMock: vi.fn(),
     putMock: vi.fn(),
@@ -22,9 +23,14 @@ const { ElMessage, getMock, postMock, putMock, delMock, pushSafeMock, routeBox, 
     authBox: { token: 'token-1' },
   }))
 
-vi.mock('vue-router', () => ({ useRoute: () => routeBox }))
+// ③ 离开拦截（useDirtyGuard）会 import onBeforeRouteLeave：只 mock useRoute 会让 setup 直接抛错
+vi.mock('vue-router', () => ({ useRoute: () => routeBox, onBeforeRouteLeave: vi.fn() }))
 
-vi.mock('element-plus', () => ({ ElMessage }))
+vi.mock('element-plus', () => ({
+  ElMessage,
+  // ③ 草稿恢复询问：默认按"用户取消"返回，避免测试挂起；具体用例自行改 resolve
+  ElMessageBox: { confirm: mockConfirm },
+}))
 
 vi.mock('@/api/request', () => ({
   get: getMock,
@@ -36,6 +42,8 @@ vi.mock('@/api/request', () => ({
 
 vi.mock('@/composables/useRouterSafe', () => ({
   useRouterSafe: () => ({ pushSafe: pushSafeMock }),
+  // ③ 草稿键要用 id：页面 imports safeRouteParam，mock 必须给出同名实现
+  safeRouteParam: (v: unknown) => Number(v) || v,
 }))
 
 vi.mock('@/utils/logger', () => ({
@@ -549,5 +557,71 @@ describe('提交与导航', () => {
     const cancel = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('取消'))
     await cancel!.trigger('click')
     expect(pushSafeMock).toHaveBeenCalledWith('/schools')
+  })
+})
+
+// ③ 草稿自动保存与离开拦截（学校编辑页，2026-10-26）
+describe('③ 草稿与离开拦截', () => {
+  const DRAFT_KEY = 'form:draft:schools:edit:new'
+
+  function seedDraft(data: Record<string, unknown>) {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, savedAt: Date.now() }))
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('有草稿 + 用户确认 → 回填表单并提示', async () => {
+    seedDraft({ name: '草稿学校', contact_person: '草稿联系人' })
+    mockConfirm.mockResolvedValue('confirm')
+
+    const wrapper = mountComp()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.formData.name).toBe('草稿学校')
+    expect(ElMessage.success).toHaveBeenCalledWith('已恢复草稿')
+    wrapper.unmount()
+  })
+
+  it('有草稿 + 用户忽略 → 丢弃草稿且不污染表单', async () => {
+    seedDraft({ name: '不要了' })
+    mockConfirm.mockRejectedValue(new Error('cancel'))
+
+    const wrapper = mountComp()
+    await flushPromises()
+
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
+    expect((wrapper.vm as any).formData.name).toBe('')
+    wrapper.unmount()
+  })
+
+  it('卸载时立刻落盘（防抖窗口内离开也不丢）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(wrapper.vm as any).formData.name = '离开前填的学校'
+    await nextTick()
+
+    wrapper.unmount()
+
+    const raw = localStorage.getItem(DRAFT_KEY)
+    expect(raw).not.toBeNull()
+    expect(JSON.parse(raw as string).data.name).toBe('离开前填的学校')
+  })
+
+  it('创建成功后清掉草稿（不复活已提交数据）', async () => {
+    seedDraft({ name: '旧草稿' })
+    mockConfirm.mockResolvedValue('confirm')
+    validateMock.mockImplementation((cb?: any) => (cb ? Promise.resolve(cb(true)) : Promise.resolve(true)))
+    postMock.mockResolvedValue({ code: 200 })
+
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleSubmit()
+    await flushPromises()
+
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
+    wrapper.unmount()
   })
 })

@@ -201,6 +201,18 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（③ 第四个页面接入：学校编辑页草稿 + 离开拦截）
+
+- `views/schools/Edit.vue` 接入 ③：草稿键 `schools:edit:new` / `schools:edit:<id>`；
+  `onMounted` 先 `await loadData()` 再询问恢复（不静默覆盖），离开 `flush()`，提交成功 `clear()`。
+- 这一次遇到**两个**测试桩滞后（都是"接入即红"）：
+  1. `vue-router` mock 缺 `onBeforeRouteLeave` → 31 个用例全红；
+  2. `@/composables/useRouterSafe` mock 只给了 `useRouterSafe`，页面新用到的
+     `safeRouteParam` 在 mock 里是 `undefined` → **setup 直接抛错**（报错指向 `Edit.vue:266`）。
+     这类错误若只看"测试红了"很容易误判成业务代码问题，实际是 mock 契约没跟上。
+- 测试：该页 **31 → 35 例**（草稿恢复/忽略/卸载落盘/提交清草稿），覆盖率 **100/100/100/100**；
+  `schools` 目录 7 个套件 **183 passed**；lint/tsc/色值棘轮全绿。
+
 ### Added（⑨ 视觉回归从 10 页扩到 44 页：30 个 console tab + 4 个核心表单）
 
 - **补齐 30 个 console tab**：系统管理 6 个聚合页共 30 个 tab，此前只有
