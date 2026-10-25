@@ -49,7 +49,8 @@ export function writePageSize(scope: string, size: number): void {
 
 export function usePageSize(scope: string) {
   const pageSize = ref(readPageSize(scope))
-  const options = computed(() => PAGE_SIZE_OPTIONS)
+  // 以可变数组副本暴露：el-pagination 的 page-sizes 要求 number[]（readonly 会类型冲突）
+  const options = computed<number[]>(() => [...PAGE_SIZE_OPTIONS])
 
   function setPageSize(next: number): number {
     const normalized = normalizePageSize(next)

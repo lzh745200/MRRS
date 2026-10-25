@@ -201,6 +201,19 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（⑥ 首个页面接入：项目列表的每页条数记忆）
+
+- `views/projects/List.vue` 的 `pagination.pageSize` 改为来自 `usePageSize('projects')`：
+  - 默认 20（原硬编码 10）；选项 `[20, 50, 100, 200]` 由 composable 提供，
+    其中 200 与后端 `MAX_PAGE_SIZE` 一致；
+  - `handleSizeChange` 里先 `setPageSize()` **归一化再持久化**：用户若通过 devtools
+    塞了 37 之类非法值，会被拉回默认而不是让后端 422；
+  - 重启后仍是上次选择（`ui:pageSize:projects`）。
+- 顺带修一个类型问题：`options` 原为 `readonly number[]`，与 `el-pagination` 的
+  `page-sizes: number[]` 冲突（TS4104），改为返回**可变数组副本**（不共享引用，调用方改不到常量）。
+- 测试：该页 **67 例**保持全绿（更新"默认 page_size 10→20"的断言），页面覆盖率 **100/100/100/100**；
+  另外跑了 `projects` 页的视觉基线（`-g "projects"`）确认 **1 passed**，DOM 结构未漂移。
+
 ### 说明（⑥ 虚拟滚动的适配性结论 + 每页条数偏好）
 
 - **结论：虚拟滚动在当前架构下没有自然落点，不强行改造。**

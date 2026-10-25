@@ -224,8 +224,9 @@ describe('挂载与加载', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
+    // ⑥ 每页条数改为走 usePageSize（默认 20，且选项含后端硬上限 200）
     expect(projectApiMock.list).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, page_size: 10 })
+      expect.objectContaining({ page: 1, page_size: 20 })
     )
     expect(projectApiMock.getStats).toHaveBeenCalled()
     expect(vm.projectList).toHaveLength(3)

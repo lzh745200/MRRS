@@ -239,7 +239,7 @@
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
+          :page-sizes="pageSizeOptions"
           :total="pagination.total"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
@@ -262,6 +262,7 @@ import { getProjectStatusLabel } from '@/config/enums'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
+import { usePageSize } from '@/composables/usePageSize'
 import { useDesensitize } from '@/composables/useDesensitize'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Download, Search, Upload, TrendCharts, Refresh } from '@element-plus/icons-vue'
@@ -314,9 +315,16 @@ const stats = reactive({
 })
 
 // 分页
+// ⑥ 每页条数：选项含后端硬上限 200，且按业务域记忆（见 composables/usePageSize.ts）
+const {
+  pageSize: prefPageSize,
+  options: pageSizeOptions,
+  setPageSize,
+} = usePageSize('projects')
+
 const pagination = reactive({
   page: 1,
-  pageSize: 10,
+  pageSize: prefPageSize.value,
   total: 0,
 })
 
@@ -633,6 +641,8 @@ const handleExport = async () => {
 }
 
 const handleSizeChange = () => {
+  // ⑥ 归一化并记住用户选择的每页条数（选项之外的 37 之类值会被拉回默认）
+  pagination.pageSize = setPageSize(pagination.pageSize)
   pagination.page = 1
   persistFilters()
   loadData()
