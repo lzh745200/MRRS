@@ -201,6 +201,28 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（⑥ 虚拟滚动基座：`VirtualList` + `virtualWindow` 窗口计算）
+
+- **为什么自己做**：项目里 `el-table` 有 1300+ 处使用，但 Element Plus 表格**不做虚拟滚动**，
+  上千行时渲染开销与内存都会失控（离线单机没有服务端兜底）。给"长列表型"页面一个
+  低风险替代：**只渲染可视区 + 缓冲行**，DOM 行数恒定，与数据总量无关。
+- **`utils/virtualWindow.ts`**：窗口算术抽成纯函数（`computeWindow` / `sliceWindow`）。
+  虚拟滚动的 bug 几乎全是边界算术，写成纯函数才能穷举：
+  - 负 `scrollTop`（触控回弹）按 0 处理，绝不产出负索引；
+  - 滚到底部时 `end` 被 `total` 截断 —— 否则会渲染 `undefined` 行；
+  - 过度滚动、`itemHeight<=0`、`total<=0`、视口高度 0 都退化为安全值
+    （`itemHeight<=0` 时按 1 处理，不产出 `Infinity`/`NaN`）。
+- **`components/common/VirtualList.vue`**：固定行高的通用虚拟列表，插槽暴露
+  `{ item, index }`（**绝对索引**，不是窗口内索引）；容器高度支持数字与 CSS 值；
+  视口高度挂载时实测一次（容器高度由 props 固定，不需要监听 resize）。
+- 实现取舍：**主动删掉两处"防御式可选链"**（`el?.scrollTop ?? 0`、`containerRef.value?.clientHeight ?? 0`）
+  —— 滚动事件目标恒为容器、mounted 后容器必然存在，留着只会是永不进入的分支（覆盖率黑洞）。
+- 测试：`virtualWindow` **14 例**（含底部截断、过度滚动、负数、零行高、小数据量）、
+  `VirtualList` **8 例**（DOM 行数远小于数据量、滚动换窗口、底部不渲染 undefined、
+  空数据、height 两写法、无 viewportHeight 时的兜底、slot 绝对索引），
+  两文件覆盖率均 **100/100/100/100**。
+- 页面落地（把 `UpdateLogs` 的 `el-timeline` 换成虚拟列表 + 视觉基线更新）在下一批完成。
+
 ### Added（③ 第四个页面接入：学校编辑页草稿 + 离开拦截）
 
 - `views/schools/Edit.vue` 接入 ③：草稿键 `schools:edit:new` / `schools:edit:<id>`；
