@@ -263,6 +263,14 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 
+> **安装包目前未做代码签名**（证书未采购；签名管线已就绪，见
+> [代码签名接入指南](docs/04-部署文档/01-Windows部署/代码签名.md)）。首次运行会遇到：
+>
+> - **SmartScreen**：提示「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」；
+> - **Defender 扫描**：首次双击后可能静默扫描 1~3 分钟（包体约 270 MB），期间安装程序无响应属正常，
+>   请勿重复双击。涉密/企业环境建议先把安装包与 `SHA256SUMS-windows-x64.txt` 一并报白名单，
+>   或由管理员用 `Get-FileHash` 核对后再分发。
+
 ## 近期修复记录
 
 ### 2026-10-24（v1.18.1）登录门面重构 + 三层对齐门禁 + 门禁真绿复验

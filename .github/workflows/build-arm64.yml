@@ -457,14 +457,18 @@ jobs:
 
       # W24（v1.15.7）：与 build-windows 同口径的发布前置门禁 —— tag commit 的 PR Checks
       # 必须为 success 才允许发布；门禁失败 → 本步失败 → 下方 Release 步骤被自动跳过并 ::error::，
-      # 不再"构建成功即发布"。超时 30 分钟（tag 构建时 PR Checks 通常已完成/接近完成，
-      # 无需 Windows 侧 75 分钟预算；actions: read 权限见文件顶部 permissions）。
+      # 不再"构建成功即发布"。
+      # 超时 **90 分钟**（2026-10-25 修正）：本仓 PR Checks 实测 17.4 / 22.6 / 30.2 / 30.2 分钟，
+      # 原值 30 与最慢一次**正好压线**；正常发布流程「推 main → 立刻打 tag」时本步只比 PR Checks
+      # 晚 1~2 分钟起跑，30 分钟上限必然超时变红（v1.18.1 能成功是因为人工先等 CI 绿了再打 tag，
+      # 属规避而非解决）。90 分钟覆盖"PR Checks 全程 + tag 构建自身排队/安装依赖"的余量。
+      # actions: read 权限见文件顶部 permissions。
       - name: Verify release gate is green (Electron DEB)
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/check_release_gate.py --timeout-minutes 30 --poll-seconds 60
+        run: python3 scripts/check_release_gate.py --timeout-minutes 90 --poll-seconds 60
 
       # Release 正文单源：与 build-windows.yml 完全一致（见该文件里的说明）。
       # 三个发布作业都会重写 body，任何一处不传就会把正文清空 —— v1.18.1 实测踩过。
@@ -724,7 +728,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/check_release_gate.py --timeout-minutes 30 --poll-seconds 60
+        run: python3 scripts/check_release_gate.py --timeout-minutes 90 --poll-seconds 60
 
       - name: Prepare release body (standalone)
         if: startsWith(github.ref, 'refs/tags/v') && success()

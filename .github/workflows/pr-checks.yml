@@ -226,6 +226,13 @@ jobs:
           echo "::error::npm ci/npm install 连续失败 —— 疑似 registry 网络故障或 package-lock 不一致，非业务代码问题"
           exit 1
       - run: cd frontend && npx vue-tsc --noEmit 2>&1
+      # Electron 外壳单测（Node 内置 test runner，零第三方依赖）：
+      # 覆盖 electron/file-chunk.js、path-guard.js、worker-pool.js（分片写入、路径越界防护、线程池）。
+      # 这三个文件此前**有测试但无人执行**（package.json 无脚本、CI 无步骤），属"孤儿测试"——
+      # 2026-10-25 实测逐个跑均为 EXIT=0，正因如此才更危险：它们会在将来悄悄失效而无人发现。
+      # 不依赖 electron 运行时（只用 assert/fs/os/path/crypto + 相对模块），故无需 npm ci。
+      - name: Electron shell unit tests
+        run: npm run test:electron
       # lint:check 为纯检查模式（不带 --fix），CI 必须真实暴露 lint 违规而非自动修复
       - run: cd frontend && npm run lint:check 2>&1
       # 前端测试带覆盖率报告（vitest run --coverage）
@@ -643,6 +650,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
+      # Electron 外壳单测同样在 Windows 上跑：path-guard.js 是**路径语义敏感**模块
+      # （大小写、分隔符、盘符、UNC、`..` 规范化），Linux 全绿不代表 Windows 正确 ——
+      # 这正是本作业存在的理由（v1.12.3 编码崩溃、v1.12.6 GBK 管道均为"Linux 绿、Windows 红"）。
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22'
+      - name: Electron shell unit tests (Windows)
+        run: npm run test:electron
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       # 编码/句柄/路径敏感子集：管道解码、打包产物校验、备份路径、
       # 数据同步路由、帮扶村上传——历史上全部在 Windows 端暴露过问题

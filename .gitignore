@@ -343,6 +343,12 @@ tests/**
 !frontend/src/**/*.test.*
 !frontend/src/**/*.spec.*
 !frontend/tests/**
+# Electron 外壳单测必须入库：上面的 `*.test.js` 通配会把它们挡在外面，
+# 而白名单只开给了 backend/frontend —— 结果 electron/tests/ 下
+# file-chunk.test.js / path-guard.test.js 长期"磁盘上有、库里没有"，
+# CI 与全新 clone 都拿不到（worker-pool.test.js 只因早于该规则才侥幸入库）。
+# 2026-10-25 补齐：path-guard 正是 Windows 路径语义的用例，缺它等于没测。
+!electron/tests/**
 
 # ===== requirements 备份与临时文件 =====
 **/requirements.txt.backup
