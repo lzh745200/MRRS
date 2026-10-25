@@ -11,6 +11,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 MODULE_PATH = Path(__file__).resolve().parents[3] / "scripts" / "check_constants_sync.py"
 
 
@@ -47,11 +49,8 @@ class TestParseConstants:
         }
 
     def test_missing_file_raises(self, tmp_path):
-        try:
+        with pytest.raises(FileNotFoundError):
             mod.parse_constants(tmp_path / "nope.py")
-        except FileNotFoundError:
-            return
-        raise AssertionError("expected FileNotFoundError")
 
 
 class TestCheck:
