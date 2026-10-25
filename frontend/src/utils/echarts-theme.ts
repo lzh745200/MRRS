@@ -71,14 +71,35 @@ const PALETTE_TOKEN_NAMES: readonly (string | null)[] = [
  * **实时**调色板：内容由 `syncPaletteFromTokens()` 原地替换（不换引用），
  * 因此 `COLOR_PALETTE[5]` 这类既有调用点无需改动，也能在主题切换后拿到新值。
  */
-const COLOR_PALETTE: string[] = [...COLOR_PALETTE_FALLBACK]
-
 /**
- * 主题版本号：主题切换时自增。图表页把 `option` 写成 computed 时读一下它，
- * 即可在切换主题后**重新计算**颜色（否则 option 里存的是旧色值字面量）。
- * `shallowRef` 足够——只需版本变化触发重算，不需要深响应。
+ * 主题版本号：主题切换时自增。`COLOR_PALETTE` 的读取会自动登记它（见下方 Proxy），
+ * 于是**任何**在 computed / render 里读过调色板的视图，都会在切换主题后自动重算 ——
+ * 5 个图表页（Dashboard / BigScreen / ChartRow / ruralWorks-Analysis / schools-List）
+ * 因此一行都不用改就有正确颜色。
  */
 export const chartThemeRevision = shallowRef(0)
+
+/**
+ * 调色板的**实际存储**：`syncPaletteFromTokens()` 原地替换内容（引用不变）。
+ */
+const PALETTE_TARGET: string[] = [...COLOR_PALETTE_FALLBACK]
+
+/**
+ * **实时**调色板（对外仍是数组，`COLOR_PALETTE[5]` 这类既有调用点无需改动）。
+ *
+ * 为什么用 Proxy：视图里的图表 option 多在 `computed` 中拼装，若直接读普通数组，
+ * 主题切换后 computed 不会重算，option 里存的还是旧色值字面量 —— 于是"切了主题、
+ * 图表没变"。这里在 `get` 里读一次 `chartThemeRevision.value`，把主题版本登记成
+ * **依赖**：主题一变，所有读过调色板的 computed 自动失效重算。
+ * 这是"零侵入接线"，比逐个改 5 个视图更不容易漏、也更不容易被后续复制粘贴带偏。
+ */
+export const COLOR_PALETTE: string[] = new Proxy(PALETTE_TARGET, {
+  get(target, prop, receiver) {
+    // 仅登记依赖，不做值变换：返回值仍是数组自身语义（length / 迭代器 / 方法都照旧）
+    void chartThemeRevision.value
+    return Reflect.get(target, prop, receiver)
+  },
+})
 
 /** 把 Token 值灌进调色板（原地替换；无 DOM 环境自动回退字面量）。 */
 export function syncPaletteFromTokens(): void {
@@ -86,7 +107,7 @@ export function syncPaletteFromTokens(): void {
     const token = PALETTE_TOKEN_NAMES[index]
     return token ? themeColor(token, fallback) : fallback
   })
-  COLOR_PALETTE.splice(0, COLOR_PALETTE.length, ...next)
+  PALETTE_TARGET.splice(0, PALETTE_TARGET.length, ...next)
 }
 
 // ============================================================================
@@ -601,8 +622,8 @@ export function getCurrentTheme(): string {
 // ============================================================================
 // 导出色彩常量（供外部直接引用，无需走 registerTheme）
 // ============================================================================
+// 注：COLOR_PALETTE 已在上方以 `export const` 声明（Proxy 实时调色板），此处不再重复导出。
 
-export { COLOR_PALETTE }
 export const MILITARY_BLUE = '#1e4d8c'
 export const REVITALIZATION_GREEN = '#2d6a4f'
 export const BADGE_GOLD = '#b8960c'

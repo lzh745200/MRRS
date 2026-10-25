@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { computed } from 'vue'
 
 const { registerThemeMock } = vi.hoisted(() => ({
   registerThemeMock: vi.fn(),
@@ -148,6 +149,21 @@ describe('utils/echarts-theme', () => {
       expect(handler).toHaveBeenCalledTimes(1)
 
       window.removeEventListener(ECHARTS_THEME_CHANGED, handler)
+    })
+
+    // ① 的关键接线：视图里的图表 option 多在 computed 中拼装，
+    // 只有"读调色板"这件事本身能登记主题依赖，切主题后才会重算（否则 option 里是旧色）。
+    it('读取 COLOR_PALETTE 的 computed 会在主题切换后自动重算（零侵入接线）', () => {
+      document.documentElement.style.setProperty('--color-primary', '#010203')
+      syncPaletteFromTokens()
+
+      const derived = computed(() => COLOR_PALETTE[0])
+      expect(derived.value).toBe('#010203')
+
+      document.documentElement.style.setProperty('--color-primary', '#040506')
+      refreshMilitaryTheme()
+
+      expect(derived.value).toBe('#040506')
     })
   })
 })
