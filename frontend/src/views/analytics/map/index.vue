@@ -408,9 +408,22 @@ async function loadTileInfo() {
   }
 }
 
-/** Leaflet tileerror（后端 404 = 该层级未预置）：提示并回退矢量视图 */
+/** 回退提示的诊断后缀：available/tileCount/source/reason，便于现场定位（不含敏感路径） */
+function tileDiagnostics(): string {
+  const info = tileInfo.value
+  if (!info) return '（瓦片信息未读取）'
+  const parts = [`available=${info.available}`, `tileCount=${info.tileCount}`]
+  if (info.source) parts.push(`source=${info.source}`)
+  if (info.reason) parts.push(`reason=${info.reason}`)
+  return `（${parts.join('，')}）`
+}
+
+/**
+ * Leaflet 侧判定"底图不可用"（一张未成功且失败 ≥8 张）时的回调：
+ * 带上后端诊断字段提示，再回退默认矢量视图。
+ */
 function handleTileError() {
-  ElMessage.warning('瓦片底图加载失败，已切回矢量地图')
+  ElMessage.warning(`瓦片底图加载失败，已切回矢量地图${tileDiagnostics()}`)
   handleTilesFallback()
 }
 

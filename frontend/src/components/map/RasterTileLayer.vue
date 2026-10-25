@@ -7,6 +7,8 @@
       <button class="map-raster-fallback" @click="handleFallback">返回矢量视图</button>
     </div>
 
+    <div v-if="partialCoverageText" class="map-raster-partial">{{ partialCoverageText }}</div>
+
     <div v-if="gcj02" class="map-raster-gcj02">{{ GCJ02_HINT }}</div>
   </div>
 </template>
@@ -19,10 +21,16 @@
  * 该端点无需鉴权（backend/app/api/v1/map.py serve_tile），因此 TileLayer 直接以
  * <img> 方式加载，不经过 axios、不拼接 token。
  *
- * 失败语义：
- * - `tile-info` 不可用 → 不创建地图，显示中文说明 + 返回矢量视图按钮
- * - Leaflet `tileerror`（后端 404）→ 中文说明 + emit('tile-error')，由父页面回退矢量视图
- * - GCJ-02 底图 → 显示偏移提示，标注点自动做 WGS-84 → GCJ-02 修正
+ * 回退语义（关键，勿退回"单张 404 即回退"）：
+ * - 视野超出预置 bbox 时 Leaflet 边缘请求必然 404，这是**常态**：
+ *   tileerror 只累加计数，且 `errorTileUrl` 让边缘瓦片渲染为透明像素；
+ * - 仅当"一张都没成功且累计失败 ≥8 张"（`shouldFallbackToVector`）才 emit('tile-error')
+ *   让父页面回退矢量；5s 看门狗兜底"视口只请求了很少瓦片却全 404"的情况；
+ * - 有成功瓦片但存在失败时，仅显示非阻塞提示「部分区域超出预置瓦片范围」。
+ *
+ * 视野约束：`maxBounds`（bbox 外扩 0.05°）+ `maxBoundsViscosity=1` 防止拖出覆盖范围，
+ * 初始视图用 `fitBounds` 贴合 bbox（固定 zoom 7 在 1080p 下视野约 21° 宽 > 贵州 6°，
+ * 必然请求到无瓦片区）。
  *
  * 本组件仅由地图页按需懒加载（defineAsyncComponent），默认视图仍是 ECharts 矢量地图。
  */
@@ -33,12 +41,20 @@ import type { TileInfo } from '@/api/map'
 import { chartColor, chartColorPrimary } from '@/utils/chartColors'
 import {
   GCJ02_HINT,
+  PARTIAL_COVERAGE_HINT,
+  TILE_BOUNDS_PADDING_DEGREES,
+  TILE_FALLBACK_WATCHDOG_MS,
+  TILE_FIT_MAX_ZOOM,
   TILE_LOAD_FAILED_HINT,
   TILE_URL_TEMPLATE,
+  TRANSPARENT_TILE_DATA_URI,
   convertMarkersForTiles,
   isGcj02,
   isTileMapUsable,
+  shouldFallbackToVector,
   tileAttribution,
+  tileCoverageBbox,
+  tileCoverageBounds,
   tileInfoHint,
   toDisplayCoord,
 } from '@/utils/mapTiles'
@@ -54,22 +70,28 @@ interface TileMapMarker {
 
 const props = withDefaults(
   defineProps<{
-    /** 地图中心（WGS-84，GCJ-02 底图时组件内部自动修正） */
-    center?: { lng: number; lat: number }
+    /**
+     * 地图中心（WGS-84，GCJ-02 底图时组件内部自动修正）。
+     * 缺省时停在瓦片覆盖范围（fitBounds），避免固定 zoom 7 把视野拉出 bbox。
+     */
+    center?: { lng: number; lat: number } | null
     zoom?: number
     height?: string
     visible?: boolean
     markers?: TileMapMarker[]
     /** `/map/tile-info` 归一化结果 */
     tileInfo?: TileInfo | null
+    /** 全 404 看门狗时长（毫秒），默认 5s；测试可注入短值 */
+    watchdogMs?: number
   }>(),
   {
-    center: () => ({ lng: 106.71, lat: 26.65 }),
+    center: null,
     zoom: 7,
     height: '500px',
     visible: true,
     markers: () => [],
     tileInfo: null,
+    watchdogMs: TILE_FALLBACK_WATCHDOG_MS,
   }
 )
 
@@ -80,15 +102,25 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLDivElement>()
-const tileFailed = ref(false)
+/** 是否已请求父页面回退矢量（保证只通知一次） */
+const fallbackRequested = ref(false)
+/** 成功加载的瓦片张数（用于区分"边缘少量 404"与"整屏加载不出来"） */
+const loadedTiles = ref(0)
+/** 加载失败的瓦片张数（404 计数） */
+const failedTiles = ref(0)
 
 let map: L.Map | null = null
 let tileLayer: L.TileLayer | null = null
 let markerLayer: L.LayerGroup | null = null
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null
 
 const gcj02 = computed(() => isGcj02(props.tileInfo?.manifest))
 const noticeText = computed(() =>
-  tileFailed.value ? TILE_LOAD_FAILED_HINT : tileInfoHint(props.tileInfo)
+  fallbackRequested.value ? TILE_LOAD_FAILED_HINT : tileInfoHint(props.tileInfo)
+)
+/** 有成功瓦片但存在 404 → 非阻塞提示（不回退） */
+const partialCoverageText = computed(() =>
+  loadedTiles.value > 0 && failedTiles.value > 0 ? PARTIAL_COVERAGE_HINT : ''
 )
 
 function markerColor(type?: string): string {
@@ -97,10 +129,26 @@ function markerColor(type?: string): string {
   return chartColorPrimary()
 }
 
-/** 瓦片错误只处理一次：连续多张 404 不应刷屏 */
+/** 瓦片加载成功计数：只要有一张成功就说明本机瓦片链路可用 */
+function handleTileLoad() {
+  loadedTiles.value += 1
+}
+
+/**
+ * 单张瓦片失败只累加计数，绝不立即回退。
+ * 视野超出预置 bbox 时边缘 404 是常态；只有"一张都未成功且失败达阈值"才回退。
+ */
 function handleTileError() {
-  if (tileFailed.value) return
-  tileFailed.value = true
+  failedTiles.value += 1
+  if (shouldFallbackToVector({ loaded: loadedTiles.value, errors: failedTiles.value })) {
+    requestFallback()
+  }
+}
+
+/** 请求父页面回退矢量视图（同一实例只发一次） */
+function requestFallback() {
+  if (fallbackRequested.value) return
+  fallbackRequested.value = true
   emit('tile-error')
 }
 
@@ -108,32 +156,99 @@ function handleFallback() {
   emit('fallback')
 }
 
-/** 视图中心（已按底图坐标系修正：GCJ-02 底图与标注点走同一转换） */
+function stopWatchdog() {
+  if (watchdogTimer !== null) {
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
+  }
+}
+
+/** 看门狗：覆盖"视口请求数不足阈值但全都 404"的白屏场景 */
+function startWatchdog() {
+  stopWatchdog()
+  watchdogTimer = setTimeout(() => {
+    if (shouldFallbackToVector({ loaded: loadedTiles.value, errors: failedTiles.value })) {
+      requestFallback()
+    }
+  }, props.watchdogMs)
+}
+
+/** 覆盖范围中心（bbox 已是底图坐标系，不再做 GCJ 偏移） */
+function bboxCenter(): [number, number] {
+  const [[south, west], [north, east]] = tileCoverageBounds(props.tileInfo)
+  return [(south + north) / 2, (west + east) / 2]
+}
+
+/** 视图中心：显式 center 走坐标系修正，缺省回落到 bbox 中心 */
 function displayCenter(): [number, number] {
-  const center = toDisplayCoord(props.center, gcj02.value)
-  return [center.lat, center.lng]
+  const center = props.center
+  if (!center) return bboxCenter()
+  const converted = toDisplayCoord(center, gcj02.value)
+  return [converted.lat, converted.lng]
+}
+
+/** 显式 center 是否落在瓦片覆盖范围内（决定 fitBounds 后是否 panTo） */
+function centerWithinBbox(info: TileInfo): boolean {
+  const center = props.center
+  if (!center) return false
+  const [minLon, minLat, maxLon, maxLat] = tileCoverageBbox(info)
+  return (
+    center.lng >= minLon && center.lng <= maxLon && center.lat >= minLat && center.lat <= maxLat
+  )
+}
+
+/** 覆盖范围外扩 padding，用于 maxBounds（防止拖出无瓦片区） */
+function expandBounds(
+  bounds: [[number, number], [number, number]]
+): [[number, number], [number, number]] {
+  const [[south, west], [north, east]] = bounds
+  const pad = TILE_BOUNDS_PADDING_DEGREES
+  return [
+    [south - pad, west - pad],
+    [north + pad, east + pad],
+  ]
 }
 
 /** 用瓦片信息创建地图（仅在 tileInfo 可用时调用，缩放级别必然非空） */
 function initMap(info: TileInfo) {
+  const bounds = tileCoverageBounds(info)
+  const minZoom = info.zoomLevels[0]
+  const maxZoom = info.zoomLevels[info.zoomLevels.length - 1]
+
   map = L.map(containerRef.value as HTMLDivElement, {
     center: displayCenter(),
     zoom: props.zoom,
-    minZoom: info.zoomLevels[0],
-    maxZoom: info.zoomLevels[info.zoomLevels.length - 1],
+    minZoom,
+    maxZoom,
+    // 视野不得拖出覆盖范围（外扩 0.05° 吸收边缘）
+    maxBounds: expandBounds(bounds),
+    maxBoundsViscosity: 1.0,
+    worldCopyJump: false,
     attributionControl: true,
   })
   tileLayer = L.tileLayer(TILE_URL_TEMPLATE, {
-    minZoom: info.zoomLevels[0],
-    maxZoom: info.zoomLevels[info.zoomLevels.length - 1],
+    minZoom,
+    maxZoom,
+    maxNativeZoom: maxZoom,
     noWrap: true,
+    // 只在覆盖范围内请求瓦片，边缘不再向无瓦片区要图
+    bounds,
+    // 边缘 404 渲染为透明像素，不显示破图
+    errorTileUrl: TRANSPARENT_TILE_DATA_URI,
     // OSM/ODbL 衍生底图必须显示署名（见 utils/mapTiles.tileAttribution）
     attribution: tileAttribution(info.manifest),
   })
   tileLayer.on('tileerror', handleTileError)
+  tileLayer.on('tileload', handleTileLoad)
   tileLayer.addTo(map)
   renderMarkers()
+  // 初始视野贴合预置范围（固定 zoom 7 在 1080p 下视野约 21° 宽 > 贵州 6°，必请求无瓦区）
+  map.fitBounds(bounds, { padding: [16, 16], maxZoom: TILE_FIT_MAX_ZOOM })
+  if (centerWithinBbox(info)) {
+    map.panTo(displayCenter())
+  }
   map.invalidateSize()
+  startWatchdog()
 }
 
 function renderMarkers() {
@@ -161,8 +276,10 @@ function applyView() {
 }
 
 function destroyMap() {
+  stopWatchdog()
   if (tileLayer) {
     tileLayer.off('tileerror', handleTileError)
+    tileLayer.off('tileload', handleTileLoad)
     tileLayer.remove()
     tileLayer = null
   }
@@ -174,7 +291,9 @@ function destroyMap() {
     map.remove()
     map = null
   }
-  tileFailed.value = false
+  fallbackRequested.value = false
+  loadedTiles.value = 0
+  failedTiles.value = 0
 }
 
 function syncMap() {
@@ -196,8 +315,9 @@ watch(
   () => syncMap()
 )
 watch(
-  () => [props.center.lng, props.center.lat],
-  () => applyView()
+  () => props.center,
+  () => applyView(),
+  { deep: true }
 )
 watch(
   () => props.zoom,
@@ -257,6 +377,20 @@ onBeforeUnmount(() => {
   color: var(--color-text-primary);
   font-size: 13px;
   box-shadow: var(--shadow-card);
+}
+
+/* 非阻塞提示：边缘越界 404 属正常，不遮挡地图、不触发回退 */
+.map-raster-partial {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 900;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--color-bg-card);
+  color: var(--color-text-regular);
+  font-size: 12px;
+  pointer-events: none;
 }
 
 /* 提示条内的"返回矢量视图"为文字链接样式（地图浮层内不引入按钮组件） */

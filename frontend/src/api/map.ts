@@ -99,6 +99,9 @@ export async function getMapConfig(): Promise<Record<string, any>> {
   return get(BASE_URL + '/config')
 }
 
+/** 瓦片覆盖范围：[minLon, minLat, maxLon, maxLat]（WGS-84/底图坐标系） */
+export type TileBbox = [number, number, number, number]
+
 /**
  * 离线瓦片包清单（随瓦片包一起由运维生成，后端 `/map/tile-info` 透出）。
  * 关键字段：provider —— 'amap'/'gaode' 表示底图为 GCJ-02 坐标系（标记点需偏移修正）。
@@ -110,6 +113,10 @@ export interface TileManifest {
   generatedAt?: string
   /** 瓦片包版本/名称 */
   version?: string
+  /** 瓦片覆盖范围 [minLon, minLat, maxLon, maxLat]（可选，随包清单下发） */
+  bbox?: TileBbox
+  /** 瓦片包区域信息（可选，部分包把 bbox 放在 region 内） */
+  region?: { bbox?: TileBbox; [key: string]: unknown }
   [key: string]: unknown
 }
 
@@ -130,6 +137,15 @@ export interface TileInfo {
   dir: string
   /** 瓦片包清单 */
   manifest: TileManifest | null
+  /**
+   * 瓦片覆盖范围 [minLon, minLat, maxLon, maxLat]（后端诊断字段）。
+   * 缺失/非法时前端回退到贵州兜底 bbox，避免把视野放到无瓦片区。
+   */
+  bbox?: TileBbox | null
+  /** 瓦片来源标识（后端诊断字段，如 'osm' / 'amap'） */
+  source?: string
+  /** 瓦片不可用原因（后端诊断字段，缺失为 null） */
+  reason?: string | null
 }
 
 export async function getTileInfo(): Promise<TileInfo> {

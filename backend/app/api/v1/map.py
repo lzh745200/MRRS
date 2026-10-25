@@ -125,6 +125,14 @@ def invalidate_map_cache() -> None:
 
 # --------------- 离线瓦片目录 ---------------
 
+# 贵州全省 bbox（minLon, minLat, maxLon, maxLat）：
+# 前端用它把瓦片视图限制在"有覆盖"的范围内，避免视野越界后大量 404 被误判为
+# "瓦片加载失败"而整体回退矢量视图（2026-10-25 现场问题根因）。
+PROVINCE_BBOX = [103.6, 24.6, 109.6, 29.2]
+
+# 瓦片目录解析来源（诊断用）：env / meipass / dev
+_TILES_DIR_SOURCE = "dev"
+
 
 def _resolve_tiles_dir() -> Path:
     """解析瓦片存储目录，兼容 PyInstaller / Electron / 开发模式。
@@ -141,20 +149,43 @@ def _resolve_tiles_dir() -> Path:
 
     注意：环境变量即使指向尚不存在的目录也直接采信 —— 运维首次导入瓦片
     时由导入端点创建目录，不能因为"目录还没建"就悄悄回退到别处。
+
+    同时记录 ``_TILES_DIR_SOURCE`` 供 ``/map/tile-info`` 诊断（现场排查
+    "装了包但瓦片目录没生效"时，能直接看到走的是 env 还是打包内置）。
     """
+    global _TILES_DIR_SOURCE
     env_path = os.environ.get("MAP_TILES_DIR")
     if env_path:
+        _TILES_DIR_SOURCE = "env"
         return Path(env_path)
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         p = Path(meipass) / "resources" / "map-tiles"
         if p.exists():
+            _TILES_DIR_SOURCE = "meipass"
             return p
     # 开发模式：仓库根目录/resources/map-tiles（源码树为 backend/app/api/v1/map.py）
+    _TILES_DIR_SOURCE = "dev"
     return Path(__file__).resolve().parents[4] / "resources" / "map-tiles"
 
 
 TILES_DIR = _resolve_tiles_dir()
+
+
+def _manifest_bbox(manifest) -> Optional[list]:
+    """从 MANIFEST 取覆盖 bbox：region.bbox 优先，其次顶层 bbox。"""
+    if not isinstance(manifest, dict):
+        return None
+    region = manifest.get("region")
+    if isinstance(region, dict):
+        bbox = region.get("bbox")
+        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+            return list(bbox)
+    bbox = manifest.get("bbox")
+    if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+        return list(bbox)
+    return None
+
 
 # 黔南州12县市中心坐标
 QIANNAN_COUNTY_COORDS = {
@@ -663,8 +694,17 @@ def _tiles_dir_public_name() -> str:
 
 @router.get("/tile-info")
 async def get_tile_info():
-    """获取离线瓦片信息：是否可用、缩放级别、瓦片数量、体积与 MANIFEST 元数据"""
+    """获取离线瓦片信息：是否可用、缩放级别、瓦片数量、体积、覆盖 bbox 与 MANIFEST 元数据。
+
+    诊断字段（2026-10-25 现场排障新增，均为只读、只增不删）：
+    - ``source``：瓦片目录来源 ``env`` / ``meipass`` / ``dev``；
+    - ``reason``：不可用原因 ``dir_missing`` / ``no_tiles``，可用时为 ``None``；
+    - ``bbox``：瓦片覆盖范围 ``[minLon, minLat, maxLon, maxLat]``，优先取 MANIFEST
+      的 ``region.bbox`` / ``bbox``，缺失时回退贵州全省 bbox。前端据此把视图限制在
+      有覆盖的范围内，避免边缘 404 被误判为"瓦片加载失败"。
+    """
     dir_name = _tiles_dir_public_name()
+    source = _TILES_DIR_SOURCE
     if not TILES_DIR.exists():
         return success_response(data={
             "available": False,
@@ -673,11 +713,15 @@ async def get_tile_info():
             "totalBytes": 0,
             "dir": dir_name,
             "manifest": None,
+            "source": source,
+            "reason": "dir_missing",
+            "bbox": list(PROVINCE_BBOX),
         })
 
     stats = scan_tiles_dir(TILES_DIR)
     zoom_levels = stats["zoom_levels"]
     tile_count = stats["total_tiles"]
+    manifest = read_manifest_file(TILES_DIR / "MANIFEST.json")
     data = {
         "available": tile_count > 0,
         "tileCount": tile_count,
@@ -685,7 +729,10 @@ async def get_tile_info():
         "totalBytes": stats["total_bytes"],
         "dir": dir_name,
         # MANIFEST.json 缺失/损坏 → None（不影响瓦片服务本身）
-        "manifest": read_manifest_file(TILES_DIR / "MANIFEST.json"),
+        "manifest": manifest,
+        "source": source,
+        "reason": None if tile_count > 0 else "no_tiles",
+        "bbox": _manifest_bbox(manifest) or list(PROVINCE_BBOX),
     }
     if zoom_levels:
         data["minZoom"] = zoom_levels[0]

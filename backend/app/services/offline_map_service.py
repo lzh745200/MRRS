@@ -134,6 +134,51 @@ def scan_tiles_dir(root: Path) -> Dict[str, Any]:
     }
 
 
+def _valid_bbox(value: Any) -> Optional[List[float]]:
+    """校验并归一 bbox：``[min_lon, min_lat, max_lon, max_lat]``；非法返回 None。
+
+    仅接受有限数字且范围合法（经度 -180~180、纬度 -90~90、min < max），
+    避免把脏数据透给前端 Leaflet 导致 fitBounds/maxBounds 抛错。
+    """
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    try:
+        nums = [float(item) for item in value]
+    except (TypeError, ValueError):
+        return None
+    if any(not math.isfinite(num) for num in nums):
+        return None
+    min_lon, min_lat, max_lon, max_lat = nums
+    if not (-180.0 <= min_lon < max_lon <= 180.0 and -90.0 <= min_lat < max_lat <= 90.0):
+        return None
+    return nums
+
+
+def _normalize_region(value: Any) -> Optional[Dict[str, Any]]:
+    """MANIFEST.region 只保留白名单字段（name / bbox / overviewZooms / detailZooms）。
+
+    现场排障只需要"这块瓦片覆盖哪里"，不透传任意 JSON，避免把 MANIFEST 当作
+    任意数据通道。
+    """
+    if not isinstance(value, dict):
+        return None
+    region: Dict[str, Any] = {}
+    name = value.get("name")
+    if isinstance(name, str) and name.strip():
+        region["name"] = name.strip()[:100]
+    bbox = _valid_bbox(value.get("bbox"))
+    if bbox is not None:
+        region["bbox"] = bbox
+    for key in ("overviewZooms", "detailZooms"):
+        levels = value.get(key)
+        if isinstance(levels, list):
+            try:
+                region[key] = [int(level) for level in levels]
+            except (TypeError, ValueError):
+                continue
+    return region or None
+
+
 def normalize_manifest(raw: Any) -> Dict[str, Any]:
     """规范化并校验 MANIFEST.json 内容。
 
@@ -187,6 +232,9 @@ def normalize_manifest(raw: Any) -> Dict[str, Any]:
         "generatedAt": raw.get("generatedAt"),
         "tileCount": tile_count,
         "totalBytes": total_bytes,
+        # 覆盖范围（前端据此 fitBounds/maxBounds，避免视野越界后大量 404）
+        "bbox": _valid_bbox(raw.get("bbox")),
+        "region": _normalize_region(raw.get("region")),
     }
 
 

@@ -7,7 +7,7 @@
  * 坐标系统：瓦片默认按 WGS-84 / 标准 Web Mercator 组织；若 manifest.provider
  * 为高德系（GCJ-02），标注点需做 WGS-84 → GCJ-02 偏移修正，并提示用户。
  */
-import type { TileInfo, TileManifest } from '@/api/map'
+import type { TileBbox, TileInfo, TileManifest } from '@/api/map'
 
 /** 本机后端瓦片 URL 模板：Leaflet TileLayer 直接展开 {z}/{x}/{y} */
 export const TILE_URL_TEMPLATE = '/api/v1/map/tiles/{z}/{x}/{y}.png'
@@ -24,9 +24,35 @@ export const TILE_PACKAGE_MAX_BYTES = 512 * 1024 * 1024
 /** GCJ-02 底图提示（高德等国内厂商瓦片存在 WGS-84 → GCJ-02 偏移） */
 export const GCJ02_HINT = '底图为 GCJ-02 坐标系，标记点可能存在偏移'
 
-/** 瓦片加载失败提示（Leaflet tileerror：后端 404 表示该层级未预置） */
+/** 瓦片加载失败提示（仅"一张都没加载出来"才会显示，边缘少量 404 不算失败） */
 export const TILE_LOAD_FAILED_HINT =
   '瓦片加载失败：本机后端未提供当前层级的瓦片文件，无法显示瓦片底图，请返回矢量视图。'
+
+/** 部分区域越界时的非阻塞提示（Leaflet 边缘 404 属正常，不回退矢量） */
+export const PARTIAL_COVERAGE_HINT = '部分区域超出预置瓦片范围（边缘为空白，属正常）'
+
+/** 贵州兜底覆盖范围 [minLon, minLat, maxLon, maxLat]：后端未下发 bbox 时使用 */
+export const TILE_COVERAGE_FALLBACK_BBOX: TileBbox = [103.6, 24.6, 109.6, 29.2]
+
+/** 视野限制外扩量（度）：吸收边缘瓦片，避免拖到边界就整屏 404 */
+export const TILE_BOUNDS_PADDING_DEGREES = 0.05
+
+/** 初始 fitBounds 的最大缩放：小范围/单点时不把视野放到过高层级 */
+export const TILE_FIT_MAX_ZOOM = 9
+
+/** 全 404 看门狗时长（毫秒）：窗口内一张未成功且失败数达阈值 → 判定底图不可用 */
+export const TILE_FALLBACK_WATCHDOG_MS = 5000
+
+/** 回退矢量的失败阈值：加载成功数为 0 且失败数达到该值才回退 */
+export const TILE_FALLBACK_ERROR_THRESHOLD = 8
+
+/**
+ * 1×1 全透明 PNG（70 字节）的 data URI。
+ * 作为 TileLayer 的 errorTileUrl：边缘瓦片 404 时替换为透明像素，
+ * 既不显示破图，也不会把错误抛到组件外。
+ */
+export const TRANSPARENT_TILE_DATA_URI =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg=='
 
 /** 判定为 GCJ-02 的来源标识（小写比较） */
 const GCJ02_PROVIDERS = ['amap', 'gaode', 'gcj02', 'gcj-02', '高德']
@@ -66,6 +92,61 @@ export function toFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * 解析 bbox（[minLon, minLat, maxLon, maxLat]）。
+ * 必须是 4 个有限数字、经纬度合法且 min < max，否则返回 null（由调用方逐级兜底）。
+ */
+export function parseTileBbox(value: unknown): TileBbox | null {
+  if (!Array.isArray(value) || value.length !== 4) return null
+  const nums = value.map((item) => toFiniteNumber(item))
+  if (nums.some((item) => item === null)) return null
+  const [minLon, minLat, maxLon, maxLat] = nums as TileBbox
+  if (minLon >= maxLon || minLat >= maxLat) return null
+  if (minLon < -180 || maxLon > 180 || minLat < -90 || maxLat > 90) return null
+  return [minLon, minLat, maxLon, maxLat]
+}
+
+/**
+ * 瓦片实际覆盖 bbox：info.bbox → manifest.region.bbox → manifest.bbox → 贵州兜底。
+ * 任何一级非法/缺失都继续向下兜底，保证返回值一定可用于 fitBounds / bounds。
+ */
+export function tileCoverageBbox(info: TileInfo | null | undefined): TileBbox {
+  const manifest = info?.manifest
+  const region = asDict(manifest?.region)
+  return (
+    parseTileBbox(info?.bbox) ??
+    parseTileBbox(region.bbox) ??
+    parseTileBbox(manifest?.bbox) ??
+    ([...TILE_COVERAGE_FALLBACK_BBOX] as TileBbox)
+  )
+}
+
+/** 覆盖 bbox → Leaflet bounds（[[south, west], [north, east]]） */
+export function tileCoverageBounds(
+  info: TileInfo | null | undefined
+): [[number, number], [number, number]] {
+  const [minLon, minLat, maxLon, maxLat] = tileCoverageBbox(info)
+  return [
+    [minLat, minLon],
+    [maxLat, maxLon],
+  ]
+}
+
+/** 瓦片加载统计（loaded=成功张数，errors=失败张数） */
+export interface TileLoadStats {
+  loaded: number
+  errors: number
+}
+
+/**
+ * 是否回退矢量视图。
+ * 只有"一张都没加载成功 + 累计失败达阈值"才回退：视野边缘越界的 404 是常态，
+ * 单张/少量失败（哪怕成功张数很少）都必须留在瓦片视图里。
+ */
+export function shouldFallbackToVector({ loaded, errors }: TileLoadStats): boolean {
+  return loaded === 0 && errors >= TILE_FALLBACK_ERROR_THRESHOLD
+}
+
+/**
  * 归一化 `/map/tile-info` 响应（envelope / 裸对象均可）。
  * 返回字段恒定存在，便于模板直接展示；兼容后端尚未返回 totalBytes/manifest 的过渡期。
  */
@@ -78,6 +159,7 @@ export function normalizeTileInfo(raw: unknown): TileInfo {
         .sort((a, b) => a - b)
     : []
   const manifest = asDict(payload.manifest)
+  const reason = typeof payload.reason === 'string' ? payload.reason.trim() : ''
   return {
     available: payload.available === true,
     tileCount: toFiniteNumber(payload.tileCount) ?? 0,
@@ -85,6 +167,10 @@ export function normalizeTileInfo(raw: unknown): TileInfo {
     totalBytes: toFiniteNumber(payload.totalBytes) ?? 0,
     dir: typeof payload.dir === 'string' ? payload.dir : '',
     manifest: Object.keys(manifest).length > 0 ? (manifest as TileManifest) : null,
+    // 诊断字段（可选）：非法 bbox 归 null，由 tileCoverageBbox 逐级兜底
+    bbox: parseTileBbox(payload.bbox),
+    source: typeof payload.source === 'string' ? payload.source.trim() : '',
+    reason: reason || null,
   }
 }
 

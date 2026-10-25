@@ -5,6 +5,34 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.2] - 2026-10-25 — 瓦片底图“加载失败已切回矢量”根治（边缘 404 不再整体回退）
+
+> **现场症状**：地图可视化切到「瓦片底图」后立即提示「瓦片底图加载失败，已切回矢量地图」。
+> **根因（不是瓦片缺失）**：`RasterTileLayer.vue` 把**任意一张**瓦片 404 当作整体失败并立即回退；
+> 同时 Leaflet 未设 `bounds/maxBounds`、开局固定 `zoom=7`——1080p 屏在 z7 的视野约 21° 宽，
+> 远超贵州 6° 的瓦片覆盖范围，**边缘瓦片必然 404**，于是一开视图就回退。
+> 另：`/map/tile-info` 未回传覆盖 bbox 与目录来源，现场无法判断“走 env 还是打包内置”。
+
+### Fixed
+
+- **前端不再因边缘 404 整体回退**：TileLayer 增加 `bounds`（只在覆盖范围内请求）+ `errorTileUrl`
+  （透明 1×1，404 渲染空白不破图）+ `maxNativeZoom`；Map 增加 `maxBounds`（bbox 外扩 0.05°）+
+  `maxBoundsViscosity:1` + `worldCopyJump:false`；开局 `fitBounds(覆盖 bbox, maxZoom:9)`，不再固定 zoom 7；
+  `center` 缺省 `null`，显式且落在 bbox 内才 `panTo`；`tileerror` 只计数，**仅 `loaded===0 && errors>=8`
+  （或 5s 看门狗内全 404）才回退**；有成功也有失败时只显示非阻塞提示
+  「部分区域超出预置瓦片范围（边缘为空白，属正常）」。
+- **后端诊断字段**：`GET /api/v1/map/tile-info` 新增 `bbox`（MANIFEST `region.bbox` → `bbox` → 贵州兜底）、
+  `source`（`env`/`meipass`/`dev`）、`reason`（`dir_missing`/`no_tiles`，可用时 `null`）；
+  MANIFEST 归一化白名单放行并校验 `bbox`/`region`（有限数值、经纬度范围、min<max），脏值逐级回退。
+- **回退提示带诊断**：提示追加 `available/tileCount/source/reason`，现场可区分“没装瓦片”与“真故障”。
+
+### Tests / 验证
+
+- 前端 TDD：先红（组件 11 / 工具 8 失败）→ 实现 → 绿；`mapTiles`/`RasterTileLayer`/`MapTileManager`/api 等
+  **6 文件 103 passed**，改动文件覆盖率 100%，`vue-tsc --noEmit` exit 0；
+- 后端：新增 `test_map_tile_info_diagnostics.py`（11 项）+ 既有 map/tiles 套件合计 **216 passed**；
+- 打包后运行期：`/map/tile-info` 含 `bbox/source/reason`；覆盖区内瓦片 200、区外 404（前端透明处理、不回退）。
+
 ## [1.18.1] - 2026-10-24 — 登录门面重构 / 三层对齐门禁 / 门禁真绿复验
 
 > 本批包含三块：① 登录页 UI 务实化改造（修死链与不可见错误）；② R35 三层对齐门禁落地并修掉它抓出的漂移；

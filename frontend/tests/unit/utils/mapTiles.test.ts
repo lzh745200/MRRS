@@ -8,10 +8,17 @@ import { describe, it, expect } from 'vitest'
 import {
   GCJ02_HINT,
   OSM_ATTRIBUTION,
+  PARTIAL_COVERAGE_HINT,
   TILE_ATTRIBUTION,
+  TILE_BOUNDS_PADDING_DEGREES,
+  TILE_COVERAGE_FALLBACK_BBOX,
+  TILE_FALLBACK_ERROR_THRESHOLD,
+  TILE_FALLBACK_WATCHDOG_MS,
+  TILE_FIT_MAX_ZOOM,
   TILE_LOAD_FAILED_HINT,
   TILE_PACKAGE_MAX_BYTES,
   TILE_URL_TEMPLATE,
+  TRANSPARENT_TILE_DATA_URI,
   convertMarkersForTiles,
   formatManifestTime,
   formatTileBytes,
@@ -21,7 +28,11 @@ import {
   isTileMapUsable,
   normalizeTileImportResult,
   normalizeTileInfo,
+  parseTileBbox,
+  shouldFallbackToVector,
   tileAttribution,
+  tileCoverageBbox,
+  tileCoverageBounds,
   tileInfoHint,
   toDisplayCoord,
   toFiniteNumber,
@@ -107,7 +118,32 @@ describe('normalizeTileInfo', () => {
       totalBytes: 0,
       dir: '',
       manifest: null,
+      bbox: null,
+      source: '',
+      reason: null,
     })
+  })
+
+  it('诊断字段透传：bbox / source / reason（含去空格与非法 bbox 归一）', () => {
+    const info = normalizeTileInfo({
+      available: true,
+      tileCount: 4,
+      bbox: ['103.6', 24.6, '109.6', 29.2],
+      source: '  osm-guizhou  ',
+      reason: '   ',
+    })
+    expect(info.bbox).toEqual([103.6, 24.6, 109.6, 29.2])
+    expect(info.source).toBe('osm-guizhou')
+    expect(info.reason).toBeNull() // 全空白视为无原因
+
+    const reason = normalizeTileInfo({ reason: '瓦片目录为空' })
+    expect(reason.reason).toBe('瓦片目录为空')
+    expect(reason.source).toBe('')
+    expect(reason.bbox).toBeNull()
+
+    // 非法 bbox（长度/顺序）→ null，交给覆盖范围解析兜底
+    expect(normalizeTileInfo({ bbox: [1, 2, 3] }).bbox).toBeNull()
+    expect(normalizeTileInfo({ bbox: [110, 30, 100, 20] }).bbox).toBeNull()
   })
 
   it('异常输入（null/字符串/数组）返回默认结构且不抛错', () => {
@@ -263,6 +299,89 @@ describe('normalizeTileImportResult', () => {
       message: '瓦片包导入成功',
       tileCount: 0,
     })
+  })
+})
+
+describe('覆盖范围 bbox 与回退阈值（边缘 404 不支持整体回退）', () => {
+  it('parseTileBbox：合法值原样，长度/非数值/顺序/越界全部 null', () => {
+    expect(parseTileBbox([103.6, 24.6, 109.6, 29.2])).toEqual([103.6, 24.6, 109.6, 29.2])
+    expect(parseTileBbox('x')).toBeNull()
+    expect(parseTileBbox(null)).toBeNull()
+    expect(parseTileBbox([1, 2, 3])).toBeNull()
+    expect(parseTileBbox([1, 2, 3, 'x'])).toBeNull()
+    expect(parseTileBbox([110, 20, 110, 30])).toBeNull() // 经度 min>=max
+    expect(parseTileBbox([100, 30, 110, 30])).toBeNull() // 纬度 min>=max
+    expect(parseTileBbox([-190, 20, 110, 30])).toBeNull() // 经度越界
+    expect(parseTileBbox([100, 20, 190, 30])).toBeNull()
+    expect(parseTileBbox([100, -95, 110, 30])).toBeNull() // 纬度越界
+    expect(parseTileBbox([100, 20, 110, 95])).toBeNull()
+  })
+
+  it('tileCoverageBbox 优先级：info.bbox → manifest.region.bbox → manifest.bbox → 贵州兜底', () => {
+    expect(tileCoverageBbox({ ...usable, bbox: [100, 20, 110, 30] })).toEqual([100, 20, 110, 30])
+    expect(
+      tileCoverageBbox({
+        ...usable,
+        bbox: null,
+        manifest: { provider: 'osm', region: { bbox: [101, 21, 111, 31] } },
+      })
+    ).toEqual([101, 21, 111, 31])
+    expect(
+      tileCoverageBbox({
+        ...usable,
+        bbox: null,
+        manifest: { provider: 'osm', bbox: [102, 22, 112, 32] },
+      })
+    ).toEqual([102, 22, 112, 32])
+    // 非法/缺失逐级回退到兜底
+    expect(tileCoverageBbox({ ...usable, bbox: [0, 0, 0, 0], manifest: null })).toEqual(
+      TILE_COVERAGE_FALLBACK_BBOX
+    )
+    expect(tileCoverageBbox(null)).toEqual(TILE_COVERAGE_FALLBACK_BBOX)
+    expect(tileCoverageBbox(undefined)).toEqual(TILE_COVERAGE_FALLBACK_BBOX)
+    expect(
+      tileCoverageBbox({
+        ...usable,
+        bbox: null,
+        manifest: { provider: 'osm', region: { bbox: 'bad' }, bbox: [1, 2] },
+      })
+    ).toEqual(TILE_COVERAGE_FALLBACK_BBOX)
+  })
+
+  it('tileCoverageBounds 转成 Leaflet 的 [[south, west], [north, east]]', () => {
+    expect(tileCoverageBounds({ ...usable, bbox: [103.6, 24.6, 109.6, 29.2] })).toEqual([
+      [24.6, 103.6],
+      [29.2, 109.6],
+    ])
+    expect(tileCoverageBounds(null)).toEqual([
+      [24.6, 103.6],
+      [29.2, 109.6],
+    ])
+  })
+
+  it('常量契约：贵州兜底 bbox / 外扩 / fitBounds 上限 / 看门狗 / 阈值 / 部分覆盖文案', () => {
+    expect(TILE_COVERAGE_FALLBACK_BBOX).toEqual([103.6, 24.6, 109.6, 29.2])
+    expect(TILE_BOUNDS_PADDING_DEGREES).toBe(0.05)
+    expect(TILE_FIT_MAX_ZOOM).toBe(9)
+    expect(TILE_FALLBACK_WATCHDOG_MS).toBe(5000)
+    expect(TILE_FALLBACK_ERROR_THRESHOLD).toBe(8)
+    expect(PARTIAL_COVERAGE_HINT).toContain('超出预置瓦片范围')
+    expect(PARTIAL_COVERAGE_HINT).toContain('属正常')
+  })
+
+  it('透明瓦片是 1×1 PNG data URI（边缘 404 不显示破图）', () => {
+    expect(TRANSPARENT_TILE_DATA_URI.startsWith('data:image/png;base64,')).toBe(true)
+    expect(TRANSPARENT_TILE_DATA_URI).toContain('iVBORw0KGgo') // PNG 魔数
+  })
+
+  it('shouldFallbackToVector：只有"一张未成功且失败≥8"才回退', () => {
+    expect(shouldFallbackToVector({ loaded: 0, errors: 8 })).toBe(true)
+    expect(shouldFallbackToVector({ loaded: 0, errors: 99 })).toBe(true)
+    // 少量 404（边缘越界是常态）绝不回退
+    expect(shouldFallbackToVector({ loaded: 0, errors: 7 })).toBe(false)
+    // 只要有一张成功，即使失败很多也不整体回退
+    expect(shouldFallbackToVector({ loaded: 1, errors: 100 })).toBe(false)
+    expect(shouldFallbackToVector({ loaded: 0, errors: 0 })).toBe(false)
   })
 })
 
