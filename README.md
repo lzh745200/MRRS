@@ -1,8 +1,8 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.6
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.7
 
-![Version](https://img.shields.io/badge/version-1.18.6-blue)
+![Version](https://img.shields.io/badge/version-1.18.7-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
@@ -51,7 +51,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-25（v1.18.6）— 后端 14,722 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-26（v1.18.7）— 后端 14,722 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
 > （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，全部段跑完统一 report，
 > 由 `.coveragerc` fail_under=100 单一来源判定；45,936 语句 / 11,452 分支，Miss 0 / BrPart 0）；
 > 前端 **347 个 `.test.ts` / 7,356 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
