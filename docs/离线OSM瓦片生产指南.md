@@ -197,3 +197,53 @@ npm run build:win
 7. z11 不画 unclassified/living_street/track（按规格只在 z12 引入）；比例尺未做底衬。
 8. **多包叠加导入后** `MANIFEST.json` 保留"最后导入包"的元数据，目录是并集；`verify_tiles` 对叠加目录会提示
    `tileCount` 不一致（预期）。后端 `/map/tile-info` 的 `tileCount` 走磁盘实时扫描，不受影响。
+
+## 八、瓦片底图加载与"边缘 404"（v1.18.2）
+
+### 8.1 现象与根因
+
+现场曾出现：切到「瓦片底图」立即提示 **「瓦片底图加载失败，已切回矢量地图」**。
+根因**不是瓦片缺失**，而是前端把**任意一张**瓦片 404 当成整体失败：
+
+- Leaflet 视野只要有一部分落在"贵州 bbox"之外，对应瓦片必然 404（这是正确的：没有数据）；
+- 旧实现未设 `bounds`/`maxBounds`，且开局固定 `zoom=7` —— 1080p 屏在 z7 的视野约 **21° 宽**，
+  远超贵州 **6°** 的覆盖范围 → 一开视图就整片边缘 404 → 立即回退。
+
+### 8.2 v1.18.2 的修复行为
+
+- **只在覆盖范围内请求**：`bounds`（瓦片层）与 `maxBounds`（地图，外扩 0.05°）限制视野，**拖不出**贵州范围；
+- **开局自适应**：`fitBounds(覆盖 bbox, maxZoom:9)`，不再固定 zoom 7；
+- **边缘 404 渲染为透明**：`errorTileUrl` 用 1×1 透明 PNG，缺数据处为空白，**不破图、不回退**；
+- **回退只看"真故障"**：`loaded===0 && errors>=8`（或 5s 看门狗内全 404）才回退矢量；
+  有成功也有失败时，只在左下角显示非阻塞提示「部分区域超出预置瓦片范围（边缘为空白，属正常）」。
+
+### 8.3 排障口径（`GET /api/v1/map/tile-info`）
+
+```json
+{
+  "available": true,
+  "tileCount": 5623,
+  "zoomLevels": [5,6,7,8,9,10,11,12],
+  "bbox": [103.6, 24.6, 109.6, 29.2],
+  "source": "env",
+  "reason": null,
+  "dir": "map-tiles",
+  "manifest": { "...": "..." }
+}
+```
+
+| 字段 | 含义 | 典型问题 |
+|---|---|---|
+| `available` / `reason` | 是否可用；`dir_missing`=目录不存在、`no_tiles`=目录里没有 png | `dir_missing`：安装包缺 `resources/map-tiles`（extraResources 未打进）或 `MAP_TILES_DIR` 指向错误 |
+| `source` | 目录来源：`env`（Electron 注入 `MAP_TILES_DIR`）/`meipass`（PyInstaller 内置）/`dev`（源码树） | 安装包运行时**应为 `env`**；若为 `dev`/`meipass` 说明环境变量没注入 |
+| `bbox` | 该瓦片集的覆盖范围 | 与前端 `maxBounds`/`fitBounds` 一致；导入子集包后建议复查 |
+
+> 注意：`bbox` 取自 `MANIFEST.json` 的 `region.bbox` / `bbox`，缺失时回退贵州全省 bbox；
+> 若导入的是**单个市州包**，MANIFEST 的 bbox 只覆盖该市州，地图会相应缩小可拖范围（符合预期）。
+
+### 8.4 现场快速自检
+
+1. 浏览器/开发者工具打开 `/api/v1/map/tile-info`：`available=true` 且 `tileCount>0`；
+2. 打开 `/api/v1/map/tiles/12/3258/1735.png`：应返回 PNG（`200 image/png`）；
+3. 打开 `/api/v1/map/tiles/12/0/0.png`：应返回 404 —— 这是**正常**的边缘无数据，前端会渲染透明；
+4. 若页面仍回退，提示里会带 `available/tileCount/source/reason`，按 8.3 对照即可判断是"没装瓦片"还是"真故障"。

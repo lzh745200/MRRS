@@ -1,19 +1,24 @@
 #!/usr/bin/env pwsh
 # ============================================================
-# Windows 安装包一键构建（前端 -> 资源同步 -> PyInstaller -> NSIS）
+# Windows installer one-shot build
+#   frontend build -> sync resources/frontend -> PyInstaller -> NSIS
 # ------------------------------------------------------------
-# 解决两个 Windows 实测坑：
-#   1) 默认 %TEMP% 会让 esbuild 报 "Access is denied"（删临时文件失败）；
-#      → 构建前把 TEMP/TMP 重定向到 <repo>\.scratch\tmp，结束后恢复。
-#   2) `bash` 常被 WSL 接管而不可用，sync-frontend-dist.sh 失效；
-#      → 改用 scripts/build/sync-frontend.ps1（robocopy 等价实现）。
+# Why this wrapper exists (two real Windows pitfalls):
+#   1) Default %TEMP% makes esbuild fail with "Access is denied"
+#      (cannot delete its temp dir). We redirect TEMP/TMP to <repo>\.scratch\tmp.
+#   2) `bash` is often taken over by WSL on Windows, so
+#      scripts/build/sync-frontend-dist.sh cannot run; we use the
+#      PowerShell equivalent below instead.
 #
-# 用法：
+# ASCII-only on purpose: Windows PowerShell 5.1 decodes .ps1 as ANSI when
+# there is no BOM, so non-ASCII text can break parsing after edits.
+#
+# Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/build-win.ps1
 #   powershell -File scripts/build/build-win.ps1 -SkipFrontend
 #   powershell -File scripts/build/build-win.ps1 -IncludeMapTilesInBackend
-#       # 默认后端不再打包瓦片（由 Electron extraResources + MAP_TILES_DIR 提供）；
-#       # 只有「不带 Electron 的 standalone 后端分发」才需要该开关。
+#       # backend no longer bundles tiles by default; Electron ships them via
+#       # extraResources + MAP_TILES_DIR. Use this only for standalone backend.
 # ============================================================
 [CmdletBinding()]
 param(
@@ -26,7 +31,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $tmp = Join-Path (Join-Path $root '.scratch') 'tmp'
 
 function Fail([string]$msg) {
-    Write-Host "[错误] $msg" -ForegroundColor Red
+    Write-Host "[ERROR] $msg" -ForegroundColor Red
     exit 1
 }
 
@@ -38,45 +43,53 @@ $oldInclude = $env:INCLUDE_MAP_TILES
 try {
     $env:TEMP = $tmp
     $env:TMP = $tmp
-    if ($IncludeMapTilesInBackend) { $env:INCLUDE_MAP_TILES = '1' } else { $env:INCLUDE_MAP_TILES = $null }
+    if ($IncludeMapTilesInBackend) {
+        $env:INCLUDE_MAP_TILES = '1'
+        Write-Host '[env] INCLUDE_MAP_TILES=1 (backend also bundles tiles)'
+    } else {
+        $env:INCLUDE_MAP_TILES = $null
+        Write-Host '[env] INCLUDE_MAP_TILES unset (tiles only via extraResources)'
+    }
     Write-Host "[env] TEMP/TMP -> $tmp"
-    if ($env:INCLUDE_MAP_TILES) { Write-Host "[env] INCLUDE_MAP_TILES=1（后端也打包瓦片）" } else { Write-Host "[env] INCLUDE_MAP_TILES 未设置（瓦片仅走 extraResources）" }
 
     if (-not $SkipFrontend) {
-        Write-Host ""
-        Write-Host "=== [1/3] 前端构建 ==="
+        Write-Host ''
+        Write-Host '=== [1/3] frontend build ==='
         Push-Location (Join-Path $root 'frontend')
         try {
             npm run build
-            if ($LASTEXITCODE -ne 0) { Fail "前端构建失败" }
+            if ($LASTEXITCODE -ne 0) { Fail 'frontend build failed' }
         } finally { Pop-Location }
 
-        Write-Host ""
-        Write-Host "=== [2/3] 同步前端产物 ==="
+        Write-Host ''
+        Write-Host '=== [2/3] sync frontend dist ==='
         & (Join-Path $PSScriptRoot 'sync-frontend.ps1')
-        if ($LASTEXITCODE -ne 0) { Fail "前端产物同步失败" }
+        if ($LASTEXITCODE -ne 0) { Fail 'frontend sync failed' }
     } else {
-        Write-Host "[1/3][2/3] 跳过前端构建与同步（-SkipFrontend）"
+        Write-Host '[1/3][2/3] skipped (-SkipFrontend)'
     }
 
-    Write-Host ""
-    Write-Host "=== [3/3] PyInstaller + electron-builder ==="
+    Write-Host ''
+    Write-Host '=== [3/3] PyInstaller + electron-builder ==='
     Push-Location $root
     try {
         npm run build:win
-        if ($LASTEXITCODE -ne 0) { Fail "npm run build:win 失败" }
+        if ($LASTEXITCODE -ne 0) { Fail 'npm run build:win failed' }
     } finally { Pop-Location }
 
-    # 用 UTF-8 显式读取：Windows PowerShell 5.1 的 Get-Content 默认按 ANSI 解码，
-    # package.json 里的中文 productName 会让 ConvertFrom-Json 报 ArgumentException。
-    $pkgRaw = [System.IO.File]::ReadAllText((Join-Path $root 'package.json'), [System.Text.Encoding]::UTF8)
+    # UTF-8 explicit read: PS 5.1 Get-Content defaults to ANSI and would choke
+    # on the Chinese productName inside package.json.
+    $pkgRaw = [System.IO.File]::ReadAllText(
+        (Join-Path $root 'package.json'),
+        [System.Text.Encoding]::UTF8
+    )
     $pkg = $pkgRaw | ConvertFrom-Json
-    $exeName = "MRRS-Setup-$($pkg.version)-x64.exe"
+    $exeName = 'MRRS-Setup-' + $pkg.version + '-x64.exe'
     $exe = Join-Path (Join-Path (Join-Path $root 'dist') 'electron') $exeName
-    if (-not (Test-Path $exe)) { Fail "未找到安装包：$exe" }
+    if (-not (Test-Path $exe)) { Fail "installer not found: $exe" }
     $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-    Write-Host ""
-    Write-Host "[OK] 安装包：$exe（$mb MB）" -ForegroundColor Green
+    Write-Host ''
+    Write-Host "[OK] installer: $exe ($mb MB)" -ForegroundColor Green
     exit 0
 } finally {
     $env:TEMP = $oldTemp
