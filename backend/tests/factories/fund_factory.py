@@ -29,7 +29,6 @@ class FundFactory:
             health_score=100,
             has_anomaly=False,
             budget_version=1,
-            budget_status="draft",
             created_at=now,
             updated_at=now,
         )

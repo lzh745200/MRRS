@@ -58,7 +58,6 @@ class Organization(BaseModel):
     contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
     contact_email = Column(String(100), nullable=True, comment="联系邮箱")
     address = Column(String(200), nullable=True, comment="地址")
-    region_code = Column(String(20), nullable=True, comment="行政区划编码（关联 regions.code，用于数据权限前缀匹配）")
     is_active = Column(Boolean, default=True, comment="是否启用")
     path = Column(String(500), nullable=True, comment="路径")
     created_by = Column(Integer, nullable=True, comment="创建人ID")

@@ -37,7 +37,6 @@ class SystemMonitor(Base):
 
     # 数据库指标
     db_connections = Column(Integer, comment="数据库连接数")
-    db_query_time = Column(Float, comment="数据库查询平均时间")
 
     # 元数据
     host = Column(String(100), comment="主机名")

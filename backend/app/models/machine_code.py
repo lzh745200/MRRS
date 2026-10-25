@@ -58,7 +58,6 @@ class MachineCode(Base):
         nullable=False,
         comment="是否允许下级组织生成通行码",
     )
-    restrict_permissions = Column(Text, default="", comment="此机器码限制的功能权限(JSON数组)")
     description = Column(Text, comment="备注说明")
     created_by = Column(Integer, ForeignKey("users.id"), comment="创建人ID（管理员）")
     created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")

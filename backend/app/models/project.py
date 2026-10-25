@@ -89,11 +89,6 @@ class Project(Base):
         nullable=True,
         comment="负责单位ID",
     )
-    region_code = Column(
-        String(20),
-        nullable=True,
-        comment="行政区划编码（关联 regions.code，用于数据权限前缀匹配）",
-    )
 
     budget = Column(Numeric(15, 4), default=0, comment="预算金额(万元)")
     actual_cost = Column(Numeric(15, 4), default=0, comment="实际花费(万元)")
@@ -139,10 +134,6 @@ class Project(Base):
     remarks = Column(Text, nullable=True, comment="备注")
 
     # 经费管理扩展 —— 论证立项阶段经济指标
-    total_budget_estimate = Column(Numeric(15, 4), nullable=True, comment="经费总预算估算(万元)")
-    fund_source_category = Column(Text, nullable=True, comment="资金来源分类(JSON)")
-    expected_economic_benefit = Column(Text, nullable=True, comment="预期经济效益量化指标")
-    expected_military_benefit = Column(Text, nullable=True, comment="预期效益量化指标")
 
     # ================= 软删标记 =================
     is_active = Column(Boolean, default=True, nullable=False, comment="是否启用(软删标记)")
@@ -277,8 +268,9 @@ def _mask_account(value):
         return "*" * len(text)
     return "****" + text[-4:]
 
-
 # 重新导出 Fund 以兼容 from app.models.project import Fund 的写法
+
+
 from app.models.fund import Fund  # noqa: E402, F401
 
 

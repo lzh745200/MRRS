@@ -154,7 +154,6 @@ class APIAccessLog(Base):
     method = Column(String(10), nullable=False)
 
     request_params = Column(JSON, nullable=True)
-    request_body = Column(JSON, nullable=True)
 
     response_status = Column(Integer, nullable=True)
     response_time_ms = Column(Integer, nullable=True)
@@ -188,7 +187,6 @@ class DataExportLog(Base):
 
     file_format = Column(String(20), nullable=True)
     record_count = Column(Integer, nullable=True)
-    file_size_bytes = Column(Integer, nullable=True)
 
     file_path = Column(String(500), nullable=True)
 

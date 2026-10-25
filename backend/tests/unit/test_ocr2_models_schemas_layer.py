@@ -69,7 +69,7 @@ class TestAlertHistoryCreatedAtAlias:
         assert history.created_at == ts
 
     def test_order_by_alias_works(self, real_db_session):
-        rule = AlertRule(name="r", metric_type="response_time", threshold=1.0, channels=["email"])
+        rule = AlertRule(name="r", metric_type="response_time", threshold=1.0)
         real_db_session.add(rule)
         real_db_session.commit()
         real_db_session.add_all([

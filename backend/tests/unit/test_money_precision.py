@@ -55,7 +55,7 @@ class TestModelColumnScale:
     """锁定模型列精度契约：金额列 scale=4。"""
 
     @pytest.mark.parametrize(
-        "field", ["budget", "actual_cost", "invested_amount", "total_budget_estimate"]
+        "field", ["budget", "actual_cost", "invested_amount"]
     )
     def test_project_money_columns_scale_4(self, field):
         col = getattr(Project, field).property.columns[0]

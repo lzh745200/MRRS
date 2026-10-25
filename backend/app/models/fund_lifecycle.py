@@ -110,7 +110,6 @@ class PerformanceLevel(str, enum.Enum):
     C = "C"
     D = "D"
 
-
 # ==================== 模型 ====================
 
 
@@ -227,8 +226,6 @@ class FundTransferVoucher(Base):
     updated_at = Column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
     # 协同扩展字段
-    military_project_code = Column(String(100), nullable=True, comment="专项项目编号")
-    local_project_code = Column(String(100), nullable=True, comment="地方项目编号")
     sync_status = Column(String(20), default="pending", comment="同步状态: pending/synced/failed")
 
     def __repr__(self):

@@ -65,7 +65,6 @@ class FundAllocationOrder(Base):
         comment="状态: draft/issued/received/completed/cancelled",
     )
     received_at = Column(UtcDateTime(), nullable=True, comment="接收时间")
-    received_by = Column(String(50), nullable=True, comment="接收人")
     remarks = Column(Text, nullable=True, comment="备注")
     created_by = Column(String(50), nullable=True, comment="创建人")
     created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)
@@ -102,9 +101,7 @@ class AllocationOrderItem(Base):
     )
     organization_name = Column(String(200), nullable=True, comment="接收单位名称")
     amount = Column(Numeric(15, 4), nullable=False, comment="分配金额(万元)")
-    account = Column(String(200), nullable=True, comment="接收账户")
     status = Column(String(20), default="pending", comment="状态: pending/transferred/confirmed")
-    transferred_at = Column(UtcDateTime(), nullable=True, comment="划转时间")
     confirmed_at = Column(UtcDateTime(), nullable=True, comment="确认时间")
     remarks = Column(Text, nullable=True, comment="备注")
     created_at = Column(UtcDateTime(), server_default=func.now(), nullable=False)

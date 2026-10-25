@@ -69,7 +69,6 @@ class FundMock:
             has_anomaly=False,
             settlement_status=None,
             budget_version=1,
-            budget_status="draft",
             organization_id=1,
             created_by=1,
             year=2025,

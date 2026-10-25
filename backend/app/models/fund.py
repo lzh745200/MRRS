@@ -138,7 +138,6 @@ class Fund(BaseModel):
     settlement_status = Column(String(20), nullable=True, comment="决算状态")
 
     budget_version = Column(Integer, default=1, comment="预算版本号")
-    budget_status = Column(String(20), default="draft", comment="预算状态: draft/submitted/approved")
 
     # ================= 软删标记 =================
     is_active = Column(Boolean, default=True, nullable=False, comment="是否启用(软删标记)")
@@ -166,10 +165,10 @@ class Fund(BaseModel):
     def __repr__(self):
         return f"<Fund(id={self.id}, name={self.name}, amount={self.amount})>"
 
-
 # ---------------------------------------------------------------------------
 # 🚀 自动化填充聚合字段 (对业务代码零侵入)
 # ---------------------------------------------------------------------------
+
 
 def _parse_date_value(val):
     """将日期值统一转换为 date 对象，支持 datetime、date、str 类型。"""
@@ -223,15 +222,16 @@ def _enrich_fund_time_fields(mapper, connection, target: Fund):
         target.year_month = None
         target.year_quarter = None
 
-
 # 监听插入和更新事件
+
+
 event.listen(Fund, "before_insert", _enrich_fund_time_fields)
 event.listen(Fund, "before_update", _enrich_fund_time_fields)
-
 
 # ---------------------------------------------------------------------------
 # 附件与预算模型 (保持不变)
 # ---------------------------------------------------------------------------
+
 
 class FundAttachment(Base):
     """经费附件"""
@@ -261,16 +261,16 @@ class FundAttachment(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
-
 # W27 P1（死模型清理）：`BudgetRecord`（表 `budget_records`）已删除。
 # 它全仓零引用（无端点/服务使用），且缺 organization_id/created_by 无法做数据域
 # 隔离；真正的预算功能是 `FundBudget`（models/fund_budget.py，带 organization_id）。
 # 数据库侧由迁移 `r37_drop_budget_records_001` 走三分支清理（空表删除/有数据改名归档）。
 
-
 # 确保关联模型在映射器配置前注册至 SQLAlchemy，以便
 # relationship("Project"/"SupportedVillage"/"Organization") 字符串引用能解析。
 # 放在文件末尾以避免循环导入。
+
+
 from .project import Project          # noqa: E402, F401
 from .organization import Organization  # noqa: E402, F401
 from .supported_village import SupportedVillage  # noqa: E402, F401

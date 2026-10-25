@@ -78,8 +78,6 @@ class VillagePopulationFactory:
             marginal_poverty_population=15,
             sudden_difficulty_households=3,
             sudden_difficulty_population=8,
-            veteran_village_secretary=1,
-            veteran_village_committee=3,
             created_at=now,
             updated_at=now,
         )

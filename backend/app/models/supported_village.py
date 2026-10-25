@@ -108,11 +108,6 @@ class SupportedVillage(Base, TimestampMixin):
         nullable=True,
         comment="所属组织ID",
     )
-    region_code = Column(
-        String(20),
-        nullable=True,
-        comment="行政区划编码（关联 regions.code，用于数据权限前缀匹配）",
-    )
     created_by = Column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -301,7 +296,6 @@ class SupportedVillage(Base, TimestampMixin):
     def __repr__(self):
         return f"<SupportedVillage(id={self.id}, name={self.village_name})>"
 
-
 # ══════════════════════════════════════════════════════════════
 #  村级年度数据模型（共用模式: village FK + year + 业务字段）
 # ══════════════════════════════════════════════════════════════
@@ -345,12 +339,6 @@ class VillagePopulation(Base, TimestampMixin):
     sudden_difficulty_population = Column(
         Integer, default=0, comment="突发严重困难户(人)"
     )
-    veteran_village_secretary = Column(
-        Integer, default=0, comment="村支书(退役人员)"
-    )
-    veteran_village_committee = Column(
-        Integer, default=0, comment="村委员(退役人员)"
-    )
 
     village = relationship("SupportedVillage", back_populates="population_data")
 
@@ -387,7 +375,6 @@ class VillageIncome(Base, TimestampMixin):
 
     def __repr__(self):
         return f"<VillageIncome(id={self.id}, village={self.supported_village_id}, year={self.year})>"
-
 
 # ══════════════════════════════════════════════════════════════
 #  帮扶支持类模型
@@ -631,7 +618,6 @@ class EducationSupport(Base, TimestampMixin):
         "SupportedVillage", back_populates="education_support_data"
     )
 
-
 # ══════════════════════════════════════════════════════════════
 #  帮扶经费 & 梯次发展
 # ══════════════════════════════════════════════════════════════
@@ -663,7 +649,6 @@ class SupportFunding(Base, TimestampMixin):
     military_investment = Column(Float, default=0, comment="专项投入(万元)")
     local_investment = Column(Float, default=0, comment="地方投入(万元)")
     planned_investment = Column(Float, default=0, comment="计划投入(万元)")
-
 
 # ══════════════════════════════════════════════════════════════
 #  报表订阅
@@ -702,7 +687,6 @@ class ReportSubscription(Base, TimestampMixin):
     last_sent_at = Column(
         UtcDateTime(), nullable=True, comment="最近一次成功生成/送达时间（NULL=从未生成）"
     )
-
 
 # ══════════════════════════════════════════════════════════════
 #  村委会信息 & 成员
@@ -769,7 +753,6 @@ class VillageCommitteeMember(Base, TimestampMixin):
 
     committee_info = relationship("VillageCommitteeInfo", back_populates="members")
 
-
 # ══════════════════════════════════════════════════════════════
 #  帮扶村附件
 # ══════════════════════════════════════════════════════════════
@@ -803,8 +786,9 @@ class VillageAttachment(Base, TimestampMixin):
         comment="上传者ID",
     )
 
-
 # 确保 Fund 模型已注册至 SQLAlchemy 映射器注册表，
 # 以便 SupportedVillage.funds relationship("Fund", ...) 能解析。
 # 放在文件末尾以避免循环导入。
+
+
 from .fund import Fund  # noqa: E402, F401

@@ -38,4 +38,3 @@ class HiddenDashboardActivity(Base):
         unique=True,
         comment="被隐藏的动态ID，如 project_123",
     )
-    hidden_at = Column(UtcDateTime(), default=func.now())

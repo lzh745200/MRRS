@@ -46,7 +46,6 @@ class TeaPlantation(Base, TimestampMixin):
     karst_soil_moisture = Column(
         Float, nullable=True, comment="喀斯特土壤湿度指数（0.0-1.0）"
     )
-    quality_score = Column(Float, nullable=True, comment="品质评分（1-10）")
     description = Column(Text, nullable=True, comment="备注说明")
 
     def __repr__(self):
@@ -83,12 +82,8 @@ class CactusFruitPlot(Base, TimestampMixin):
     )
     name = Column(String(100), nullable=False, comment="园区名称")
     area_mu = Column(Float, default=0, comment="面积（亩）")
-    plant_density = Column(Integer, nullable=True, comment="种植密度（株/亩）")
     annual_yield_kg = Column(Float, default=0, comment="年产量（公斤）")
     harvest_year = Column(Integer, nullable=True, comment="采收年份")
-    karst_adaptation_score = Column(
-        Float, nullable=True, comment="喀斯特适应性评分（1-10）"
-    )
     slope_degree = Column(Float, nullable=True, comment="坡度（度）")
     soil_depth_cm = Column(Float, nullable=True, comment="土层厚度（厘米）")
     annual_rainfall_mm = Column(Float, nullable=True, comment="年降雨量（毫米）")
@@ -108,7 +103,6 @@ class CactusFruitPlot(Base, TimestampMixin):
         return calculate_karst_adaptation(
             self.slope_degree, self.soil_depth_cm, self.annual_rainfall_mm
         )
-
 
 # ==================== 喀斯特地貌关联算法 ====================
 

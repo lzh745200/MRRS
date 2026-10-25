@@ -53,16 +53,6 @@ class SubordinateInstance(BaseModel):
         nullable=True,
         comment="授权到期日",
     )
-    last_config_hash = Column(
-        String(64),
-        nullable=True,
-        comment="最后下发的管控配置包SHA256哈希",
-    )
-    last_config_applied_at = Column(
-        UtcDateTime(),
-        nullable=True,
-        comment="下级最后应用配置的时间",
-    )
     last_report_at = Column(
         UtcDateTime(),
         nullable=True,

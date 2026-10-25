@@ -44,7 +44,6 @@ class EffectivenessEvaluation(Base):
     total_score = Column(Float, nullable=False)  # 总分
     rank = Column(Integer, nullable=True)  # 排名
     grade = Column(String(10), nullable=True)  # 等级(A/B/C/D)
-    report_path = Column(String(500), nullable=True)  # 报告文件路径
     evaluated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     evaluated_at = Column(
         UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False

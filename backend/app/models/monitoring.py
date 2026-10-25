@@ -5,7 +5,6 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    JSON,
     Boolean,
     Column,
     Float,
@@ -44,9 +43,7 @@ class AlertRule(Base):
     metric_type = Column(String(50), nullable=False)  # response_time/error_rate/resource
     threshold = Column(Float, nullable=False)
     duration_seconds = Column(Integer, nullable=False, default=60)
-    channels = Column(JSON, nullable=False)  # ["email", "webhook"]
     webhook_url = Column(String(500), nullable=True)
-    email_recipients = Column(JSON, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False)
     created_at = Column(
         UtcDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False
