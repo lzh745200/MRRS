@@ -385,14 +385,14 @@ describe('api/request — response 错误拦截器', () => {
   it('400 detail 为对象 → 挂载通用请求失败消息', async () => {
     const error = { response: { status: 400, data: { detail: { field: 'x' } } }, config: makeConfig() }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求失败 (400)')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
   it('400 无任何信息 → 挂载通用请求失败消息', async () => {
     const error = { response: { status: 400, data: {} }, config: makeConfig() }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求失败 (400)')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
@@ -441,14 +441,14 @@ describe('api/request — response 错误拦截器', () => {
   it('404 → 挂载资源不存在消息（无 URL 拼接）', async () => {
     const error = { response: { status: 404, data: {} }, config: makeConfig({ url: '/missing' }) }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求的资源不存在')
+    expect(error.userMessage).toBe('请求的资源不存在或已被删除')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
   it('404 无 config → 挂载资源不存在消息', async () => {
     const error = { response: { status: 404, data: {} } }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求的资源不存在')
+    expect(error.userMessage).toBe('请求的资源不存在或已被删除')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
@@ -469,14 +469,14 @@ describe('api/request — response 错误拦截器', () => {
   it('500 → 挂载服务器错误消息', async () => {
     const error = { response: { status: 500, data: {} }, config: makeConfig() }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('服务器错误，请稍后重试')
+    expect(error.userMessage).toBe('服务器繁忙，请稍后重试')
     expect(mockElMessage.error).not.toHaveBeenCalled()
   })
 
   it('503 → 挂载服务器错误消息', async () => {
     const error = { response: { status: 503, data: {} }, config: makeConfig() }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('服务器错误，请稍后重试')
+    expect(error.userMessage).toBe('服务器繁忙，请稍后重试')
     expect(mockElMessage.error).not.toHaveBeenCalled()
   })
 
@@ -486,7 +486,7 @@ describe('api/request — response 错误拦截器', () => {
       config: makeConfig(),
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('body.name: 必填')
+    expect(error.userMessage).toBe('必填')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
@@ -503,14 +503,14 @@ describe('api/request — response 错误拦截器', () => {
   it('422 无 detail → 默认校验失败提示', async () => {
     const error = { response: { status: 422, data: {} }, config: makeConfig() }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('输入数据校验失败')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
   it('422 detail 为空数组 → 默认校验失败提示', async () => {
     const error = { response: { status: 422, data: { detail: [] } }, config: makeConfig() }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('输入数据校验失败')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
@@ -520,7 +520,7 @@ describe('api/request — response 错误拦截器', () => {
       config: makeConfig(),
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe(': 必填')
+    expect(error.userMessage).toBe('必填')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 
@@ -530,7 +530,7 @@ describe('api/request — response 错误拦截器', () => {
       config: makeConfig(),
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('name: 非法值')
+    expect(error.userMessage).toBe('非法值')
     expect(mockElMessage.warning).not.toHaveBeenCalled()
   })
 

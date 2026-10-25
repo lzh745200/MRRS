@@ -494,7 +494,7 @@ const saveProfile = async () => {
     editing.value = false
     ElMessage.success('个人资料保存成功')
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '保存失败，请重试'
+    const errorMessage = getErrorMessage(error, '保存失败，请重试')
     ElMessage.error(errorMessage)
   } finally {
     saving.value = false

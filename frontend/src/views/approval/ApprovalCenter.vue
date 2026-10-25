@@ -79,6 +79,7 @@ export function batchRejectValidator(v: string): true | string {
 </script>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { ref, onMounted } from 'vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -144,7 +145,7 @@ async function loadTasks() {
     tasks.value = Array.isArray(parsedTasks) ? parsedTasks : []
     total.value = Number(res?.total ?? tasks.value.length) || tasks.value.length
   } catch (e: unknown) {
-    ElMessage.error(e instanceof Error ? e.message : '加载审批任务失败')
+    ElMessage.error(getErrorMessage(e, '加载审批任务失败'))
   } finally {
     loading.value = false
   }

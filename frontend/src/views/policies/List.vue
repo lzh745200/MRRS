@@ -180,6 +180,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { logger } from '@/utils/logger'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
@@ -368,7 +369,7 @@ const handleDelete = async (row: any) => {
     // 成功静默：删除成功仅刷新列表
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(getErrorMessage(error, '删除失败'))
     }
   }
 }
@@ -402,7 +403,7 @@ const handleBatchDelete = async () => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '批量删除失败')
+      ElMessage.error(getErrorMessage(error, '批量删除失败'))
     }
   }
 }
@@ -448,7 +449,7 @@ const handleImport = () => {
       currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
       loadData()
     } catch (error: any) {
-      ElMessage.error(error.message || '导入失败')
+      ElMessage.error(getErrorMessage(error, '导入失败'))
     }
   }
   input.click()

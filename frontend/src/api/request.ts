@@ -7,6 +7,11 @@ import { logger } from '@/utils/logger'
 import { AuthStorage } from '@/utils/authStorage'
 import { safeArray } from '@/composables/useSafeData'
 import { isOfflineMode, getMockResponse } from '@/utils/offlineMock'
+import {
+  extractServerMessage,
+  isRawAxiosMessage,
+  statusFallbackMessage,
+} from '@/utils/getErrorMessage'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
@@ -239,44 +244,43 @@ async function _extractServerMessage(error: any): Promise<string> {
     try {
       const text = await data.text()
       const parsed = JSON.parse(text)
-      if (parsed?.detail) return typeof parsed.detail === 'string' ? parsed.detail : ''
-      if (parsed?.message) return typeof parsed.message === 'string' ? parsed.message : ''
-      return ''
+      // 与 getErrorMessage 共用同一套提取口径（含 422 数组 detail 的防御性兼容）
+      return extractServerMessage({ response: { data: parsed } })
     } catch {
       return ''
     }
   }
-  const detail = data?.detail
-  if (typeof detail === 'string' && detail) return detail
-  const message = data?.message
-  if (typeof message === 'string' && message) return message
-  return ''
+  return extractServerMessage(error)
 }
 
-/** 构建用户可读的错误消息（挂载到 error.userMessage） */
+/**
+ * 构建用户可读的错误消息（挂载到 error.userMessage）。
+ *
+ * **契约**：返回值永不为 axios 原文（`Request failed with status code 4xx`）。
+ * 服务端文案优先；没有可读文案时按状态码给中文兜底。
+ */
 async function _buildUserMessage(error: any): Promise<string> {
   const serverMsg = await _extractServerMessage(error)
+  if (serverMsg) return serverMsg
+
   const status = error?.response?.status
 
-  if (status === 422) {
-    const detail: any = error?.response?.data?.detail
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first = detail[0]
-      return `${first.loc?.join('.') || ''}: ${first.msg || first.message || ''}`.trim()
-    }
-    return serverMsg || '输入数据校验失败'
-  }
+  if (status === 422) return '请求参数有误，请检查填写内容后重试'
   // 注：401/403 由响应拦截器先行处理（登录过期/CSRF 重试），不会到达本函数
-  if (status === 404) return serverMsg || '请求的资源不存在'
-  if (status >= 500) return serverMsg || '服务器错误，请稍后重试'
-  if (status) return serverMsg || `请求失败 (${status})`
+  if (status === 404) return '请求的资源不存在或已被删除'
+  if (status) {
+    const byStatus = statusFallbackMessage(status)
+    return byStatus || `请求失败（HTTP ${status}），请稍后重试`
+  }
   if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
     return '请求超时，请重试'
   }
   if (error.code === 'ERR_NETWORK' || error.message?.includes('NetworkError')) {
     return '网络连接失败，请检查服务是否启动'
   }
-  if (typeof error?.message === 'string' && error.message && error.message !== 'Network Error') {
+  // 非 axios 的业务错误（页面自己 throw new Error('...')）才透传 message，
+  // 且必须先排除 axios 技术原文。
+  if (typeof error?.message === 'string' && error.message && !isRawAxiosMessage(error.message)) {
     return error.message
   }
   return '操作失败'

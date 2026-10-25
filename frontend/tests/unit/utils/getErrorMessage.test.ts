@@ -30,7 +30,7 @@ describe('utils/getErrorMessage — 零依赖错误消息提取', () => {
 
   it('无服务端字段 → 取 error.message（Network Error 除外）', () => {
     expect(getErrorMessage(new Error('boom'))).toBe('boom')
-    expect(getErrorMessage(new Error('Network Error'))).toBe('操作失败')
+    expect(getErrorMessage(new Error('Network Error'))).toBe('网络连接失败，请检查网络后重试')
   })
 
   it('message 非字符串/为空 → 兜底', () => {

@@ -132,6 +132,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { DIALOG_SM } from '@/config/dialog'
 import { ref, reactive, onMounted } from 'vue'
 import { Refresh, Key, Warning, Delete } from '@element-plus/icons-vue'
@@ -189,7 +190,7 @@ async function loadStatus() {
     status.latest_version = res.latest_version
     status.requires_rotation = res.requires_rotation
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '获取密钥状态失败'
+    const msg = getErrorMessage(e, '获取密钥状态失败')
     ElMessage.error(msg)
   } finally {
     loadingStatus.value = false
@@ -202,7 +203,7 @@ async function loadVersions() {
     const res = await secretsApi.getVersions()
     versions.value = res.versions
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '获取密钥版本失败'
+    const msg = getErrorMessage(e, '获取密钥版本失败')
     ElMessage.error(msg)
   } finally {
     loadingVersions.value = false
@@ -233,7 +234,7 @@ async function handleRotate() {
     ElMessage.success(res.message ?? '密钥轮换成功')
     await refreshAll()
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '密钥轮换失败'
+    const msg = getErrorMessage(e, '密钥轮换失败')
     ElMessage.error(msg)
   } finally {
     loadingRotate.value = false
@@ -256,7 +257,7 @@ async function handleCreate() {
     createForm.expires_days = undefined
     await refreshAll()
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '创建密钥失败'
+    const msg = getErrorMessage(e, '创建密钥失败')
     ElMessage.error(msg)
   } finally {
     loadingCreate.value = false
@@ -293,7 +294,7 @@ async function handleRevoke(row: VersionRow) {
     ElMessage.success(res.message ?? '密钥已撤销')
     await refreshAll()
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '撤销密钥失败'
+    const msg = getErrorMessage(e, '撤销密钥失败')
     ElMessage.error(msg)
   } finally {
     revokingId.value = null
@@ -317,7 +318,7 @@ async function handleCleanup() {
     ElMessage.success(res.message ?? `清理了 ${res.deleted_count} 个过期密钥`)
     await refreshAll()
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '清理失败'
+    const msg = getErrorMessage(e, '清理失败')
     ElMessage.error(msg)
   } finally {
     loadingCleanup.value = false

@@ -164,6 +164,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -206,7 +207,7 @@ const getMachineCode = async () => {
     machineData.value = response
     ElMessage.success('机器码获取成功')
   } catch (error: any) {
-    ElMessage.error(error.message || '获取机器码失败')
+    ElMessage.error(getErrorMessage(error, '获取机器码失败'))
   } finally {
     loading.value = false
   }
@@ -234,7 +235,7 @@ const generatePassword = async () => {
     generatedPassword.value = response
     ElMessage.success('初始密码已生成')
   } catch (error: any) {
-    ElMessage.error(error.message || '生成密码失败')
+    ElMessage.error(getErrorMessage(error, '生成密码失败'))
   } finally {
     generating.value = false
   }
@@ -262,7 +263,7 @@ const resetPassword = async () => {
     resetResult.value = response
     ElMessage.success('密码已重置')
   } catch (error: any) {
-    ElMessage.error(error.message || '重置密码失败')
+    ElMessage.error(getErrorMessage(error, '重置密码失败'))
   } finally {
     resetting.value = false
   }

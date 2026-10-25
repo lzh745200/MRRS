@@ -158,6 +158,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { ref, computed, onMounted } from 'vue'
@@ -261,7 +262,7 @@ const handleImport = async () => {
       ElMessage.success('导入成功')
     }
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.detail || error.message || '导入失败')
+    ElMessage.error(getErrorMessage(error, '导入失败'))
   } finally {
     importing.value = false
   }

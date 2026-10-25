@@ -180,6 +180,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
@@ -308,7 +309,7 @@ const loadData = async () => {
       pushSafe('/policies')
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '加载政策数据失败')
+    ElMessage.error(getErrorMessage(error, '加载政策数据失败'))
     pushSafe('/policies')
   } finally {
     loading.value = false
@@ -410,7 +411,7 @@ const handleSubmit = async () => {
 
       pushSafe('/policies')
     } catch (error: any) {
-      ElMessage.error(error.message || '保存失败')
+      ElMessage.error(getErrorMessage(error, '保存失败'))
     } finally {
       submitLoading.value = false
     }

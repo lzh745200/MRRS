@@ -13,6 +13,44 @@
 > 远超贵州 6° 的瓦片覆盖范围，**边缘瓦片必然 404**，于是一开视图就回退。
 > 另：`/map/tile-info` 未回传覆盖 bbox 与目录来源，现场无法判断“走 env 还是打包内置”。
 
+### Fixed（2026-10-25 追加：用户反馈 `Request failed with status code 422`）
+
+- **422 校验错误中文化 + 不再回显 input**（后端根因）：此前只注册了 pydantic 的
+  `ValidationError` 处理器，**FastAPI 的 `RequestValidationError` 无人接管** —— 422 返回的是
+  **英文数组** `detail: [{loc, msg: "Field required", input: "明文密码", ...}]`。三条链路因此全错：
+  前端按字符串读 `detail` 落空 → 把 axios 原文 `Request failed with status code XXX` 显示给用户；
+  文案是英文技术描述，基层操作员看不懂；`input` 回显把**明文密码**写进响应体与前端日志。
+  新增 `app/core/validation_errors.py`（字段名 → 中文标签、pydantic 校验类型 → 中文模板、丢弃
+  `input`/非标量 `ctx`、同文案去重、明细上限 20 条），并同时注册
+  `RequestValidationError` 与 `ValidationError` 两个处理器，返回统一信封
+  `{code:422, success:false, message, detail, errors}`（`detail` 与 `message` 同值，兼容历史读 `detail` 的视图）。
+- **前端统一出口保证永不显示技术原文**（`src/utils/getErrorMessage.ts` 重写）：新增
+  `isRawAxiosMessage()`（识别 `Request failed with status code N` / `Network Error` /
+  `timeout of Xms exceeded` / `Failed to fetch`）、`statusFallbackMessage()`（400/401/403/404/
+  409/413/429/5xx 各自中文兜底）、`extractServerMessage()`（message → detail(字符串) →
+  detail(数组，兼容历史 FastAPI 形态) → errors 数组 → 嵌套 error.message → 纯文本体）。
+  `getErrorMessage()` 依次尝试 userMessage → 服务端文案 → 状态码兜底 → fallback，
+  **任何分支都不会返回 axios 原文**；`userMessage` 若本身是原文也会被识别并降级。
+- **拦截器与视图层对齐**：`src/api/request.ts` 的 `_extractServerMessage` / `_buildUserMessage`
+  改为复用同一套提取口径（Blob 响应体也走它），并按状态码给中文兜底；20 处
+  `ElMessage.error(error.message || '…')` / `const msg = e instanceof Error ? e.message : '…'`
+  统一改为 `ElMessage.error(getErrorMessage(e, '…'))`（涉及 MachineCode / Profile /
+  ConflictResolution / Export / Import / policies Edit+List / Organization List /
+  EncryptionSettings / SecretsManagement / ControlPackage / ApprovalCenter）。
+- **新增门禁 `scripts/check_error_message_leaks.py`**（CI `static-analysis`）：扫描
+  `frontend/src` 面向用户的提示调用（`ElMessage.*` / `ElNotification.*` / `notify(`），
+  发现直接取 `error.message` 即失败；实现层（`getErrorMessage.ts` / `request.ts` /
+  `errorHandler.ts`）豁免。去注释时保留换行，报告行号与源文件一致。
+  单测 `backend/tests/unit/test_error_message_leak_gate.py`（11 项，含"注释不误报""块注释不打乱行号"
+  "实现层豁免"与当前仓库零泄漏）。
+
+### Tests / 验证（422 修复）
+
+- `backend/tests/unit/test_validation_errors_i18n.py`（35 项）：字段标签、类型模板、
+  ctx 缺失回落、未知类型、去重、明细上限、`input` 永不回显、真实 HTTP 422 形状。
+- `frontend/tests/unit/utils/errorMessageContract.test.ts`（37 项）：10 个状态码的
+  "绝不漏原文"回归、detail 数组/errors 数组/嵌套/纯文本体、业务 Error 透传、超时与网络错误。
+
 ### Fixed
 
 - **前端不再因边缘 404 整体回退**：TileLayer 增加 `bounds`（只在覆盖范围内请求）+ `errorTileUrl`

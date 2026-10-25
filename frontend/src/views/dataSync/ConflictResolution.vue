@@ -66,6 +66,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { ref, onMounted } from 'vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { useRoute } from 'vue-router'
@@ -137,7 +138,7 @@ const loadConflicts = async () => {
       }
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '加载冲突数据失败')
+    ElMessage.error(getErrorMessage(error, '加载冲突数据失败'))
   } finally {
     loading.value = false
   }
@@ -158,7 +159,7 @@ const resolveConflict = async (conflict: Conflict) => {
     // 从列表中移除已解决的冲突
     conflicts.value = conflicts.value.filter((c) => c.id !== conflict.id)
   } catch (error: any) {
-    ElMessage.error(error.message || '解决冲突失败')
+    ElMessage.error(getErrorMessage(error, '解决冲突失败'))
   }
 }
 
@@ -187,7 +188,7 @@ const resolveAll = async () => {
     pushSafe({ name: 'DataSyncImport' })
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '批量解决失败')
+      ElMessage.error(getErrorMessage(error, '批量解决失败'))
     }
   }
 }

@@ -241,6 +241,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { DIALOG_MD } from '@/config/dialog'
 import { unwrapList } from '@/utils/unwrapList'
 import { logger } from '@/utils/logger'
@@ -496,7 +497,7 @@ async function handleSubmit() {
     fetchDataWithSort()
     fetchStats()
   } catch (err: any) {
-    ElMessage.error(err.message || '操作失败')
+    ElMessage.error(getErrorMessage(err, '操作失败'))
   } finally {
     submitting.value = false
   }

@@ -479,6 +479,13 @@ jobs:
       # 如 2026-10-21 发现的 R33 单位授权两个 tab 不可见）
       - name: Console tab mapping check
         run: python scripts/check_console_tab_mapping.py
+      # 错误文案泄漏门禁：禁止把 axios 技术原文（Request failed with status code 4xx）
+      # 直接展示给用户 —— 必须走 getErrorMessage()。缘起 2026-10-25 用户反馈界面出现
+      # "Request failed with status code 422"：后端 422 返回英文数组 detail 且回显 input，
+      # 前端多处 ElMessage.error(error.message) 把原文抛给用户。
+      # 纯标准库扫描 frontend/src，无需安装依赖，故放在本作业。
+      - name: Error message leak check
+        run: python scripts/check_error_message_leaks.py
       # 后端综合安全审计：裸 db.commit()、跨组织删除、缺 ok_list/write_work_log/filter_by_data_scope
       - name: Backend comprehensive security audit
         run: python scripts/security_audit.py --verbose

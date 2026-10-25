@@ -127,6 +127,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -217,7 +218,7 @@ const loadStatus = async () => {
       encryptionStatus.value = response.data
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '加载状态失败')
+    ElMessage.error(getErrorMessage(error, '加载状态失败'))
   }
 }
 
@@ -252,7 +253,7 @@ const handleInitialize = async () => {
       }
     } catch (error: any) {
       if (error !== 'cancel') {
-        ElMessage.error(error.message || '启用加密失败')
+        ElMessage.error(getErrorMessage(error, '启用加密失败'))
       }
     } finally {
       initializing.value = false
@@ -285,7 +286,7 @@ const handleChangePassword = async () => {
         await loadStatus()
       }
     } catch (error: any) {
-      ElMessage.error(error.message || '修改密码失败')
+      ElMessage.error(getErrorMessage(error, '修改密码失败'))
     } finally {
       changing.value = false
     }
@@ -322,7 +323,7 @@ const handleDisable = async () => {
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '禁用加密失败')
+      ElMessage.error(getErrorMessage(error, '禁用加密失败'))
     }
   } finally {
     disabling.value = false

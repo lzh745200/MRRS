@@ -32,9 +32,14 @@ class TestExceptionHandlers:
         assert resp.status_code == 422
         body = resp.json()
         assert body["code"] == 422
-        assert body["message"] == "请求参数验证失败"
+        # 2026-10-25：message 改为「请求参数验证失败」+ 首条中文明细，
+        # 同时 detail 与 message 同值（兼容读 detail 的视图）。
+        assert body["message"].startswith("请求参数验证失败")
+        assert body["detail"] == body["message"]
         assert body["success"] is False
         assert isinstance(body["errors"], list) and body["errors"]
+        # 明细只保留 loc/msg/type，且不回显 input（可能含明文密码）
+        assert set(body["errors"][0]) == {"loc", "msg", "type"}
 
     def test_unhandled_exception_returns_500(self):
         client = TestClient(_build_app(), raise_server_exceptions=False)

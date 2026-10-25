@@ -142,6 +142,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { ref, onMounted } from 'vue'
@@ -273,7 +274,7 @@ const handleExport = async () => {
       ElMessage.warning(result.message)
     }
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.detail || error.message || '导出失败')
+    ElMessage.error(getErrorMessage(error, '导出失败'))
   } finally {
     exporting.value = false
   }
@@ -288,7 +289,7 @@ const handleDownloadByName = async (packageName: string) => {
   try {
     await downloadExportPackage(packageName)
   } catch (error: any) {
-    ElMessage.error(error.message || '下载失败')
+    ElMessage.error(getErrorMessage(error, '下载失败'))
   } finally {
     downloading.value = false
   }

@@ -123,9 +123,9 @@ describe('EncryptionSettings.vue', () => {
   })
 
   it('加载状态失败 → 错误提示', async () => {
-    mockGet.mockRejectedValue(new Error('load failed'))
+    mockGet.mockRejectedValue(new Error('密钥状态读取异常'))
     const w = await mountComp()
-    expect(ElMessage.error).toHaveBeenCalledWith('load failed')
+    expect(ElMessage.error).toHaveBeenCalledWith('密钥状态读取异常')
   })
 
   it('加载状态失败无 message → 默认文案', async () => {

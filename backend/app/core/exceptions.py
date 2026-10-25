@@ -2,9 +2,12 @@
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.exc import IntegrityError, OperationalError
+
+from app.core.validation_errors import build_validation_error_payload
 
 logger = logging.getLogger(__name__)
 
@@ -171,10 +174,21 @@ def register_exception_handlers(app: FastAPI):
 
     @app.exception_handler(PydanticValidationError)
     async def validation_error_handler(request: Request, exc: PydanticValidationError):
-        return JSONResponse(
-            status_code=422,
-            content={"code": 422, "message": "请求参数验证失败", "success": False, "errors": exc.errors()},
-        )
+        # 与 RequestValidationError 共用同一个中文化出口：两处必须给同一份
+        # {code,message,detail,errors} 结构，否则前端又会出现"有的 422 能读文案、
+        # 有的读不到"的双口径。
+        return JSONResponse(status_code=422, content=build_validation_error_payload(exc.errors()))
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(request: Request, exc: RequestValidationError):
+        """请求体 / 查询参数 / 路径参数校验失败（**422 的真正来源**）。
+
+        缺这条注册时 FastAPI 走内置处理器：``detail`` 是英文数组且回显 ``input``，
+        前端按字符串读 ``detail`` 落空 → 用户看到
+        ``Request failed with status code 422``；同时密码等敏感提交值被回显。
+        详见 ``app/core/validation_errors.py``。
+        """
+        return JSONResponse(status_code=422, content=build_validation_error_payload(exc.errors()))
 
     async def _db_constraint_handler(request: Request, exc: Exception):
         """IntegrityError / OperationalError 的统一出口。

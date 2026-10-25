@@ -295,14 +295,14 @@ describe('api/request — 拦截器未覆盖分支', () => {
     it('404 → 挂载资源不存在消息', async () => {
       const error = { response: { status: 404, data: {} }, config: makeConfig({ url: '/missing' }) }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('请求的资源不存在')
+      expect(error.userMessage).toBe('请求的资源不存在或已被删除')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
     it('500 → 挂载服务器错误消息', async () => {
       const error = { response: { status: 500, data: {} }, config: makeConfig() }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('服务器错误，请稍后重试')
+      expect(error.userMessage).toBe('服务器繁忙，请稍后重试')
       expect(mockElMessage.error).not.toHaveBeenCalled()
     })
 
@@ -315,7 +315,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('body.name: 必填')
+      expect(error.userMessage).toBe('必填')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
@@ -332,7 +332,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
     it('422 无 detail → 默认校验失败提示', async () => {
       const error = { response: { status: 422, data: {} }, config: makeConfig() }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('输入数据校验失败')
+      expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
@@ -517,7 +517,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
     it('404 无 config → 挂载资源不存在消息', async () => {
       const error = { response: { status: 404, data: {} } }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('请求的资源不存在')
+      expect(error.userMessage).toBe('请求的资源不存在或已被删除')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
@@ -541,7 +541,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('输入数据校验失败')
+      expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
@@ -551,7 +551,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe(': 必填')
+      expect(error.userMessage).toBe('必填')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
@@ -561,7 +561,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('name: 非法值')
+      expect(error.userMessage).toBe('非法值')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
@@ -571,7 +571,7 @@ describe('api/request — 拦截器未覆盖分支', () => {
         config: makeConfig(),
       }
       await expect(handlers.responseR(error)).rejects.toBe(error)
-      expect(error.userMessage).toBe('请求失败 (400)')
+      expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
       expect(mockElMessage.warning).not.toHaveBeenCalled()
     })
 
@@ -641,13 +641,13 @@ describe('responseR — Blob 错误体 / silent / 超时网络分支（覆盖率
   it('Blob 无 detail/message → 按状态码兜底', async () => {
     const error = blobError(JSON.stringify({ other: 1 }), 400)
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求失败 (400)')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
   })
 
   it('Blob 非法 JSON → catch 后按状态码兜底', async () => {
     const error = blobError('not-json', 404)
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求的资源不存在')
+    expect(error.userMessage).toBe('请求的资源不存在或已被删除')
   })
 
   it('silent 配置 → 错误挂载 __silent 标记（跳过全局兜底）', async () => {
@@ -702,13 +702,13 @@ describe('responseR — Blob 错误体 / silent / 超时网络分支（覆盖率
       config: makeConfig(),
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('body.name: field required')
+    expect(error.userMessage).toBe('field required')
     const error2 = {
       response: { status: 422, data: { detail: [{ msg: '仅msg无loc' }] } },
       config: makeConfig(),
     }
     await expect(handlers.responseR(error2)).rejects.toBe(error2)
-    expect(error2.userMessage).toBe(': 仅msg无loc')
+    expect(error2.userMessage).toBe('仅msg无loc')
     const error3 = {
       response: { status: 422, data: { detail: '字符串detail' } },
       config: makeConfig(),
@@ -750,13 +750,13 @@ describe('responseR — 消息提取残余分支（覆盖率补全 II）', () =>
   it('Blob detail 为非字符串（如对象）→ 忽略并走状态兜底', async () => {
     const error = blobError(JSON.stringify({ detail: { nested: 1 } }), 400)
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求失败 (400)')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
   })
 
   it('Blob message 为非字符串 → 忽略并走状态兜底', async () => {
     const error = blobError(JSON.stringify({ message: 123 }), 400)
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('请求失败 (400)')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
   })
 
   it('422 detail 数组元素用 message 键（无 msg）→ 取 message', async () => {
@@ -768,7 +768,7 @@ describe('responseR — 消息提取残余分支（覆盖率补全 II）', () =>
       config: makeConfig(),
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('query.year: field required')
+    expect(error.userMessage).toBe('field required')
   })
 
   it('带 response 无 status + ERR_NETWORK → 网络连接失败', async () => {
@@ -798,6 +798,6 @@ describe('responseR — 422 数组元素 msg/message 全缺省', () => {
       config: makeConfig(),
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
-    expect(error.userMessage).toBe('body.amount:')
+    expect(error.userMessage).toBe('请求参数有误，请检查填写内容后重试')
   })
 })

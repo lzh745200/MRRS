@@ -87,6 +87,7 @@
 </template>
 
 <script setup lang="ts">
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
@@ -125,7 +126,7 @@ async function handleFileChange(file: UploadFile) {
     const res = await post('/control-packages/import-preview', formData)
     preview.value = res.data || res
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '预览失败'
+    const msg = getErrorMessage(e, '预览失败')
     ElMessage.error(msg)
     preview.value = null
   }
@@ -148,7 +149,7 @@ async function handleImport() {
     importResult.value = res.data || res
     ElMessage.success('管控配置包导入成功')
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '导入失败'
+    const msg = getErrorMessage(e, '导入失败')
     ElMessage.error(msg)
   } finally {
     importing.value = false
