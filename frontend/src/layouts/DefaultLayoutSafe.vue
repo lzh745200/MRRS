@@ -213,6 +213,9 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <!-- ④ 同步状态胶囊：离线+介质传输下用户最关心"多久没对账"，原来埋在系统管理里 -->
+          <SyncStatusCapsule />
+
           <!-- 菜单搜索（Ctrl+K） -->
           <el-tooltip content="菜单搜索 (Ctrl+K)" placement="bottom">
             <span
@@ -335,6 +338,7 @@ import { useConfigStore, THEME_OPTIONS } from '@/stores/config'
 import { cancelAllRequests, freezeRequests } from '@/api/request'
 import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
 import MenuSearchDialog from '@/components/nav/MenuSearchDialog.vue'
+import SyncStatusCapsule from '@/components/nav/SyncStatusCapsule.vue'
 import AppearanceSettings from '@/components/settings/AppearanceSettings.vue'
 import {
   HomeFilled,

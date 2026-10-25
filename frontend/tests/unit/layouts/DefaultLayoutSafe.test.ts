@@ -440,7 +440,16 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
 
   it('已加载时不重复请求菜单', async () => {
     await mountLayout()
-    expect(mocks.get).not.toHaveBeenCalled()
+    // ④ 顶栏新增「同步状态胶囊」：挂载时会读一次 /data-sync/logs（只读、失败静默）。
+    // 本用例真正要守的语义是"菜单已加载就不再请求菜单"，故按 URL 精确断言。
+    const menuCalls = mocks.get.mock.calls.filter((call: unknown[]) =>
+      String(call[0]).includes('/menus')
+    )
+    expect(menuCalls).toHaveLength(0)
+    const syncCalls = mocks.get.mock.calls.filter((call: unknown[]) =>
+      String(call[0]).includes('/data-sync/logs')
+    )
+    expect(syncCalls.length).toBeLessThanOrEqual(1)
   })
 
   it('折叠按钮切换侧栏宽度并隐藏板块标题', async () => {

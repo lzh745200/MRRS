@@ -201,6 +201,27 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（④ 顶栏「数据同步状态」胶囊 + 台账抽屉）
+
+- **`composables/useSyncStatus.ts`**：只读 `/data-sync/logs`（**不新增后端接口**），
+  把"最近一次导入/导出距今多久"算成四挡：<1 天=已同步、<7 天=待同步、≥7 天=久未同步、
+  无记录=未同步（阈值 `SYNC_STALE_DAYS` 对外导出便于调整）。
+  - 纯函数 `formatRelative` / `computeLevel` / `pickLatest` / `summarize` 独立可测；
+    未来时间按 0 处理（时钟漂移不出现"-3 分钟前"），`created_at` 非法的脏记录跳过；
+  - 接口失败**不弹错**（顶栏常驻，弹错会污染每个页面），静默降级为"未同步"并在抽屉里说明原因；
+  - 兼容 `[] / {items} / {list} / {data} / {records}` 五种载荷形态。
+- **`components/nav/SyncStatusCapsule.vue`**：胶囊（状态点 + 相对时间，可键盘 Enter/Space 打开）
+  + `el-drawer` 台账（时间/动作/结果/说明），顶部汇总"最近同步 X 前（导入）"，附刷新按钮。
+  单根元素包裹 —— 多根 + 具名插槽组合会触发 "Codegen node is missing"（ErrorBoundary 同类坑）。
+- **接入顶栏**（`layouts/DefaultLayoutSafe.vue` 的 `header-right`，消息铃铛之前）。
+  动机：离线 + 介质传输下，用户最关心的不是"服务器通不通"，而是"我这份数据多久没跟上级对过"，
+  而这个信息原先埋在系统管理里没人看。
+- 实现取舍：展示格式化（动作中文名/时间/占位）抽到 `utils/syncLogFormat.ts` 并由计算属性求值 ——
+  写在 `el-table` 插槽里的话，单测 stub 掉表格后插槽不执行，函数覆盖率永远到不了 100%。
+- 测试：`useSyncStatus` **19 例**、`syncLogFormat` **8 例**、`SyncStatusCapsule` **11 例**，
+  三文件覆盖率均 **100/100/100/100**；布局测试 39 例（原断言"挂载不发请求"改为按 URL 精确断言
+  —— 菜单不重复请求仍被守住，新增的 `data-sync/logs` 只允许一次）。
+
 ### Added（③ 批量粘贴弹窗组件 `BulkPasteDialog`）
 
 - **`components/common/BulkPasteDialog.vue`**：粘贴 → 预览 → 校验 → 确认，只 emit 数据、
