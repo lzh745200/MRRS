@@ -12,6 +12,9 @@
 | 07:06 | Nightly Full Test 失败 | 后端全量覆盖率 `99.82 < 100`、前端 `src/utils` / `src/api` 覆盖率缺口（99.9/99.53） |
 | 12:55 | PR Checks 失败 | 前端覆盖率缺口（`src/utils` 99.91 / `src/api` 99.9）；后端 `MAX_PAGE_SIZE` 断言过期 |
 | 13:10 | PR Checks 失败 | `tests/unit/test_svc_batch.py::test_h10` 仍断言常量等于旧值 100（`constants.py` 已改为 200） |
+| 16:40 | PR Checks 失败 | E2E `village-lifecycle` 选择器 `.el-dialog,.el-drawer,form` 的 `.first()` 命中顶栏新增的**隐藏**同步抽屉 |
+| 16:45 | Nightly 失败 | Nightly 6 段分组漏 `backend/tests/*.py` 根目录 → `permission_packs.py` 夜间覆盖率 38%、总覆盖 99.82% |
+| 17:10 | PR Checks 失败 | `scripts/release_tag.py` 裸 `# pragma: no cover`（无理由）→ F2 棘轮 NEW=1 |
 
 ## 二、根因分类（按代价排序）
 
@@ -45,7 +48,11 @@
    （`git grep <常量名>`），pre-push 的 `check-constants-sync` 会拦。
 4. 覆盖率不是"大概齐"：前端 `src/**` 阈值 100%、后端 `--cov=app` 100%；
    新增分支必须带用例。本地至少要跑**改动文件所在目录的完整覆盖**（不要只跑"相关文件"）。
-5. 被并发推送取消的运行**不算验证**：用 `gh run list --branch main` 确认目标 commit
+5. **E2E 选择器必须可辨识"可见"**：`.el-dialog, .el-drawer, form` 这类多类型 `.first()` 会被
+   顶栏/全局的隐藏抽屉污染；断言一律用 `:visible` 过滤或 `data-testid`，不要依赖 DOM 顺序。
+6. **Nightly 与 PR Checks 必须同一测试覆盖面**：两套分组曾漏掉 `backend/tests/*.py` 根目录，
+   造成"PR 绿、Nightly 恒红"；`check_nightly_test_parity.py` 已把这条变成机械检查。
+7. 被并发推送取消的运行**不算验证**：用 `gh run list --branch main` 确认目标 commit
    确实有一次 `completed/success`，而不是 `cancelled`。
 
 ## 五、复盘检查清单（CI 红时按顺序看）
