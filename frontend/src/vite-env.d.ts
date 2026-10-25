@@ -34,3 +34,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/**
+ * 构建时由 vite.config.ts / vitest.config.ts 的 `define` 注入，
+ * 值等于根 `package.json` 的 `version`（版本号单一事实源）。
+ */
+declare const __APP_VERSION__: string

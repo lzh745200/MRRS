@@ -1,8 +1,20 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+// 与 vite.config.ts 口径一致：把 package.json 的版本注入 __APP_VERSION__，
+// 让被测代码里不再存在第二份「会忘记同步」的版本号字面量。
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const pkgVersion = (
+  JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')) as { version: string }
+).version
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkgVersion),
+  },
   plugins: [vue()],
   test: {
     globals: true,

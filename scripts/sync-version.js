@@ -216,20 +216,11 @@ const TARGETS = [
       return c.replace(/(\$PACKAGE_VERSION\s*=\s*")([^"]+)(")/, `$1${v}$3`);
     },
   },
-  {
-    name: "frontend/src/config/constants.ts (SYSTEM_VERSION fallback)",
-    file: "frontend/src/config/constants.ts",
-    describe(c) {
-      const m = c.match(/VITE_APP_VERSION \|\|\s*'([^']+)'/);
-      return m ? m[1] : null;
-    },
-    apply(c, v) {
-      return c.replace(
-        /(VITE_APP_VERSION \|\|\s*')(\d+\.\d+\.\d+)(')/g,
-        `$1${v}$3`,
-      );
-    },
-  },
+  // 已移出的目标（2026-10-25）：frontend/src/config/constants.ts 的 SYSTEM_VERSION 兜底。
+  // 该字面量改为构建时从 package.json 注入的 `__APP_VERSION__`
+  // （frontend/vite.config.ts + vitest.config.ts 的 define），源码里不再有
+  // 第二份版本号可被忘记提交 —— 历史上 v1.18.2 → v1.18.5 连续 4 次因它漏提交
+  // 导致「版本一致性门禁」与 constants.test.ts 同时变红。
   {
     // M53（2026-10-14）：根 package-lock.json 长期不在任何同步目标内，实测停在
     // 1.10.0（package.json 已 1.12.16）→ `npm ci` 元数据与包版本不一致。

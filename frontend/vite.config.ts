@@ -52,11 +52,30 @@ function spaFallbackPlugin(): PluginOption {
   }
 }
 
+/**
+ * 版本号单一事实源：构建时直接读 package.json 注入 `__APP_VERSION__`。
+ *
+ * 为什么不再用源码字面量做兜底：`frontend/src/config/constants.ts` 曾经写
+ * `VITE_APP_VERSION || '1.18.x'`，这串字面量是 `sync-version.js` 的同步目标之一，
+ * 于是每次升版本都得记得把它一起提交 —— 实测 v1.18.2 → v1.18.5 连续 4 次漏提交，
+ * 每次都让 `static-analysis`（版本一致性）与 `constants.test.ts` 同时变红。
+ * 现在兜底值来自 package.json 本身，源码里不再有第二份版本号可被忘记。
+ */
+function readPackageVersion(): string {
+  return (
+    JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')) as { version: string }
+  ).version
+}
+
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production'
 
   return {
     appType: 'spa',
+
+    define: {
+      __APP_VERSION__: JSON.stringify(readPackageVersion()),
+    },
 
     // 基础路径：绝对路径 `/` 适用于 FastAPI 根路径托管生产模式。
     // 注意：生产环境 FastAPI 在 http://host:port/ 根路径下挂载前端静态文件，
