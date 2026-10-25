@@ -102,6 +102,16 @@ describe('extractServerMessage', () => {
     )
   })
 
+  it('响应体本身是数组 → 按 detail 数组处理（顶层数组分支）', () => {
+    // CI 曾因缺此用例让 src/utils 分支覆盖率停在 99.03%（getErrorMessage.ts:99）。
+    expect(extractServerMessage(axiosError(422, [{ msg: '密码不能为空' }]))).toBe('密码不能为空')
+    expect(extractServerMessage(axiosError(400, ['第一条', '第二条']))).toBe('第一条；第二条')
+  })
+
+  it('数组元素只带 message 键（无 msg）也能读', () => {
+    expect(extractServerMessage(axiosError(422, [{ message: '仅 message 键' }]))).toBe('仅 message 键')
+  })
+
   it('errors 数组（本仓库 422 信封）也能读', () => {
     const data = { errors: [{ msg: '密码不能为空' }, { msg: '用户名长度不能少于 3 个字符' }] }
     expect(extractServerMessage(axiosError(422, data))).toBe(
