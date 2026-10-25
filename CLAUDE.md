@@ -66,7 +66,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,650 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,658 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -134,7 +134,7 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
 - `.env` 文件不纳入版本控制
 - 版本号**唯一权威来源**是根 `package.json` 的 `version`（后端经同步写入
   `backend/app/core/config.py` → `Settings.PROJECT_VERSION`）；
-  **23 处目标**（含 8 个 optional 项）由 `node scripts/sync-version.js --write` 单源同步，
+  **22 处目标**（含 8 个 optional 项）由 `node scripts/sync-version.js --write` 单源同步，
   `--check` 为 CI 门禁。⚠️ 旧脚本 `scripts/sync_version.py` 只覆盖 6 类文件且**无校验能力**，
   仅被构建流水线按 tag 使用，不要把它当作唯一同步手段
 - **发布流程**：本地门禁全绿 → 提交推送 → **确认 main 的 PR Checks 已绿** →

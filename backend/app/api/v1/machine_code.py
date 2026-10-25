@@ -12,12 +12,12 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.core.constants import ADMIN_ROLES, FACTORY_ADMIN_PASSWORD
+from app.core.constants import ADMIN_ROLES, DEFAULT_PAGE_SIZE, FACTORY_ADMIN_PASSWORD, MAX_PAGE_SIZE
 from app.core.database import get_db
 from app.core.response import ok_list
 from app.core.security import check_rate_limit, get_client_ip, get_current_user, get_password_hash
@@ -746,7 +746,7 @@ async def list_organization_pass_codes(
     organization_id: Optional[int] = None,
     status: Optional[str] = None,
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

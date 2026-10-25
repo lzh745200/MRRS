@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.models.machine_code import MachineCode
 from app.models.user import User
 from app.services.user_service import VALID_ROLES
-from app.core.constants import normalize_role
+from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, normalize_role
 from app.core.transaction import safe_commit
 from app.core.response import success_response
 from app.utils.pagination import clamp_offset_limit
@@ -349,7 +349,7 @@ async def update_current_user_profile(
 @router.get("")
 async def list_users(
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     keyword: Optional[str] = None,
     username: Optional[str] = None,
     is_active: Optional[bool] = None,

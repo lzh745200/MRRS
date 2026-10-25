@@ -6,10 +6,11 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.core.database import get_db
 from app.core.permission_utils import require_admin
 from app.core.response import ok_list, success_response
@@ -62,7 +63,7 @@ async def _get_user_from_token(authorization: Optional[str] = None) -> Optional[
 @router.get("")
 async def list_feedback(
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     type: Optional[str] = None,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),

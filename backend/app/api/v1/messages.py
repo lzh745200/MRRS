@@ -17,6 +17,8 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
@@ -182,7 +184,7 @@ async def get_messages(
     start_date: Optional[str] = Query(None, description="开始时间 (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="结束时间 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=500),
+    page_size: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     current_user=Depends(get_current_user),
     service: MessageService = Depends(get_message_service),
 ):

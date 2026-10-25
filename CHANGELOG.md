@@ -5,6 +5,88 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.6] - 2026-10-25 — 仓库卫生与门禁加固（scripts 纳入 flake8、全仓 flake8 归零）
+
+> **背景**：本仓文档声明的"flake8 零错误门禁"实际只覆盖 `backend/app/`；
+> 2026-10-25 实测 `cd backend && flake8 app/` **79 条违规**、`scripts/` 19 条违规，
+> 而这两处都不在任何 CI 步骤的有效拦截范围内。本版把口径补齐并把存量归零。
+
+### Fixed
+
+- **`backend/app/` flake8 归零（79 → 0）**：78 处 `E302/E305`（`app/models/` 14 个文件
+  顶层定义之间只有 1 个空行）+ 1 处 `F401`（`models/monitoring.py` 未使用的 `JSON` 导入）。
+  修法为纯空行/导入整理，无逻辑变更。
+- **`scripts/` flake8 归零（19 → 0）**：未使用导入 4 处（`run_backend_tests_segmented.py`
+  的 `shutil`、`docs/extract_api_endpoints.py` 的 `re`、`security/pii_scan.py` 的 `io`/`os`）、
+  `E401`×2 / `E302` / `E305` / `E303` 各 1（`pre_commit_hooks.py`、`ppt_overflow_check.py`）、
+  `W292` 缺末尾换行 ×2、`W504` 行尾二元运算符 ×2、`F541` 空 f-string ×1、
+  `E501` 超长行 ×5（`cleanup.py`×3、`ppt_overflow_check.py`、`run_backend_tests_segmented.py`）。
+- **`frontend/package.json` 补 `engines`**：`node: ^20.19.0 || >=22.12.0`
+  （对齐 Vite 7 的实际要求；本机实测 Node 25.2.1）。此前无任何约束。
+
+### Added
+
+- **CI 增补 `scripts/` flake8 步骤**（`.github/workflows/pr-checks.yml` 的 `lint` 作业）：
+  `flake8 ../scripts/ --max-line-length=120 --count --max-complexity=40 --exclude ../scripts/archive`。
+  复杂度阈值放宽到 40 的**理由**：`scripts/` 多为一次性流程脚本（`cleanup.py` 35、
+  `run_backend_tests_segmented.py` 27、`ppt_overflow_check.py` 24、`audit_static_assets.py` 19），
+  `main()` 天然较长；其余规则与 `app/` 完全同口径，`scripts/archive/` 与仓库根
+  `.flake8` 的 exclude 保持一致（本地直跑 `flake8 scripts/` 仍是 0）。
+
+### Changed
+
+- 版本 1.18.5 → 1.18.6，`node scripts/sync-version.js --write` 同步 22 处目标（14 个文件已更新）。
+- `gh auth setup-git` 已配置（`credential.https://github.com.helper` 指向 gh），
+  https 协议的 git 操作可用 gh 凭证；本仓 `origin` 仍为 SSH，推送走既有 `id_rsa` 不变。
+
+### Tests
+
+- 待完整回归结果回填：`scripts/run_backend_tests_segmented.py`（后端分段全量）
+  + `cd frontend && npm test -- --run`（前端全量）+ `vue-tsc --noEmit`。
+
+### Fixed（2026-10-25 追加②：版本号去"双字面量"）
+
+- **`SYSTEM_VERSION` 兜底不再在源码里写版本号字面量**：`frontend/src/config/constants.ts`
+  改为 `import.meta.env.VITE_APP_VERSION || __APP_VERSION__`，而 `__APP_VERSION__` 由
+  `vite.config.ts` / `vitest.config.ts` 的 `define` 在构建期从根 `package.json` 注入
+  （类型声明见 `src/vite-env.d.ts`）。
+  **为什么**：那串字面量是 `sync-version.js` 的同步目标之一，每升一次版本都得记得一起提交；
+  实测 v1.18.2 → v1.18.5 **连续 4 次漏提交**，每次都让 `static-analysis` 的
+  Version consistency check 与 `constants.test.ts` 同时变红。现在源码里只有一份版本号
+  （`package.json`），**不存在可被忘记的副本**。
+- **`sync-version.js` 目标 23 → 22 处**（摘掉 `frontend/src/config/constants.ts`）：
+  该文件不再需要同步，`--check` 也不再检查它。文档同步更新
+  （`CLAUDE.md` / `AGENTS.md` / `docs/03-开发文档/06-运维文档/技术栈说明.md` /
+  `docs/04-部署文档/01-Windows部署/构建打包指南.md`）。
+
+### Fixed（2026-10-25 追加③：清理 26 个零引用死字段）
+
+- **新增迁移 `r43_prune_dead_columns_001`**：清掉 `scripts/scan_dead_columns.py` 扫出的
+  **26 条**「模型里声明、`app/` 非模型代码零引用、`frontend/src` 零引用」的列 ——
+  它们既无写入路径也无读取路径，留着等于让 schema 撒谎（与 r41 删 `issues` 表同一理由）。
+  沿用 r35/r36/r39 的**列级三分支**契约：列不存在→跳过；整列空/0→`DROP COLUMN`；
+  **有数据→改名 `legacy_<列名>` 归档，数据一行不丢**；归档列已存在→保留原列交人工确认。
+- **真实库演练（开发库副本，r42 → r43）**：`funds.budget_status`（12 行）、
+  `machine_codes.restrict_permissions`（1 行）有值 → 归档为 `legacy_*` 且行数不变；
+  其余 24 列为空 → 删除。若日后要恢复这些功能，列名与 DDL 都在迁移历史里，可逆。
+- **同步清理**：14 个模型文件移除字段声明；`test_json_column_mutability_ratchet`
+  基线 28→25（JSON 列）与 27→24（已复核列）、`test_money_precision` 金额列清单、
+  `test_funds_api_extended` / `fund_factory` / `village_factory` 的字段入参。
+- **新增测试 `test_migration_r43_prune_dead_columns.py`（10 例）**：三分支、0 值视为未填、
+  幂等、归档列已存在、表/列缺失、清单形状、修订链接 r42→r43。
+
+### Tests（2026-10-25 追加②③验证）
+
+- 后端受影响测试 **174 例全过**（含 r43 迁移 10 例）；`alembic heads` 单 head
+  `r43_prune_dead_columns_001`；三层对齐门禁（含空库 `alembic upgrade head`）**通过**。
+- 前端：`vue-tsc --noEmit` 0 错误；`constants.test.ts` 7 例全过（兜底值 = `package.json`
+  版本，证明 `define` 注入生效）；`sync-version.js --check` 通过（22 处目标）。
+- **⚠️ 本机 `npm run build` 当前失败，与本次改动无关**（已隔离证明）：报
+  `[vite:esbuild-transpile] remove ...\Temp\esbuild-<hash>: Access is denied`。
+  把本次 4 个前端文件还原成 HEAD 版本后**同样失败**，属本机环境问题
+  （残留 esbuild 服务进程锁住临时二进制 + Defender 实时扫描；CI 为 Linux runner 不受影响）。
+  本机如需出包，先 `Get-Process esbuild | Stop-Process` 并清空 `%TEMP%\esbuild-*` 后重试。
+
 ## [1.18.5] - 2026-10-25 — 修正 1.18.4 的 bbox 补丁未生效（真正取最细 zoom）
 
 > **1.18.4 的事故**：声称"取最细 zoom"，但源码编辑未命中实际结构（`scan_tiles_dir`
@@ -25,6 +107,24 @@
 - `test_tile_info_coverage_bbox.py` / `test_map_tile_info_diagnostics.py` /
   `test_offline_map_service.py` / `test_tiles_pipeline.py` 合计 **163 passed**；flake8 0。
 - 真机（打包后端）复验：`tile-info.bbox` 为上述辖区量级；覆盖区内瓦片 200、区外 404。
+
+### Fixed（⑥ 分页硬上限：4 处裸分页 + 1 处 500 上限）
+
+- **`page_size` 有 4 处完全没有上限**（`machine_code` / `organization` / `auth/users` / `feedback`
+  都是裸 `page_size: int = 20`），另有 `messages` 一处 `le=500`。离线单机里这不是"慢一点"：
+  一次实例化上千 ORM 对象（含加密 PII 列），Electron 侧拿到超大 JSON 会卡死，
+  现场表现是"点一下列表就白屏"。全部改为
+  `Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)` / `Field(...)`。
+- **`MAX_PAGE_SIZE` 100 → 200**：不能定 100 —— 前端已有 **21 处 `page_size: 200`**
+  （地图/帮扶村/转交人搜索等"取一屏全量"场景），定 100 会把这些调用直接打成 422，
+  等于用门禁制造一批线上故障；200 也是本仓既有的事实上限（18 处端点本就写 `le=200`）。
+- **新增门禁 `backend/scripts/check_pagination_cap.py`**：任何 `page_size` 声明同行缺 `le=`
+  或 `le` 超过 `MAX_PAGE_SIZE` 即失败（CI `static-analysis` 的 `Pagination cap guard`）。
+  另有 `backend/tests/unit/test_pagination_cap_gate.py`（**8 例**）：门禁能红（裸声明 / le=500 /
+  目录缺失）、能绿（`le=MAX_PAGE_SIZE` / 更严格字面量）、真实仓库通过、
+  且 `MAX_PAGE_SIZE==200` 与前端调用习惯一致。
+- 验证：门禁 EXIT=0；新增 8 例全通过；受影响端点测试
+  `test_auth_users_api` / `test_api_messages_full` / `test_organization_management` **89 passed**。
 
 ### Added（② 场景预设 + 首次启动按视口自适应）
 

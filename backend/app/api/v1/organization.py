@@ -12,11 +12,12 @@ from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ...core.cache import cache_manager
+from ...core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from ...core.database import get_db
 from ...core.logging import logger
 from ...core.permission_utils import is_superuser
@@ -189,7 +190,7 @@ class OrganizationListResponse(BaseModel):
     items: List[OrganizationResponse] = []
     total: int = 0
     page: int = 1
-    page_size: int = 20
+    page_size: int = Field(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
 
 
 # ==================== API端点 ====================

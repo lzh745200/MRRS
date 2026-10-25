@@ -384,6 +384,11 @@ jobs:
       - run: pip install flake8 mypy bandit
       # flake8 零错误门禁
       - run: cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
+      # 运维脚本同一口径零错误门禁。复杂度阈值放宽到 40：scripts/ 下多为一次性
+      # 流程脚本（清理/打包审计/分段测试执行器），main() 天然较长；其余规则
+      # （未用导入、重复导入、空行、EOF 换行、行内换行运算符等）与 app/ 一致。
+      # scripts/archive/ 为已归档的一次性迁移脚本，与仓库根 .flake8 的 exclude 保持一致。
+      - run: cd backend && python -m flake8 ../scripts/ --max-line-length=120 --count --max-complexity=40 --exclude ../scripts/archive
       # mypy 类型检查（非阻断，但报告类型问题）
       - name: mypy type check
         run: cd backend && python -m mypy app/ --config-file=mypy.ini --ignore-missing-imports || true
@@ -458,6 +463,12 @@ jobs:
       # 软删除过滤静态扫描：新增对软删模型的无 is_active 聚合/列表查询即失败
       - name: Soft-delete filter guard
         run: python backend/scripts/check_soft_delete_usage.py
+      # 分页硬上限（2026-10-25）：page_size 必须写 le=MAX_PAGE_SIZE。
+      # 离线单机里无上限不是"慢一点"——一次实例化上千 ORM 对象（含加密 PII 列），
+      # Electron 侧拿到超大 JSON 会卡死，现场表现是"点一下列表就白屏"。
+      # 排查时发现 4 处裸 `page_size: int = 20` 与 1 处 le=500，本门禁防复发。
+      - name: Pagination cap guard
+        run: python backend/scripts/check_pagination_cap.py --root backend
       # P-1/P-2/P-3 预防性棘轮门禁（遗留风险治理计划 2026-09-13）：
       # os._exit 绕 lifespan / subprocess text=True 缺 encoding / rmtree 后缺
       # dirs_exist_ok 的 copytree / ZIP 与上传无界读取 / 上传端点未限长 /

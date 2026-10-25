@@ -10,7 +10,15 @@ ANALYTICS_CACHE_PREFIX = "analytics:"
 
 # ── 分页 ──
 DEFAULT_PAGE_SIZE = 20
-MAX_PAGE_SIZE = 100
+# 分页**硬上限**（2026-10-25 由 100 上调为 200）：
+#   1) 前端已有 21 处 `page_size: 200`（地图/帮扶村/转交人搜索等"取一屏全量"场景），
+#      上限若为 100，这些调用会直接 422 —— 等于用一个门禁制造一批线上故障；
+#   2) 200 是本仓既有的**事实上限**：18 处端点本来就写 `le=200`；
+#   3) 仍需上限的原因：离线单机里 `page_size=1000` 会一次实例化上千 ORM 对象
+#      （含加密 PII 列），Electron 侧拿到超大 JSON 会卡死，现场表现是"点一下列表白屏"。
+# 任何新的分页参数必须写 `Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)`，
+# 由 backend/scripts/check_pagination_cap.py 门禁保证。
+MAX_PAGE_SIZE = 200
 
 # ── HTTP ──
 # Nginx 非标准状态码：客户端在服务器完成响应前关闭了连接
