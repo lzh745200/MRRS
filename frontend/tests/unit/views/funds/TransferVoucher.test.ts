@@ -79,6 +79,13 @@ function mountComp() {
     global: {
       renderStubDefaultSlot: true,
       stubs: {
+        // ⑤ OCR 建议组件：这里只验证"页面如何消费建议"，识别本身在组件自身测试里覆盖
+        OcrVoucherSuggest: {
+          name: 'OcrVoucherSuggest',
+          props: ['current', 'targets'],
+          emits: ['apply', 'apply-all'],
+          template: '<div class="ocr-suggest-stub" />',
+        },
         'el-page-header': {
           name: 'ElPageHeader',
           template: '<div class="el-page-header-stub"><slot name="content" /><slot /></div>',
@@ -509,6 +516,95 @@ describe('凭证附件上传（funcs@179 handleVoucherUpload / funcs@78 http-req
     expect(ElMessage.error).toHaveBeenCalledWith('上传失败，请稍后重试')
     expect(ElMessage.success).not.toHaveBeenCalled()
     expect(vm.uploadingId).toBeNull()
+    wrapper.unmount()
+  })
+})
+
+// ⑤ OCR 字段级建议的落点（2026-10-26）
+describe('③/⑤ OCR 建议接入新建对话框', () => {
+  function ocrStub(wrapper: ReturnType<typeof mountComp>) {
+    return wrapper.findComponent({ name: 'OcrVoucherSuggest' })
+  }
+
+  it('ocrCurrent 反映表单当前值（供组件展示"将会覆盖成什么"）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.form.amount = 12.5
+    vm.form.transfer_date = '2026-01-02'
+    await flushPromises()
+
+    expect(ocrStub(wrapper).props('current')).toEqual({
+      amount: '12.5',
+      transfer_date: '2026-01-02',
+    })
+    wrapper.unmount()
+  })
+
+  it('金额字段为空时 current 给空串（不显示 0）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.form.amount = 0
+    await flushPromises()
+    expect(ocrStub(wrapper).props('current').amount).toBe('')
+    wrapper.unmount()
+  })
+
+  it('采纳金额 → 写入 form.amount', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    ocrStub(wrapper).vm.$emit('apply', { key: 'amount', value: '1234.5' })
+    await flushPromises()
+    expect(vm.form.amount).toBe(1234.5)
+    wrapper.unmount()
+  })
+
+  it('采纳日期 → 写入 form.transfer_date；未知字段被忽略', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    ocrStub(wrapper).vm.$emit('apply', { key: 'transfer_date', value: '2026-03-04' })
+    await flushPromises()
+    expect(vm.form.transfer_date).toBe('2026-03-04')
+
+    ocrStub(wrapper).vm.$emit('apply', { key: 'voucher_no', value: 'X-1' })
+    await flushPromises()
+    expect(vm.form.voucher_no).toBe('')
+    wrapper.unmount()
+  })
+
+  it('非法金额（非数字 / ≤0）不写入，避免把 NaN 塞进表单', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.form.amount = 9
+
+    ocrStub(wrapper).vm.$emit('apply', { key: 'amount', value: 'abc' })
+    await flushPromises()
+    expect(vm.form.amount).toBe(9)
+
+    ocrStub(wrapper).vm.$emit('apply', { key: 'amount', value: '0' })
+    await flushPromises()
+    expect(vm.form.amount).toBe(9)
+    wrapper.unmount()
+  })
+
+  it('全部采纳 → 两个字段一起写入并提示核对', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    ocrStub(wrapper).vm.$emit('apply-all', { amount: '500', transfer_date: '2026-05-06' })
+    await flushPromises()
+
+    expect(vm.form.amount).toBe(500)
+    expect(vm.form.transfer_date).toBe('2026-05-06')
+    expect(ElMessage.success).toHaveBeenCalledWith('已填入 2 个字段，请核对后保存')
     wrapper.unmount()
   })
 })

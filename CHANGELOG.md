@@ -201,6 +201,19 @@
 - 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
   **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
 
+### Added（⑤ 接入活体页面：转账凭证新建对话框）
+
+- `views/funds/TransferVoucher.vue` 的新建对话框接入 `OcrVoucherSuggest`：
+  「识别凭证图片 → 逐字段建议 → 采纳/忽略」，落点是本页真实存在的两个字段
+  `amount`（金额万元）与 `transfer_date`（划转日期）—— 正好是后端 OCR 的结构化返回项。
+- **字段写入做类型防御**：金额只在 `Number.isFinite && > 0` 时写入，非法值（`abc` / `0`）直接忽略，
+  避免把 `NaN` 塞进 `el-input-number` 造成"看着有值、提交为空"；未知字段（如 `voucher_no`）一律不写。
+- 「全部采纳」会提示"已填入 N 个字段，请核对后保存"——识别结果仍需人工确认后才提交，
+  不会绕过表单校验与审计留痕。
+- 测试：该页 **23 → 29 例**（`ocrCurrent` 反映表单值、金额为空不给 `0`、采纳金额/日期、
+  未知字段忽略、非法金额拒绝写入、全部采纳提示），页面覆盖率 **100/100/100/100**；
+  `eslint src --max-warnings=0`、`vue-tsc`、色值棘轮 146/146 全绿。
+
 ### Added（⑤ 经费凭证 OCR「字段级建议」——把"识别完还得自己抄"接上）
 
 - **发现**：后端 `POST /funds/ocr-voucher`（`{text, amount, date, confidence, engine}`）早已实现，

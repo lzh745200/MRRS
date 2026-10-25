@@ -90,6 +90,8 @@
 
     <!-- 新建对话框 -->
     <el-dialog v-model="showCreateDialog" append-to-body title="新建转账凭证" :width="DIALOG_MD">
+      <!-- ⑤ 凭证图片识别：识别结果拆成逐字段建议，用户逐条采纳（不整段覆盖表单） -->
+      <OcrVoucherSuggest :current="ocrCurrent" @apply="onOcrApply" @apply-all="onOcrApplyAll" />
       <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
         <el-form-item label="凭证编号" prop="voucher_no" required
           ><el-input v-model="form.voucher_no"
@@ -126,10 +128,11 @@
 
 <script setup lang="ts">
 import { DIALOG_MD } from '@/config/dialog'
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { fundLifecycleApi } from '@/api/fundLifecycle'
+import OcrVoucherSuggest from '@/components/funds/OcrVoucherSuggest.vue'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { logger } from '@/utils/logger'
 
@@ -166,6 +169,34 @@ const formRules: FormRules = {
 }
 
 const uploadingId = ref<number | null>(null)
+
+// ── ⑤ OCR 字段级建议的落点：金额与转账日期是后端结构化返回的两个字段 ──
+const ocrCurrent = computed(() => ({
+  amount: form.amount ? String(form.amount) : '',
+  transfer_date: form.transfer_date || '',
+}))
+
+function onOcrApply(payload: { key: string; value: string }): void {
+  applyOcrField(payload.key, payload.value)
+}
+
+function onOcrApplyAll(payload: Record<string, string>): void {
+  for (const [key, value] of Object.entries(payload)) applyOcrField(key, value)
+  ElMessage.success(`已填入 ${Object.keys(payload).length} 个字段，请核对后保存`)
+}
+
+/** 只认金额与日期两类字段；金额非法（非数字）时拒绝写入，避免把 NaN 塞进表单。 */
+function applyOcrField(key: string, value: string): void {
+  if (key === 'amount') {
+    const num = Number(value)
+    if (!Number.isFinite(num) || num <= 0) return
+    form.amount = num
+    return
+  }
+  if (key === 'transfer_date') {
+    form.transfer_date = value
+  }
+}
 
 async function handleVoucherUpload(voucherId: number, file: File) {
   uploadingId.value = voucherId
