@@ -10,11 +10,15 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# 并发组按 github.ref 区分：push 为 refs/heads/main、PR 为 refs/pull/N/merge，
-# 二者互不取消。
+# 并发组按 github.ref 区分：push 为 refs/heads/main、PR 为 refs/pull/N/merge。
+# cancel-in-progress **只对 PR 生效**（2026-10-25 修正）：
+# 原来对 main 也取消，导致连续快速推送时前一次运行被中断 —— 实测 2026-10-25 的
+# main 上连续 5 次运行**全部 cancelled**，那段时间等于没有任何一次完整验证，
+# 而"推送成功"极易被误当成"验证通过"。main 改为排队（不取消），
+# 配合 scripts/check_main_ci.py（打 tag 前确认该 commit 的 PR Checks 已 success）。
 concurrency:
   group: pr-checks-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -138,6 +142,23 @@ jobs:
           name: branch-coverage
           path: backend/coverage-branch.json
           if-no-files-found: ignore
+      # 覆盖率缺口可见清单（2026-10-25）：`fail_under=100` 只告诉"红了"，
+      # 这一步把未覆盖语句行/分支按文件列出来，写进 $GITHUB_STEP_SUMMARY 并留 artifact，
+      # 避免下一个人用 pragma/skip 糊过去（豁免理由棘轮仍会拦，但先给他一条正路）。
+      - name: Coverage gaps (backend)
+        if: always()
+        run: |
+          JSON=backend/coverage-branch.json
+          [ -f "$JSON" ] || JSON=backend/coverage.json
+          python scripts/coverage_gaps.py --coveragepy "$JSON" --out coverage-gaps-backend.md --title "后端覆盖率缺口"
+      - name: Upload coverage gaps (backend)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-gaps-backend
+          path: coverage-gaps-backend.md
+          if-no-files-found: warn
+          retention-days: 30
       - name: Report backend failure
         if: failure()
         run: |
@@ -292,6 +313,20 @@ jobs:
           done
           [ "$overall" -eq 0 ] || echo "::error::覆盖率门禁连续 2 次失败（含 OOM 边缘可能）—— 详见上方日志"
           exit $overall
+      # 覆盖率缺口可见清单（2026-10-25）：把"红一次"变成"照着修"。
+      # 只写 $GITHUB_STEP_SUMMARY（运行页直接可见，**不需要任何写权限**；
+      # 不用 PR 评论是因为受限仓库的 `pull-requests: write` 常缺失、会让步骤白红）。
+      - name: Coverage gaps (frontend)
+        if: always()
+        run: python3 scripts/coverage_gaps.py --istanbul frontend/coverage/coverage-final.json --out coverage-gaps-frontend.md --title "前端覆盖率缺口"
+      - name: Upload coverage gaps (frontend)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-gaps-frontend
+          path: coverage-gaps-frontend.md
+          if-no-files-found: warn
+          retention-days: 30
       - name: Report vitest failure
         if: failure()
         run: |

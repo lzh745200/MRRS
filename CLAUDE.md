@@ -140,10 +140,15 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
 - **发布流程**：本地门禁全绿 → 提交推送 → **确认 main 的 PR Checks 已绿** →
   `git tag v<版本> && git push origin v<版本>`
   → Actions 自动产出 **Windows x64 安装包** 与 **麒麟 ARM64 deb** 并发布 Release（两个安装包）。
+  "确认已绿"用脚本，不靠眼睛：**`python scripts/check_main_ci.py`**（默认只查一次；
+  `--wait-minutes 40` 可等）。它挡的是一类真实误判——2026-10-25 实测 main 上连续 5 次
+  PR Checks **全部 cancelled**（并发组被后续推送打断），那段时间"推送成功"但**零完整验证**；
+  `pr-checks.yml` 已改为 `cancel-in-progress` **只对 PR 生效**，main 改为排队。
   两个构建工作流的"发布前置门禁"（`scripts/check_release_gate.py`）会轮询该 commit 的
   PR Checks 结论，等待上限 **90 分钟**（2026-10-25 由 30 上调：本仓 PR Checks 实测
   17.4~30.2 分钟，原值 30 与最慢一次压线，正常"推 main 立刻打 tag"会超时变红）。
-  该约束由 `electron/tests/ci-wiring.test.js` 守卫（等待预算 <60 分钟即测试失败）。
+  该约束由 `electron/tests/ci-wiring.test.js` 守卫（等待预算 <60 分钟、或 main 恢复取消、
+  或缺少 check_main_ci.py 接线，都会让测试失败）。
 - **更新日志必须及时** (2026-10-25): `CHANGELOG.md` 是唯一账本 —— **每次改动在同一个提交里**
   更新当前版本段（`## [x.y.z] - <日期> — <一句话主题>`），写清「改了什么 / 为什么 / 怎么验证」，
   不要留到发版前补（v1.18.1 就漏记了 4 条最贵的踩坑：E2E 选择器失效、Release 正文 0 字符、

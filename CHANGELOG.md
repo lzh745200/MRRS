@@ -26,6 +26,29 @@
   `test_offline_map_service.py` / `test_tiles_pipeline.py` 合计 **163 passed**；flake8 0。
 - 真机（打包后端）复验：`tile-info.bbox` 为上述辖区量级；覆盖区内瓦片 200、区外 404。
 
+### Changed（CI 治理：让"验证过"可被证明，让"红了"能照着修）
+
+- **main 不再被后续推送取消运行**：`pr-checks.yml` 的 `concurrency.cancel-in-progress`
+  由 `true` 改为 `${{ github.event_name == 'pull_request' }}`。
+  动机是实测出来的：2026-10-25 main 上连续 **5 次** PR Checks 全部 `cancelled`
+  （每次推送打断前一次），那段时间"推送成功"但**一次完整验证都没有** ——
+  这类静默空窗最容易被误读成"CI 过了"。main 改为排队，PR 仍取消（快速迭代优先）。
+- **新增 `scripts/check_main_ci.py`（打 tag 前的显式确认）**：查询目标 commit 的 PR Checks
+  结论，`success` → 0；无运行/仍在跑/失败/被取消 → 非 0 并给出运行链接与建议
+  （被取消时提示"通常是并发打断，重跑或等新 push"）。支持 `--wait-minutes` 等待与 `--json`。
+  踩坑：GitHub 的 `head_sha` 过滤**只认完整 40 位**，传 7 位短号返回空数组
+  （`1c41ef5` → total_count 0；补全后 → 1），已用 `git rev-parse` 自动补全。
+- **覆盖率缺口变可见清单**：新增 `scripts/coverage_gaps.py`（同时解析 coverage.py JSON 与
+  istanbul `coverage-final.json`，内置 `--selftest`），在 backend / frontend 两个作业里以
+  **`if: always()`** 生成 Markdown 表（按缺口排序、列出未覆盖行与未覆盖分支），写入
+  `$GITHUB_STEP_SUMMARY` 并留存 artifact 30 天。
+  选 `$GITHUB_STEP_SUMMARY` 而不是 PR 评论：受限仓库常缺 `pull-requests: write`，
+  评论失败会让步骤白红；摘要卡在运行页无需任何写权限。
+- **新增 CI 策略守卫** `electron/tests/ci-policy.test.js`（4 例）：main 不得恢复取消、
+  `check_main_ci.py` 必须存在且被发布流程文档引用、`coverage_gaps.py` 必须支持双格式与自测、
+  两个作业必须都有 `if: always()` 的缺口生成步骤。
+  已实证能红：把 `cancel-in-progress` 改回 `true` → **EXIT=1**；还原 → **EXIT=0**。
+
 ## [1.18.4] - 2026-10-25 — 瓦片覆盖 bbox 取最细 zoom（修正 1.18.3 概览瓦片撑大 maxBounds）
 
 > 1.18.3 的实测 bbox 取"所有 zoom 的并集"，但 **z5 概览瓦片按全球网格对齐**，
