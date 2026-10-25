@@ -4,11 +4,18 @@
 import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
 
-import { useUiPrefs } from '@/composables/useUiPrefs'
+import { useUiPrefs, UI_PRESET_OPTIONS, type UiPreset } from '@/composables/useUiPrefs'
 import { THEME_OPTIONS, DEFAULT_THEME, useConfigStore } from '@/stores/config'
 
 const configStore = useConfigStore()
-const { prefs, setPrefs, resetPrefs } = useUiPrefs()
+const { prefs, preset, setPrefs, applyPreset, resetPrefs } = useUiPrefs()
+
+const presetOptions = UI_PRESET_OPTIONS
+
+/** 选场景 = 一次性覆盖四个字段（不留"大字 + 舒适行高"这类叠加残余）。 */
+function onPreset(value: string | number | boolean | undefined) {
+  applyPreset(String(value) as UiPreset)
+}
 
 const themeOptions = computed(() => THEME_OPTIONS)
 const currentTheme = computed({
@@ -41,6 +48,28 @@ function onReset() {
 
 <template>
   <div class="appearance-settings" data-testid="appearance-settings">
+    <!-- ② 场景预设：把"调 4 个开关"降为"选 1 个场景"。选中后四个字段一次性覆盖；
+         手动改任一开关即变"自定义"，该行不再高亮（matchPreset 返回 'custom'）。 -->
+    <div class="appearance-row" data-testid="appearance-preset-row">
+      <span class="appearance-label">场景</span>
+      <el-radio-group
+        :model-value="preset"
+        size="small"
+        data-testid="appearance-preset"
+        @change="onPreset"
+      >
+        <el-radio-button
+          v-for="p in presetOptions"
+          :key="p.value"
+          :value="p.value"
+          :title="p.hint"
+          :data-testid="`preset-${p.value}`"
+        >
+          {{ p.label }}
+        </el-radio-button>
+      </el-radio-group>
+    </div>
+
     <div class="appearance-row" data-testid="appearance-theme-row">
       <span class="appearance-label">主题</span>
       <el-select

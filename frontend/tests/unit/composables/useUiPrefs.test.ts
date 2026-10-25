@@ -10,9 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_UI_PREFS,
   UI_PREFS_STORAGE_KEY,
+  UI_PRESETS,
   applyUiPrefsToDom,
+  hasStoredUiPrefs,
   initUiPrefs,
+  matchPreset,
   normalizeUiPrefs,
+  pickDensityForViewport,
   readUiPrefs,
   useUiPrefs,
   writeUiPrefs,
@@ -69,7 +73,12 @@ describe('read/write UiPrefs', () => {
   })
 
   it('写入后可读回', () => {
-    const prefs = { fontSize: 'large' as const, density: 'compact' as const, contrast: 'high' as const, simplify: true }
+    const prefs = {
+      fontSize: 'large' as const,
+      density: 'compact' as const,
+      contrast: 'high' as const,
+      simplify: true,
+    }
     writeUiPrefs(prefs)
     expect(localStorage.getItem(UI_PREFS_STORAGE_KEY)).toBe(JSON.stringify(prefs))
     expect(readUiPrefs()).toEqual(prefs)
@@ -145,5 +154,101 @@ describe('useUiPrefs', () => {
     expect(prefs.value).toEqual(DEFAULT_UI_PREFS)
     expect(document.documentElement.dataset.simplify).toBe('false')
     expect(document.documentElement.dataset.contrast).toBe('normal')
+  })
+})
+
+// ② 场景预设与按视口自适应
+describe('UI_PRESETS / matchPreset / applyPreset', () => {
+  it('三档预设都是完整偏好（四字段齐全，不是打补丁）', () => {
+    for (const preset of Object.values(UI_PRESETS)) {
+      expect(Object.keys(preset).sort()).toEqual(['contrast', 'density', 'fontSize', 'simplify'])
+    }
+  })
+
+  it('matchPreset 精确命中预设名', () => {
+    expect(matchPreset({ ...UI_PRESETS.presentation })).toBe('presentation')
+    expect(matchPreset({ ...UI_PRESETS.compact })).toBe('compact')
+    expect(matchPreset({ ...DEFAULT_UI_PREFS })).toBe('standard')
+  })
+
+  it('混搭（无任何预设完全一致）返回 custom', () => {
+    expect(matchPreset({ ...DEFAULT_UI_PREFS, density: 'compact' })).toBe('custom')
+  })
+
+  it('applyPreset 一次性覆盖四个字段并持久化 + 应用 DOM', () => {
+    const { prefs, preset, applyPreset } = useUiPrefs()
+    applyPreset('presentation')
+    expect(prefs.value).toEqual(UI_PRESETS.presentation)
+    expect(preset.value).toBe('presentation')
+    expect(JSON.parse(localStorage.getItem(UI_PREFS_STORAGE_KEY) as string)).toEqual(
+      UI_PRESETS.presentation
+    )
+    expect(document.documentElement.dataset.fontSize).toBe('large')
+    expect(document.documentElement.dataset.simplify).toBe('true')
+  })
+
+  it('手动改任一开关后预设变为 custom（预设行不再高亮）', () => {
+    const { preset, applyPreset, setPrefs } = useUiPrefs()
+    applyPreset('compact')
+    expect(preset.value).toBe('compact')
+    setPrefs({ contrast: 'high' })
+    expect(preset.value).toBe('custom')
+  })
+})
+
+describe('视口自适应与首次初始化', () => {
+  it('pickDensityForViewport：≤800 紧凑，>800 舒适', () => {
+    expect(pickDensityForViewport(768)).toBe('compact')
+    expect(pickDensityForViewport(800)).toBe('compact')
+    expect(pickDensityForViewport(801)).toBe('comfortable')
+    expect(pickDensityForViewport(1080)).toBe('comfortable')
+  })
+
+  it('hasStoredUiPrefs 反映存储现状，存储不可用返回 false', () => {
+    expect(hasStoredUiPrefs()).toBe(false)
+    writeUiPrefs({ ...DEFAULT_UI_PREFS })
+    expect(hasStoredUiPrefs()).toBe(true)
+    // jsdom 的 localStorage.getItem 是自有属性，必须打在实例上才能拦到
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('denied')
+    })
+    expect(hasStoredUiPrefs()).toBe(false)
+    vi.restoreAllMocks()
+  })
+
+  it('首次使用按视口高度给紧凑密度并落盘', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(720)
+    initUiPrefs()
+    expect(document.documentElement.dataset.density).toBe('compact')
+    expect(JSON.parse(localStorage.getItem(UI_PREFS_STORAGE_KEY) as string).density).toBe('compact')
+    vi.restoreAllMocks()
+  })
+
+  it('大视口首次使用给舒适密度', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1440)
+    initUiPrefs()
+    expect(document.documentElement.dataset.density).toBe('comfortable')
+    vi.restoreAllMocks()
+  })
+
+  it('已有存储时不被视口推荐覆盖（尊重用户选择）', () => {
+    writeUiPrefs({ ...DEFAULT_UI_PREFS, density: 'comfortable' })
+    localStorage.setItem(
+      UI_PREFS_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_UI_PREFS, density: 'comfortable' })
+    )
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(600)
+    initUiPrefs()
+    expect(document.documentElement.dataset.density).toBe('comfortable')
+    vi.restoreAllMocks()
+  })
+
+  // SSR / 无 window 环境（构建期预渲染、单测、Electron 早期阶段）不能抛错：
+  // 取不到视口就按 768（政务本）保守处理，行为与"小屏"一致。
+  it('无 window 环境回退 768，不抛错', () => {
+    vi.stubGlobal('window', undefined)
+    expect(() => initUiPrefs()).not.toThrow()
+    expect(document.documentElement.dataset.density).toBe('compact')
+    vi.unstubAllGlobals()
   })
 })

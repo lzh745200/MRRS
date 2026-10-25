@@ -26,6 +26,22 @@
   `test_offline_map_service.py` / `test_tiles_pipeline.py` 合计 **163 passed**；flake8 0。
 - 真机（打包后端）复验：`tile-info.bbox` 为上述辖区量级；覆盖区内瓦片 200、区外 404。
 
+### Added（② 场景预设 + 首次启动按视口自适应）
+
+- **三档场景预设**（`useUiPrefs.ts` 的 `UI_PRESETS` / `UI_PRESET_OPTIONS` / `matchPreset`）：
+  「标准」（标准字号+舒适行高）、「紧凑」（小字号+紧凑行高+简化，一屏多几行）、
+  「演示」（大字号+紧凑+简化，投影/汇报可读）。预设是**四个字段的完整组合**而非打补丁 ——
+  避免叠加出"大字 + 舒适行高 + 不简化"这种怪状态；手动改任一开关后 `matchPreset` 返回
+  `custom`，预设行自动不再高亮。
+- **外观设置面板新增「场景」行**（`data-testid="appearance-preset-row"`），一次点击即套用；
+  原字号/密度/高对比/简化四个开关保留，供微调。
+- **首次启动按视口高度给初始密度**：`pickDensityForViewport()` —— ≤800px（1366×768 政务本、
+  老投影）用紧凑行高，否则舒适；`initUiPrefs()` 只在**从未存过偏好**时采用推荐值，
+  用户手动改过就不再覆盖（避免"我调好了、下次打开又被改回去"）。
+  无 `window` 环境（预渲染/单测）回退 768 保守处理，不抛错。
+- 测试：`useUiPrefs.test.ts` 11→**25**、`AppearanceSettings.test.ts` 9→**12**；
+  两文件覆盖率 **100/100/100/100**。
+
 ### Changed（图表主题跟随设计 Token）
 
 - **ECharts 调色板与主题改为 Token 驱动且可刷新**：`echarts-theme.ts` 新增

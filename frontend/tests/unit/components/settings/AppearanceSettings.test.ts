@@ -27,7 +27,8 @@ const StubSelect = defineComponent({
   props: { modelValue: { type: [String, Number], default: '' } },
   emits: ['update:modelValue'],
   setup(props, { slots }) {
-    return () => h('div', { class: 'stub-select', 'data-value': String(props.modelValue) }, slots.default?.())
+    return () =>
+      h('div', { class: 'stub-select', 'data-value': String(props.modelValue) }, slots.default?.())
   },
 })
 const StubOption = defineComponent({
@@ -123,16 +124,44 @@ describe('AppearanceSettings', () => {
 
   it('字号档切换写入偏好 localStorage 与 DOM', async () => {
     const wrapper = mountPanel()
-    // 两个 radio-group：字体档在前、密度档在后（DOMWrapper 无 vm，按组件顺序取）
-    const fontGroup = wrapper.findAllComponents(StubRadioGroup)[0]
+    // 三个 radio-group 顺序：场景预设[0]、字号[1]、密度[2]
+    const fontGroup = wrapper.findAllComponents(StubRadioGroup)[1]
     await fontGroup.vm.$emit('update:modelValue', 'large')
     expect(JSON.parse(localStorage.getItem(UI_PREFS_STORAGE_KEY) as string).fontSize).toBe('large')
     expect(document.documentElement.dataset.fontSize).toBe('large')
   })
 
+  // ② 场景预设：一次点击覆盖四个字段，不留"大字 + 舒适行高"这类叠加残余
+  it('选择"演示"场景 → 四个字段一次性覆盖', async () => {
+    const wrapper = mountPanel()
+    const presetGroup = wrapper.findAllComponents(StubRadioGroup)[0]
+    await presetGroup.vm.$emit('change', 'presentation')
+
+    const stored = JSON.parse(localStorage.getItem(UI_PREFS_STORAGE_KEY) as string)
+    expect(stored).toEqual({
+      fontSize: 'large',
+      density: 'compact',
+      contrast: 'normal',
+      simplify: true,
+    })
+    expect(document.documentElement.dataset.fontSize).toBe('large')
+    expect(document.documentElement.dataset.density).toBe('compact')
+  })
+
+  it('选择"紧凑"场景 → 小字号 + 紧凑行高 + 简化模式', async () => {
+    const wrapper = mountPanel()
+    const presetGroup = wrapper.findAllComponents(StubRadioGroup)[0]
+    await presetGroup.vm.$emit('change', 'compact')
+
+    const stored = JSON.parse(localStorage.getItem(UI_PREFS_STORAGE_KEY) as string)
+    expect(stored.fontSize).toBe('compact')
+    expect(stored.density).toBe('compact')
+    expect(stored.simplify).toBe(true)
+  })
+
   it('密度档切换写入偏好', async () => {
     const wrapper = mountPanel()
-    const densityGroup = wrapper.findAllComponents(StubRadioGroup)[1]
+    const densityGroup = wrapper.findAllComponents(StubRadioGroup)[2] // 预设[0]、字号[1]、密度[2]
     await densityGroup.vm.$emit('update:modelValue', 'compact')
     expect(JSON.parse(localStorage.getItem(UI_PREFS_STORAGE_KEY) as string).density).toBe('compact')
   })
@@ -156,7 +185,7 @@ describe('AppearanceSettings', () => {
 
   it('重置按钮恢复默认偏好与默认主题并提示', async () => {
     const wrapper = mountPanel()
-    const fontGroup = wrapper.findAllComponents(StubRadioGroup)[0]
+    const fontGroup = wrapper.findAllComponents(StubRadioGroup)[1] // [0] 是 ② 的场景预设组，字号档在其后
     await fontGroup.vm.$emit('update:modelValue', 'large')
     await wrapper.find('[data-testid="appearance-reset"]').trigger('click')
     const stored = JSON.parse(localStorage.getItem(UI_PREFS_STORAGE_KEY) as string)
@@ -176,5 +205,13 @@ describe('AppearanceSettings', () => {
   it('主题选项来自 THEME_OPTIONS（3 项）', () => {
     const wrapper = mountPanel()
     expect(wrapper.findAllComponents(StubOption).length).toBe(3)
+  })
+
+  // ② 场景预设行在 DOM 上可定位（供人工排查/后续 E2E 用；组件内是 el-radio-group 桩）
+  it('预设行与字号行都能按 data-testid 定位', () => {
+    const wrapper = mountPanel()
+    expect(findRadioGroup(wrapper, 'appearance-preset-row').exists()).toBe(true)
+    expect(findRadioGroup(wrapper, 'appearance-font-row').exists()).toBe(true)
+    expect(findRadioGroup(wrapper, 'appearance-density-row').exists()).toBe(true)
   })
 })
