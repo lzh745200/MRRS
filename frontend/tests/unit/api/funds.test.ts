@@ -401,4 +401,28 @@ describe('api/funds', () => {
       })
     })
   })
+
+  describe('ocrVoucher（⑤ 凭证识别）', () => {
+    it('以 multipart 提交文件到 /funds/ocr-voucher，并原样返回识别结果', async () => {
+      const result = { amount: '100', date: '2026-01-02', confidence: 0.9, engine: 'rapidocr' }
+      mockPost.mockResolvedValue(result)
+
+      const file = new File(['x'], 'voucher.jpg', { type: 'image/jpeg' })
+      await expect(fundApi.ocrVoucher(file)).resolves.toEqual(result)
+
+      expect(mockPost).toHaveBeenCalledTimes(1)
+      const [url, body] = mockPost.mock.calls[0]
+      expect(url).toBe('/funds/ocr-voucher')
+      // 必须是 FormData：后端端点声明的是 UploadFile = File(...)
+      expect(body).toBeInstanceOf(FormData)
+      expect((body as FormData).get('file')).toBe(file)
+    })
+
+    it('不吞错：503（引擎不可用）原样抛给调用方按平台降级处理', async () => {
+      const error = { status: 503, detail: 'OCR 引擎不可用' }
+      mockPost.mockRejectedValue(error)
+
+      await expect(fundApi.ocrVoucher(new File(['x'], 'a.jpg'))).rejects.toBe(error)
+    })
+  })
 })
