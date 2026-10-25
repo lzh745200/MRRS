@@ -369,4 +369,32 @@ describe('模板分支', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('今日事项')
   })
+
+  // 2026-10-26 补：CI 覆盖率报 `evt.type || 'primary'` 的回退分支与标签点击处理器未覆盖
+  it('事件无 type 时回退 primary，且点击标签进入编辑', async () => {
+    const today = new Date()
+    const ds = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+      today.getDate()
+    ).padStart(2, '0')}`
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([
+        { id: 1, date: ds, title: '带类型', type: 'success' },
+        // 缺 type：走 `evt.type || 'primary'` 的回退分支
+        { id: 2, date: ds, title: '无类型' },
+      ])
+    )
+    const wrapper = mountComp()
+    await flushPromises()
+
+    const tags = wrapper.findAll('.el-tag-stub')
+    expect(tags.length).toBe(2)
+    // 点击事件标签 → editEvent(evt)（此前该内联处理器从未被触发）
+    await tags[1].trigger('click')
+    await nextTick()
+
+    const vm = wrapper.vm as any
+    expect(vm.dialogVisible).toBe(true)
+    expect(vm.form.title).toBe('无类型')
+  })
 })
