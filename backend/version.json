@@ -1,14 +1,16 @@
 {
   "version": "1.18.6",
-  "build": "20261024",
-  "release_date": "2026-10-24",
-  "description": "打包环境可用性修复：前端目录自发现（真机白屏风险）+ 冻结运行时完整性检查误报",
+  "build": "20261025",
+  "release_date": "2026-10-25",
+  "description": "仓库卫生与门禁加固 + 录入效率/性能批次：flake8 全仓归零、覆盖率门禁失效根治、表单草稿与 Excel 批量粘贴、虚拟滚动与分页硬上限（v1.18.6）",
   "features": [
-    "打包后端在无环境变量时找不到前端（真机白屏风险，重要）：Electron 通过 http://127.0.0.1:<port> 加载界面并依赖 FRONTEND_DIST_PATH 指路，而 PyInstaller onedir 的实际布局是 <resources>/backend/assistance-backend/_internal（_MEIPASS）+ <resources>/frontend（与 backend 同级），原候选表缺少「自 _MEIPASS 上溯三级」这条 —— 一旦 Electron 漏传该变量（手工启动后端排障、升级后环境变量遗漏、麒麟用 systemd 直跑），访问 / 直接 404、桌面端白屏",
-    "修复方式：新增两条候选 —— _MEIPASS 上溯三级 /frontend、冻结态 sys.executable 的 /frontend（注意 exe 是文件路径，需先去掉文件名再上溯三级，合计四级；只上溯三级会落到 <resources>/backend/frontend 这个不存在的位置）；显式传入的 FRONTEND_DIST_PATH 仍最优先，不破坏既有契约",
-    "冻结运行时误报「关键文件缺失」：startup/environment.py 对 app/core/config.py 等 4 个 .py 源文件做存在性检查，而 PyInstaller 包里源码已编译进可执行文件 —— 启动日志恒刷 4 条 WARNING，让运维误判「安装包损坏」。修复：sys.frozen 时跳过源码检查并记录 INFO 说明原因（防篡改由代码签名 + 安装包 SHA256 承担），开发态检查逻辑原样保留",
-    "离线安装包实测（把打包后端放到全新空目录、空 %APPDATA%/%LOCALAPPDATA%，模拟任意电脑首次安装）：自动建库（data / data_sync / uploads / archives / cache / logs / offline_tiles）并启动成功；/health 200 且 migration.at_head=true；出厂口令登录 200 且 must_change_password=true；未传 FRONTEND_DIST_PATH 时访问 / 修复后 200（含 id=app）、修复前 404；启动日志不再出现「关键文件缺失」误报",
-    "测试：test_static_files.py 增补 onedir 布局推导 3 例（_MEIPASS 同级 frontend / 冻结 exe 兜底 / 环境变量优先不破坏）；test_environment_integrity_helpers.py 增补「冻结跳过 / 开发态保留」双向用例",
-    "顺带修正 app/utils/paths.py 关于 _MEIPASS 的过时注释：PyInstaller < 6 的 onedir 模式不设置 _MEIPASS（仅 onefile），6+ 两种模式都设置（onedir 指向 <app>/_internal）；它表示资源目录而非打包标志，定位资源请走 static_files / map 的候选路径方式，不要自己另写上溯级数"
+    "门禁与仓库卫生：backend/app flake8 79 → 0、scripts 19 → 0，CI 口径补齐（scripts 按 --max-complexity=40 纳入 lint）；覆盖率门禁两处失效根治 —— .coveragerc 缺失 fail-fast（防 fail_under 静默失效）、12 段全部跑完统一 report、--cov-unique 避免并发覆盖分片",
+    "分页与性能：MAX_PAGE_SIZE 统一为 200，4 处裸 page_size + 1 处 le=500 收口；新增 usePageSize 每页条数记忆（项目列表接入）与 VirtualList 虚拟滚动基座（窗口算术纯函数 22 例测试）",
+    "录入效率包：表单草稿自动保存（useFormDraft，切页/刷新不丢）+ Excel 批量粘贴解析（parsePastedTable，消费帮扶台账逐行校验、串行新增、失败行号回传）",
+    "主题与图表：ECharts 主题改读设计 Token（Proxy 依赖登记），5 个图表页零改动跟随主题；新增标准/紧凑/演示三档场景预设，首次启动按视口自适应密度",
+    "数据层清理：删除 26 个零引用死字段（迁移 r43，有数据列归档不删）；模型↔库三层对齐门禁保持 0 漂移（52 路由模块 / 118 表 / 63 迁移单 head r43）",
+    "错误体验：422 校验错误中文化且不回显 input，前端统一出口永不显示技术原文；新增 check_error_message_leaks 门禁",
+    "安全与稳定性：密码哈希改 bcrypt 直连（消除 passlib 在 bcrypt 5.x 下的随机 MissingBackendError）；地图 bbox 增加「4 个有限数值」校验（拒绝 bool/NaN/±inf）；旧管理员恢复端点下线为 410 Gone",
+    "验收口径：后端 12 段 14,722 用例 0 失败 0 跳过 / 45,936 语句 + 11,452 分支 100%；前端 347 文件 7,356 用例 / 语句·分支·函数·行四项 100%；flake8 app+scripts 0；单 head r43"
   ]
 }
