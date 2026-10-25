@@ -1,4 +1,4 @@
-# Release Notes — v1.18.7（2026-10-26）
+# Release Notes — v1.18.7（2026-10-25）
 
 > 供 GitHub Release 正文使用；逐项变更见根目录 `CHANGELOG.md` 的 `[1.18.2]`–`[1.18.7]` 段。
 
