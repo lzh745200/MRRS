@@ -181,11 +181,19 @@
 
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/getErrorMessage'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import {
+  ElMessage,
+  ElMessageBox,
+  type FormInstance,
+  type FormRules,
+  type UploadFile,
+} from 'element-plus'
+import { useDirtyGuard } from '@/composables/useDirtyGuard'
+import { useFormDraft } from '@/composables/useFormDraft'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { useUploadHeaders } from '@/composables/useUploadHeaders'
-import { ElMessage, type FormInstance, type FormRules, type UploadFile } from 'element-plus'
 import { Back, Upload, Check } from '@element-plus/icons-vue'
 import { usePolicyStore } from '@/stores/policy'
 import { getLevelOptions, type PolicyCategory, type PolicyStatus } from '@/api/policy'
@@ -221,6 +229,30 @@ const formData = reactive({
 })
 
 const fileList = ref<UploadFile[]>([])
+
+// ── ③ 录入效率：草稿自动保存 + 未保存离开拦截 ──────────────────────────
+// 草稿按业务键隔离：新建与编辑不同记录互不污染。
+const draftKey = isEdit.value
+  ? `policies:edit:${safeRouteParam(route.params.id)}`
+  : 'policies:edit:new'
+const {
+  hasDraft,
+  restore: restoreDraft,
+  clear: clearDraft,
+  flush: flushDraft,
+} = useFormDraft(formData, { key: draftKey })
+
+// 脏标记：初始化（loadData 回填 / 草稿恢复）完成后由 onMounted 复位，
+// 因此不必再造"只在初始化后注册 watcher"的可选链 —— 那会留下永不进入的分支（覆盖率黑洞）。
+const isDirty = ref(false)
+const stopDirtyWatch = watch(
+  formData,
+  () => {
+    isDirty.value = true
+  },
+  { deep: true }
+)
+useDirtyGuard(isDirty)
 
 // 层级选项（根据分类动态变化）
 // Level options (loaded async on category change)
@@ -409,6 +441,9 @@ const handleSubmit = async () => {
         ElMessage.success('新增成功')
       }
 
+      // 提交成功：清掉草稿并复位脏标记（否则下次进来会"复活"已提交的数据）
+      clearDraft()
+      isDirty.value = false
       pushSafe('/policies')
     } catch (error: any) {
       ElMessage.error(getErrorMessage(error, '保存失败'))
@@ -424,6 +459,31 @@ onMounted(async () => {
     await loadData()
   }
   loadLevelOptions()
+
+  // ③ 有未提交草稿时先问再恢复：不静默覆盖后端刚拉回来的数据。
+  if (hasDraft.value) {
+    try {
+      await ElMessageBox.confirm('检测到上次未提交的草稿，是否恢复？', '恢复草稿', {
+        confirmButtonText: '恢复',
+        cancelButtonText: '忽略',
+        type: 'info',
+      })
+      restoreDraft()
+      ElMessage.success('已恢复草稿')
+    } catch {
+      clearDraft()
+    }
+  }
+
+  // 初始化完成（含 loadData 回填与草稿恢复）后复位脏标记，
+  // 否则上面那个 deep watcher 会在回填时把表单误判为"用户已修改"。
+  isDirty.value = false
+})
+
+onBeforeUnmount(() => {
+  stopDirtyWatch()
+  // 离开前立刻落盘一次（防抖窗口内离开也不能丢）
+  flushDraft()
 })
 </script>
 

@@ -187,6 +187,20 @@
 - 说明：本批交付的是**可复用基座**；接入具体表单页（并配 `useDirtyGuard` 铺开）在下一批完成 ——
   目前全仓只有 `projects/Edit.vue` 一个页面接了离开拦截。
 
+### Added（③ 第二个页面接入：政策编辑页草稿 + 离开拦截）
+
+- **`views/policies/Edit.vue` 接入 ③**：草稿键按模式隔离（`policies:edit:new` /
+  `policies:edit:<id>`）；`onMounted` 里若存在草稿则**先问再恢复**（`ElMessageBox.confirm`），
+  用户忽略则删除草稿；`onBeforeUnmount` 立刻 `flush()` 落盘（防抖窗口内离开也不丢）；
+  提交成功后 `clear()` + 复位脏标记（避免下次进来"复活"已提交数据）。
+- **离开拦截接线**：`useDirtyGuard(isDirty)` —— 此前全仓只有 `projects/Edit.vue` 接入，
+  本批再补一个录入型页面。实现上刻意**不造**"只在初始化后注册 watcher"的可选链
+  （那会留下永不进入的分支，是覆盖率黑洞），改为 setup 即注册、初始化完成后复位脏标记。
+- 测试：`Edit.test.ts` 37 → **42 例**（新增草稿恢复/忽略/守卫注册/卸载落盘/提交清草稿），
+  该页覆盖率仍 **100/100/100/100**；`vue-tsc` 0；`eslint src --max-warnings=0` 通过。
+- 顺带记录：该测试文件里 3 条 `Write operation failed: computed value is readonly` 告警
+  **在未接入版本上同样存在**（已用 `git checkout` 对比验证），属既有测试桩行为，非本次引入。
+
 ### Fixed（⑥ 分页硬上限：4 处裸分页 + 1 处 500 上限）
 
 - **`page_size` 有 4 处完全没有上限**（`machine_code` / `organization` / `auth/users` / `feedback`

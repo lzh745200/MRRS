@@ -17,6 +17,8 @@ const {
   getLevelOptionsMock,
   authStorageMock,
   validateMock,
+  messageBoxConfirmMock,
+  onBeforeRouteLeaveMock,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   pushSafeMock: vi.fn(),
@@ -28,18 +30,20 @@ const {
     updatePolicy: vi.fn(),
     createPolicy: vi.fn(),
   },
+  messageBoxConfirmMock: vi.fn(),
+  onBeforeRouteLeaveMock: vi.fn(),
   getLevelOptionsMock: vi.fn(),
   authStorageMock: { getToken: vi.fn() },
   validateMock: vi.fn(),
 }))
 
 // ③ 离开拦截（useDirtyGuard）会 import onBeforeRouteLeave：只 mock useRoute 会让 setup 直接抛错。
-vi.mock('vue-router', () => ({ useRoute: () => routeBox, onBeforeRouteLeave: vi.fn() }))
+vi.mock('vue-router', () => ({ useRoute: () => routeBox, onBeforeRouteLeave: onBeforeRouteLeaveMock }))
 
 vi.mock('element-plus', () => ({
   ElMessage,
-  // ③ 草稿恢复询问：默认按"用户取消"返回，避免测试挂起
-  ElMessageBox: { confirm: vi.fn(() => Promise.reject(new Error('cancel'))) },
+  // ③ 草稿恢复询问：默认按"用户取消"返回，避免测试挂起；具体用例自行改 resolve
+  ElMessageBox: { confirm: messageBoxConfirmMock },
   ElForm: {},
 }))
 
@@ -620,6 +624,81 @@ describe('编辑模式提交分支', () => {
     await vm.handleSubmit().catch(() => {})
     policyStore.updatePolicy.mockResolvedValue({ code: 400 })
     await vm.handleSubmit().catch(() => {})
+    wrapper.unmount()
+  })
+})
+
+// ③ 录入效率：草稿自动保存 + 未保存离开拦截（2026-10-25）
+describe('③ 草稿与离开拦截', () => {
+  const DRAFT_KEY = 'form:draft:policies:edit:new'
+
+  function seedDraft(data: Record<string, unknown>) {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, savedAt: Date.now() }))
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('有草稿 + 用户确认 → 回填表单并提示', async () => {
+    seedDraft({ title: '草稿标题' })
+    messageBoxConfirmMock.mockResolvedValue('confirm')
+
+    const wrapper = mountComp()
+    await flushPromises()
+    await nextTick()
+
+    const vm = wrapper.vm as any
+    expect(vm.formData.title).toBe('草稿标题')
+    expect(ElMessage.success).toHaveBeenCalledWith('已恢复草稿')
+    wrapper.unmount()
+  })
+
+  it('有草稿 + 用户忽略 → 丢弃草稿且不污染表单', async () => {
+    seedDraft({ title: '不要了' })
+    messageBoxConfirmMock.mockRejectedValue(new Error('cancel'))
+
+    const wrapper = mountComp()
+    await flushPromises()
+    await nextTick()
+
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
+    expect((wrapper.vm as any).formData.title).toBe('')
+    wrapper.unmount()
+  })
+
+  it('注册离开拦截（useDirtyGuard 走 onBeforeRouteLeave）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(onBeforeRouteLeaveMock).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('卸载时立刻落盘（防抖窗口内离开也不丢）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    ;(wrapper.vm as any).formData.title = '离开前填的'
+    await nextTick()
+
+    wrapper.unmount()
+
+    const raw = localStorage.getItem(DRAFT_KEY)
+    expect(raw).not.toBeNull()
+    expect(JSON.parse(raw as string).data.title).toBe('离开前填的')
+  })
+
+  it('提交成功后清掉草稿（不复活已提交数据）', async () => {
+    seedDraft({ title: '旧草稿' })
+    messageBoxConfirmMock.mockResolvedValue('confirm')
+    policyStore.createPolicy.mockResolvedValue({ code: 200, data: { id: 7 } })
+
+    const wrapper = mountComp()
+    await flushPromises()
+    await nextTick()
+    const vm = wrapper.vm as any
+    validateMock.mockResolvedValue(true)
+    await vm.handleSubmit()
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
     wrapper.unmount()
   })
 })
