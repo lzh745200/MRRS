@@ -84,6 +84,35 @@ Release 正文由 `scripts/prepare_release_body.py` 以本仓库发布说明为*
   `unreported_count` / `statistics`，而 service 返回 `not_reported_count` / `pending_review_count` /
   `overdue_count` / `report_rate`；Pydantic `extra=ignore` 会把差异吞掉。已对齐。
 
+### Fixed（发布链路，交付当日追加）
+
+- **登录页重构打挂了 E2E**：`tests/e2e/flows/login.spec.ts` 三处断言随 DOM 改名失效 ——
+  `.error-banner` 已改为 `.alert`；且新提示条带 `role="alert"` 后与 Element Plus 的 ElMessage
+  toast **同时命中**同一选择器，Playwright 严格模式直接判「多元素」失败。
+  已改为 `.alert, .error-banner, …, [role="alert"]` 并收敛 `.first()`；
+  **本地实跑：修前 6/7、修后 7/7，全量 E2E 165/165 通过**后才重新推送。
+- **GitHub Release 正文长度为 0**：Release 由 3 个作业各自上传
+  （`build-windows.yml` 1 个 + `build-arm64.yml` 2 个），`softprops/action-gh-release`
+  每次都会重写正文 —— 不传 body 的作业把 Windows 侧写好的正文覆盖成空。
+  现三处统一 `body_path`，正文由 `scripts/prepare_release_body.py` 以仓库发布说明为**单源**生成。
+- **正文生成步骤在 Windows runner 上崩溃**：第一版写成 POSIX shell，而 `build-windows` 跑在
+  `windows-2022`（默认 PowerShell），该步骤直接失败、构建变红。改为跨平台 Python 脚本后通过。
+- **体积/SHA256 写死在文档与发布正文里必然过期**：构建产物**非逐字节可复现**
+  （PyInstaller/electron-builder 含时间戳；实测同一源码 4 次构建得到 4 组哈希），
+  重打 tag 重建后正文哈希与资产实际值不符。现改为「体积与校验值一律以 Release 资产的
+  `SHA256SUMS-*.txt` 为准」（该文件由出包作业对真实文件生成，天然自洽），
+  文档只保留约数与文件名。
+
+### Added（发布链路）
+
+- **`scripts/prepare_release_body.py`**：按 tag 从 `docs/04-部署文档/RELEASE_NOTES-<tag>.md`
+  生成 Release 正文；文件缺失时产出含 CHANGELOG 指引的兜底正文并打 warning，
+  **不让"缺发布说明"变成构建失败**。两个工作流 runner 不同（ubuntu / windows-2022），
+  故用 Python 而非 shell 实现。
+- **`scripts/check_changelog.py` + CI 门禁 + 单测**：把「更新日志必须及时」变成可执行约束 ——
+  校验版本段存在、`x.y.z` 形式、**严格降序**、日期合法且非未来、**当前 `package.json` 版本已记录**、
+  版本段非空标题。此前靠人记，v1.18.1 就漏记了上面 4 条交付期修复。
+
 ### Fixed（交付前逐维复验补齐）
 
 - **三层对齐门禁在 CI 里跑不起来**：原先放在 `static-analysis` 作业，而该作业只装 `alembic` 与几个

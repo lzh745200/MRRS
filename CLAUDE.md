@@ -84,6 +84,7 @@ cd backend && .venv/Scripts/python.exe scripts/check_subprocess_encoding.py
 cd backend && .venv/Scripts/python.exe scripts/check_dir_replace.py
 cd backend && .venv/Scripts/python.exe scripts/check_scheduler_registration.py
 python scripts/check_hardcoded_styles.py          # 前端硬编码色值棘轮（只紧不松）
+python scripts/check_changelog.py                 # 更新日志时效性（当前版本必须已记录）
 
 # lint-staged：仅检查 git 暂存文件（加速提交）
 cd frontend && npx lint-staged
@@ -137,6 +138,13 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   仅被构建流水线按 tag 使用，不要把它当作唯一同步手段
 - **发布流程**：本地门禁全绿 → 提交推送 → `git tag v<版本> && git push origin v<版本>`
   → Actions 自动产出 **Windows x64 安装包** 与 **麒麟 ARM64 deb** 并发布 Release（两个安装包）
+- **更新日志必须及时** (2026-10-25): `CHANGELOG.md` 是唯一账本 —— **每次改动在同一个提交里**
+  更新当前版本段（`## [x.y.z] - <日期> — <一句话主题>`），写清「改了什么 / 为什么 / 怎么验证」，
+  不要留到发版前补（v1.18.1 就漏记了 4 条最贵的踩坑：E2E 选择器失效、Release 正文 0 字符、
+  Windows runner 上 shell 崩溃、哈希写死必过期）。门禁 `scripts/check_changelog.py`
+  （CI `static-analysis`，单测 `backend/tests/unit/test_changelog_gate.py`）会校验：
+  **当前 `package.json` 版本必须已记录** + 最近 3 版段格式规范（`x.y.z` / 日期非未来 /
+  非空 / 严格降序）；早期历史遗留段（`未发布` / `1.2.0-build` / 重复段）**不追溯**。
 - **依赖清单单一事实源** (2026-09-14, R15)：运行时依赖只登记在
   `backend/app/core/required_packages.py`（运行时必需 / 运行时可选 / 仅开发 三级），
   并在 `backend/requirements*.txt` 登记同一分发名。**禁止**在端点或启动钩子里自持清单

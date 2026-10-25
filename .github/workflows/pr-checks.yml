@@ -482,6 +482,13 @@ jobs:
       # 后端综合安全审计：裸 db.commit()、跨组织删除、缺 ok_list/write_work_log/filter_by_data_scope
       - name: Backend comprehensive security audit
         run: python scripts/security_audit.py --verbose
+      # 更新日志时效性门禁：当前 package.json 版本必须已在 CHANGELOG 记录，
+      # 且最近 3 个版本段格式规范（x.y.z / 日期非未来 / 非空 / 严格降序）。
+      # 缘起：v1.18.1 交付当日代码与发布都改了，更新日志漏记 4 条最贵的踩坑
+      # （E2E 选择器失效、Release 正文 0 字符、Windows runner 上 shell 崩溃、哈希写死必过期）。
+      # 纯标准库 + 只读 package.json，故放在本作业（无需安装 backend 依赖）。
+      - name: Changelog freshness check
+        run: python scripts/check_changelog.py
       # Alembic 迁移健康门禁：单 head、无分叉（防再发 4c1ea8a0 MultipleHeads 打包启动失败）
       - name: Alembic migration health check
         run: |
