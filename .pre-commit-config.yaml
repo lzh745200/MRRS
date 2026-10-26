@@ -1,5 +1,22 @@
 # Pre-commit hooks configuration
-# 安装: pip install pre-commit && pre-commit install
+#
+# 安装（本仓库推荐用后端 venv 的解释器，不污染系统 Python）：
+#   Windows:  backend\.venv\Scripts\python.exe -m pip install pre-commit
+#             backend\.venv\Scripts\python.exe -m pre_commit install
+#   Linux:    backend/.venv/bin/python -m pip install pre-commit
+#             backend/.venv/bin/python -m pre_commit install
+#
+# 为什么本地钩子用 `language: python`（2026-10-26 体检后改）：
+#   `language: system` 直接执行 `python scripts/...`，依赖 `python` 在 PATH 上。
+#   本机（以及不少离线/沙箱环境）根本没有 `python` —— 强行安装钩子会让**每一次
+#   git commit 都失败**。`language: python` 由 pre-commit 用"运行 pre-commit 的那个
+#   解释器"建独立 venv，并把它的 `python` 放到 PATH 前面，因此与本机 PATH 无关。
+#   钩子脚本本身全部是标准库实现，不需要额外依赖；flake8 / bandit 用
+#   additional_dependencies 装进各自环境。
+#
+# 关于 electron 语法检查：原先用 `bash -c 'for f in electron/*.js; do node --check'`。
+#   Windows 上 `bash` 常解析到 C:\Windows\System32\bash.exe（没装发行版的 WSL 启动器），
+#   钩子必然失败；改为 `node scripts/check_electron_syntax.js`，跨平台一致。
 #
 # 增强配置 (v1.2.0+):
 # - lint-staged: 仅检查变更文件，加速提交
@@ -35,7 +52,7 @@ repos:
       - id: check-dockerfile-tail
         name: check Dockerfile RUN has | tail
         entry: python scripts/pre_commit_hooks.py check_dockerfile_tail
-        language: system
+        language: python
         files: ^docker/Dockerfile
         pass_filenames: false
         stages: [pre-commit]
@@ -43,14 +60,14 @@ repos:
       - id: check-hardcoded-styles
         name: check hardcoded styles (UI v2.0 guard)
         entry: python scripts/check_hardcoded_styles.py --staged
-        language: system
+        language: python
         files: ^frontend/src/.*\.vue$
         pass_filenames: false
         stages: [pre-commit]
 
       - id: electron-syntax-check
         name: node --check electron main process (mojibake guard, 10c56cd0 regression)
-        entry: bash -c 'for f in electron/*.js; do node --check "$f" || exit 1; done'
+        entry: node scripts/check_electron_syntax.js
         language: system
         files: ^electron/.*\.js$
         pass_filenames: false
@@ -59,14 +76,14 @@ repos:
       - id: scan-corrupted-files
         name: scan NUL bytes / non-UTF8 corrupted files (CodeCheck FAILURE guard)
         entry: python scripts/scan_mojibake.py --check
-        language: system
+        language: python
         pass_filenames: false
         stages: [pre-commit]
 
       - id: check-css-vars
         name: check quadruple-dash CSS var typo (transparent-bg guard, 2026-08-29 regression)
         entry: python scripts/check_css_vars.py --staged
-        language: system
+        language: python
         files: \.(scss|css|vue)$
         pass_filenames: false
         stages: [pre-commit]
@@ -74,7 +91,7 @@ repos:
       - id: check-tokens-sync
         name: check tokens dual-source sync (W11-043 guard)
         entry: python scripts/check_tokens_sync.py --staged
-        language: system
+        language: python
         files: ^frontend/src/styles/(tokens|tokens-vars)\.scss$
         pass_filenames: false
         stages: [pre-commit]
@@ -82,21 +99,25 @@ repos:
       - id: flake8
         name: flake8
         entry: python scripts/pre_commit_hooks.py flake8
-        language: system
+        language: python
+        additional_dependencies: [flake8]
         pass_filenames: false
         stages: [pre-push]
 
       - id: bandit
         name: bandit (security)
         entry: python scripts/pre_commit_hooks.py bandit
-        language: system
+        language: python
+        additional_dependencies: [bandit]
         pass_filenames: false
         stages: [pre-push]
 
-      - id: check-tokens-sync
+      # 注意：id 不能重复（pre-commit 按 id 定位钩子）。历史上两条都叫
+      # check-tokens-sync，第二条永远不会被单独点名，故改为 -files 后缀。
+      - id: check-tokens-sync-files
         name: check-tokens-sync (tokens.scss vs tokens-vars.scss)
         entry: python scripts/check_tokens_sync.py
-        language: system
+        language: python
         files: ^frontend/src/styles/tokens.*\.scss$
         pass_filenames: false
         stages: [pre-commit]
@@ -104,7 +125,7 @@ repos:
       - id: vue-tsc
         name: vue-tsc
         entry: python scripts/pre_commit_hooks.py vue_tsc
-        language: system
+        language: python
         pass_filenames: false
         stages: [pre-push]
 
@@ -114,7 +135,7 @@ repos:
       - id: check-constants-sync
         name: check constants vs test/doc literals (constant drift guard)
         entry: python scripts/check_constants_sync.py
-        language: system
+        language: python
         pass_filenames: false
         always_run: true
         stages: [pre-push]
@@ -124,13 +145,13 @@ repos:
       - id: check-nightly-test-parity
         name: nightly test coverage parity (PR Checks vs Nightly grouping)
         entry: python scripts/check_nightly_test_parity.py
-        language: system
+        language: python
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 
 # CI workflows:
-# - pre-commit 阶段: ruff (快速)、trailing-whitespace、YAML/JSON 检查
+# - pre-commit 阶段: ruff (快速)、trailing-whitespace、YAML/JSON 检查、损坏扫描
 # - pre-push 阶段: flake8, bandit, vue-tsc (全量质量门禁)
 # - 推荐配合 lint-staged (见 frontend/package.json):
 #   npx lint-staged  # 仅检查 git 暂存文件
