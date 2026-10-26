@@ -3154,4 +3154,29 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.12",
+        "date": "2026-10-26",
+        "description": "贵州 z14 预渲染交付（全省包 283.7MB / 64,900 张；9 市州分包）",
+        "features": [
+            (
+                "z14 全省瓦片渲染：64,900 张 / 296.9MB / 560.7s（115.7 张/秒，0 失败），样式 osm-vector-basemap-light-v3-poi（含学校 "
+                "POI 682 个），bbox=贵州全省。"
+            ),
+            (
+                "scripts/tiles/pack_prefecture_z14.py：把权威 z14 瓦片集打散为 9 个市州包（按 prefecture_bboxes.json + 0.02° pa"
+                "dding；每包 MANIFEST 写 region/zoom/tileCount/ODbL）。"
+            ),
+            (
+                "交付目录 deliverables/osm-tiles-z14-20261026/：guizhou-all_z14.zip（283.7MB，64,900 张）+ 9 个 guizhou-<"
+                "slug>_z14.zip（合计 389.2MB，77,666 条目，含市州间重叠）+ SHA256/README/summary。"
+            ),
+            (
+                "WPS 模块覆盖率缺口（CI backend-test 红）：app/core/office_formats.py 91.67%、app/services/office_reader.py"
+                " 81.88%，全量门禁 99.95 < 100。"
+            ),
+            "OSM 数据建筑仅 20,393 处、POI 2,261：z14 可见路网/水系/村名/学校注记，没有建筑轮廓级细节；",
+            "全省包 283.7MB 已接近导入体验上限，现场建议用市州分包按需导入。",
+        ],
+    },
 ]
