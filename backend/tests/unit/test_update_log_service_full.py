@@ -159,6 +159,12 @@ class TestSyncVersionHistory:
 
 
 class TestCheckAndRecordVersionChange:
+    @pytest.fixture(autouse=True)
+    def _clean_logs(self, real_db_session):
+        """每个用例从空表开始：计数类断言不能受前序用例残留影响。"""
+        real_db_session.query(SystemUpdateLog).delete()
+        real_db_session.commit()
+
     def test_no_latest_initializes(self, svc):
         out = svc.check_and_record_version_change("1.0.0")
         assert out["action"] == "initialize"
@@ -172,13 +178,21 @@ class TestCheckAndRecordVersionChange:
         assert svc.is_version_recorded("9.9.9") is True
 
     def test_version_changed_known_version(self, svc, real_db_session):
-        _mklog(real_db_session, "0.1.0", datetime(2026, 1, 1))
+        """已知版本升级：由补齐逻辑写入，不应再重复记一条。
+
+        注：用数据源里存在的 1.1.0 作为"老库记录"；若用 0.1.0 这类 CHANGELOG 里没有的
+        更早版本，它会作为历史记录保留（不清库），总数会多出来，属预期行为。
+        """
+        _mklog(real_db_session, "1.1.0", datetime(2026, 3, 13))
         known = VERSION_HISTORY_DATA[-1]["version"]
-        out = svc.check_and_record_version_change(known)
-        assert out["action"] == "record_change"
+
+        assert svc.check_and_record_version_change(known) is None
+
+        rows = real_db_session.query(SystemUpdateLog).filter(SystemUpdateLog.version == known).all()
+        assert len(rows) == 1
         # 已知版本 → 描述取自 VERSION_HISTORY_DATA
-        rec = svc.get_update_by_version(known)
-        assert "更新内容" in rec.description
+        assert "更新内容" in rows[0].description
+        assert svc.get_update_count() == len(VERSION_HISTORY_DATA)
 
     def test_version_unchanged_returns_none(self, svc, real_db_session):
         _mklog(real_db_session, "1.0.0", datetime(2026, 1, 1))
@@ -193,6 +207,17 @@ class TestCheckAndRecordVersionChange:
 
         assert svc.get_update_count() == len(VERSION_HISTORY_DATA)
         assert svc.get_update_count() > before
+
+    def test_old_db_backfill_does_not_duplicate_current(self, svc, real_db_session):
+        """补齐后当前版本已存在，不得再写一条（老库升级实测会出现两条同版本）。"""
+        _mklog(real_db_session, "1.1.0", datetime(2026, 3, 13))
+        current = VERSION_HISTORY_DATA[-1]["version"]
+
+        svc.check_and_record_version_change(current)
+
+        rows = real_db_session.query(SystemUpdateLog).filter(SystemUpdateLog.version == current).all()
+        assert len(rows) == 1
+        assert svc.get_update_count() == len(VERSION_HISTORY_DATA)
 
     def test_fully_recorded_and_unchanged_is_noop(self, svc):
         """历史已完整且版本未变时不写库、返回 None（补齐逻辑必须是幂等的）。"""

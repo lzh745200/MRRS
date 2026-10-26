@@ -266,19 +266,27 @@ class UpdateLogService:
                 "result": result,
             }
 
+        # 升级前的版本，用于返回给调用方记录日志（补齐后 latest 会变，故先留存）
+        previous_version = latest.version
+
         # 老库补齐：历史数据源会随版本新增条目（应用内日志曾长期停在 1.1.1），
         # 只靠"检测版本变化"只会补记当前这一条，中间版本仍缺失。这里每次启动做一次
         # 幂等同步，缺失的版本会被补上；已存在的不动。
         sync_result = self.sync_version_history(updated_by)
         synced_count = sync_result.get("synced_count", 0)
 
-        if latest.version != current_version:
-            # 版本发生变化，查找版本描述
+        # 补齐后必须重新取最新一条：否则会拿"补齐前"的旧记录判断版本是否变化，
+        # 当前版本刚被补进来又被当成"新版本"再写一次（实测老库升级会出现两条 1.18.9）。
+        latest = self.get_latest_update()
+
+        if (
+            latest is not None
+            and latest.version != current_version
+            and not self.is_version_recorded(current_version)
+        ):
+            # 走到这里说明当前版本不在历史数据源里（例如热修复包没来得及更新 CHANGELOG），
+            # 数据源里有的版本已被上面的幂等补齐写入，不会重复。这里只记一条通用说明。
             description = "系统更新"
-            for v_data in VERSION_HISTORY_DATA:
-                if v_data["version"] == current_version:
-                    description = self._build_version_description(v_data)
-                    break
 
             # 记录更新
             self.record_update(
@@ -287,10 +295,10 @@ class UpdateLogService:
                 updated_by=updated_by,
             )
 
-            logger.info("检测到版本变更: %s -> %s", latest.version, current_version)
+            logger.info("检测到版本变更: %s -> %s", previous_version, current_version)
             return {
                 "action": "record_change",
-                "old_version": latest.version,
+                "old_version": previous_version,
                 "new_version": current_version,
                 "synced_count": synced_count,
             }
