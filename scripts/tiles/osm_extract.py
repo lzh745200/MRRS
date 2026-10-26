@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 """从 OSM PBF 提取包（贵州省）抽取可离线渲染的矢量图层，落盘为单个 pickle。
 
-schema v2（向后兼容 v1）：在 v1 基础上补齐 **multipolygon 关系**（大湖/水库/林地/湿地等
-多 way 拼接的成大面），并细化道路/面/地名分类，供 z5–12 瓦片渲染与"各市州分包"使用。
+schema v3（向后兼容 v1/v2）：在 v2（multipolygon 关系 + 洞）基础上新增 **POI 图层**
+（学校/幼儿园/学院/大学），供 z13 瓦片绘制"村子与学校名称"。v2/v1 的 pkl 仍可被
+渲染器读取（`pois` 缺失按空列表处理）。
 
 输出契约（渲染器按此消费）
 --------------------------
 ```
 {
   "meta": {
-     "schema_version": 2,
+     "schema_version": 3,
      "source_file": "guizhou.osm.pbf", "source_bytes": int,
      "license": "ODbL-1.0", "attribution": "© OpenStreetMap contributors",
      "bbox": [min_lon, min_lat, max_lon, max_lat],   # 保留要素的实际包围盒
@@ -18,6 +19,7 @@ schema v2（向后兼容 v1）：在 v1 基础上补齐 **multipolygon 关系**�
      "relation_fail_sample_ids": [int, ...],        # 缝合失败的关系样例（最多 10 个）
      "counts": {
         "lines": {...by class...}, "polys": {...by class...}, "places": {...by class...},
+        "pois": {"school": int, "kindergarten": int, "college": int, "university": int},
         "skipped": {...by reason...},
         "relations_total": int, "relations_assembled": int, "relations_failed": int,
         "holes_total": int
@@ -30,11 +32,16 @@ schema v2（向后兼容 v1）：在 v1 基础上补齐 **multipolygon 关系**�
              "name": str, "rings": [[(lon, lat), ...], ...],
              "holes": [[(lon, lat), ...], ...]}],   # 无洞时必须为 []（不要省略该键）
   "places":[{"name": str, "name_zh": str, "cls": "city|town|village|hamlet|suburb|district",
-             "lon": float, "lat": float, "population": int|None}]
+             "lon": float, "lat": float, "population": int|None}],
+  "pois":  [{"name": str, "name_zh": str, "cls": "school|kindergarten|college|university",
+             "lon": float, "lat": float, "amenity": str}]   # v3 新增；node + way 质心
 }
 ```
 - 坐标统一 `round(..., 5)`；线/环保留首尾端点；环闭合（首尾同点）。
 - `polys[*].rings` 目前恒为 1 个外环（多面关系已拆成多条），`holes` 为该外环内的内环（岛屿）。
+- POI：`amenity ∈ {school, kindergarten, college, university}` 的 node 与 way；
+  way 取其节点坐标的**质心**（relation 暂不做）；名称取 `name:zh` → `name`，无名称不输出，
+  截断 100（`NAME_MAX_LEN`）。
 
 分类规则（tag 白名单）
 ----------------------
@@ -101,7 +108,7 @@ from pathlib import Path
 # 常量：schema 版本、tag 白名单与输出类别
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 LICENSE = "ODbL-1.0"
 ATTRIBUTION = "© OpenStreetMap contributors"
@@ -177,6 +184,9 @@ PLACE_NODE_MAP = {
     "borough": "district",
 }
 PLACE_CLASSES = tuple(dict.fromkeys(PLACE_NODE_MAP.values()))
+
+# POI（v3）：`amenity` 白名单。渲染端据此在 z12（大学/学院）/z13（学校/幼儿园）画名称。
+POI_AMENITIES = ("school", "kindergarten", "college", "university")
 
 # 简化容差（度）：z11 级别约 30m，面略放宽以压体积
 LINE_TOLERANCE = 0.0003
@@ -721,6 +731,48 @@ def _encode_place(tags, lon, lat):
     return payload, False
 
 
+def _amenity_class(tags):
+    """POI 的 `amenity` 白名单归一（大小写/空白容忍）；非白名单返回 None。"""
+    amenity = str((tags or {}).get("amenity") or "").strip().lower()
+    return amenity if amenity in POI_AMENITIES else None
+
+
+def _encode_poi(tags, lon, lat, cls):
+    """POI（学校/幼儿园/学院/大学）→ 输出结构；无名称返回 None。
+
+    名称优先级与 places 一致：`name:zh`（含 `name:zh-Hans`）→ `name`，截断 100。
+    `cls` 与 `amenity` 同值（渲染端按 cls 判断最小缩放与优先级）。
+    """
+    name_zh = clamp_name(tags.get("name:zh") or tags.get("name:zh-Hans"))
+    name = name_zh or clamp_name(tags.get("name"))
+    if not name:
+        return None
+    return {
+        "name": name,
+        "name_zh": name_zh,
+        "cls": cls,
+        "lon": round(lon, 5),
+        "lat": round(lat, 5),
+        "amenity": cls,
+    }
+
+
+def _way_centroid(segments):
+    """way 的节点坐标质心（顶点均值）；无点返回 None。
+
+    way 的 POI（学校/大学常以闭合面表示）用质心作为标签落点；顶点均值对
+    凸/凹多边形都足够（仅用于注记定位，不参与几何计算）。
+    """
+    points = [point for segment in segments for point in segment]
+    if not points:
+        return None
+    count = float(len(points))
+    return (
+        sum(point[0] for point in points) / count,
+        sum(point[1] for point in points) / count,
+    )
+
+
 def scan_relations(osmium, in_path):
     """pass1：收集 multipolygon 关系。返回 (plans, member_way_ids)。
 
@@ -767,6 +819,7 @@ def build_handler(osmium, member_ways):  # noqa: C901 - 回调式分类逻辑集
             self.raw_lines = []   # (cls, name, [(lon, lat), ...])
             self.raw_polys = []   # (cls, name, [(lon, lat), ...])  单 way 环
             self.raw_places = []  # dict
+            self.raw_pois = []    # dict（v3：学校/幼儿园/学院/大学）
             self.way_geoms = {}   # way_id -> [node_id, ...]（仅 multipolygon 成员 way）
             self.node_coords = {}  # node_id -> (lon, lat)（仅成员 way 用到的节点）
             self.node_bbox = None
@@ -777,6 +830,7 @@ def build_handler(osmium, member_ways):  # noqa: C901 - 回调式分类逻辑集
             self.skipped = {
                 "node_bad_coord": 0,
                 "place_no_name": 0,
+                "poi_no_name": 0,
                 "way_no_geometry": 0,
                 "way_bad_coord": 0,
                 "way_no_class": 0,
@@ -821,6 +875,14 @@ def build_handler(osmium, member_ways):  # noqa: C901 - 回调式分类逻辑集
                 self.skipped["place_no_name"] += 1
             elif payload is not None:
                 self.raw_places.append(payload)
+            # v3 POI：学校/幼儿园/学院/大学节点（与 place 互斥，amenity 挂在独立 tag 上）
+            poi_cls = _amenity_class(tags)
+            if poi_cls is not None:
+                poi = _encode_poi(tags, lon, lat, poi_cls)
+                if poi is None:
+                    self.skipped["poi_no_name"] += 1
+                else:
+                    self.raw_pois.append(poi)
 
         # -- way：线 / 面 / multipolygon 成员几何 ----------------------------
         def way(self, w):
@@ -842,7 +904,8 @@ def build_handler(osmium, member_ways):  # noqa: C901 - 回调式分类逻辑集
             if not tags:
                 return
             poly_cls, line_cls = _classify_tags(tags)
-            if poly_cls is None and line_cls is None:
+            poi_cls = _amenity_class(tags)
+            if poly_cls is None and line_cls is None and poi_cls is None:
                 self.skipped["way_no_class"] += 1
                 return
 
@@ -850,6 +913,21 @@ def build_handler(osmium, member_ways):  # noqa: C901 - 回调式分类逻辑集
             self.skipped["way_bad_coord"] += bad
             if not segments:
                 self.skipped["way_no_geometry"] += 1
+                return
+
+            # v3 POI：way（多为闭合面，如学校/大学）用节点坐标质心作为标签落点
+            if poi_cls is not None:
+                centroid = _way_centroid(segments)
+                if centroid is None:
+                    self.skipped["way_no_geometry"] += 1
+                else:
+                    poi = _encode_poi(tags, centroid[0], centroid[1], poi_cls)
+                    if poi is None:
+                        self.skipped["poi_no_name"] += 1
+                    else:
+                        self.raw_pois.append(poi)
+            if poly_cls is None and line_cls is None:
+                # 纯 POI way（如 amenity=school 的边界），不进入线/面图层
                 return
 
             name = clamp_name(tags.get("name:zh") or tags.get("name"))
@@ -940,6 +1018,35 @@ def build_layers(handler, filter_bbox, line_tol, ring_tol):
     handler.raw_places = []
 
     return lines, line_counts, polys, poly_counts, places, place_counts, out_bbox
+
+
+def build_pois(handler, filter_bbox):
+    """v3 POI 后处理：bbox 过滤 + 去重 + 分类计数；返回 (pois, counts, bbox)。
+
+    与 places 同口径：点必须在过滤框内才保留；同名同类同坐标视为重复（节点+way
+    质心可能重合）。处理完清空 handler.raw_pois 及时释放内存。
+    """
+    skipped = handler.skipped
+    pois = []
+    counts = {cls: 0 for cls in POI_AMENITIES}
+    seen = set()
+    out_bbox = None
+    for poi in handler.raw_pois:
+        if filter_bbox is not None and not (
+            filter_bbox[0] <= poi["lon"] <= filter_bbox[2]
+            and filter_bbox[1] <= poi["lat"] <= filter_bbox[3]
+        ):
+            skipped["out_of_bbox"] += 1
+            continue
+        key = (poi["name"], poi["cls"], poi["lon"], poi["lat"])
+        if key in seen:
+            continue
+        seen.add(key)
+        pois.append(poi)
+        counts[poi["cls"]] += 1
+        out_bbox = bbox_of(((poi["lon"], poi["lat"]),), out_bbox)
+    handler.raw_pois = []
+    return pois, counts, out_bbox
 
 
 def _relation_poly_entry(plan, outer_ring, holes):
@@ -1076,13 +1183,13 @@ class _OutputError(Exception):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         prog="osm_extract.py",
-        description="从贵州省 OSM PBF 提取包抽取离线渲染图层（道路/水系/面状地物/地名 + "
-                    "multipolygon 关系拼接），原子写出 layers.pkl（schema v2）。",
+        description="从贵州省 OSM PBF 提取包抽取离线渲染图层（道路/水系/面状地物/地名/POI + "
+                    "multipolygon 关系拼接），原子写出 layers.pkl（schema v3）。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "示例:\n"
             "  python scripts/tiles/osm_extract.py --input .scratch/osm/guizhou.osm.pbf "
-            "--output .scratch/osm/layers.pkl --stats\n"
+            "--output .scratch/osm/layers-v3.pkl --stats\n"
             "  python scripts/tiles/osm_extract.py --input guizhou.osm.pbf --no-relations\n"
             "\n退出码: 0 成功 / 2 环境或参数错误 / 3 数据解析失败 / 4 落盘或体积门禁失败\n"
         ),
@@ -1237,7 +1344,7 @@ def _used_filter_bbox(handler, filter_bbox):
     return used
 
 
-def _build_payload(in_path, in_bytes, data_bbox, counts, lines, polys, places, fail_ids):
+def _build_payload(in_path, in_bytes, data_bbox, counts, lines, polys, places, pois, fail_ids):
     return {
         "meta": {
             "schema_version": SCHEMA_VERSION,
@@ -1253,6 +1360,7 @@ def _build_payload(in_path, in_bytes, data_bbox, counts, lines, polys, places, f
         "lines": lines,
         "polys": polys,
         "places": places,
+        "pois": pois,
     }
 
 
@@ -1284,6 +1392,7 @@ def _log_report(log, out_path, out_bytes, data_bbox, counts, skipped, t_scan, t_
     log("线 %d 条：%s" % (sum(counts["lines"].values()), _fmt_counts(counts["lines"])))
     log("面 %d 个：%s" % (sum(counts["polys"].values()), _fmt_counts(counts["polys"])))
     log("点 %d 个：%s" % (sum(counts["places"].values()), _fmt_counts(counts["places"])))
+    log("POI %d 个：%s" % (sum(counts["pois"].values()), _fmt_counts(counts["pois"])))
     log(
         "关系：总计 %d、成功 %d、失败 %d、洞 %d"
         % (
@@ -1330,6 +1439,7 @@ def _write_stats(
             "lines": sum(counts["lines"].values()),
             "polys": sum(counts["polys"].values()),
             "places": sum(counts["places"].values()),
+            "pois": sum(counts["pois"].values()),
             "skipped": sum(skipped.values()),
         },
         "relation_fail_sample_ids": payload["meta"]["relation_fail_sample_ids"],
@@ -1391,6 +1501,9 @@ def main(argv=None):
     lines, line_counts, polys, poly_counts, places, place_counts, data_bbox = build_layers(
         handler, used_bbox, line_tol, ring_tol
     )
+    pois, poi_counts, poi_bbox = build_pois(handler, used_bbox)
+    if poi_bbox is not None:
+        data_bbox = bbox_of(((poi_bbox[0], poi_bbox[1]), (poi_bbox[2], poi_bbox[3])), data_bbox)
 
     log("[4/5] 拼接 multipolygon 关系（按 node id 缝合，role/包含关系判定内外环）…")
     rel_polys, rel_poly_counts, relation_counts, fail_ids, rel_bbox = build_relation_layers(
@@ -1416,10 +1529,13 @@ def main(argv=None):
         "lines": line_counts,
         "polys": poly_counts,
         "places": place_counts,
+        "pois": poi_counts,
         "skipped": handler.skipped,
     }
     counts.update(relation_counts)
-    payload = _build_payload(in_path, in_bytes, data_bbox, counts, lines, polys, places, fail_ids)
+    payload = _build_payload(
+        in_path, in_bytes, data_bbox, counts, lines, polys, places, pois, fail_ids
+    )
 
     out_path = Path(args.output)
     try:

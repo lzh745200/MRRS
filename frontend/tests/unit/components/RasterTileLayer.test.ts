@@ -27,14 +27,30 @@ const hoisted = vi.hoisted(() => {
   }
 
   const map = (el: any, opts: any) => {
+    const handlers: Record<string, Function[]> = {}
     const instance: any = {
       el,
       opts,
+      handlers,
+      zoom: opts?.zoom ?? 7,
+      size: { x: 800, y: 600 },
       remove: vi.fn(),
       setView: vi.fn(),
       fitBounds: vi.fn(),
       panTo: vi.fn(),
       invalidateSize: vi.fn(),
+      on: vi.fn((event: string, handler: Function) => {
+        addHandler(handlers, event, handler)
+        return instance
+      }),
+      off: vi.fn(() => instance),
+      getZoom: vi.fn(() => instance.zoom),
+      getSize: vi.fn(() => instance.size),
+      /** 简单线性投影，便于断言标签像素位置（经度×60、纬度反向往南） */
+      latLngToContainerPoint: vi.fn((latlng: [number, number]) => ({
+        x: Math.round((latlng[1] - 100) * 60),
+        y: Math.round((30 - latlng[0]) * 60),
+      })),
     }
     state.maps.push(instance)
     return instance
@@ -472,5 +488,188 @@ describe('RasterTileLayer.vue — 不可用与生命周期', () => {
     state.groups.length = 0
     const empty = await mountLayer({ tileInfo: null })
     expect(() => empty.unmount()).not.toThrow()
+  })
+})
+
+/** 模拟地图缩放到指定级别并触发 zoomend */
+function setZoom(mapInstance: any, zoom: number) {
+  mapInstance.zoom = zoom
+  ;(mapInstance.handlers.zoomend || []).forEach((fn: Function) => fn())
+}
+
+/** 模拟地图移动结束 */
+function triggerMove(mapInstance: any) {
+  ;(mapInstance.handlers.moveend || []).forEach((fn: Function) => fn())
+}
+
+describe('RasterTileLayer.vue — 常显标签（z12 村 / z13 校，方案 A）', () => {
+  it('z12：村常显（白底小字、不拦截拖拽）、学校仍仅悬停', async () => {
+    await mountLayer()
+    const map = state.maps[0]
+    setZoom(map, 12)
+    await nextTick()
+
+    expect(state.circles[0].bindTooltip).toHaveBeenLastCalledWith(
+      '甲村',
+      expect.objectContaining({
+        permanent: true,
+        interactive: false,
+        direction: 'right',
+        className: 'map-raster-label',
+      })
+    )
+    // 学校阈值 13 → z12 仅悬停（无 options）
+    expect(state.circles[1].bindTooltip).toHaveBeenLastCalledWith('乙小学')
+    expect(state.circles[1].bindTooltip.mock.calls.at(-1)).toHaveLength(1)
+    // 非村/校类型永不常显
+    expect(state.circles[2].bindTooltip.mock.calls.at(-1)).toHaveLength(1)
+  })
+
+  it('z13：村与学校都常显，字号升到大档', async () => {
+    await mountLayer()
+    const map = state.maps[0]
+    setZoom(map, 13)
+    await nextTick()
+
+    expect(state.circles[0].bindTooltip).toHaveBeenLastCalledWith(
+      '甲村',
+      expect.objectContaining({
+        permanent: true,
+        className: 'map-raster-label map-raster-label--lg',
+      })
+    )
+    expect(state.circles[1].bindTooltip).toHaveBeenLastCalledWith(
+      '乙小学',
+      expect.objectContaining({
+        permanent: true,
+        className: 'map-raster-label map-raster-label--lg',
+      })
+    )
+    expect(state.circles[2].bindTooltip.mock.calls.at(-1)).toHaveLength(1)
+  })
+
+  it('z11：全部退回仅悬停（无常显标签）', async () => {
+    await mountLayer()
+    const map = state.maps[0]
+    setZoom(map, 11)
+    await nextTick()
+
+    for (const circle of state.circles) {
+      const last = circle.bindTooltip.mock.calls.at(-1)
+      expect(last).toHaveLength(1)
+    }
+  })
+
+  it('缩放往返：z12 常显 → z11 退回悬停 → z12 再常显；同 zoom 重复 zoomend 不重复重绑', async () => {
+    await mountLayer()
+    const map = state.maps[0]
+    const village = state.circles[0]
+
+    setZoom(map, 12)
+    await nextTick()
+    expect(village.bindTooltip.mock.calls.filter(([, opts]) => opts?.permanent)).toHaveLength(1)
+
+    setZoom(map, 11)
+    await nextTick()
+    expect(village.bindTooltip).toHaveBeenLastCalledWith('甲村')
+
+    setZoom(map, 12)
+    await nextTick()
+    expect(village.bindTooltip.mock.calls.filter(([, opts]) => opts?.permanent)).toHaveLength(2)
+
+    // 同 zoom 再触发 zoomend：模式未变 → 不重绑
+    const callsBefore = village.bindTooltip.mock.calls.length
+    setZoom(map, 12)
+    await nextTick()
+    expect(village.bindTooltip.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('碰撞：同格两个村只常显离视野中心更近的那个', async () => {
+    const crowded = [
+      { id: 11, name: '远村', lng: 106.57, lat: 26.65, type: 'village' }, // x≈394
+      { id: 12, name: '近村', lng: 106.68, lat: 26.65, type: 'village' }, // x≈401
+    ]
+    await mountLayer({ markers: crowded })
+    const map = state.maps[0]
+    setZoom(map, 12)
+    await nextTick()
+
+    // 两点同属 64×20 格 (6,10)，中心 (400,300)：近村胜出
+    expect(state.circles[0].bindTooltip.mock.calls.at(-1)).toHaveLength(1)
+    expect(state.circles[1].bindTooltip).toHaveBeenLastCalledWith(
+      '近村',
+      expect.objectContaining({ permanent: true })
+    )
+  })
+
+  it('markers 变化（筛选村/校）后标签同步增删', async () => {
+    const wrapper = await mountLayer()
+    const map = state.maps[0]
+    setZoom(map, 12)
+    await nextTick()
+
+    await wrapper.setProps({
+      markers: [{ id: 21, name: '新小学', lng: 107.1, lat: 26.9, type: 'school' }],
+    })
+    await nextTick()
+
+    const latest = state.circles.at(-1)
+    // z12 学校不常显
+    expect(latest.bindTooltip.mock.calls.at(-1)).toHaveLength(1)
+
+    setZoom(map, 13)
+    await nextTick()
+    expect(latest.bindTooltip).toHaveBeenLastCalledWith(
+      '新小学',
+      expect.objectContaining({ permanent: true })
+    )
+  })
+
+  it('moveend 后按新像素位置重选：移出视野的村退回悬停', async () => {
+    await mountLayer({
+      markers: [{ id: 31, name: '边缘村', lng: 100.1, lat: 26.65, type: 'village' }],
+    })
+    const map = state.maps[0]
+    setZoom(map, 12)
+    await nextTick()
+    expect(state.circles[0].bindTooltip).toHaveBeenLastCalledWith(
+      '边缘村',
+      expect.objectContaining({ permanent: true })
+    )
+
+    map.latLngToContainerPoint.mockReturnValue({ x: -50, y: 200 })
+    triggerMove(map)
+    await nextTick()
+    expect(state.circles[0].bindTooltip.mock.calls.at(-1)).toHaveLength(1)
+  })
+
+  it('空 markers / 卸载：不产生标签，且解绑 zoom/move 监听', async () => {
+    const wrapper = await mountLayer({ markers: [] })
+    const map = state.maps[0]
+    setZoom(map, 13)
+    await nextTick()
+    expect(state.circles).toHaveLength(0)
+
+    wrapper.unmount()
+    expect(map.off).toHaveBeenCalledWith('zoomend', expect.any(Function))
+    expect(map.off).toHaveBeenCalledWith('moveend', expect.any(Function))
+  })
+
+  it('无 id 的标注用 name 作 key（仍能常显）；卸载后迟到的 zoomend 事件安全忽略', async () => {
+    const wrapper = await mountLayer({
+      markers: [{ name: '无编号村', lng: 106.71, lat: 26.65, type: 'village' }],
+    })
+    const map = state.maps[0]
+    setZoom(map, 12)
+    await nextTick()
+    expect(state.circles[0].bindTooltip).toHaveBeenLastCalledWith(
+      '无编号村',
+      expect.objectContaining({ permanent: true })
+    )
+
+    // 卸载后地图已销毁：残留事件回调不得抛错（refreshLabels 的 map 空值保护）
+    const lateHandlers = [...(map.handlers.zoomend || [])]
+    wrapper.unmount()
+    expect(() => lateHandlers.forEach((fn) => fn())).not.toThrow()
   })
 })

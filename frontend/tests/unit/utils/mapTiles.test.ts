@@ -7,6 +7,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   GCJ02_HINT,
+  LABEL_CELL_HEIGHT,
+  LABEL_CELL_WIDTH,
+  LABEL_MAX_COUNT,
+  LABEL_MIN_ZOOM_SCHOOL,
+  LABEL_MIN_ZOOM_VILLAGE,
   OSM_ATTRIBUTION,
   PARTIAL_COVERAGE_HINT,
   TILE_ATTRIBUTION,
@@ -26,9 +31,11 @@ import {
   isGcj02,
   isLocalTileUrl,
   isTileMapUsable,
+  labelZoomForType,
   normalizeTileImportResult,
   normalizeTileInfo,
   parseTileBbox,
+  selectVisibleLabels,
   shouldFallbackToVector,
   tileAttribution,
   tileCoverageBbox,
@@ -427,5 +434,110 @@ describe('WGS-84 → GCJ-02 坐标修正', () => {
     expect(converted[0]).not.toEqual(markers[0])
     expect(converted[0].name).toBe('a')
     expect(markers[0]).toEqual({ name: 'a', lat: 26.65, lng: 106.63 })
+  })
+})
+
+describe('瓦片底图常显标签（zoom 阈值 / 碰撞 / 上限 / 优先级）', () => {
+  const label = (name: string, type: string | undefined, x: number, y: number) => ({
+    id: name,
+    name,
+    type,
+    x,
+    y,
+  })
+  const viewport = { width: 800, height: 600 }
+
+  it('labelZoomForType：村 ≥12、学校 ≥13、其它类型永不常显', () => {
+    expect(labelZoomForType('village')).toBe(12)
+    expect(labelZoomForType('school')).toBe(13)
+    expect(labelZoomForType('project')).toBe(Number.POSITIVE_INFINITY)
+    expect(labelZoomForType(undefined)).toBe(Number.POSITIVE_INFINITY)
+    expect(labelZoomForType('')).toBe(Number.POSITIVE_INFINITY)
+    expect(LABEL_MIN_ZOOM_VILLAGE).toBe(12)
+    expect(LABEL_MIN_ZOOM_SCHOOL).toBe(13)
+    expect(LABEL_MAX_COUNT).toBe(120)
+    expect(LABEL_CELL_WIDTH).toBe(64)
+    expect(LABEL_CELL_HEIGHT).toBe(20)
+  })
+
+  it('z11 不常显任何标签；z12 只常显村；z13 村与学校都常显', () => {
+    const labels = [
+      label('甲村', 'village', 100, 100),
+      label('乙小学', 'school', 300, 100),
+      label('丙项目', 'project', 500, 100),
+    ]
+    expect(selectVisibleLabels(labels, 11, viewport)).toEqual([])
+    expect(selectVisibleLabels(labels, 12, viewport).map((l) => l.name)).toEqual(['甲村'])
+    expect(
+      selectVisibleLabels(labels, 13, viewport)
+        .map((l) => l.name)
+        .sort()
+    ).toEqual(['乙小学', '甲村'].sort())
+    // 学校在 z12 不提前出现
+    expect(selectVisibleLabels([label('乙小学', 'school', 10, 10)], 12, viewport)).toEqual([])
+  })
+
+  it('碰撞：同一 64×20 格只保留一个，学校优先于村（即使村更近中心）', () => {
+    const labels = [label('甲村', 'village', 400, 300), label('乙小学', 'school', 405, 302)]
+    expect(selectVisibleLabels(labels, 13, viewport).map((l) => l.name)).toEqual(['乙小学'])
+  })
+
+  it('碰撞：同类型按到视野中心距离近者优先', () => {
+    const labels = [label('远村', 'village', 395, 300), label('近村', 'village', 401, 300)]
+    // 两点同属一格 (6,15)，中心 (400,300) → 近村更近
+    expect(selectVisibleLabels(labels, 12, viewport).map((l) => l.name)).toEqual(['近村'])
+  })
+
+  it('上限：默认 120，可用 opts.maxLabels 收窄（含 0）', () => {
+    const many = Array.from({ length: 200 }, (_, i) =>
+      label(`村${i}`, 'village', (i % 10) * 70, Math.floor(i / 10) * 25)
+    )
+    expect(selectVisibleLabels(many, 12, viewport)).toHaveLength(LABEL_MAX_COUNT)
+    expect(selectVisibleLabels(many, 12, viewport, { maxLabels: 5 })).toHaveLength(5)
+    expect(selectVisibleLabels(many, 12, viewport, { maxLabels: 0 })).toHaveLength(0)
+  })
+
+  it('视野外的点不参与；opts.margin 可放宽容差', () => {
+    const labels = [
+      label('左外', 'village', -5, 100),
+      label('下外', 'village', 100, 605),
+      label('内', 'village', 200, 200),
+    ]
+    expect(selectVisibleLabels(labels, 12, viewport).map((l) => l.name)).toEqual(['内'])
+    expect(
+      selectVisibleLabels(labels, 12, viewport, { margin: 16 })
+        .map((l) => l.name)
+        .sort()
+    ).toEqual(['下外', '内', '左外'].sort())
+  })
+
+  it('格尺寸可覆盖：默认同格的两点，缩小格宽后不再互斥', () => {
+    const labels = [label('甲', 'village', 100, 100), label('乙', 'village', 110, 100)]
+    expect(selectVisibleLabels(labels, 12, viewport)).toHaveLength(1)
+    expect(selectVisibleLabels(labels, 12, viewport, { cellWidth: 4 })).toHaveLength(2)
+    // 格高覆盖：纵向两点默认不同格（y/20 → 4 与 5），拉高格高到 40 后同格互斥
+    const vertical = [label('上', 'village', 100, 85), label('下', 'village', 100, 100)]
+    expect(selectVisibleLabels(vertical, 12, viewport)).toHaveLength(2)
+    expect(selectVisibleLabels(vertical, 12, viewport, { cellHeight: 40 })).toHaveLength(1)
+  })
+
+  it('结果顺序稳定：学校优先，其次按中心距离由近到远', () => {
+    const labels = [
+      label('远村', 'village', 10, 10),
+      label('近村', 'village', 400, 300),
+      label('学校', 'school', 790, 590),
+    ]
+    expect(selectVisibleLabels(labels, 13, viewport).map((l) => l.name)).toEqual([
+      '学校',
+      '近村',
+      '远村',
+    ])
+  })
+
+  it('空输入 / 空视口尺寸安全', () => {
+    expect(selectVisibleLabels([], 13, viewport)).toEqual([])
+    expect(selectVisibleLabels([label('甲村', 'village', 10, 10)], 13, { width: 0, height: 0 })).toEqual(
+      []
+    )
   })
 })

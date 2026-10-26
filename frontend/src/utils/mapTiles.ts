@@ -200,6 +200,115 @@ export function isGcj02(manifest: TileManifest | null | undefined): boolean {
   return GCJ02_PROVIDERS.includes(provider.trim().toLowerCase())
 }
 
+// ── 瓦片底图常显标签（方案 A：z12 村 / z13 校 常显名称） ──
+
+/** 帮扶村常显标签的最小缩放级别 */
+export const LABEL_MIN_ZOOM_VILLAGE = 12
+/** 学校常显标签的最小缩放级别（比村更高一级：学校更稀疏，避免互相压字） */
+export const LABEL_MIN_ZOOM_SCHOOL = 13
+/** 标签碰撞格宽（px）：同一格内只保留优先级最高的一个标签 */
+export const LABEL_CELL_WIDTH = 64
+/** 标签碰撞格高（px） */
+export const LABEL_CELL_HEIGHT = 20
+/** 单次常显标签上限：z13+ 时村校可能上百，超过即丢弃，防止拖动/缩放卡顿 */
+export const LABEL_MAX_COUNT = 120
+
+/**
+ * 该类型标注**常显**标签所需的最小 zoom。
+ * 只开放帮扶村（12）与学校（13）；其它类型（project 等）返回 Infinity（永不常显）。
+ */
+export function labelZoomForType(type: string | undefined): number {
+  if (type === 'school') return LABEL_MIN_ZOOM_SCHOOL
+  if (type === 'village') return LABEL_MIN_ZOOM_VILLAGE
+  return Number.POSITIVE_INFINITY
+}
+
+/** 待选标签：x/y 为**容器像素坐标**（组件用 map.latLngToContainerPoint 投影） */
+export interface LabelCandidate {
+  id?: number | string
+  name: string
+  type?: string
+  x: number
+  y: number
+}
+
+/** 视口尺寸（容器像素） */
+export interface LabelViewportSize {
+  width: number
+  height: number
+}
+
+export interface LabelSelectOptions {
+  /** 单次上限，默认 LABEL_MAX_COUNT */
+  maxLabels?: number
+  /** 碰撞格宽，默认 LABEL_CELL_WIDTH */
+  cellWidth?: number
+  /** 碰撞格高，默认 LABEL_CELL_HEIGHT */
+  cellHeight?: number
+  /** 视口外容差（px），默认 0；>0 时允许略微出界的标签参与 */
+  margin?: number
+}
+
+/**
+ * 类型优先级：学校 0 > 帮扶村 1。
+ * 其它类型已被 labelZoomForType 判为永不常显（Infinity），不会进入排序。
+ */
+function labelTypePriority(type: string | undefined): number {
+  return type === 'school' ? 0 : 1
+}
+
+/**
+ * 选择当前 zoom/视口下应**常显**的标签（纯函数，便于单测）。
+ *
+ * 规则（先到先得 + 优先级）：
+ * 1. 按类型阈值过滤：zoom < labelZoomForType(type) 的不常显（村 <12、学校 <13、其它永不）；
+ * 2. 视口外的点不参与（margin 可放宽）；
+ * 3. 排序：学校优先于村；同类型按到视野中心的距离由近到远；完全相同时按 name 稳定排序；
+ * 4. 像素格碰撞（默认 64×20）：同格已有标签则跳过；
+ * 5. 达到 maxLabels 即停止（默认 120）。
+ *
+ * 返回结果按选中顺序排列（即优先级/距离顺序），不修改入参。
+ */
+export function selectVisibleLabels(
+  labels: LabelCandidate[],
+  zoom: number,
+  viewport: LabelViewportSize,
+  opts: LabelSelectOptions = {}
+): LabelCandidate[] {
+  const maxLabels = opts.maxLabels ?? LABEL_MAX_COUNT
+  const cellWidth = opts.cellWidth ?? LABEL_CELL_WIDTH
+  const cellHeight = opts.cellHeight ?? LABEL_CELL_HEIGHT
+  const margin = opts.margin ?? 0
+  const centerX = viewport.width / 2
+  const centerY = viewport.height / 2
+
+  const candidates = labels.filter((label) => {
+    if (zoom < labelZoomForType(label.type)) return false
+    if (label.x < -margin || label.y < -margin) return false
+    return label.x <= viewport.width + margin && label.y <= viewport.height + margin
+  })
+
+  candidates.sort((a, b) => {
+    const byPriority = labelTypePriority(a.type) - labelTypePriority(b.type)
+    if (byPriority !== 0) return byPriority
+    const distanceA = (a.x - centerX) ** 2 + (a.y - centerY) ** 2
+    const distanceB = (b.x - centerX) ** 2 + (b.y - centerY) ** 2
+    if (distanceA !== distanceB) return distanceA - distanceB
+    return a.name.localeCompare(b.name)
+  })
+
+  const occupied = new Set<string>()
+  const selected: LabelCandidate[] = []
+  for (const candidate of candidates) {
+    if (selected.length >= maxLabels) break
+    const key = `${Math.floor(candidate.x / cellWidth)}:${Math.floor(candidate.y / cellHeight)}`
+    if (occupied.has(key)) continue
+    occupied.add(key)
+    selected.push(candidate)
+  }
+  return selected
+}
+
 /**
  * 底图署名文案：OSM 衍生瓦片必须显示 ODbL 署名，其余用"离线瓦片"。
  * 判定依据：manifest.provider 含 osm，或 license 含 ODbL/OpenStreetMap（不区分大小写）。

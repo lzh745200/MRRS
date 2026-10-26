@@ -5,6 +5,40 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.11] - 2026-10-26 — 瓦片底图常显村/校名称 + 贵州 z13（16,422 张 / 95MB）+ 学校 POI 图层
+
+> 用户诉求：瓦片底图要能直接看到"每个帮扶村、每所学校"的名称。拆成两层解决：
+> ① 名称权威来源 = 系统业务库（**常显标签层**）；② 底图细节 + 自然村/学校注记 = **z13 瓦片包**。
+
+### Added
+
+- **瓦片底图常显村/校名称（方案 A）**：`zoom >= 12` 常显帮扶村名、`zoom >= 13` 常显学校名
+  （`zoom < 12` 仍仅悬停）；标签文本严格取 `marker.name`；防遮挡用 64×20px 像素格
+  （学校优先 → 距视野中心近优先），单次上限 120 条；`interactive:false` + `pointer-events:none`
+  不拦截拖拽；`zoomend/moveend` 重算、只在显示模式变化时重绑 Tooltip；卸载解绑监听。
+  纯函数 `labelZoomForType` / `selectVisibleLabels` 在 `frontend/src/utils/mapTiles.ts`，
+  单测 9 + 组件 8 项，两文件覆盖率 100%。
+- **OSM 提取 schema v2→v3：`pois` 图层**：`amenity ∈ {school, kindergarten, college, university}`
+  的 node 与 way 质心（`name:zh → name`，无名称不输出，截断 100）；v1/v2 pkl 仍兼容。
+  实测贵州：POI **682**（school 559 / kindergarten 44 / college 54 / university 25）。
+- **贵州 z13 全省瓦片包**：16,422 张 / **97.6MB** / 184s（89.2 张/秒，0 失败），
+  导出 `guizhou-z13.zip` **95.1MB**；MANIFEST `zoom=[13,13]`、`tileCount=16422`、
+  license `ODbL-1.0 (© OpenStreetMap contributors)`；`verify_tiles --require-min 16400` 通过；
+  导入实测 16,422 张全部落盘。注记：大学/学院 z12 起、学校/幼儿园 z13 起；单瓦片标签上限 14→32。
+
+### Changed
+
+- `render_osm_tiles.py` 新增 `--no-poi`（z≤12 重渲时完全复现 v2 样式，避免高校标记"回归"）；
+  内置安装包仍为 z5–12（316.7MB），z13 作为**独立可选包**导入（≤512MB 上限内，无需分包）。
+
+### 使用与注意
+
+- 导入：管理员 → 系统管理 → 备份与存储 → 地图瓦片 → 导入瓦片包，选 `guizhou-z13.zip`；
+- 导入后地图最大 zoom 由 12 → 13，学校名开始出现（OSM 覆盖 682 处，非"全部学校"）；
+- **帮扶村/学校官方名称以系统库为准**：常显标签只显示 `latitude/longitude` 非空的记录，
+  部署前需核查村/校坐标完整率（dev 库 6 村 0 坐标）；缺坐标的后端会按区县估算但带 `isEstimated`；
+- 视觉未人工核验（本会话模型不能读图），已用候选统计 + POI/`--no-poi` 像素差（4493/8268）佐证。
+
 ## [1.18.10] - 2026-10-26 — WPS 兼容：.xls/.et 导入打通、格式白名单单一源、导出格式门禁
 
 > **背景**：政务现场主流办公套件是 WPS，但系统此前只在"标准格式"上成立。实测三个缺口：

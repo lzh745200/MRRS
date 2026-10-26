@@ -247,3 +247,49 @@ npm run build:win
 2. 打开 `/api/v1/map/tiles/12/3258/1735.png`：应返回 PNG（`200 image/png`）；
 3. 打开 `/api/v1/map/tiles/12/0/0.png`：应返回 404 —— 这是**正常**的边缘无数据，前端会渲染透明；
 4. 若页面仍回退，提示里会带 `available/tileCount/source/reason`，按 8.3 对照即可判断是"没装瓦片"还是"真故障"。
+
+## 九、z13 升级与村/校名称（v1.18.11）
+
+### 9.1 本次交付
+
+| 项 | 内容 |
+|---|---|
+| 贵州 z13 全省包 | `deliverables/osm-tiles-z13-20261026/guizhou-z13.zip`，**95.1MB**，16,422 张，zoom=[13,13] |
+| POI 图层（schema v3） | 学校/幼儿园/学院/大学共 **682** 个（school 559 / kindergarten 44 / college 54 / university 25） |
+| 常显标签 | `zoom>=12` 帮扶村名、`zoom>=13` 学校名（系统业务库为准，OSM 只补充自然村/学校注记） |
+| 内置安装包 | 仍为 z5–12（316.7MB），z13 作为**独立可选包**导入（远低于 512MB 上限） |
+
+### 9.2 渲染口径（防止"重渲 z12 出高校标记"）
+
+- 大学/学院 `min_zoom=12`、学校/幼儿园 `min_zoom=13`；村/屯保持 `min_zoom=11`（不回归）；
+- 单瓦片标签上限 14 → **32**；
+- 重渲 z≤12 时**必须带 `--no-poi`**，才能逐像素复现 v2 旧样式；只有 z13 用 v3（`--input layers-v3.pkl`）。
+
+```bash
+# 提取 v3（含 POI）
+PYTHONPATH=.scratch/osm/pylibs python scripts/tiles/osm_extract.py \
+  -i .scratch/osm/guizhou.osm.pbf -o .scratch/osm/layers-v3.pkl --stats
+
+# 渲染 z13（POI 开）
+python scripts/tiles/render_osm_tiles.py --input .scratch/osm/layers-v3.pkl \
+  --bbox 103.6,24.6,109.6,29.2 --zoom 13 --out .scratch/osm/tiles-z13 --jobs 4
+
+# 打独立包（不改内置 resources/map-tiles）
+python scripts/tiles/export_tiles.py --from .scratch/osm/tiles-z13 \
+  --zip deliverables/osm-tiles-z13-20261026/guizhou-z13.zip --refresh-manifest --require-min 16400
+```
+
+### 9.3 导入后效果与自检
+
+- `GET /api/v1/map/tile-info` → `zoomLevels` 变为 `5..13`（内置 5–12 + 导入 13）；
+- `GET /api/v1/map/tiles/13/6524/3467.png` → 200，可见高校/学校名（实测该瓦片 26 条 POI）；
+- 地图页 `zoom>=12` 出现帮扶村名字、`zoom>=13` 出现学校名字；点击圆点仍打开详情；
+- 村/校名字来自系统业务库（`/map/markers`），**前提是记录有经纬度**；部署前用
+  `SELECT count(*) FROM schools WHERE latitude IS NULL OR longitude IS NULL;` 核查完整率。
+
+### 9.4 已知限制
+
+1. OSM 学校覆盖约 682 处，**不等于**教育局全部学校；"每一所学校"必须补全业务库坐标；
+2. 常显标签有 120 条上限与像素格避让，密集城区会主动丢弃部分标签（缩放可看全）；
+3. 标签 `pointer-events:none` 不拦截拖拽，点标签区域会穿透到地图（点圆点可打开详情）；
+4. z14（约 700MB）需按市州分包，本次未做。

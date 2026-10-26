@@ -41,6 +41,7 @@ import type { TileInfo } from '@/api/map'
 import { chartColor, chartColorPrimary } from '@/utils/chartColors'
 import {
   GCJ02_HINT,
+  LABEL_MIN_ZOOM_SCHOOL,
   PARTIAL_COVERAGE_HINT,
   TILE_BOUNDS_PADDING_DEGREES,
   TILE_FALLBACK_WATCHDOG_MS,
@@ -51,6 +52,7 @@ import {
   convertMarkersForTiles,
   isGcj02,
   isTileMapUsable,
+  selectVisibleLabels,
   shouldFallbackToVector,
   tileAttribution,
   tileCoverageBbox,
@@ -66,6 +68,16 @@ interface TileMapMarker {
   lng: number
   lat: number
   type?: string
+}
+
+/** 标签显示模式：hover=仅悬停；small/large=常显（字号两档） */
+type LabelMode = 'hover' | 'small' | 'large'
+
+/** 标注点条目：保留 circle 以便缩放/移动后按需重绑标签 */
+interface MarkerEntry {
+  marker: TileMapMarker
+  circle: L.CircleMarker
+  labelMode: LabelMode | null
 }
 
 const props = withDefaults(
@@ -113,6 +125,8 @@ let map: L.Map | null = null
 let tileLayer: L.TileLayer | null = null
 let markerLayer: L.LayerGroup | null = null
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+/** 当前标注点（点击仍是 marker-click；标签按 zoom/位置从这些条目里挑选） */
+let markerEntries: MarkerEntry[] = []
 
 const gcj02 = computed(() => isGcj02(props.tileInfo?.manifest))
 const noticeText = computed(() =>
@@ -241,6 +255,9 @@ function initMap(info: TileInfo) {
   tileLayer.on('tileerror', handleTileError)
   tileLayer.on('tileload', handleTileLoad)
   tileLayer.addTo(map)
+  // 常显标签随缩放档位变化 / 拖动后像素位置变化而重算
+  map.on('zoomend', refreshLabels)
+  map.on('moveend', refreshLabels)
   renderMarkers()
   // 初始视野贴合预置范围（固定 zoom 7 在 1080p 下视野约 21° 宽 > 贵州 6°，必请求无瓦区）
   map.fitBounds(bounds, { padding: [16, 16], maxZoom: TILE_FIT_MAX_ZOOM })
@@ -251,11 +268,64 @@ function initMap(info: TileInfo) {
   startWatchdog()
 }
 
+/**
+ * 常显标签（方案 A）：z≥12 帮扶村、z≥13 学校**直接显示名称**（用户诉求），
+ * z<12 或未被选中的仍只悬停显示。
+ *
+ * - 选谁常显由纯函数 `selectVisibleLabels` 决定（像素格碰撞 64×20 + 学校优先 + 距离中心优先 + 上限 120）；
+ * - 标签用 permanent tooltip 且 `interactive:false`（配 CSS pointer-events:none），
+ *   因此不拦截地图拖拽；标注点本身的点击仍走既有 `marker-click`；
+ * - 仅在显示模式变化时才重新 bindTooltip，避免拖动时对上百标注反复绑定。
+ */
+function applyLabelMode(entry: MarkerEntry, mode: LabelMode) {
+  if (entry.labelMode === mode) return
+  entry.labelMode = mode
+  if (mode === 'hover') {
+    entry.circle.bindTooltip(entry.marker.name)
+    return
+  }
+  entry.circle.bindTooltip(entry.marker.name, {
+    permanent: true,
+    direction: 'right',
+    offset: [8, 0],
+    interactive: false,
+    className: mode === 'large' ? 'map-raster-label map-raster-label--lg' : 'map-raster-label',
+  })
+}
+
+/** 按当前 zoom/视野重算常显标签（缩放、拖动、标注变化时调用） */
+function refreshLabels() {
+  const currentMap = map
+  if (!currentMap) return
+  const zoom = currentMap.getZoom()
+  const size = currentMap.getSize()
+  const selected = selectVisibleLabels(
+    markerEntries.map(({ marker }) => {
+      const point = currentMap.latLngToContainerPoint([marker.lat, marker.lng])
+      return { id: marker.id, name: marker.name, type: marker.type, x: point.x, y: point.y }
+    }),
+    zoom,
+    { width: size.x, height: size.y }
+  )
+  const visibleKeys = new Set(selected.map((label) => String(label.id ?? label.name)))
+  // 字号两档：z12 小字、z≥13 大字（学校常显起点）
+  const large = zoom >= LABEL_MIN_ZOOM_SCHOOL
+  for (const entry of markerEntries) {
+    const key = String(entry.marker.id ?? entry.marker.name)
+    if (!visibleKeys.has(key)) {
+      applyLabelMode(entry, 'hover')
+      continue
+    }
+    applyLabelMode(entry, large ? 'large' : 'small')
+  }
+}
+
 function renderMarkers() {
   if (!map) return
   if (!markerLayer) markerLayer = L.layerGroup().addTo(map)
   const group = markerLayer
   group.clearLayers()
+  markerEntries = []
   convertMarkersForTiles(props.markers, gcj02.value).forEach((marker) => {
     const point = L.circleMarker([marker.lat, marker.lng], {
       radius: 6,
@@ -264,10 +334,11 @@ function renderMarkers() {
       fillColor: markerColor(marker.type),
       fillOpacity: 0.9,
     })
-    point.bindTooltip(marker.name)
     point.on('click', () => emit('marker-click', marker))
     point.addTo(group)
+    markerEntries.push({ marker, circle: point, labelMode: null })
   })
+  refreshLabels()
 }
 
 function applyView() {
@@ -288,9 +359,12 @@ function destroyMap() {
     markerLayer = null
   }
   if (map) {
+    map.off('zoomend', refreshLabels)
+    map.off('moveend', refreshLabels)
     map.remove()
     map = null
   }
+  markerEntries = []
   fallbackRequested.value = false
   loadedTiles.value = 0
   failedTiles.value = 0
@@ -419,5 +493,30 @@ onBeforeUnmount(() => {
   background: var(--color-bg-card);
   color: var(--color-text-regular);
   font-size: 12px;
+}
+
+/* 常显标签（Leaflet 自己创建 tooltip DOM，故用 :deep 穿透 scoped 作用域）
+ * 颜色全部走 design token；pointer-events:none 保证标签不拦截地图拖拽。 */
+:deep(.map-raster-label.leaflet-tooltip) {
+  padding: 1px 4px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 3px;
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+/* 小三角与标签边框同色，避免出现深色描边 */
+:deep(.map-raster-label.leaflet-tooltip-right::before) {
+  border-right-color: var(--color-border-light);
+}
+
+/* 大字档：z≥13（学校常显起点）时名称更易读 */
+:deep(.map-raster-label--lg.leaflet-tooltip) {
+  font-size: var(--font-size-sm);
 }
 </style>

@@ -84,8 +84,29 @@ DEFAULT_ATTRIBUTION = "© OpenStreetMap contributors"
 LICENSE_TEXT = "ODbL-1.0 (© OpenStreetMap contributors)"
 PROVIDER = "osm-render"
 STYLE_NAME = "osm-vector-basemap-light-v2"
-MAX_LABELS = 14
+# v3（POI 学校/大学注记）样式名；未启用 POI 时仍写 v2，保持既有产物可追溯
+STYLE_NAME_V3 = "osm-vector-basemap-light-v3-poi"
+MAX_LABELS = 32
 ROAD_NAME_MAX_CHARS = 8
+
+# 地名最小缩放（z11/12 行为保持不变：村/屯仍从 z11 起绘，避免既有 z5–12 产物回归）
+PLACE_MIN_ZOOM = {
+    "city": 8,
+    "district": 9,
+    "suburb": 9,
+    "town": 10,
+    "village": 11,
+    "hamlet": 11,
+}
+
+# POI（schema v3）最小缩放：大学/学院 z12 起、学校/幼儿园 z13 起（z13 包主用）。
+# 可用 `--no-poi` 完全关闭，从而在 z12 及以下复现 v2 旧样式。
+POI_MIN_ZOOM = {
+    "university": 12,
+    "college": 12,
+    "school": 13,
+    "kindergarten": 13,
+}
 
 FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyh.ttc",
@@ -169,6 +190,7 @@ BOUND_STYLE_PROVINCE = (2.5, 11.0, 5.0)  # 长虚线
 LABEL_COLOR_PREF = (74, 94, 76)
 LABEL_COLOR_COUNTY = (96, 112, 98)
 LABEL_COLOR_PLACE = (70, 70, 70)
+LABEL_COLOR_POI = (140, 62, 40)  # 学校/大学：暖棕红，与地名灰、水系蓝区分
 LABEL_COLOR_WATER = (58, 108, 148)
 LABEL_COLOR_PARK = (62, 112, 68)
 LABEL_COLOR_ROAD = (120, 92, 52)
@@ -250,13 +272,17 @@ PREFECTURE_SUFFIXES = (
     "地区",
 )
 
-# 注记优先级（数值越小越优先）
+# 注记优先级（数值越小越优先）。POI：大学/学院 > 学校/幼儿园 > 村/屯。
 LABEL_PRIORITY = {
     "city": 0,
     "district": 1,
     "suburb": 1,
     "pref": 1.5,
     "county": 2,
+    "university": 3.2,
+    "college": 3.3,
+    "school": 3.5,
+    "kindergarten": 3.6,
     "town": 3,
     "village": 4,
     "hamlet": 4,
@@ -642,6 +668,18 @@ class PlaceItem(object):
         self.population = population
 
 
+class PoiItem(object):
+    """v3 POI（学校/幼儿园/学院/大学）：只用于注记，不参与几何绘制。"""
+
+    __slots__ = ("name", "cls", "lon", "lat")
+
+    def __init__(self, name: str, cls: str, lon: float, lat: float):
+        self.name = name
+        self.cls = cls
+        self.lon = lon
+        self.lat = lat
+
+
 def _centroid_of(points: Sequence[Tuple[float, float]]) -> Tuple[float, float]:
     """粗糙质心（顶点均值）：只用于水面名定位，无需精确。"""
     if not points:
@@ -738,8 +776,34 @@ def _normalize_places(raw_items: Any) -> List["PlaceItem"]:
     return places
 
 
+def _normalize_pois(raw_items: Any) -> List["PoiItem"]:
+    """规范化 v3 `pois`；v1/v2 pkl 无该键时返回空列表（向后兼容）。
+
+    只保留已知 amenity 类别 + 合法坐标 + 非空名称；脏条目静默跳过（与 places 同口径）。
+    """
+    pois: List[PoiItem] = []
+    for item in raw_items or []:
+        if not isinstance(item, dict):
+            continue
+        cls = str(item.get("cls") or item.get("amenity") or "").strip().lower()
+        if cls not in POI_MIN_ZOOM:
+            continue
+        try:
+            lon = float(item.get("lon"))
+            lat = float(item.get("lat"))
+        except (TypeError, ValueError):
+            continue
+        if not (-180.0 <= lon <= 180.0 and -90.0 <= lat <= 90.0):
+            continue
+        name = str(item.get("name_zh") or item.get("name") or "").strip()
+        if not name:
+            continue
+        pois.append(PoiItem(name, cls, lon, lat))
+    return pois
+
+
 def load_layers(path: Path) -> Dict[str, Any]:
-    """读取并规范化 layers.pkl；v1（无 holes）与 v2 均兼容。"""
+    """读取并规范化 layers.pkl；v1（无 holes）/v2/ v3（含 pois）均兼容。"""
     if not path.is_file():
         raise TileToolError(f"找不到输入文件: {path}")
     try:
@@ -752,12 +816,14 @@ def load_layers(path: Path) -> Dict[str, Any]:
     lines, skipped_lines = _normalize_lines(raw.get("lines"))
     polys, skipped_polys, hole_count = _normalize_polys(raw.get("polys"))
     places = _normalize_places(raw.get("places"))
+    pois = _normalize_pois(raw.get("pois"))
     meta = raw.get("meta") if isinstance(raw.get("meta"), dict) else {}
     return {
         "meta": meta,
         "lines": lines,
         "polys": polys,
         "places": places,
+        "pois": pois,
         "skipped_lines": skipped_lines,
         "skipped_polys": skipped_polys,
         "hole_count": hole_count,
@@ -1035,10 +1101,10 @@ class FontBook:
 
 
 class LabelCandidate(object):
-    __slots__ = ("priority", "importance", "text", "x", "y", "size", "color")
+    __slots__ = ("priority", "importance", "text", "x", "y", "size", "color", "marker")
 
     def __init__(self, priority: float, importance: float, text: str,
-                 x: float, y: float, size: int, color):
+                 x: float, y: float, size: int, color, marker: bool = False):
         self.priority = priority
         self.importance = importance
         self.text = text
@@ -1046,6 +1112,7 @@ class LabelCandidate(object):
         self.y = y
         self.size = size
         self.color = color
+        self.marker = marker
 
 
 class Renderer:
@@ -1053,6 +1120,7 @@ class Renderer:
         self.lines: List[LineItem] = layers["lines"]
         self.polys: List[PolyItem] = layers["polys"]
         self.places: List[PlaceItem] = layers["places"]
+        self.pois: List[PoiItem] = layers.get("pois") or []
         self.admin = admin
         self.attribution = attribution
         self.fonts = FontBook()
@@ -1372,6 +1440,7 @@ class Renderer:
         candidates: List[LabelCandidate] = []
         self._admin_labels(candidates, to_px, z, rect)
         self._place_labels(candidates, to_px, z, query_box, rect)
+        self._poi_labels(candidates, to_px, z, query_box, rect)
         self._poly_labels(candidates, to_px, z, query_box, rect)
         self._road_labels(candidates, z, rect, road_names)
         return candidates
@@ -1388,13 +1457,14 @@ class Renderer:
         lat: float,
         size: int,
         color,
+        marker: bool = False,
     ) -> None:
         if not text:
             return
         x, y = to_px(lon, lat)
         if not (rect[0] <= x <= rect[2] and rect[1] <= y <= rect[3]):
             return
-        candidates.append(LabelCandidate(priority, importance, text, x, y, size, color))
+        candidates.append(LabelCandidate(priority, importance, text, x, y, size, color, marker))
 
     def _admin_labels(self, candidates: List[LabelCandidate], to_px, z: int, rect) -> None:
         admin = self.admin
@@ -1413,10 +1483,8 @@ class Renderer:
                                  size, LABEL_COLOR_COUNTY)
 
     def _place_labels(self, candidates: List[LabelCandidate], to_px, z: int, query_box, rect) -> None:
-        place_min_zoom = {"city": 8, "district": 9, "suburb": 9, "town": 10,
-                          "village": 11, "hamlet": 11}
         for place in self.places:
-            min_zoom = place_min_zoom.get(place.cls)
+            min_zoom = PLACE_MIN_ZOOM.get(place.cls)
             if min_zoom is None or z < min_zoom:
                 continue
             if not (query_box[0] <= place.lon <= query_box[2]
@@ -1426,6 +1494,23 @@ class Renderer:
             self._push_label(candidates, to_px, rect, LABEL_PRIORITY.get(place.cls, 4),
                              float(place.population or 0), place.name, place.lon, place.lat,
                              size, LABEL_COLOR_PLACE)
+
+    def _poi_labels(self, candidates: List[LabelCandidate], to_px, z: int, query_box, rect) -> None:
+        """POI 注记：大学/学院 z12 起、学校/幼儿园 z13 起（v3 图层；v2 pkl 无候选）。"""
+        for poi in self.pois:
+            min_zoom = POI_MIN_ZOOM.get(poi.cls)
+            if min_zoom is None or z < min_zoom:
+                continue
+            if not (query_box[0] <= poi.lon <= query_box[2]
+                    and query_box[1] <= poi.lat <= query_box[3]):
+                continue
+            size = 12 if poi.cls in ("university", "college") else 11
+            self._push_label(
+                candidates, to_px, rect, LABEL_PRIORITY[poi.cls],
+                # 重要性只用于同优先级排序；POI 内部保持固定顺序（高校 > 学校 > 幼儿园）
+                1e6 - LABEL_PRIORITY[poi.cls], poi.name, poi.lon, poi.lat,
+                size, LABEL_COLOR_POI, marker=True,
+            )
 
     def _poly_labels(self, candidates: List[LabelCandidate], to_px, z: int, query_box, rect) -> None:
         if z < 10 or self.poly_index is None:
@@ -1473,10 +1558,20 @@ class Renderer:
             font = self.fonts.get(candidate.size)
             if font is None:
                 return
+            # POI：左侧 5x5 小方块 + 右侧名称（方框先画，文字左对齐）；其余注记居中
+            text_x = candidate.x + 5 if candidate.marker else candidate.x
+            anchor = "lm" if candidate.marker else "mm"
             left, top, right, bottom = draw.textbbox(
-                (candidate.x, candidate.y), candidate.text, font=font, anchor="mm"
+                (text_x, candidate.y), candidate.text, font=font, anchor=anchor
             )
             box = (left - 1, top - 1, right + 1, bottom + 1)
+            if candidate.marker:
+                box = (
+                    min(box[0], candidate.x - 4),
+                    min(box[1], candidate.y - 5),
+                    box[2],
+                    max(box[3], candidate.y + 5),
+                )
             if any(
                 not (box[2] < other[0] or box[0] > other[2] or box[3] < other[1] or box[1] > other[3])
                 for other in placed
@@ -1484,12 +1579,17 @@ class Renderer:
                 continue
             placed.append(box)
             drawn.add(candidate.text)
+            if candidate.marker:
+                draw.rectangle(
+                    (candidate.x - 3, candidate.y - 3, candidate.x + 1, candidate.y + 1),
+                    fill=candidate.color,
+                )
             draw.text(
-                (candidate.x, candidate.y),
+                (text_x, candidate.y),
                 candidate.text,
                 font=font,
                 fill=candidate.color,
-                anchor="mm",
+                anchor=anchor,
                 stroke_width=2,
                 stroke_fill=LABEL_HALO,
             )
@@ -1792,10 +1892,13 @@ def _worker_init(
     attribution: str,
     out_dir: str,
     skip_existing: bool,
+    no_poi: bool = False,
 ) -> None:
     """并行 worker 初始化：各自加载图层与索引（Windows spawn 下每进程独立）。"""
     global _WORKER_RENDERER, _WORKER_STATE
     layers = load_layers(Path(input_path))
+    if no_poi:
+        layers["pois"] = []
     admin = load_admin_geo(Path(geo_path)) if geo_path else None
     _WORKER_RENDERER = Renderer(layers, admin, attribution)
     _WORKER_STATE = {"out": Path(out_dir), "skip": bool(skip_existing)}
@@ -1847,6 +1950,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="只统计瓦片数量与图层规模，不渲染")
     parser.add_argument("--attribution", default=DEFAULT_ATTRIBUTION,
                         help=f"瓦片左下角署名文案（默认 {DEFAULT_ATTRIBUTION}；空串 = 不绘制）")
+    parser.add_argument("--no-poi", action="store_true",
+                        help="关闭 v3 POI 注记（学校/大学）；z12 及以下需要复现 v2 旧样式时使用")
     parser.add_argument("--preview", type=int, default=0, metavar="N",
                         help="渲染完成后复制 N 张抽样瓦片到预览目录（默认 0）")
     parser.add_argument("--preview-dir", default=DEFAULT_PREVIEW_DIR,
@@ -1866,7 +1971,8 @@ def _print_plan(bbox, z_min: int, z_max: int) -> int:
 
 
 def _write_manifest(out_dir: Path, bbox, z_min: int, z_max: int, attribution: str,
-                    input_path: Path, geo_path: Optional[Path], meta: Dict[str, Any]) -> Dict[str, Any]:
+                    input_path: Path, geo_path: Optional[Path], meta: Dict[str, Any],
+                    style: str = STYLE_NAME, poi_count: int = 0) -> Dict[str, Any]:
     count, total_bytes, levels = scan_tiles(out_dir)
     sources = [str(input_path)]
     if geo_path is not None:
@@ -1886,8 +1992,9 @@ def _write_manifest(out_dir: Path, bbox, z_min: int, z_max: int, attribution: st
         extra={
             "attribution": attribution,
             "renderer": "scripts/tiles/render_osm_tiles.py",
-            "style": STYLE_NAME,
-            "tilesVersion": 2,
+            "style": style,
+            "tilesVersion": 3 if poi_count else 2,
+            "poiCount": poi_count,
             "sourceMeta": meta or {},
         },
     )
@@ -1961,6 +2068,7 @@ def _render_parallel(
     skip_existing: bool,
     started: float,
     total_plan: int,
+    no_poi: bool = False,
 ) -> Tuple[int, int, int, bool, List[Tuple[int, int, int]]]:
     rendered = 0
     skipped = 0
@@ -1973,7 +2081,7 @@ def _render_parallel(
             processes=jobs,
             initializer=_worker_init,
             initargs=(str(input_path), str(geo_path) if geo_path else None,
-                      attribution, str(out_dir), skip_existing),
+                      attribution, str(out_dir), skip_existing, no_poi),
         ) as pool:
             for status, tile in pool.imap_unordered(_worker_render, tiles, chunksize=8):
                 if status == "ok":
@@ -2054,6 +2162,10 @@ def _execute(args) -> int:
         fail(str(exc), 2)
         return 2
 
+    if args.no_poi:
+        layers["pois"] = []
+        log("已关闭 POI 注记（--no-poi）：z12 及以下与 v2 样式一致")
+
     _log_inputs(input_path, layers, admin)
     total_plan = _print_plan(bbox, z_min, z_max)
     tiles = list(iter_tiles(bbox, z_min, z_max))
@@ -2066,7 +2178,7 @@ def _execute(args) -> int:
         log(f"并行渲染: {args.jobs} 进程（spawn）")
         result = _render_parallel(
             tiles, args.jobs, out_dir, input_path, geo_path, args.attribution,
-            args.skip_existing, started, total_plan,
+            args.skip_existing, started, total_plan, args.no_poi,
         )
     else:
         result = _render_sequential(
@@ -2082,7 +2194,7 @@ def _log_inputs(input_path: Path, layers: Dict[str, Any], admin: Optional[Dict[s
     log(
         f"图层: 线 {len(layers['lines'])}（跳过 {layers['skipped_lines']}）"
         f"  面 {len(layers['polys'])}（跳过 {layers['skipped_polys']}，洞 {layers['hole_count']}）"
-        f"  注记点 {len(layers['places'])}"
+        f"  注记点 {len(layers['places'])}  POI {len(layers.get('pois') or [])}"
     )
     if admin:
         log(f"行政边界: {len(admin['counties'])} 县 / {len(admin['pref'])} 地州 / "
@@ -2093,15 +2205,17 @@ def _finish(args, result, bbox, z_min: int, z_max: int, input_path: Path, out_di
             geo_path: Optional[Path], layers: Dict[str, Any], started: float) -> int:
     rendered, skipped, failures, interrupted, done_tiles = result
     elapsed = time.time() - started
+    poi_count = len(layers.get("pois") or [])
+    style = STYLE_NAME_V3 if poi_count else STYLE_NAME
     stats = _write_manifest(out_dir, bbox, z_min, z_max, args.attribution, input_path, geo_path,
-                            layers.get("meta") or {})
+                            layers.get("meta") or {}, style=style, poi_count=poi_count)
     speed = (rendered + skipped) / max(elapsed, 1e-6)
     log(
         f"完成: 渲染 {rendered} 张 / 跳过 {skipped} / 失败 {failures}；目录现有 {stats['count']} 张，"
         f"共 {human_bytes(stats['bytes'])}；耗时 {elapsed:.1f}s（{speed:.1f} 张/秒）"
     )
     log(f"输出: {out_dir}  缩放级别: {stats['levels']}")
-    log(f"MANIFEST: provider={PROVIDER} license={LICENSE_TEXT} style={STYLE_NAME}")
+    log(f"MANIFEST: provider={PROVIDER} license={LICENSE_TEXT} style={style} POI={poi_count}")
 
     if args.preview > 0:
         files = [out_dir / str(z) / str(x) / f"{y}.png" for z, x, y in done_tiles]
