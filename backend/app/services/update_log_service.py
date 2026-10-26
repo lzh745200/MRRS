@@ -219,9 +219,12 @@ class UpdateLogService:
         Returns:
             同步结果统计
         """
+        # 一次性取出已记录版本，避免对 97 个版本各查一次库（启动路径上这很贵）
+        recorded = {row[0] for row in self.db.query(SystemUpdateLog.version).all()}
+
         synced_count = 0
         for seq, version_data in enumerate(VERSION_HISTORY_DATA):
-            if not self.is_version_recorded(version_data["version"]):
+            if version_data["version"] not in recorded:
                 log_entry = self._create_version_entry(version_data, updated_by, seq)
                 self.db.add(log_entry)
                 synced_count += 1
@@ -263,6 +266,12 @@ class UpdateLogService:
                 "result": result,
             }
 
+        # 老库补齐：历史数据源会随版本新增条目（应用内日志曾长期停在 1.1.1），
+        # 只靠"检测版本变化"只会补记当前这一条，中间版本仍缺失。这里每次启动做一次
+        # 幂等同步，缺失的版本会被补上；已存在的不动。
+        sync_result = self.sync_version_history(updated_by)
+        synced_count = sync_result.get("synced_count", 0)
+
         if latest.version != current_version:
             # 版本发生变化，查找版本描述
             description = "系统更新"
@@ -283,6 +292,9 @@ class UpdateLogService:
                 "action": "record_change",
                 "old_version": latest.version,
                 "new_version": current_version,
+                "synced_count": synced_count,
             }
 
+        if synced_count:
+            logger.info("版本未变更，已补齐 %s 条缺失的历史版本记录", synced_count)
         return None  # 版本未变更

@@ -183,3 +183,22 @@ class TestCheckAndRecordVersionChange:
     def test_version_unchanged_returns_none(self, svc, real_db_session):
         _mklog(real_db_session, "1.0.0", datetime(2026, 1, 1))
         assert svc.check_and_record_version_change("1.0.0") is None
+
+    def test_old_db_backfills_missing_history(self, svc, real_db_session):
+        """老库只有一条 1.0.0 记录时，启动检查要把中间缺失的版本补齐（不能只补当前版本）。"""
+        _mklog(real_db_session, "1.0.0", datetime(2026, 1, 1))
+        before = svc.get_update_count()
+
+        assert svc.check_and_record_version_change("1.0.0") is None
+
+        assert svc.get_update_count() == len(VERSION_HISTORY_DATA)
+        assert svc.get_update_count() > before
+
+    def test_fully_recorded_and_unchanged_is_noop(self, svc):
+        """历史已完整且版本未变时不写库、返回 None（补齐逻辑必须是幂等的）。"""
+        svc.initialize_version_history()
+        total = svc.get_update_count()
+        assert total == len(VERSION_HISTORY_DATA)
+
+        assert svc.check_and_record_version_change(VERSION_HISTORY_DATA[-1]["version"]) is None
+        assert svc.get_update_count() == total

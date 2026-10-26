@@ -3013,6 +3013,10 @@ VERSION_HISTORY_DATA = [
                 "的顺序不稳定，实测 1.18.2 会排在 1.18.3 前面。修法：初始化/同步时按版本序号加秒偏移（前端只显示日期，秒级偏移不可见），查询再加 version DESC 兜底，历史库里的"
                 "老数据也能稳定倒序。"
             ),
+            (
+                "升级用户的旧库只补当前一条：check_and_record_version_change 原先只在\"版本号变了\"时补记一条，中间版本仍然缺失（老库会从 1.1.1 直接跳到 1.18"
+                ".9）。改为每次启动做一次幂等补齐：一次性取出已记录版本集合，缺哪条补哪条，已存在的不动。"
+            ),
             "scripts/check_update_log.py 发布说明一致性门禁（已接入 pr-checks 的 static-analysis 与make test-local），一次校验三处",
             (
                 "单元测试 tests/unit/test_update_log_sync.py：断言生成文件与 CHANGELOG 一致、最新版本等于 version.json、版本序列升序无重复、解析跳"
