@@ -470,3 +470,14 @@ gate_stderr.txt
 /logs/
 /projects/
 docs/agents/workspace.yaml
+
+# ── 整理补充（2026-10-26 收口）──
+# 零引用测试中间产物 / AI 工具缓存 / 本地产物：不再入库
+.scratch/tmp/
+.qoder/
+.reasonix/
+.zcode/
+deliverables/releases/
+*.exe
+*.msi
+*.dmg
