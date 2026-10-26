@@ -33,6 +33,8 @@ HEADING_RE = re.compile(r"^##\s*\[(\d+\.\d+\.\d+)\]\s*-\s*(\d{4}-\d{2}-\d{2})\s*
 BULLET_RE = re.compile(r"^[-*]\s+(.*)$")
 MAX_FEATURES = 12
 MAX_FEATURE_LEN = 220
+# 只写给维护者的内部小节：不进用户可见的更新日志
+META_SECTIONS = ("验证", "自测", "备注", "Verification", "Notes")
 
 HEADER = '''# -*- coding: utf-8 -*-
 """应用内「更新日志」数据（自动生成，请勿手工编辑）。
@@ -48,21 +50,36 @@ VERSION_HISTORY_DATA = '''
 
 
 def _clean(text: str) -> str:
-    """去掉 Markdown 装饰，保留可读纯文本。"""
+    """去掉 Markdown 装饰，保留可读纯文本；超长时在标点处收尾，避免半句截断。"""
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)   # [文字](链接) → 文字
     text = text.replace("**", "").replace("__", "").replace("`", "")
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > MAX_FEATURE_LEN:
-        text = text[: MAX_FEATURE_LEN - 1].rstrip() + "…"
-    return text
+    text = re.sub(r"\s+", " ", text).strip().rstrip("：:").strip()
+    if len(text) <= MAX_FEATURE_LEN:
+        return text
+
+    head = text[:MAX_FEATURE_LEN]
+    for mark in ("。", "；", "！", "？"):
+        pos = head.rfind(mark)
+        if pos >= MAX_FEATURE_LEN * 0.5:
+            return head[: pos + 1]
+    pos = head.rfind("，")
+    if pos >= MAX_FEATURE_LEN * 0.5:
+        return head[:pos] + "…"
+    return head.rstrip() + "…"
 
 
-def parse_changelog(text: str) -> List[Dict]:
-    """把 CHANGELOG 文本解析为 [{version, date, description, features}, ...]（升序）。"""
+def parse_changelog(text: str) -> List[Dict]:  # noqa: C901 - 逐行状态机，分支天然多，拆开反而更难读
+    """把 CHANGELOG 文本解析为 [{version, date, description, features}, ...]（升序）。
+
+    跳过 `[Unreleased]` / `[未发布]` 等非语义化版本段（无发布号，不属于版本历史），
+    并跳过 `### 验证` 这类内部小节 —— 它们写给维护者看，不适合出现在用户可见的更新日志里。
+    """
     entries: Dict[str, Dict] = {}
     order: List[str] = []
     cur = None
     in_fence = False
+    skip_section = False
+    skip_nested = False
 
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -76,6 +93,8 @@ def parse_changelog(text: str) -> List[Dict]:
         m = HEADING_RE.match(line)
         if m:
             version, date, title = m.group(1), m.group(2), (m.group(3) or "").strip()
+            skip_section = False
+            skip_nested = False
             if version in entries:      # 历史重复段（如 1.1.0 出现两次）保留首段
                 cur = None
                 continue
@@ -87,22 +106,41 @@ def parse_changelog(text: str) -> List[Dict]:
         if line.startswith("## "):      # 其他二级标题结束当前段
             cur = None
             continue
-        if cur is None:
+
+        if line.startswith("### "):
+            # 内部小节（验证/自测/备注）不进用户可见日志
+            skip_section = any(k in line for k in META_SECTIONS)
+            continue
+
+        if cur is None or skip_section:
             continue
 
         bm = BULLET_RE.match(line)
         if bm:
-            item = _clean(bm.group(1))
-            if not item or item.startswith("|"):
+            raw_item = bm.group(1).strip()
+            if raw_item.startswith("|"):
                 continue
+            skip_nested = False
             if len(cur["features"]) < MAX_FEATURES:
-                cur["features"].append(item)
+                cur["features"].append(raw_item)
+            continue
+
+        # 子条目（缩进的 - / * / 1. / 1)）属于细节，不进用户可见日志；
+        # 它们的折行续行也必须一起跳过，否则会被拼到父条目上变成串行。
+        if re.match(r"^\s+(?:[-*]|\d+[.)])\s", line):
+            skip_nested = True
+            continue
+
+        # CHANGELOG 的要点常折行书写（续行缩进、不以列表符号开头）：拼回上一条，
+        # 否则用户看到的每条要点都是被截断的半句话。
+        if cur["features"] and not skip_nested and line.startswith("  "):
+            cur["features"][-1] = cur["features"][-1] + line.strip()
 
     result = []
     for version in order:
         item = entries[version]
-        if not item["features"]:
-            item["features"] = [item["description"] or "本次更新"]
+        cleaned = [_clean(feat) for feat in item["features"]]
+        item["features"] = [feat for feat in cleaned if feat] or [item["description"] or "本次更新"]
         if not item["description"]:
             item["description"] = item["features"][0]
         result.append(item)

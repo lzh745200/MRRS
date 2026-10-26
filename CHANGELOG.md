@@ -17,7 +17,7 @@
 
 - **应用内更新日志长期不更新**：`update_log_service.py` 里的 240 行硬编码历史被删除，
   改由 `backend/app/services/version_history_data.py` 提供，该文件由
-  `scripts/sync_update_log.py` 从 `CHANGELOG.md` 生成（96 个版本，1.0.0 → 1.18.9）。
+  `scripts/sync_update_log.py` 从 `CHANGELOG.md` 生成（1.0.0 起的全部历史版本）。
   改版本说明只需改 CHANGELOG，不再需要手抄第二份。
 - **同一天多个版本的顺序是随机的**：`created_at` 只按日期写入（1.18.2–1.18.7 全是 2026-10-25），
   同一时间戳下 `ORDER BY created_at DESC` 的顺序不稳定，实测 1.18.2 会排在 1.18.3 前面。
@@ -44,7 +44,7 @@
 
 - `check_update_log.py` / `check_changelog.py` / `check_doc_numbers.py` / `sync-version.js --check` 全部 exit 0。
 - 更新日志相关 29 例测试通过，`app/services/update_log_service.py` 行+分支覆盖率 **100%**（92 语句 / 26 分支）。
-- 端到端实测：全新库启动后 `GET /api/v1/system/update-logs` 返回 **96 条**，首条 1.18.9、
+- 端到端实测：全新库启动后 `GET /api/v1/system/update-logs` 返回全部历史版本，首条为当前版本、
   次条 1.18.8，倒序严格按语义化版本排列。
 
 ## [1.18.8] - 2026-10-26 — 全面收口：逐一代码体检 + 项目整理 −1880 文件 + 分段覆盖率门禁修复
