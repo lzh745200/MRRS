@@ -3097,7 +3097,11 @@ VERSION_HISTORY_DATA = [
             "前端 accept 同步：Excel 上传 8 处补 .et（含 YearlyOverview 扩展名校验与提示文案、对应单测期望），区块附件上传补 .et/.wps/.dps。",
             ".xls 可传不可读（真实死路）：无 xlrd + openpyxl 不支持 OLE2 → 现在按容器走 xlrd。",
             "WPS .wps/.dps 附件被拒：现在可上传（仅存储），导入时给\"请另存为 .docx/.pptx\"的明确提示，不再抛裸异常。",
-            "待完整回归结果回填：后端 12 段 / 前端全量 / 门禁全套。",
+            (
+                "新增用例：test_office_formats_wps.py 14 passed（xlsx/xls/两种容器 .et 读取、.wps/.dps 提示、白名单接受 .et、openpyxl"
+                " 风格替身语义）+ test_office_formats_gate.py11 passed（含 5 个负向用例：裸 openpyxl / 硬编码白名单 / 非白名单导出扩展名 /缺 BO"
+                "M 的 CSV 各自能红）+ 导出侧回读（模板 xlsx 可被…"
+            ),
         ],
     },
     {
