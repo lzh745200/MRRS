@@ -293,3 +293,14 @@ python scripts/tiles/export_tiles.py --from .scratch/osm/tiles-z13 \
 2. 常显标签有 120 条上限与像素格避让，密集城区会主动丢弃部分标签（缩放可看全）；
 3. 标签 `pointer-events:none` 不拦截拖拽，点标签区域会穿透到地图（点圆点可打开详情）；
 4. z14（约 700MB）需按市州分包，本次未做。
+
+## 十、z14 预渲染交付（v1.18.12）
+
+- 全省 z14：`.scratch/osm/tiles-z14`，**64,900 张 / 296.9MB**，渲染 560.7s（115.7 张/秒，0 失败）；
+- 交付包（`deliverables/osm-tiles-z14-20261026/`）：
+  - `guizhou-all_z14.zip` **283.7MB**（64,900 张，<512MB 单包上限）；
+  - `guizhou-<slug>_z14.zip` ×9（21.5~63.8MB，合计 389.2MB/77,666 条目，含重叠）；
+- 打包脚本：`python scripts/tiles/pack_prefecture_z14.py --source .scratch/osm/tiles-z14`；
+- 校验：9 市州包逐个 `import_tiles` + `verify_tiles` 全通过；全省包与内置合并 **70,523 张 / zoom 5..12,14**；
+- 与 z13 包叠加导入后 zoom 连续 5..14；村名 z≥12、校名 z≥13 由业务标签层常显（与 zoom 无关）；
+- 限制：OSM 建筑仅 2 万处，z14 仍以路网/水系/村名/学校注记为主，无建筑轮廓级细节。
