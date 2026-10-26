@@ -254,8 +254,10 @@ async def _import_entities(
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
 
-    if not file.filename.lower().endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="不支持的文件格式，请上传 .xlsx 或 .xls 文件")
+    from app.core.office_formats import is_spreadsheet_upload, spreadsheet_upload_hint
+
+    if not is_spreadsheet_upload(file.filename):
+        raise HTTPException(status_code=400, detail=spreadsheet_upload_hint())
 
     if entity_type not in VALID_ENTITY_TYPES:
         raise HTTPException(
@@ -332,11 +334,10 @@ def _resolve_validator(entity_type: str):
 
 
 def _parse_excel_rows(file_content: bytes, header_parser, example_markers):
-    """解析Excel文件，返回行数据列表"""
-    from io import BytesIO
-    from openpyxl import load_workbook
+    """解析Excel文件，返回行数据列表（.xlsx/.xls/WPS .et 均可）"""
+    from app.services.office_reader import load_workbook_any
 
-    wb = load_workbook(filename=BytesIO(file_content), data_only=True)
+    wb = load_workbook_any(file_content)
     ws = wb.active
     rows = []
     header_mapping = {}

@@ -84,7 +84,7 @@ hiddenimports = [
     'diskcache',
 
     # ── 数据处理 ──
-    'pandas', 'numpy', 'openpyxl', 'xlsxwriter',
+    'pandas', 'numpy', 'openpyxl', 'xlsxwriter', 'xlrd',
 
     # ── 文档生成 ──
     'reportlab', 'docx', 'pptx', 'mammoth',

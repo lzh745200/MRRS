@@ -1,12 +1,12 @@
 """Policy import from Excel — extracted from api/v1/policy.py to reduce C901 complexity."""
 
-from io import BytesIO
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, UploadFile
-from openpyxl import load_workbook
 from sqlalchemy.orm import Session
+
+from app.services.office_reader import load_workbook_any
 
 from app.models.policy import Policy
 from app.core.upload_security import validate_excel_upload
@@ -37,7 +37,7 @@ async def import_policies_from_excel(
     )
 
     try:
-        wb = load_workbook(BytesIO(content))
+        wb = load_workbook_any(content, getattr(file, "filename", None))
         ws = wb.active
 
         level_map = {

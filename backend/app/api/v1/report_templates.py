@@ -573,10 +573,10 @@ def _parse_template_excel(
         - errors: 错误信息列表
         - rows: 原始数据行列表
     """
-    # P2-4 启动优化：openpyxl 惰性导入（同上）
-    from openpyxl import load_workbook
+    # .xlsx / .xls / WPS .et 统一按容器魔数解析（原先只能读 xlsx）
+    from app.services.office_reader import load_workbook_any
 
-    wb = load_workbook(io.BytesIO(content), read_only=True)
+    wb = load_workbook_any(content, "template.xlsx")
     ws = wb.active
     rows = list(ws.iter_rows(min_row=3, values_only=True))  # 跳过标题和表头
 
@@ -1265,8 +1265,10 @@ async def upload_filled_template(
     if not t:
         raise HTTPException(status_code=404, detail="模板不存在")
 
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="仅支持 .xlsx / .xls 文件")
+    from app.core.office_formats import is_spreadsheet_upload, spreadsheet_upload_hint
+
+    if not is_spreadsheet_upload(file.filename):
+        raise HTTPException(status_code=400, detail=spreadsheet_upload_hint())
 
     fields = _normalize_template_fields(safe_json_loads(t.fields, default=[]))
     if not fields:
@@ -1278,10 +1280,10 @@ async def upload_filled_template(
     )
 
     try:
-        # P2-4 启动优化：openpyxl 惰性导入（同上）
-        from openpyxl import load_workbook
+        # .xlsx / .xls / WPS .et 统一按容器魔数解析（原先只能读 xlsx）
+        from app.services.office_reader import load_workbook_any
 
-        wb = load_workbook(io.BytesIO(content), read_only=True)
+        wb = load_workbook_any(content, getattr(file, "filename", None))
         wb.close()
     except Exception:
         raise HTTPException(status_code=400, detail="无法解析 Excel 文件")

@@ -39,6 +39,32 @@
   部署前需核查村/校坐标完整率（dev 库 6 村 0 坐标）；缺坐标的后端会按区县估算但带 `isEstimated`；
 - 视觉未人工核验（本会话模型不能读图），已用候选统计 + POI/`--no-poi` 像素差（4493/8268）佐证。
 
+### Fixed（质量门禁层，2026-10-26 体检）
+
+- **损坏扫描守卫自身两个缺陷**：① `scripts/scan_mojibake.py --check` 因本机运行时日志
+  （`frontend/logs-*.txt`，正常含 NUL 且已被 `.gitignore` 忽略）**恒红** —— 守卫被当成噪音，
+  "扫描失败"与"提交照样过"长期并存；现在按 `git ls-files --others --ignored --exclude-standard`
+  跳过被忽略路径（已跟踪文件不受 `.gitignore` 影响，仍全量扫描；非 git 工作副本退回全量）。
+  ② `os.path.getsize` 在 try 之外，扫描期间被并发 pytest 删除的临时库
+  （`backend/backup_snapshot_*.db-journal`）让守卫自己抛 `FileNotFoundError` → 改为跳过。
+  回归：`backend/tests/unit/test_scan_mojibake_gate.py`（7 项，含"未忽略的 NUL/双编文件仍必红"
+  两条负向用例，防止为变绿而削弱守卫）。
+- **`.gitignore` 双编损坏吞掉两条规则**（2026-10-24 `7f8738b` 引入）：三行注释被写成 GBK 双编，
+  其中两行把 `logs/` 与 `_*.ps1` "粘"进注释行，**规则实际失效**（根目录 `logs/` 不再被忽略）。
+  按 git 历史原文还原三行注释，并把两条规则拆回独立行。
+- **两道既有门禁从未在 CI 执行**：`scan_mojibake.py --check` 接入 `static-analysis`；
+  `check_doc_numbers.py --full` 接入 `stack-alignment`（该门禁需 `import app.main` 与
+  `pytest --collect-only`，放无后端依赖的 `static-analysis` 会 `ModuleNotFoundError` 恒红）。
+  同时把 `CLAUDE.md` 的后端用例数由过期的 14,726 校正为实测值。
+- **pre-commit 配置在"`python` 不在 PATH"的机器上必然失败**：本地钩子
+  `language: system` + `entry: python scripts/...` 改为 `language: python`（由 pre-commit
+  用运行它的解释器自建环境）；`electron-syntax-check` 的 `bash -c 'for f in electron/*.js'`
+  改为 `node scripts/check_electron_syntax.js`（Windows 的 `bash` 常解析到**未装发行版的 WSL
+  启动器**，钩子必然失败）；重复的 `check-tokens-sync` id 改为 `-files` 后缀。
+  **本机未执行 `pre-commit install`**：本机 python 子进程无法写 `%TEMP%`/`~/.cache`，
+  装上会让每一次 `git commit` 失败（违反"不得新增问题"），故本轮的强制点是 CI；
+  在正常 shell 里执行一次 `python -m pre_commit install` 即启用。
+
 ## [1.18.10] - 2026-10-26 — WPS 兼容：.xls/.et 导入打通、格式白名单单一源、导出格式门禁
 
 > **背景**：政务现场主流办公套件是 WPS，但系统此前只在"标准格式"上成立。实测三个缺口：
@@ -85,7 +111,22 @@
 
 ### Tests
 
-- 待完整回归结果回填：后端 12 段 / 前端全量 / 门禁全套。
+- 新增用例：`test_office_formats_wps.py` **14 passed**（xlsx/xls/两种容器 .et 读取、
+  `.wps/.dps` 提示、白名单接受 .et、openpyxl 风格替身语义）+ `test_office_formats_gate.py`
+  **11 passed**（含 5 个负向用例：裸 openpyxl / 硬编码白名单 / 非白名单导出扩展名 /
+  缺 BOM 的 CSV 各自能红）+ 导出侧回读（模板 xlsx 可被 openpyxl 重开、CSV 带 BOM）。
+- **后端 12 段等价全量**：seg01/02/03/08/09/11 首轮 PASS；seg04 **2278** / seg05 **872** /
+  seg06 **1574** / seg07 **517** / seg10 **2585** / seg12 **3192** 复验 PASS（0 failed / 0 skipped）。
+  期间修掉两处**并发提交造成的陈旧状态**（非本改动引入）：应用内更新日志数据未随新版
+  重新生成（已跑 `sync_update_log.py`）、`_FakeFile` 无 `filename` 的直接调用场景
+  （统一 `getattr(file, "filename", None)`）。
+- **前端全量**：**347 文件 / 7374 用例全 PASS**（含 WPS accept 断言同步）。
+- **门禁**：`flake8 app/`=0、`flake8 scripts/`=0、`check_office_formats`=OK、
+  `check_changelog`=OK、`check_doc_numbers --full`=OK（849 端点 / 344 文件 / 14,793 用例）、
+  `check_pagination_cap` / 菜单对齐 / console tab 映射 / 硬编码色 146-基线 / 三层对齐 /
+  6 项预防性棘轮 全绿。
+- **WPS 人工抽样（3A）**：已生成 `.scratch/wps-samples/` 下 3 个文件供真机 WPS 打开验收：
+  `01_帮扶村导入模板.xlsx`、`02_帮扶村导出.csv`、`03_年度工作报告.docx`（自动回读已通过）。
 
 ## [1.18.9] - 2026-10-26 — 应用内更新日志接入唯一账本 + 发布说明一致性门禁（根治版本说明漂移）
 

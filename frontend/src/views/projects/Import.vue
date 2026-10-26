@@ -126,7 +126,7 @@
               :auto-upload="false"
               :on-change="handleFileChange"
               :on-exceed="handleExceed"
-              accept=".xlsx,.xls"
+              accept=".xlsx,.xls,.et"
               :file-list="fileList"
               class="upload-container"
             >

@@ -256,7 +256,7 @@
           :http-request="handleImportUpload"
           :before-upload="beforeImportUpload"
           :limit="1"
-          accept=".xlsx,.xls"
+          accept=".xlsx,.xls,.et"
           drag
         >
           <el-icon class="el-icon--upload"><Upload /></el-icon>

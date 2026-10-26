@@ -122,7 +122,7 @@
     <input
       ref="fileInputRef"
       type="file"
-      accept=".xlsx,.xls"
+      accept=".xlsx,.xls,.et"
       style="display: none"
       @change="handleFileChange"
     />

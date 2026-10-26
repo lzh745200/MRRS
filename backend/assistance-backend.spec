@@ -141,6 +141,8 @@ hiddenimports = [
     # 数据处理
     'openpyxl.styles',
     'openpyxl.utils',
+    # .xls / WPS 旧版 .et（OLE2 容器）导入：openpyxl 不支持，必须打包 xlrd
+    'xlrd',
     'pandas.core',
     'pandas.io.excel',
     'numpy.core._multiarray_umath',

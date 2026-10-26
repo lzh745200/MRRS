@@ -50,6 +50,8 @@ REQUIRED_RUNTIME_PACKAGES: Tuple[Dependency, ...] = (
     Dependency("pydantic", "pydantic", "请求/响应数据校验"),
     Dependency("pandas", "pandas", "报表与数据分析"),
     Dependency("openpyxl", "openpyxl", "Excel 导入导出"),
+    # 导入端点接受 .xls / WPS 旧版 .et（都是 OLE2 容器），openpyxl 读不了 → 必需
+    Dependency("xlrd", "xlrd", "Excel 97-2003 与 WPS 旧版表格导入"),
     # alert_service 在模块顶层 `import httpx`，该模块经 services/monitoring_service
     # → api/v1/monitoring_legacy → api/v1/__init__ 在启动期导入 —— 缺包即启动失败，
     # 故与 requirements.txt 同步登记为运行时必需（离线默认不发请求，但导入必须成功）。

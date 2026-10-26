@@ -790,7 +790,7 @@ async function handleExport() {
 function handleImport() {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.xlsx,.xls'
+  input.accept = '.xlsx,.xls,.et'
   input.onchange = async (e: any) => {
     const file = e.target.files[0]
     if (!file) return

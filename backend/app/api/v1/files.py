@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
+from app.core.office_formats import DOCUMENT_UPLOAD_EXTS
 from app.core.security import get_current_user
 from app.core.response import success_response
 from app.utils.upload_helper import save_upload_file
@@ -27,9 +28,11 @@ _UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 
 # 允许的文件扩展名（按类别分组）
 # 注意: svg 不在白名单（可含脚本导致存储型 XSS）
+# documents 组统一取自 app.core.office_formats（WPS 兼容改造 P0）：
+# 标准格式 + WPS 原生 .et/.wps/.dps（附件只存不解析）。
 _ALLOWED_EXTS = {
     "image": {"jpg", "jpeg", "png", "gif", "bmp", "webp", "ico"},
-    "document": {"pdf", "doc", "docx", "ppt", "pptx", "txt", "xls", "xlsx", "csv"},
+    "document": set(DOCUMENT_UPLOAD_EXTS),
     "archive": {"zip", "rar", "7z", "tar", "gz"},
     "audio": {"mp3", "wav", "ogg"},
     "video": {"mp4", "avi", "mov", "mkv", "webm"},

@@ -3131,6 +3131,23 @@ VERSION_HISTORY_DATA = [
                 "带 isEstimated；"
             ),
             "视觉未人工核验（本会话模型不能读图），已用候选统计 + POI/--no-poi 像素差（4493/8268）佐证。",
+            (
+                "损坏扫描守卫自身两个缺陷：① scripts/scan_mojibake.py --check 因本机运行时日志（frontend/logs-*.txt，正常含 NUL 且已被 .giti"
+                "gnore 忽略）恒红 —— 守卫被当成噪音，\"扫描失败\"与\"提交照样过\"长期并存；"
+            ),
+            (
+                ".gitignore 双编损坏吞掉两条规则（2026-10-24 7f8738b 引入）：三行注释被写成 GBK 双编，其中两行把 logs/ 与 _*.ps1 \"粘\"进注释行，规则实"
+                "际失效（根目录 logs/ 不再被忽略）。按 git 历史原文还原三行注释，并把两条规则拆回独立行。"
+            ),
+            (
+                "两道既有门禁从未在 CI 执行：scan_mojibake.py --check 接入 static-analysis；check_doc_numbers.py --full 接入 sta"
+                "ck-alignment（该门禁需 import app.main 与pytest --collect-only，放无后端依赖的 static-analysis 会 ModuleNotFo"
+                "undError 恒红）。"
+            ),
+            (
+                "pre-commit 配置在\"python 不在 PATH\"的机器上必然失败：本地钩子language: system + entry: python scripts/... 改为 l"
+                "anguage: python（由 pre-commit用运行它的解释器自建环境）；"
+            ),
         ],
     },
 ]

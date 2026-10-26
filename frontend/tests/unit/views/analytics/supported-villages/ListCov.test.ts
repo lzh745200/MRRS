@@ -537,7 +537,7 @@ describe('筛选表单与操作栏模板产物', () => {
     })
     await btns(wrapper, '导入数据')[0].trigger('click')
     expect(inputs.length).toBe(1)
-    expect(inputs[0].accept).toBe('.xlsx,.xls')
+    expect(inputs[0].accept).toBe('.xlsx,.xls,.et') // WPS 表格 .et 也应可导入
     expect(inputs[0].type).toBe('file')
 
     spy.mockRestore()

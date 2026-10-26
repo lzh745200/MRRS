@@ -387,7 +387,7 @@ describe('YearlyOverview.vue 导入导出', () => {
     await vm.handleImportSection('population', {})
     expect(mocks.importSectionData).not.toHaveBeenCalled()
     await vm.handleImportSection('population', { raw: { name: 'a.txt', size: 100 } })
-    expect(mocks.ElMessage.error).toHaveBeenCalledWith('只能上传 Excel 文件(.xlsx/.xls)')
+    expect(mocks.ElMessage.error).toHaveBeenCalledWith('只能上传 Excel 文件(.xlsx/.xls/.et)')
     await vm.handleImportSection('population', { raw: { name: 'a.xlsx', size: 11 * 1024 * 1024 } })
     expect(mocks.ElMessage.error).toHaveBeenCalledWith('文件大小不能超过 10MB')
     // file 为 null → 提前返回

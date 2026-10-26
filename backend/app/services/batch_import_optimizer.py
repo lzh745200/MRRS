@@ -10,6 +10,8 @@
 import logging
 from typing import Any, Dict, List, Tuple
 
+from app.services.office_reader import read_rows
+
 logger = logging.getLogger(__name__)
 
 # 单次批量插入的批次大小
@@ -25,41 +27,20 @@ def read_excel_raw(file_content: bytes) -> List[List[Any]]:
     Returns:
         行列表，每行为单元格值列表（空值为 None，与 openpyxl values_only 一致）
     """
-    import pandas as pd
-    from io import BytesIO
-
-    df = pd.read_excel(
-        BytesIO(file_content),
-        engine="openpyxl",
-        header=None,
-        dtype=object,
-        keep_default_na=False,
-    )
-    # keep_default_na=False 会把空单元格读成 ""，统一回 None 与 openpyxl 对齐
-    return [[(None if v == "" else v) for v in row] for row in df.values.tolist()]
+    # 统一走 office_reader：按容器魔数选择 openpyxl(.xlsx/.et-OOXML) 或
+    # xlrd(.xls/.et-OLE2)，不再固定 engine="openpyxl"（那会让 .xls 必然失败）。
+    return read_rows(file_content)
 
 
 def _read_excel_fallback(file_content: bytes) -> Tuple[List[str], List[Dict[str, Any]]]:
-    """openpyxl 回退读取（pandas 不可用时）"""
-    from io import BytesIO
-    from openpyxl import load_workbook
-
-    wb = load_workbook(BytesIO(file_content), read_only=True, data_only=True)
-    ws = wb.active
-    rows_iter = ws.iter_rows(values_only=True)
-
-    # 第一行是表头
-    try:
-        headers = [str(h).strip() if h else f"col_{i}" for i, h in enumerate(next(rows_iter))]
-    except StopIteration:
-        wb.close()
+    """表头+数据行回退读取（pandas 不可用时；.xlsx/.xls/WPS .et 均支持）"""
+    raw = read_rows(file_content)
+    if not raw:
         return [], []
-
+    headers = [str(h).strip() if h else f"col_{i}" for i, h in enumerate(raw[0])]
     rows = []
-    for row in rows_iter:
+    for row in raw[1:]:
         if all(v is None for v in row):
             continue
         rows.append({headers[i]: (str(v) if v is not None else "") for i, v in enumerate(row) if i < len(headers)})
-
-    wb.close()
     return rows, headers

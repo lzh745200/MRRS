@@ -800,17 +800,20 @@ async def import_villages(
     db: Session = Depends(get_db),
 ):
     """从 Excel 导入帮扶村"""
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="请上传 .xlsx 或 .xls 格式的文件")
+    from app.core.office_formats import is_spreadsheet_upload, spreadsheet_upload_hint
+
+    if not is_spreadsheet_upload(file.filename):
+        raise HTTPException(status_code=400, detail=spreadsheet_upload_hint())
     # R2 第二层：分块读取 + 滚动计数（原一次性读完，超高压缩比 xlsx 可致 OOM）。
     # 放在 try 之外：超限 413 必须在解析兜底之前抛出。
     contents = await read_upload_with_limit(
         file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
     )
-    import openpyxl  # 重依赖惰性导入（连带 numpy，约 3s），仅在该导入端点触发
-
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        from app.services.office_reader import load_workbook_any
+
+        # .xlsx / .xls / WPS .et 统一按容器魔数解析
+        wb = load_workbook_any(contents, getattr(file, "filename", None))
         ws = wb.active
     except Exception:
         raise HTTPException(status_code=400, detail="无法解析 Excel 文件，请检查文件格式")
@@ -1752,8 +1755,9 @@ async def import_section_data(
         file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
     )
     try:
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(_section_bytes))
+        from app.services.office_reader import load_workbook_any
+
+        wb = load_workbook_any(_section_bytes, getattr(file, "filename", None))
         ws = wb.active
     except Exception:
         raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
@@ -1782,8 +1786,9 @@ async def import_all_sections_data(
         file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
     )
     try:
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(_all_bytes))
+        from app.services.office_reader import load_workbook_any
+
+        wb = load_workbook_any(_all_bytes, getattr(file, "filename", None))
     except Exception:
         raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
     # 工作表名 → 板块键：兼容 section_key（population）与模型表名/中文名

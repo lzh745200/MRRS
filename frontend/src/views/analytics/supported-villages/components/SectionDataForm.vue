@@ -697,7 +697,7 @@
           :on-remove="handleUploadRemove"
           :http-request="handleCustomUpload"
           multiple
-          accept=".jpg,.jpeg,.png,.gif,.bmp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar"
+          accept=".jpg,.jpeg,.png,.gif,.bmp,.pdf,.doc,.docx,.wps,.xls,.xlsx,.et,.ppt,.pptx,.dps,.zip,.rar"
           :limit="10"
           :on-exceed="handleExceed"
         >

@@ -1749,17 +1749,19 @@ async def _check_import_rate_limit(user_id: int, client_ip: str, request=None) -
 
 async def _parse_import_excel(file: UploadFile):
     """验证文件类型并解析 Excel，返回 worksheet"""
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="请上传 .xlsx 或 .xls 格式文件")
+    from app.core.office_formats import is_spreadsheet_upload, spreadsheet_upload_hint
+
+    if not is_spreadsheet_upload(file.filename):
+        raise HTTPException(status_code=400, detail=spreadsheet_upload_hint())
     try:
-        import openpyxl
+        from app.services.office_reader import load_workbook_any
 
         # R2 第二层：分块读取 + 滚动计数（超限 413，不再整包入内存）
         content = await read_upload_with_limit(
             file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
         )
-        wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
-        return wb.active
+        # .xlsx / .xls / WPS .et 统一按容器魔数解析（原先只能读 openpyxl 的 xlsx）
+        return load_workbook_any(content, getattr(file, "filename", None)).active
     except HTTPException:
         raise  # 413/400 原样上抛，不被解析兜底降级
     except Exception:

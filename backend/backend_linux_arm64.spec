@@ -21,7 +21,7 @@ hiddenimports = [
     'cryptography', 'cryptography.fernet', 'cryptography.hazmat',
     'aiosqlite', 'alembic', 'alembic.config',
     'email_validator', 'python_multipart', 'multipart',
-    'pandas', 'numpy', 'openpyxl', 'xlsxwriter',
+    'pandas', 'numpy', 'openpyxl', 'xlsxwriter', 'xlrd',
     'docx', 'fpdf', 'reportlab', 'pptx',
     'PIL', 'PIL.Image', 'qrcode', 'jieba',
     'apscheduler', 'structlog', 'slowapi', 'diskcache',

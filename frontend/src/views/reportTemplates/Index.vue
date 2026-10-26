@@ -295,7 +295,7 @@
           :limit="1"
           :on-change="onFileChange"
           :on-remove="onFileRemove"
-          accept=".xlsx,.xls"
+          accept=".xlsx,.xls,.et"
           class="upload-block"
         >
           <el-button type="primary">

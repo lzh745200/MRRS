@@ -66,14 +66,14 @@
             drag
             :auto-upload="false"
             :limit="1"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.et"
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
           >
             <el-icon :size="48"><Upload /></el-icon>
             <div class="upload-text">
               <p>拖拽文件到此处或<em>点击上传</em></p>
-              <p class="upload-hint">仅支持 .xlsx / .xls 格式，单次最多 1000 条</p>
+              <p class="upload-hint">仅支持 .xlsx / .xls / .et（WPS 表格）格式，单次最多 1000 条</p>
             </div>
           </el-upload>
         </el-form-item>

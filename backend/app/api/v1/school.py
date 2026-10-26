@@ -296,10 +296,9 @@ async def import_schools_excel(
 
     try:
         # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy），仅本端点触发
-        from openpyxl import load_workbook
+        from app.services.office_reader import load_workbook_any
 
-        with open(tmp_path, "rb") as _f:
-            wb = load_workbook(_f)
+        wb = load_workbook_any(content, getattr(file, "filename", None))
         ws = wb.active
 
         status_map = {"帮扶中": "active", "未帮扶": "inactive", "已完成": "completed"}
@@ -401,10 +400,9 @@ async def import_scholarship_students(
         tmp_path = tmp.name
     try:
         # P2-4 启动优化：openpyxl 惰性导入（同上）
-        from openpyxl import load_workbook
+        from app.services.office_reader import load_workbook_any
 
-        with open(tmp_path, "rb") as _f:
-            wb = load_workbook(_f)
+        wb = load_workbook_any(content, getattr(file, "filename", None))
         ws = wb.active
         imported = 0
         errors = []
@@ -1484,10 +1482,9 @@ async def import_school_scholarship_students(
     }
     try:
         # P2-4 启动优化：openpyxl 惰性导入（同上）
-        from openpyxl import load_workbook
+        from app.services.office_reader import load_workbook_any
 
-        with open(tmp_path, "rb") as _f:
-            wb = load_workbook(_f)
+        wb = load_workbook_any(content, getattr(file, "filename", None))
         ws = wb.active
         imported = 0
         errors = []

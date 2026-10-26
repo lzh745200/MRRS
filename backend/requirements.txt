@@ -57,6 +57,8 @@ email_validator==2.1.1
 aiofiles==24.1.0
 pillow==12.3.0
 openpyxl==3.1.5
+# .xls（Excel 97-2003）与 WPS 旧版 .et 导入：openpyxl 只支持 OOXML，OLE2 容器必须用 xlrd
+xlrd==2.0.1
 reportlab==4.1.0
 mammoth==1.11.0
 qrcode==7.4.2

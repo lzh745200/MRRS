@@ -23,7 +23,7 @@
             :show-file-list="false"
             :before-upload="() => false"
             :on-change="handleImportAll"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.et"
             class="inline-upload"
           >
             <el-button type="success" :loading="importingAll">
@@ -86,7 +86,7 @@
             :show-file-list="false"
             :before-upload="() => false"
             :on-change="(file: any) => handleImportSection(section.key, file)"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.et"
             class="inline-upload"
           >
             <el-button>
@@ -655,9 +655,12 @@ async function handleImportSection(sectionKey: string, file: any) {
   const rawFile = file?.raw || file
   // File validation
   if (!rawFile) return
-  const isExcel = rawFile.name?.endsWith('.xlsx') || rawFile.name?.endsWith('.xls')
+  const isExcel =
+    rawFile.name?.endsWith('.xlsx') ||
+    rawFile.name?.endsWith('.xls') ||
+    rawFile.name?.endsWith('.et')
   if (!isExcel) {
-    ElMessage.error('只能上传 Excel 文件(.xlsx/.xls)')
+    ElMessage.error('只能上传 Excel 文件(.xlsx/.xls/.et)')
     return
   }
   if (rawFile.size > 10 * 1024 * 1024) {

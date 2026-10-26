@@ -8,7 +8,6 @@ Requirements: 1.4, 1.6, 1.7, 1.10 - 批量创建帮扶村记录，支持事务�
 import logging
 from dataclasses import dataclass, field
 from datetime import timezone, datetime
-from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -26,6 +25,7 @@ from app.services.data_validator_service import (
     ValidationErrorCode,
 )
 from app.services.entity_import_validator import EntityImportValidator
+from app.services.office_reader import read_rows
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
@@ -171,15 +171,9 @@ class ExcelImporterService:
                 return _pandas_read_raw(file_content)
             except Exception as e:
                 logger.warning("pandas 快速读取失败，回退到 openpyxl: %s", e)
-        # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy），
-        # 仅在 pandas 快速路径不可用的回退分支上触发。
-        from openpyxl import load_workbook
-
-        wb = load_workbook(filename=BytesIO(file_content), data_only=True)
-        ws = wb.active
-        raw_rows = [list(row) for row in ws.iter_rows(values_only=True)]
-        wb.close()
-        return raw_rows
+        # 回退分支同样统一走 office_reader：按容器魔数选 openpyxl / xlrd，
+        # 从而 .xls（OLE2）与 WPS .et（两种容器）在 pandas 不可用时也能导入。
+        return read_rows(file_content)
 
     @staticmethod
     def _detect_header_row(raw_rows: List[list], parse_headers_fn) -> Tuple[List[str], Dict[int, str], int]:
