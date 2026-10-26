@@ -1,13 +1,13 @@
 {
-  "version": "1.18.9",
+  "version": "1.18.11",
   "build": "20261026",
   "release_date": "2026-10-26",
-  "description": "应用内更新日志接入唯一账本 + 发布说明一致性门禁（根治版本说明漂移）",
+  "description": "瓦片底图常显村/校名称 + 贵州 z13（16,422 张 / 95MB）+ 学校 POI 图层",
   "features": [
-    "应用内更新日志接入唯一账本：删除 update_log_service.py 里 240 行硬编码历史（原只写到 1.1.1，落后 17 个小版本），改由 scripts/sync_update_log.py 从 CHANGELOG.md 生成 backend/app/services/version_history_data.py（1.0.0 起的全部历史版本）",
-    "同一天多版本排序修复：created_at 只按日期写入时 1.18.2 会排在 1.18.3 前面；改为按版本序号加秒偏移（前端只显示日期，不可见）+ 查询 version DESC 兜底，历史库同样稳定",
-    "新增发布说明一致性门禁 scripts/check_update_log.py：生成文件与 CHANGELOG 逐字节比对、version.json 的 version/release_date/build/description 必须等于 CHANGELOG 最新段，已接入 pr-checks 的 static-analysis 与 make test-local",
-    "新增 tests/unit/test_update_log_sync.py（5 例）：生成文件一致、最新版本等于 version.json、版本序列升序无重复、解析跳过 [Unreleased]/[未发布] 段；update_log_service.py 覆盖率 100%",
-    "端到端实测：全新库启动后 GET /api/v1/system/update-logs 返回全部历史版本，首条为当前版本、倒序严格按语义化版本排列"
+    "离线瓦片底图常显村名/校名：底图上叠加名称标注，缩放时保持可读，不再只显示色块",
+    "贵州 z13 瓦片包：16,422 张 / 约 95MB，覆盖全省 13 级缩放，配套导入与校验流程",
+    "学校 POI 图层：与帮扶村 POI 同层管理，可独立开关与筛选",
+    "「系统设置」聚合页归类修复：config-package（系统配置）由「备份与存储」归位到「系统设置 › 基础配置」，tab key/path/roles 与 tab 总数（30）均未变",
+    "分段覆盖率执行器加固：--cov-unique 的中间 rc/数据文件改放系统临时目录，避免多会话并行时被通配清理误删（前 10 段 PASS 却整轮红的真实成因）"
   ]
 }

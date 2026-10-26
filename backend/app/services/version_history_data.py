@@ -3017,6 +3017,10 @@ VERSION_HISTORY_DATA = [
                 "升级用户的旧库只补当前一条：check_and_record_version_change 原先只在\"版本号变了\"时补记一条，中间版本仍然缺失（老库会从 1.1.1 直接跳到 1.18"
                 ".9）。改为每次启动做一次幂等补齐：一次性取出已记录版本集合，缺哪条补哪条，已存在的不动。"
             ),
+            (
+                "「系统设置」聚合页只有一个页签（归类错位）：config-package（系统配置）被挂在「备份与存储 › 数据包与存储」下，导致「系统设置」只剩「更新日志」一项，页面自己的描述也只能写成"
+                "\"更新日志等基础系统配置\"；而 SettingsOverview.vue 的「配置管理」分组一直把「系统配置 + 更新日志」并列 —— 两处口径互相矛盾。"
+            ),
             "scripts/check_update_log.py 发布说明一致性门禁（已接入 pr-checks 的 static-analysis 与make test-local），一次校验三处",
             (
                 "单元测试 tests/unit/test_update_log_sync.py：断言生成文件与 CHANGELOG 一致、最新版本等于 version.json、版本序列升序无重复、解析跳"
@@ -3024,8 +3028,109 @@ VERSION_HISTORY_DATA = [
             ),
             (
                 "backend/version.json 的 description 改为与 CHANGELOG 标题严格一致（原先为手工改写版本，已与标题漂移）；features 保留人工维护，只要求非"
-                "空。"
+                "空。所以\"表单漏了必填项\"不会被 TypeScript 发现；请求体从来没有被比对过 —— 这类「提交少字段 / 必填性不符」既躲过类型检查，也躲过门禁，只能等用户撞 422。"
             ),
+            (
+                "前端补字段：views/organization/List.vue 新增「组织编码」输入（必填 + ^\\d{6}$ 校验 +「省级 XX0000 / 市州级 XXYY00 / 县市级 X"
+                "XYYZZ」提示），新增态可填、编辑态只读禁用（编码创建后不可修改），提交时新增带 trim 后的 code、编辑不提交 code；与 views/organization/Edit.vu"
+                "e 的既有口径完全一致。"
+            ),
+            (
+                "类型对齐：OrganizationCreate.code 改为必填；顺手修掉同源的三处漂移（D 轴首次运行即抓出，全部真实存在）：| 契约 | 漂移 | 处理 ||---|---|---|"
+                "| DataReportCreate | 前端缺 report_type、title 后端必填前端可选、target_org_id 前端必填后端可选 | 按后端逐字段对齐 || Suppo"
+                "rtedVillageCreate | department /…"
+            ),
+            (
+                "Edit.vue 的 code: formData.code || undefined 改为 code: formData.code.trim() ——|| undefined 会把已通过"
+                "校验的必填值静默丢弃，退化成后端 422。"
+            ),
+            (
+                "前端 tests/unit/views/organization/ListCov.test.ts 追加 5 例（新增态渲染/可编辑、编辑态回填/禁用、校验规则 6 位、新增 payload"
+                " 带 trim 后的 code、编辑 payload 不含 code）；同时修正既有用例里因新增输入而整体后移的 ElInput 索引。"
+            ),
+            (
+                "后端新增 tests/unit/test_stack_alignment_gate_r35_axis_d.py（9 例：三个漂移方向、非 Create/Update 忽略、同名多义跳过、U"
+                "pdate 后缀覆盖、当前仓库零漂移、report 含新字段）。"
+            ),
+        ],
+    },
+    {
+        "version": "1.18.10",
+        "date": "2026-10-26",
+        "description": "WPS 兼容：.xls/.et 导入打通、格式白名单单一源、导出格式门禁",
+        "features": [
+            (
+                "app/core/office_formats.py（格式单一事实源）：容器魔数（zip/OLE2）、可解析表格集合xlsx/xls/et、WPS 原生集合、附件 documents 白名"
+                "单、导出白名单 xlsx/csv/docx/pdf、统一的 WPS 指引文案。纯函数、无 IO、无第三方依赖。"
+            ),
+            (
+                "app/services/office_reader.py（统一读取层）：按容器魔数而非扩展名选择解析器（zip→openpyxl / ole2→xlrd / 其它→统一 400），提供 "
+                "read_rows(content, filename) 与openpyxl 风格 load_workbook_any()（含 iter_rows/max_row/sheetnames/g"
+                "etitem 替身）…"
+            ),
+            (
+                "xlrd==2.0.1 依赖：backend/requirements.txt + app/core/required_packages.py（运行时必需）+ 3 个 PyInstalle"
+                "r spec 的 hiddenimports 同步登记。"
+            ),
+            (
+                "scripts/check_office_formats.py 门禁 + CI 接入（static-analysis）：导入禁止直连openpyxl.load_workbook、白名单禁止"
+                "硬编码 endswith((\".xlsx\",\".xls\"))、导出扩展名必须在白名单内、CSV 必须带 UTF-8 BOM；并对 xlsx/xls/两种容器 .et 夹具做运行时自"
+                "检（未装依赖的 CI 作业自动跳过，pytest 侧覆盖）。"
+            ),
+            (
+                "回归用例：test_office_formats_wps.py（14 例）+ test_office_formats_gate.py（11 例，含 5 个负向用例保证门禁能红），夹具见 b"
+                "ackend/tests/fixtures/office/。"
+            ),
+            (
+                "导入解析统一收口到 office_reader：import_export/import_data、projects、school（3 处）、supported_village（3 处）、"
+                "report_templates（2 处）、services/policy_import_service、services/excel_importer_service、services/"
+                "batch_import_optimizer。"
+            ),
+            (
+                "白名单统一：4 处硬编码扩展名判断改为 office_formats.is_spreadsheet_upload（含 .et），错误文案统一为\"支持 .xlsx/.xls/.et + W"
+                "PS 另存为指引\"。"
+            ),
+            (
+                "附件白名单：files.py documents 组改由 office_formats.DOCUMENT_UPLOAD_EXTS 提供，新增 .et/.wps/.dps（只存不解析，导入仍"
+                "只接受可解析格式）。"
+            ),
+            "前端 accept 同步：Excel 上传 8 处补 .et（含 YearlyOverview 扩展名校验与提示文案、对应单测期望），区块附件上传补 .et/.wps/.dps。",
+            ".xls 可传不可读（真实死路）：无 xlrd + openpyxl 不支持 OLE2 → 现在按容器走 xlrd。",
+            "WPS .wps/.dps 附件被拒：现在可上传（仅存储），导入时给\"请另存为 .docx/.pptx\"的明确提示，不再抛裸异常。",
+            "待完整回归结果回填：后端 12 段 / 前端全量 / 门禁全套。",
+        ],
+    },
+    {
+        "version": "1.18.11",
+        "date": "2026-10-26",
+        "description": "瓦片底图常显村/校名称 + 贵州 z13（16,422 张 / 95MB）+ 学校 POI 图层",
+        "features": [
+            (
+                "瓦片底图常显村/校名称（方案 A）：zoom >= 12 常显帮扶村名、zoom >= 13 常显学校名（zoom < 12 仍仅悬停）；标签文本严格取 marker.name；防遮挡用 "
+                "64×20px 像素格（学校优先 → 距视野中心近优先），单次上限 120 条；interactive:false + pointer-events:none不拦截拖拽；zoomend/m"
+                "oveend 重算、只在显示模式变化时重绑 Tooltip；"
+            ),
+            (
+                "OSM 提取 schema v2→v3：pois 图层：amenity ∈ {school, kindergarten, college, university}的 node 与 way "
+                "质心（name:zh → name，无名称不输出，截断 100）；v1/v2 pkl 仍兼容。实测贵州：POI 682（school 559 / kindergarten 44 / col"
+                "lege 54 / university 25）。"
+            ),
+            (
+                "贵州 z13 全省瓦片包：16,422 张 / 97.6MB / 184s（89.2 张/秒，0 失败），导出 guizhou-z13.zip 95.1MB；MANIFEST zoom=["
+                "13,13]、tileCount=16422、license ODbL-1.0 (© OpenStreetMap contributors)；verify_tiles --require-"
+                "min 16400 通过；导入实测 16,422 张全部落盘。"
+            ),
+            (
+                "render_osm_tiles.py 新增 --no-poi（z≤12 重渲时完全复现 v2 样式，避免高校标记\"回归\"）；内置安装包仍为 z5–12（316.7MB），z13 作为"
+                "独立可选包导入（≤512MB 上限内，无需分包）。"
+            ),
+            "导入：管理员 → 系统管理 → 备份与存储 → 地图瓦片 → 导入瓦片包，选 guizhou-z13.zip；",
+            "导入后地图最大 zoom 由 12 → 13，学校名开始出现（OSM 覆盖 682 处，非\"全部学校\"）；",
+            (
+                "帮扶村/学校官方名称以系统库为准：常显标签只显示 latitude/longitude 非空的记录，部署前需核查村/校坐标完整率（dev 库 6 村 0 坐标）；缺坐标的后端会按区县估算但"
+                "带 isEstimated；"
+            ),
+            "视觉未人工核验（本会话模型不能读图），已用候选统计 + POI/--no-poi 像素差（4493/8268）佐证。",
         ],
     },
 ]
