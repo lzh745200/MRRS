@@ -8,19 +8,24 @@
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.8）
+## 本版亮点（v1.18.12）
 
-- **项目整理（−1,880 个被跟踪文件，4407 → 2527）**：删除 `.scratch/tiles-import-test/`（1,423 个
-  瓦片导入中间产物，全仓零引用）、`.qoder/`（456 个 AI 工具知识库缓存 —— 本仓结构说明本就标注
-  「机器本地元数据，不参与交付」）、1 MB 的 PPT 原始备份；补 `.gitignore`
-  （`.scratch/tmp/`、`.qoder/`、`deliverables/releases/`、`*.exe|*.msi|*.dmg`）防止再混入
-- **修掉一个"看起来永远绿、其实没验证"的门禁缺陷**：分段覆盖率执行器的 `coverage combine`
-  被传了数据文件名当路径、且各段分片名与 `<data_file>.*` glob 不匹配 → 合并必然失败（提示还只读
-  stderr 所以一直是空消息）；单段运行更会把 28% 的残缺结果当门禁结论。现改为分片命名
-  `<data_file>.segN` + 无参 combine + 失败打印 stdout/stderr + **子集运行不判阈值**
-- **收口体检零缺陷**：20 道静态门禁全绿；PII 扫描 0 高危 0 中危；文档死链 0；TODO/FIXME 遗留 0；
-  运行时依赖清单与 `requirements.txt` 完全一致；Alembic 单 head；前端生产可达性 320/324
-  （余 4 项经核实为工具盲区与刻意保留的测试基座，非缺陷）
+- **贵州 z14 高清瓦片交付**：全省包 64,900 张 / **283.7MB**（约 8.6 m/像素，可看清街区与道路），
+  低于 512MB 导入上限；另提供 **9 个市州分包**（21.5~63.8MB）供按需导入，每包 MANIFEST 写
+  region/zoom/tileCount/license；与内置 z5–12、z13 包**可叠加**（同名覆盖），同时导入后 5..14 级连续
+- **WPS 办公格式真正打通**：`app/services/office_reader.py` 按**容器魔数**（zip→openpyxl / OLE2→xlrd）
+  选解析器，`.xls` 与 WPS 旧版 `.et` 不再"能选不能读"；格式白名单收敛到 `app/core/office_formats.py`
+  单一来源，附件可传 `.et/.wps/.dps`；新增 `scripts/check_office_formats.py` 门禁并接入 CI
+  （导入禁止直连 `openpyxl.load_workbook`、导出白名单、CSV 必须 UTF-8 BOM）
+- **瓦片底图直接显示村名/校名**：`zoom>=12` 常显帮扶村名、`zoom>=13` 常显学校名（文本取系统库名称，
+  像素格贪心防遮挡、不拦截拖拽）；OSM 提取新增 `pois` 图层（贵州实测 682 处学校类 POI）
+- **新增组织缺「组织编码」输入（真实 422 缺陷）**：后端要求 6 位行政区划代码，前端表单却没有输入项，
+  用户点提交只能吃 422。已补字段（必填 + `^\d{6}$` + 编码规则提示，编辑态只读），并修掉同源的
+  3 处请求体漂移；**三层对齐门禁扩为四层**，新增 **D 轴「请求体必填性」**（同名且唯一的
+  `*Create/*Update` 契约前后端必填字段必须一致，三个方向都报），从此"表单少字段"由 CI 自动拦截
+- **门禁与仓库卫生**：新增全仓损坏扫描（mojibake / NUL / 非 UTF-8，跳过 `.gitignore` 命中的运行时产物）；
+  清理根目录 18 个 `pip` 解包临时目录（6.42MB）；修掉 `.gitignore` 里 3 行 GBK 双编；删除误入库的
+  `docs/~$*.pptx` 锁文件
 - **历史亮点（v1.18.1 起）**：
 
 - **登录页务实化改造**：修掉「注册账户」死链（默认不开放自助注册却无条件显示，现已按 `public-config` 显隐、
@@ -33,7 +38,7 @@
   **前端 TS interface ↔ 后端 Pydantic 字段**，专治"单测全绿、真机全废"；上线即抓到两处契约漂移
   （行业模型列名与 `r42` 迁移不一致、数据上报 schema 字段名与 service 返回不一致）并已修复
 - **100% 覆盖率门禁真绿复验**：发现 `backend/.coveragerc` 被误删导致 `fail_under=100` 静默失效
-  （12/12 段"通过"实为 99%），恢复后补齐 7 处缺口，现为 **45,945 语句 / 11,456 分支，Miss 0 / BrPart 0**
+  （12/12 段"通过"实为 99%），恢复后补齐 7 处缺口，现为 **46,088 语句 / 11,500 分支，Miss 0 / BrPart 0**
 - **离线可靠性**：备份携带 PII 密钥指纹（跨机恢复 409 + 显式放行 + 审计）、备份启动补跑、
   `OFFLINE_MODE` 统一开关、`/health` 暴露时钟漂移与 WAL 状态
 - **介质链路治理**（v1.17.0 起）：四类包统一**整包查重（SHA256）+ 导入台账 + 回执**、
@@ -43,8 +48,8 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **14,726 用例**, 0 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **7,356 passed**（347 个 `.test.ts`），0 失败 |
+| 后端测试 | **14,818 用例**, 0 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **7,379 passed**（347 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -64,11 +69,11 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-26（v1.18.8）— 后端 14,726 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-26（v1.18.12）— 后端 14,818 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
-> 45,945 语句 / 11,456 分支，Miss 0 / BrPart 0）；
-> 前端 **347 个 `.test.ts` / 7,356 用例、12 组 glob 100%**；E2E 165（含 44 页视觉回归基线）；
+> 46,088 语句 / 11,500 分支，Miss 0 / BrPart 0）；
+> 前端 **347 个 `.test.ts` / 7,379 用例、12 组 glob 100%**；E2E 199（含 44 页视觉回归基线）；
 > flake8 app+scripts 0 / vue-tsc 0 / eslint 0 / 硬编码色 146（棘轮 146/146）/ 版本单一来源一致 /
 > Alembic 单 head（63 版本，r43）/ 门禁脚本全绿（含三层对齐、零断言棘轮、同步覆盖率、菜单对齐、单 head 迁移）
 
@@ -155,7 +160,7 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 14,364（1 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 14,818（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
 | 前端单元测试 | Vitest | 7,020（339 文件） | API/Store/Component/Composable/Utils |
