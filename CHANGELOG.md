@@ -19,6 +19,17 @@
 - 交付目录 `deliverables/osm-tiles-z14-20261026/`：`guizhou-all_z14.zip`（283.7MB，64,900 张）
   + 9 个 `guizhou-<slug>_z14.zip`（合计 389.2MB，77,666 条目，含市州间重叠）+ SHA256/README/summary。
 
+### Fixed
+
+- **WPS 模块覆盖率缺口（CI backend-test 红）**：`app/core/office_formats.py` 91.67%、
+  `app/services/office_reader.py` 81.88%，全量门禁 `99.95 < 100`。
+  补测 `tests/unit/test_office_reader_cov_r46.py`（37 例，独立新文件，不与既有 WPS 测试冲突）：
+  xlrd 六种 ctype 归一（空/文本/整数/浮点/日期/布尔/兜底）、`_normalize_rows` 矩形化与空输入、
+  `_attempt_order` 三种容器顺序、空内容与 ImportError 分支文案、WPS 后缀走「另存为」提示、
+  `_CellShim/_SheetShim/_WorkbookShim`（含 `__getitem__` 命中与 KeyError）、
+  `load_workbook_any` 的真实 xlsx 与损坏 zip 回退两条分支。
+  两模块均达 **100%**（153 语句 / 44 分支）。
+
 ### 验证
 
 - 9 个市州包逐个 `import_tiles` + `verify_tiles`：**9/9 通过**；
@@ -30,6 +41,33 @@
 
 - OSM 数据建筑仅 20,393 处、POI 2,261：z14 可见路网/水系/村名/学校注记，**没有建筑轮廓级细节**；
 - 全省包 283.7MB 已接近导入体验上限，现场建议用市州分包按需导入。
+
+### Fixed（质量门禁层，2026-10-26 体检）
+
+- **损坏扫描守卫自身两个缺陷**：① `scripts/scan_mojibake.py --check` 因本机运行时日志
+  （`frontend/logs-*.txt`，正常含 NUL 且已被 `.gitignore` 忽略）**恒红** —— 守卫被当成噪音，
+  "扫描失败"与"提交照样过"长期并存；现在按 `git ls-files --others --ignored --exclude-standard`
+  跳过被忽略路径（已跟踪文件不受 `.gitignore` 影响，仍全量扫描；非 git 工作副本退回全量）。
+  ② `os.path.getsize` 在 try 之外，扫描期间被并发 pytest 删除的临时库
+  （`backend/backup_snapshot_*.db-journal`）让守卫自己抛 `FileNotFoundError` → 改为跳过。
+  回归：`backend/tests/unit/test_scan_mojibake_gate.py`（7 项，含"未忽略的 NUL/双编文件仍必红"
+  两条负向用例，防止为变绿而削弱守卫）。
+- **`.gitignore` 双编损坏吞掉两条规则**（2026-10-24 `7f8738b` 引入）：三行注释被写成 GBK 双编，
+  其中两行把 `logs/` 与 `_*.ps1` "粘"进注释行，**规则实际失效**（根目录 `logs/` 不再被忽略）。
+  按 git 历史原文还原三行注释，并把两条规则拆回独立行。
+- **两道既有门禁从未在 CI 执行**：`scan_mojibake.py --check` 接入 `static-analysis`；
+  `check_doc_numbers.py --full` 接入 `stack-alignment`（该门禁需 `import app.main` 与
+  `pytest --collect-only`，放无后端依赖的 `static-analysis` 会 `ModuleNotFoundError` 恒红）。
+  同时把 `CLAUDE.md` 的后端用例数由过期的 14,726 校正为实测值。
+- **pre-commit 配置在"`python` 不在 PATH"的机器上必然失败**：本地钩子
+  `language: system` + `entry: python scripts/...` 改为 `language: python`（由 pre-commit
+  用运行它的解释器自建环境）；`electron-syntax-check` 的 `bash -c 'for f in electron/*.js'`
+  改为 `node scripts/check_electron_syntax.js`（Windows 的 `bash` 常解析到**未装发行版的 WSL
+  启动器**，钩子必然失败）；重复的 `check-tokens-sync` id 改为 `-files` 后缀。
+  **本机未执行 `pre-commit install`**：本机 python 子进程无法写 `%TEMP%`/`~/.cache`，
+  装上会让每一次 `git commit` 失败（违反"不得新增问题"），故本轮的强制点是 CI；
+  在正常 shell 里执行一次 `python -m pre_commit install` 即启用。
+
 
 ## [1.18.11] - 2026-10-26 — 瓦片底图常显村/校名称 + 贵州 z13（16,422 张 / 95MB）+ 学校 POI 图层
 
@@ -64,32 +102,6 @@
 - **帮扶村/学校官方名称以系统库为准**：常显标签只显示 `latitude/longitude` 非空的记录，
   部署前需核查村/校坐标完整率（dev 库 6 村 0 坐标）；缺坐标的后端会按区县估算但带 `isEstimated`；
 - 视觉未人工核验（本会话模型不能读图），已用候选统计 + POI/`--no-poi` 像素差（4493/8268）佐证。
-
-### Fixed（质量门禁层，2026-10-26 体检）
-
-- **损坏扫描守卫自身两个缺陷**：① `scripts/scan_mojibake.py --check` 因本机运行时日志
-  （`frontend/logs-*.txt`，正常含 NUL 且已被 `.gitignore` 忽略）**恒红** —— 守卫被当成噪音，
-  "扫描失败"与"提交照样过"长期并存；现在按 `git ls-files --others --ignored --exclude-standard`
-  跳过被忽略路径（已跟踪文件不受 `.gitignore` 影响，仍全量扫描；非 git 工作副本退回全量）。
-  ② `os.path.getsize` 在 try 之外，扫描期间被并发 pytest 删除的临时库
-  （`backend/backup_snapshot_*.db-journal`）让守卫自己抛 `FileNotFoundError` → 改为跳过。
-  回归：`backend/tests/unit/test_scan_mojibake_gate.py`（7 项，含"未忽略的 NUL/双编文件仍必红"
-  两条负向用例，防止为变绿而削弱守卫）。
-- **`.gitignore` 双编损坏吞掉两条规则**（2026-10-24 `7f8738b` 引入）：三行注释被写成 GBK 双编，
-  其中两行把 `logs/` 与 `_*.ps1` "粘"进注释行，**规则实际失效**（根目录 `logs/` 不再被忽略）。
-  按 git 历史原文还原三行注释，并把两条规则拆回独立行。
-- **两道既有门禁从未在 CI 执行**：`scan_mojibake.py --check` 接入 `static-analysis`；
-  `check_doc_numbers.py --full` 接入 `stack-alignment`（该门禁需 `import app.main` 与
-  `pytest --collect-only`，放无后端依赖的 `static-analysis` 会 `ModuleNotFoundError` 恒红）。
-  同时把 `CLAUDE.md` 的后端用例数由过期的 14,726 校正为实测值。
-- **pre-commit 配置在"`python` 不在 PATH"的机器上必然失败**：本地钩子
-  `language: system` + `entry: python scripts/...` 改为 `language: python`（由 pre-commit
-  用运行它的解释器自建环境）；`electron-syntax-check` 的 `bash -c 'for f in electron/*.js'`
-  改为 `node scripts/check_electron_syntax.js`（Windows 的 `bash` 常解析到**未装发行版的 WSL
-  启动器**，钩子必然失败）；重复的 `check-tokens-sync` id 改为 `-files` 后缀。
-  **本机未执行 `pre-commit install`**：本机 python 子进程无法写 `%TEMP%`/`~/.cache`，
-  装上会让每一次 `git commit` 失败（违反"不得新增问题"），故本轮的强制点是 CI；
-  在正常 shell 里执行一次 `python -m pre_commit install` 即启用。
 
 ## [1.18.10] - 2026-10-26 — WPS 兼容：.xls/.et 导入打通、格式白名单单一源、导出格式门禁
 
