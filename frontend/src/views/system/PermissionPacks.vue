@@ -62,6 +62,17 @@
           />
         </el-form-item>
         <el-form-item label="菜单权限">
+          <!-- 2026-10-26：「系统配置」由「备份与存储」迁至「系统设置」。
+               存量包若只勾了「备份与存储」聚合页，迁移后不再包含系统配置 —— 此处显式提示，
+               避免管理员把"入口消失"误判为故障。 -->
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            class="pack-migration-tip"
+            title="系统配置已迁至「系统设置」"
+            description="若本包仅勾选了「备份与存储」聚合页，请补勾「系统设置」聚合页（或单独勾「系统配置」），否则成员将看不到系统配置入口。"
+          />
           <el-tree
             ref="menuTreeRef"
             :data="menuTreeData"
@@ -427,5 +438,11 @@ onMounted(() => {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 13px;
+}
+
+/* 权限包迁移提示：与菜单树留出间距，避免贴边 */
+.pack-migration-tip {
+  margin-bottom: 8px;
+  width: 100%;
 }
 </style>

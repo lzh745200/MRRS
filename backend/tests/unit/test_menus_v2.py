@@ -76,12 +76,14 @@ CONTRACT_CONSOLES = {
             ("chunked-upload", "/system/chunked-upload"),
             ("map-tiles", "/system/map-tiles"),
             ("control-package", "/system/control-package"),
-            ("config-package", "/system/config"),
         ],
     ),
     "system-console-settings": (
         "/system/console/settings",
         [
+            # 2026-10-26：config-package（系统配置）从「备份与存储」归位到本页 ——
+            # 它是基础系统配置，与备份/存储介质无关。key/path/roles 均未变。
+            ("config-package", "/system/config"),
             # W22（v1.14.0）：i18n 多语言与 email 邮件设置随需求下线（key 保留为 legacy）
             ("update-logs", "/system/update-logs"),
         ],

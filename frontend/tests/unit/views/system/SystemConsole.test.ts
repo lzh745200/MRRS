@@ -180,8 +180,9 @@ const GROUP_TABS: Record<string, string[]> = {
     'environment',
     'error-reports',
   ],
-  storage: ['backup', 'chunked-upload', 'map-tiles', 'control-package', 'config-package'],
-  settings: ['update-logs'],
+  storage: ['backup', 'chunked-upload', 'map-tiles', 'control-package'],
+  // 2026-10-26：「系统配置」归位到「系统设置」（tab key/path 未变，只换父聚合页）
+  settings: ['config-package', 'update-logs'],
   about: ['about', 'feedback', 'help', 'admin-dashboard'],
 }
 

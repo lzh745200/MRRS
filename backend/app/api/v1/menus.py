@@ -827,14 +827,11 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "order": 40,
                 "roles": ["admin", "super_admin"],
             },
-            {
-                "key": "config-package",
-                "label": "系统配置",
-                "path": "/system/config",
-                "icon": "Setting",
-                "order": 50,
-                "roles": ["admin", "super_admin"],
-            },
+            # config-package（系统配置）已于 2026-10-26 迁至「系统设置」聚合页：
+            # 它是"基础系统配置"，与备份/存储介质无关；留在本组会让「系统设置」
+            # 只剩一个「更新日志」页签，与 SettingsOverview 自身的「配置管理」分组相矛盾。
+            # tab key / path / roles 全部未改，仅换父 console —— 权限按 tab key 判定，
+            # 深链与 allowed_menus 口径不受影响。
         ],
     },
     {
@@ -848,11 +845,19 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "roles": ["admin", "super_admin"],
         "tabs": [
             {
+                "key": "config-package",
+                "label": "系统配置",
+                "path": "/system/config",
+                "icon": "Setting",
+                "order": 10,
+                "roles": ["admin", "super_admin"],
+            },
+            {
                 "key": "update-logs",
                 "label": "更新日志",
                 "path": "/system/update-logs",
                 "icon": "Document",
-                "order": 10,
+                "order": 20,
                 "roles": ["admin", "super_admin"],
             },
         ],

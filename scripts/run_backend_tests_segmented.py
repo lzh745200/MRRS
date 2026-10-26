@@ -30,8 +30,10 @@ import argparse
 import atexit
 import glob
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -225,7 +227,14 @@ def main():
         # 实测两条路都不可靠：--cov-append 在多段独立进程下只留最后一段；
         # [run] parallel 会被 pytest-cov 覆盖。故直接每段一个 data_file。
         stamp = f"{os.getpid()}-{time.strftime('%Y%m%d-%H%M%S')}"
-        cov_file_arg = f".coverage.gate.{stamp}"
+        # 中间文件一律放【系统临时目录】，不放 backend/：
+        # 2026-10-26 实测 —— 多个会话并行跑全量时，后启动的一方会用
+        # Get-ChildItem backend -Filter '.coveragerc.seg.*' | Remove-Item 之类通配
+        # 清理自己的中间文件，**连带删掉本进程的 rc**，导致末段直接
+        # ConfigError: Couldn't read ... as a config file（前 10 段全 PASS 却整轮红）。
+        # 放进 mkdtemp 后与项目目录彻底无关，任何通配清理都碰不到。
+        _tmp_dir = Path(tempfile.mkdtemp(prefix="mrrs-cov-"))
+        cov_file_arg = str(_tmp_dir / f"coverage.gate.{stamp}")
         base_rc = coveragerc.read_text(encoding="utf-8")
 
         def _rc_with_data_file(target: str) -> str:
@@ -241,7 +250,7 @@ def main():
                 out_ls = ["[run]", f"data_file = {target}", ""] + ls
             return "\n".join(out_ls) + "\n"
 
-        cov_config_path = BACKEND_DIR / f".coveragerc.gate.{stamp}"
+        cov_config_path = _tmp_dir / f"coveragerc.gate.{stamp}"
         cov_config_path.write_text(_rc_with_data_file(cov_file_arg), encoding="utf-8")
         # --cov-unique 会生成 .coveragerc.gate.* / .coveragerc.seg.* / .covseg.* 中间文件，
         # 属于纯粹的本机临时产物：跑完（含异常退出）必须自行清理，否则每次跑全量都会
@@ -254,6 +263,7 @@ def main():
                     _p.unlink(missing_ok=True)
                 except OSError:
                     pass
+            shutil.rmtree(_tmp_dir, ignore_errors=True)
 
         atexit.register(_cleanup_temp_cov_files)
         for idx, _seg in enumerate(SEGMENTS, 1):
@@ -263,7 +273,7 @@ def main():
             # （stdout 报 "No data to combine"，但代码只打印 stderr，于是只剩一行
             #  "覆盖率 combine 失败: "）；单段跑时还会把 28% 的残缺结果当门禁结论。
             seg_data = f"{cov_file_arg}.seg{idx}"
-            seg_rc = BACKEND_DIR / f".coveragerc.seg.{stamp}.{idx}"
+            seg_rc = _tmp_dir / f"coveragerc.seg.{stamp}.{idx}"
             seg_rc.write_text(_rc_with_data_file(seg_data), encoding="utf-8")
             _temp_paths.append(seg_rc)
             _temp_paths.append(BACKEND_DIR / seg_data)

@@ -90,11 +90,11 @@ const GROUP_META: Record<string, { label: string; description: string }> = {
   },
   storage: {
     label: '备份与存储',
-    description: '备份恢复、分片上传、地图瓦片与配置/管控包管理。',
+    description: '备份恢复、分片上传、地图瓦片与管控配置包管理。',
   },
   settings: {
     label: '系统设置',
-    description: '更新日志等基础系统配置。',
+    description: '系统配置、更新日志等基础系统配置（不涉及数据与运维状态）。',
   },
   about: {
     label: '关于与反馈',
@@ -180,10 +180,15 @@ const TAB_LAYOUT: Record<string, { label: string; keys: string[] }[]> = {
     { label: '备份', keys: ['backup'] },
     {
       label: '数据包与存储',
-      keys: ['chunked-upload', 'map-tiles', 'control-package', 'config-package'],
+      keys: ['chunked-upload', 'map-tiles', 'control-package'],
     },
   ],
-  settings: [{ label: '系统设置', keys: ['update-logs'] }],
+  // 2026-10-26：「系统配置」从「备份与存储」归位到本页 —— 它是基础系统配置，
+  // 与介质/备份无关。分两组呈现，避免"系统设置"只剩一个页签。
+  settings: [
+    { label: '基础配置', keys: ['config-package'] },
+    { label: '版本与日志', keys: ['update-logs'] },
+  ],
   about: [{ label: '关于与反馈', keys: ['about', 'feedback', 'help', 'admin-dashboard'] }],
 }
 
