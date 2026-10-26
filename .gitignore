@@ -440,7 +440,7 @@ backend/upload_*.rrs
 deliverables/w19-e2e/traces/
 deliverables/w19-e2e/html-report/
 
-# .scratch 涓嬬殑鍥剧墖鎺㈡祴浜х墿锛堢摝鐗囧垏鐗囩瓑锛夛紝浠?.md 宸ュ崟鍏ュ簱
+# .scratch 下的图片探测产物（瓦片切片等），仅 .md 工单入库
 .scratch/**/*.png
 .scratch/**/*.jpg
 .scratch/**/*.webp
@@ -450,13 +450,15 @@ resources/map-tiles/**/*.png
 resources/map-tiles/MANIFEST.json
 
 
-# 鏈湴璇婃柇/鍥炲綊鏃ュ織锛堜笉鍏ュ簱锛塦nlogs/
+# 本地诊断/回归日志（不入库）
+logs/
 
 
 # 本地端到端冒烟实例（独立数据库/端口，不入库）
 .smoke/
 
-# 涓存椂鍐掔儫/鎺㈡祴鑴氭湰锛堜笉鍏ュ簱锛塦n_*.ps1
+# 临时冒烟/探测脚本（不入库）
+_*.ps1
 backend/_e2e*.py
 frontend/logs-*.txt
 
@@ -483,3 +485,9 @@ deliverables/releases/
 *.dmg
 # ── Office 临时锁文件（~$xxx.pptx 之类，打开文档时自动生成）──
 ~$*
+
+# 扫描器门禁的临时工作区（backend/tests/unit/test_scan_mojibake_gate.py；隐藏目录本身会被扫描器跳过）
+.scan-mojibake-tests/
+
+# pre-commit 本地 store（本机 python 无法写 ~/.cache，用 PRE_COMMIT_HOME 指到仓库内时产生）
+.pre-commit-cache/

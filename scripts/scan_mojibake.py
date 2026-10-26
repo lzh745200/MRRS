@@ -33,6 +33,7 @@ SRC_EXTS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.vue', '.scss', '.css',
 # .bat/.ps1 允许 ANSI/GBK 编码（Windows cmd 中文批处理惯例），不做 UTF-8 强制
 NON_UTF8_EXEMPT = {'.bat', '.ps1', '.nsi'}
 
+
 def gitignored_paths():
     """被 .gitignore 忽略的文件（仓库相对路径，正斜杠）。
 
