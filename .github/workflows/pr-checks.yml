@@ -469,6 +469,13 @@ jobs:
       # 排查时发现 4 处裸 `page_size: int = 20` 与 1 处 le=500，本门禁防复发。
       - name: Pagination cap guard
         run: python backend/scripts/check_pagination_cap.py --root backend
+      # 办公文档格式门禁（WPS 兼容，2026-10-26）：导入必须走统一读取层
+      # （直连 openpyxl 会让 .xls / WPS 旧版 .et 静默失败）、白名单必须出自
+      # office_formats（新增 .et 漏改就被拒）、导出仅允许 xlsx/csv/docx/pdf、
+      # CSV 必须带 UTF-8 BOM（否则 WPS/Excel 中文乱码）。
+      # 运行时夹具自检在未装依赖的 CI static-analysis 里自动跳过（pytest 覆盖）。
+      - name: Office formats (WPS) guard
+        run: python scripts/check_office_formats.py
       # P-1/P-2/P-3 预防性棘轮门禁（遗留风险治理计划 2026-09-13）：
       # os._exit 绕 lifespan / subprocess text=True 缺 encoding / rmtree 后缺
       # dirs_exist_ok 的 copytree / ZIP 与上传无界读取 / 上传端点未限长 /
@@ -554,6 +561,14 @@ jobs:
       # 各写各的，长期停在 1.1.1（落后 17 个小版本），用户升级后看到的仍是旧说明。
       - name: In-app update log sync check
         run: python scripts/check_update_log.py
+      # 全仓损坏扫描门禁（mojibake 双编 / NUL 空字节 / 非 UTF-8）：
+      # 历史事故——backend/scripts/migrate_to_encrypted.py 被 sourcemap 与 3256 个 NUL
+      # 覆盖，CodeCheck 的 flake8 阶段直接 ValueError，流水线整体 FAILURE；.gitignore
+      # 本身也曾在 2026-10-24 被写成 GBK 双编，把 logs/ 与 _*.ps1 两条规则"粘"进注释。
+      # 纯标准库 + git，故放在本作业；本机 pre-commit 钩子依赖 `python` 在 PATH
+      # （本机没有），CI 才是这类守卫唯一可靠的执法点。
+      - name: Repository corruption scan (mojibake/NUL/non-UTF8)
+        run: python scripts/scan_mojibake.py --check
       # Alembic 迁移健康门禁：单 head、无分叉（防再发 4c1ea8a0 MultipleHeads 打包启动失败）
       - name: Alembic migration health check
         run: |
@@ -592,6 +607,14 @@ jobs:
       - name: Stack alignment check (frontend/backend/database)
         working-directory: backend
         run: python ../scripts/check_stack_alignment.py
+      # 文档数字漂移门禁：CLAUDE.md 里的 API 端点数 / 路由模块数 / 前端测试文件数 /
+      # 后端测试用例数必须与实测一致。缘起（2026-10-26 体检）：文档写"14,726 用例"，
+      # 实测 14,731→14,757，而这行数字此前**从未接进 CI**，只有人手工跑 --full 才发现，
+      # 于是"文档说它是门禁"与实际"没人执行"长期并存。
+      # --full 会 `pytest --collect-only` 并 import app.main，必须有后端运行期依赖，
+      # 因此放在本作业（static-analysis 只装了 alembic 与 lint 工具，见上方注释）。
+      - name: Doc number drift check
+        run: python scripts/check_doc_numbers.py --full
 
   # 升级排练（P0-8，2026-10-17）：用最近**发布标签**的旧代码在临时库上建出"老用户库"，
   # 每张表播一行，再用当前代码 upgrade head，校验"表集合不丢 / 行数不变 / 完整性 ok /

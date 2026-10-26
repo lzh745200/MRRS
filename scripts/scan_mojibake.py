@@ -9,6 +9,7 @@ mojibake 原理：正常简体中文 UTF-8 文本极少出现这些高频 GBK �
 排除 node_modules/dist/.git 等生成目录与 lock 文件。
 """
 import os
+import subprocess
 import sys
 
 SUSPECT = set('锛鐨鍏鎵鏈銆娈涓绠應纭鍚鐢劧鑾灏瀹璇釜浠偣浗佸绯缂杩椤埘澶囦唤鏈哄埗缂哄皯杩愯琛屾椂搴撱')
@@ -32,6 +33,33 @@ SRC_EXTS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.vue', '.scss', '.css',
 # .bat/.ps1 允许 ANSI/GBK 编码（Windows cmd 中文批处理惯例），不做 UTF-8 强制
 NON_UTF8_EXEMPT = {'.bat', '.ps1', '.nsi'}
 
+def gitignored_paths():
+    """被 .gitignore 忽略的文件（仓库相对路径，正斜杠）。
+
+    为什么要跳过它们：本守卫防的是"损坏文件被提交进版本库"，而 .gitignore 命中的
+    路径**永远进不了版本库**。过去不区分，于是本机运行时产物（如
+    `frontend/logs-*.txt`，正常含 NUL 字节）让 --check 恒红；守卫被当成噪音，
+    "扫描失败"与"提交照样过"长期并存（2026-10-26 体检发现）。
+    已跟踪文件不受 .gitignore 影响，仍全量扫描；非 git 工作副本（解包后的发布
+    目录）拿不到清单，退回全量扫描 —— 宁可多看，不可漏看。
+    """
+    try:
+        proc = subprocess.run(
+            ['git', 'ls-files', '--others', '--ignored', '--exclude-standard', '-z'],
+            capture_output=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if proc.returncode != 0:
+        return set()
+    return {
+        item.replace('\\', '/') for item in proc.stdout.decode('utf-8', 'replace').split('\0')
+        if item
+    }
+
+
+IGNORED = gitignored_paths()
+
 hits = []
 nul_hits = []
 non_utf8 = []
@@ -45,8 +73,13 @@ for root, dirs, files in os.walk('.'):
         if ext in SKIP_EXT:
             continue
         p = os.path.join(root, f)
-        if os.path.getsize(p) > 2_000_000:
+        if os.path.relpath(p).replace('\\', '/') in IGNORED:
             continue
+        try:
+            if os.path.getsize(p) > 2_000_000:
+                continue
+        except OSError:
+            continue  # 扫描期间文件被并发进程删除（pytest 临时库/日志），跳过即可
         text = None  # 每轮显式复位：解码失败时绝不能沿用上一个文件的内容
         try:
             raw = open(p, 'rb').read()
