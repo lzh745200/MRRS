@@ -246,7 +246,12 @@ def main():
 
         atexit.register(_cleanup_temp_cov_files)
         for idx, _seg in enumerate(SEGMENTS, 1):
-            seg_data = f".covseg.{stamp}.{idx}"
+            # 段数据文件名必须是 `<data_file>.<后缀>` —— coverage combine（无参）
+            # 只按 `<data_file>.*` 的 glob 去找分片。历史写法是独立的
+            # `.covseg.<stamp>.<idx>`，与 data_file 前缀不匹配 → combine 永远失败
+            # （stdout 报 "No data to combine"，但代码只打印 stderr，于是只剩一行
+            #  "覆盖率 combine 失败: "）；单段跑时还会把 28% 的残缺结果当门禁结论。
+            seg_data = f"{cov_file_arg}.seg{idx}"
             seg_rc = BACKEND_DIR / f".coveragerc.seg.{stamp}.{idx}"
             seg_rc.write_text(_rc_with_data_file(seg_data), encoding="utf-8")
             _temp_paths.append(seg_rc)
@@ -292,24 +297,31 @@ def main():
     # 覆盖率门禁：全部段跑完后，对**累积数据**统一判定一次。
     # 与"末段内联报告"相比，这里读的是所有段写入完毕后的最终文件，
     # 不会被并发会话的中途读写打断（历史症状：末段报 53%）。
-    if not args.skip_coverage_gate:
+    # 覆盖率门禁：**只在跑完 12 段时**判定。单段运行（--segment）的累积数据
+    # 天然不完整，把它的百分比当门禁结论只会产生假红灯（历史症状：单段跑报 28%）。
+    if not args.skip_coverage_gate and selected != SEGMENTS:
+        print("覆盖率门禁: 跳过（本次只跑了子集，比值无意义；全量请不带 --segment）")
+    elif not args.skip_coverage_gate:
         env_cov = dict(os.environ)
         _cov_target = args.cov_file.strip()
         if _cov_target:
             env_cov["COVERAGE_FILE"] = _cov_target
         _rc_for_report = str(cov_config_path) if cov_config_path else ".coveragerc"
-        # 每段一个独立 data_file → 先 combine 成一份，再 report。
-        _seg_files = [d for d, _rc in seg_rcs]
+        # 各段分片名为 `<data_file>.seg<N>`，位于 backend/ 下；
+        # `coverage combine` **不带路径参数**时按 `<data_file>.*` 自行发现并合并。
         combine_cmd = [sys.executable, "-m", "coverage", "combine", f"--rcfile={_rc_for_report}"]
-        if _seg_files:
-            combine_cmd += _seg_files
         combine = subprocess.run(
             combine_cmd,
             cwd=str(BACKEND_DIR), env=env_cov, capture_output=True, text=True,
             encoding="utf-8", errors="replace",
         )
         if combine.returncode != 0:
-            print(f"覆盖率 combine 失败: {(combine.stderr or '').strip()[:150]}")
+            # coverage 把 "No data to combine" 一类提示写在 **stdout**，
+            # 只打印 stderr 会得到一行空消息（历史坑）。
+            detail = ((combine.stdout or "") + (combine.stderr or "")).strip()
+            print(f"覆盖率 combine 失败: {detail[-200:] or '(无输出)'}")
+            print("=" * 70)
+            return 1
         report = subprocess.run(
             [sys.executable, "-m", "coverage", "report", f"--rcfile={_rc_for_report}"],
             cwd=str(BACKEND_DIR), env=env_cov, capture_output=True, text=True,
@@ -330,7 +342,11 @@ def main():
             Path(_rc).unlink(missing_ok=True)
         except OSError:
             pass
-    print("全部段通过；覆盖率门禁已在上面按 .coveragerc(fail_under) 统一判定")
+    print(
+        "全部段通过；覆盖率门禁已在上面按 .coveragerc(fail_under) 统一判定"
+        if selected == SEGMENTS
+        else f"子集段通过（本次只跑 {len(selected)} 段，覆盖率阈值未判定）"
+    )
     if args.cov_file.strip():
         print(f"覆盖率数据文件: backend/{args.cov_file.strip()}（独立文件，不受其他会话清理影响）")
     print("=" * 70)

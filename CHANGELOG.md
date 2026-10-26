@@ -5,6 +5,63 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.8] - 2026-10-26 — 全面收口：逐一代码体检 + 项目整理 −1880 文件 + 分段覆盖率门禁修复
+
+> **本轮目标**：交付前的最后一次全面体检 —— 逐项检测前后端/数据库/文档，修掉所有能复现的缺陷，
+> 清理仓库里的零引用产物，把文档与 PPT 对齐到实测数字，然后统一出包。
+> 结论：**20 道静态门禁全绿；后端 12 段 0 失败、覆盖率 100.00%；前端 347 文件 7,356 用例、四项 100%**。
+
+### Fixed
+
+- **分段覆盖率门禁的 `coverage combine` 一直在失败，且失败信息被吞掉**（`scripts/run_backend_tests_segmented.py`）：
+  - 症状一：每次全量跑完都打印一行 `覆盖率 combine 失败: `（消息为空），却仍然报 100% —— 说明结论
+    不是从"合并后数据"得来的，门禁的可信度不可证明。
+  - 症状二：`--segment 11` 这种单段运行会打印 `TOTAL … 28.40%` 并把退出码置 1，看起来像真实缺口。
+  - 根因：① `coverage combine` 的**位置参数是路径**，原代码传的是数据文件基名
+    （`.covseg.<stamp>.<N>`），路径不存在 → 合并失败；② 各段分片名与 `coverage` 的
+    `<data_file>.*` glob 不匹配，即使不传参也扫不到；③ 失败提示 coverage 写在 **stdout**，
+    而代码只打印 `stderr` → 只剩一行空消息。
+  - 修法：分片改名为 `<data_file>.seg<N>`（与 glob 对齐）、`combine` 改为无参调用（自行发现分片）、
+    失败时打印 stdout+stderr、**子集运行（`--segment`）不再判定阈值**并明确提示"比值无意义"。
+  - 验证：单段运行现在输出「覆盖率门禁: 跳过（本次只跑了子集…）」+「子集段通过」；
+    全量运行合并成功并给出 100.00%（45,936 语句 / 11,452 分支，Miss 0 / BrPart 0）。
+
+### Changed（项目整理：被跟踪文件 4407 → 2527，−1880）
+
+- 删除 `.scratch/tiles-import-test/`（**1423 个文件**）：瓦片导入测试的中间产物，
+  在 py/ts/vue/js/md/yml/json/ps1/sh 全量检索中**零引用**（含文档与 CI），删掉不影响任何测试或构建。
+- 删除 `.qoder/`（**456 个文件**，含 1.8 MB `repowiki-metadata.json`）：AI 工具生成的仓库知识库缓存。
+  本仓《项目文件结构说明.md》本就把它标注为「机器本地元数据，不参与交付 ❌」—— 文档说不该入库，
+  实际却跟踪了 456 个文件，本次纠正。
+- 删除 `.scratch/r34-final/帮扶管理信息系统介绍-原始备份.pptx`（1.0 MB）：与 `docs/` 正式版重复且零引用。
+- 补 `.gitignore`：`.scratch/tmp/`、`.qoder/`、`.reasonix/`、`.zcode/`、`deliverables/releases/`、
+  `*.exe|*.msi|*.dmg` —— 防止同类产物再次混入版本库。
+- **未动**（有引用/交付需要）：`deliverables/`（README/AGENTS/CHANGELOG 引用其中报告）、
+  `deploy/`、`nginx/`、`tests/`（E2E 与性能入口）。
+
+### 全面体检结论（逐项，全部零缺陷）
+
+| 检查项 | 结果 |
+|---|---|
+| 静态门禁（错误文案泄漏/更新日志/迁移/菜单/console tab/安全审计/硬编码色/三层对齐/版本一致/文档数字/os_exit/unbounded_read/upload/subprocess_encoding/dir_replace/scheduler/零断言/软删除/裸返回/electron 单测） | **20/20 exit=0** |
+| 后端分段 | **12/12 PASS**，14,722 用例 0 失败 |
+| 后端覆盖率 | **100.00%**（45,936 语句 / 11,452 分支，Miss 0 / BrPart 0） |
+| 前端 | **347 文件 / 7,356 用例全过**，Statements/Branches/Functions/Lines = **100/100/100/100** |
+| flake8 | `app/`（复杂度 16）**0**；`scripts/`（复杂度 40，CI 同口径）**0** |
+| PII / 硬编码密钥扫描 | **0 高危 / 0 中危（PASS）** |
+| 文档死链 | 146 个 md / 133 条相对链接 → **死链 0** |
+| TODO / FIXME / 待实现 遗留 | **0 处** |
+| 运行时依赖清单 ↔ requirements.txt | **完全一致**（必需 7 项 + 可选 4 项全部登记） |
+| Alembic | 单 head `r43_prune_dead_columns_001`，无分叉 |
+| 前端生产可达性 | 320/324 可达；4 个"不可达"经核实均为**工具盲区**（`main.ts` 的副作用导入 `import './router/guards'`）或**刻意保留的测试基座**（VirtualList/virtualWindow/navLinks），非缺陷 |
+
+### Docs / PPT
+
+- `backend/version.json`：版本 1.18.8、release_date 2026-10-26、描述与 features 全量重写为收口结论。
+- 系统介绍 PPT：版本页脚与"数据来源"日期同步至 **v1.18.8 / 2026-10-26**，保持 56 页与既有版式
+  （python-pptx 原位改文本，不动版式；改后跑 `scripts/ppt_overflow_check.py` 校验无溢出）。
+- README / CLAUDE.md / AGENTS.md / 《项目文件结构说明.md》文件数与实测对齐。
+
 ## [1.18.7] - 2026-10-25 — 录入效率包收口 / 数据同步胶囊 / OCR 建议 / 视觉回归 44 页 / 发布工具加固
 
 > **背景**：v1.18.6 之后又合入 24 个提交，集中在「录入效率（③）」「工作协同（④）」

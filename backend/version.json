@@ -1,17 +1,12 @@
 {
-  "version": "1.18.7",
-  "build": "20261025",
-  "release_date": "2026-10-25",
-  "description": "录入效率包收口 + 数据同步胶囊 + OCR 字段级建议 + 视觉回归 44 页 + 发布工具加固（v1.18.7）",
+  "version": "1.18.8",
+  "build": "20261026",
+  "release_date": "2026-10-26",
+  "description": "全面收口：逐一代码体检 + 项目整理（−1880 零引用文件）+ 分段覆盖率门禁修复 + 文档与 PPT 同步",
   "features": [
-    "录入效率包（③ 收口）：批量粘贴弹窗 BulkPasteDialog（粘贴 → 预览 → 逐行校验 → 确认）+ useBulkCreate 批量新增执行器（串行提交、逐条失败明细、摘要话术）；消费帮扶台账接入批量粘贴，学校/组织编辑页接入草稿自动保存与未保存离开拦截（草稿共 4 个页面）",
-    "工作协同（④）：顶栏数据同步状态胶囊 + 台账抽屉，只读 /data-sync/logs，不新增接口；异常状态一眼可见并可下钻",
-    "经费凭证 OCR（⑤）：字段级建议接入转账凭证新建对话框 —— 后端能力早已存在但前端零调用，本轮补齐识别金额/日期建议与人工确认",
-    "性能基座（⑥）：VirtualList 虚拟滚动基座 + 窗口算术纯函数（22 例测试，双文件 100% 覆盖）；usePageSize 每页条数偏好记忆并接入项目列表（归一化 + 持久化）",
-    "视觉回归（⑨）：基线从 10 页扩到 44 页（30 个 console tab + 4 个核心表单），DOM 结构快照不比对像素",
-    "质量门禁：新增 PR/Nightly 覆盖率一致性门禁；Nightly 补跑 tests 根目录（permission_packs 覆盖率 38% → 100%）；修复 E2E 新增村庄表单断言被顶栏隐藏抽屉污染（改用 :visible）",
-    "发布工程：release_tag 工具加固 —— 输出改 UTF-8、工作区脏时提供 --allow-dirty 逃生口（tag 仍只指向已推送 commit）、ci_green 兼容 stdout/stderr 为 None、裸 pragma 补理由（F2 棘轮 1 → 0）",
-    "文档与交付：README/version.json 版本与测试数字收口；新增 RELEASE_NOTES-v1.18.7；系统介绍 PPT 升级为 v1.18.7 / 56 页（新增 1.18.2–1.18.7 收口页，版本历程补到 1.18.7）",
-    "验收口径：后端 12 段 14,722 用例 0 失败 0 跳过 / 45,936 语句 + 11,452 分支 100%；前端 347 文件 7,356 用例 / 四项 100%；flake8 app+scripts 0；Alembic 63 版本单 head r43"
+    "项目整理：移除 1880 个零引用产物 —— `.scratch/tiles-import-test/`（1423，全仓零引用）、`.qoder/`（456，本仓结构说明已标注「机器本地元数据，不参与交付」）、PPT 原始备份（1.0 MB）；被跟踪文件 4407 → 2527。补 .gitignore：`.scratch/tmp/`、`.qoder/`、`.reasonix/`、`.zcode/`、`deliverables/releases/`、`*.exe|*.msi|*.dmg`",
+    "缺陷修复（分段覆盖率门禁）：`coverage combine` 原先被传入**数据文件名当路径**，且各段分片名与 `<data_file>.*` glob 不匹配 → 合并必然失败（只打印空的 stderr 提示）；单段运行还会把 28% 的残缺结果当门禁结论。现改为分片命名 `<data_file>.segN` + 无参 combine，失败时打印 stdout+stderr，**子集运行不再判定阈值**（全量才判）",
+    "全面体检（全部零缺陷）：20 道静态门禁全绿；后端 12 段 0 失败、覆盖率 100.00%（45,936 语句 / 11,452 分支，Miss 0 / BrPart 0）；前端 347 文件 7,356 用例、四项 100%；flake8 app+scripts 0；PII 扫描 0 高危 0 中危；文档死链 0；TODO/FIXME 遗留 0；运行时依赖清单与 requirements.txt 完全一致；Alembic 单 head r43",
+    "文档与 PPT：README/CLAUDE/AGENTS/项目文件结构说明 与实测数字对齐；系统介绍 PPT 版本页脚与数据来源日期同步至 v1.18.8 / 2026-10-26（保持 56 页与既有版式）"
   ]
 }

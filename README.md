@@ -1,14 +1,27 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.7
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.8
 
-![Version](https://img.shields.io/badge/version-1.18.7-blue)
+![Version](https://img.shields.io/badge/version-1.18.8-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.1）
+## 本版亮点（v1.18.8）
+
+- **项目整理（−1,880 个被跟踪文件，4407 → 2527）**：删除 `.scratch/tiles-import-test/`（1,423 个
+  瓦片导入中间产物，全仓零引用）、`.qoder/`（456 个 AI 工具知识库缓存 —— 本仓结构说明本就标注
+  「机器本地元数据，不参与交付」）、1 MB 的 PPT 原始备份；补 `.gitignore`
+  （`.scratch/tmp/`、`.qoder/`、`deliverables/releases/`、`*.exe|*.msi|*.dmg`）防止再混入
+- **修掉一个"看起来永远绿、其实没验证"的门禁缺陷**：分段覆盖率执行器的 `coverage combine`
+  被传了数据文件名当路径、且各段分片名与 `<data_file>.*` glob 不匹配 → 合并必然失败（提示还只读
+  stderr 所以一直是空消息）；单段运行更会把 28% 的残缺结果当门禁结论。现改为分片命名
+  `<data_file>.segN` + 无参 combine + 失败打印 stdout/stderr + **子集运行不判阈值**
+- **收口体检零缺陷**：20 道静态门禁全绿；PII 扫描 0 高危 0 中危；文档死链 0；TODO/FIXME 遗留 0；
+  运行时依赖清单与 `requirements.txt` 完全一致；Alembic 单 head；前端生产可达性 320/324
+  （余 4 项经核实为工具盲区与刻意保留的测试基座，非缺陷）
+- **历史亮点（v1.18.1 起）**：
 
 - **登录页务实化改造**：修掉「注册账户」死链（默认不开放自助注册却无条件显示，现已按 `public-config` 显隐、
   取不到即隐藏）；被锁定/限流时显示**倒计时并禁用按钮**；失败即清空密码并聚焦；CapsLock 提示；
@@ -51,10 +64,11 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-25（v1.18.7）— 后端 14,722 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
-> （CI 后端测试为 **12 段独立进程**分段执行，`--cov-append` 合并，全部段跑完统一 report，
-> 由 `.coveragerc` fail_under=100 单一来源判定；45,936 语句 / 11,452 分支，Miss 0 / BrPart 0）；
-> 前端 **347 个 `.test.ts` / 7,356 用例、12 组 glob 100%**；E2E 165（含 10 页视觉回归基线）；
+> **上次全量验证**: 2026-10-26（v1.18.8）— 后端 14,722 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
+> 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
+> 45,936 语句 / 11,452 分支，Miss 0 / BrPart 0）；
+> 前端 **347 个 `.test.ts` / 7,356 用例、12 组 glob 100%**；E2E 165（含 44 页视觉回归基线）；
 > flake8 app+scripts 0 / vue-tsc 0 / eslint 0 / 硬编码色 146（棘轮 146/146）/ 版本单一来源一致 /
 > Alembic 单 head（63 版本，r43）/ 门禁脚本全绿（含三层对齐、零断言棘轮、同步覆盖率、菜单对齐、单 head 迁移）
 
