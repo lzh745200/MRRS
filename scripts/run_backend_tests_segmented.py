@@ -328,21 +328,26 @@ def main():
         if _cov_target:
             env_cov["COVERAGE_FILE"] = _cov_target
         _rc_for_report = str(cov_config_path) if cov_config_path else ".coveragerc"
-        # 各段分片名为 `<data_file>.seg<N>`，位于 backend/ 下；
-        # `coverage combine` **不带路径参数**时按 `<data_file>.*` 自行发现并合并。
-        combine_cmd = [sys.executable, "-m", "coverage", "combine", f"--rcfile={_rc_for_report}"]
-        combine = subprocess.run(
-            combine_cmd,
-            cwd=str(BACKEND_DIR), env=env_cov, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-        )
-        if combine.returncode != 0:
-            # coverage 把 "No data to combine" 一类提示写在 **stdout**，
-            # 只打印 stderr 会得到一行空消息（历史坑）。
-            detail = ((combine.stdout or "") + (combine.stderr or "")).strip()
-            print(f"覆盖率 combine 失败: {detail[-200:] or '(无输出)'}")
-            print("=" * 70)
-            return 1
+        # ⚠️ 只有 **--cov-unique**（多会话防覆盖模式）才需要合并分片：
+        # 该模式下每段用 COVERAGE_FILE=`<base>.seg<N>` 写独立分片，必须 combine。
+        # 默认模式（不带该开关）全部段都用 `--cov-append` 追进同一个 backend/.coverage，
+        # **根本没有分片** —— 此时跑 combine 只会得到 "No data to combine"。
+        # （历史代码无条件 combine：提示永远失败但被忽略，随后 report 读单文件仍正确，
+        #  所以问题长期不可见；本轮曾误把该失败改成致命错误，反而让默认模式直接失败。）
+        if seg_rcs:
+            combine_cmd = [sys.executable, "-m", "coverage", "combine", f"--rcfile={_rc_for_report}"]
+            combine = subprocess.run(
+                combine_cmd,
+                cwd=str(BACKEND_DIR), env=env_cov, capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+            )
+            if combine.returncode != 0:
+                # coverage 把 "No data to combine" 一类提示写在 **stdout**，
+                # 只打印 stderr 会得到一行空消息（历史坑）。
+                detail = ((combine.stdout or "") + (combine.stderr or "")).strip()
+                print(f"覆盖率 combine 失败（--cov-unique 分片合并）: {detail[-200:] or '(无输出)'}")
+                print("=" * 70)
+                return 1
         report = subprocess.run(
             [sys.executable, "-m", "coverage", "report", f"--rcfile={_rc_for_report}"],
             cwd=str(BACKEND_DIR), env=env_cov, capture_output=True, text=True,
