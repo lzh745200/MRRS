@@ -75,6 +75,32 @@
   （python-pptx 原位改文本，不动版式；改后跑 `scripts/ppt_overflow_check.py` 校验无溢出）。
 - README / CLAUDE.md / AGENTS.md / 《项目文件结构说明.md》文件数与实测对齐。
 
+### Fixed（2026-10-26 追加：分段覆盖率「分片机制」纠正 —— 前面那次只修对了表象）
+
+首轮修复只改了分片**文件名**（`<data_file>.segN`）并把 `combine` 改成无参，但全量跑完仍报
+`No data to combine`。用两组实验把机制彻底测清后才发现真正原因：
+
+| 实验 | 结果 |
+|---|---|
+| 只传 `--cov-config=<rc>`（`data_file=.probe.seg7`），不设环境变量 | 生成 `.probe.seg7` ✅ |
+| 同一调用再设 `COVERAGE_FILE=.probe.envwin` | **只**生成 `.probe.envwin`，rc 被忽略 ✅ |
+| 走 pytest-cov（`pytest … --cov-config=<rc>`，带 `--cov-append`）不设环境变量 | 数据仍落在默认 `backend/.coverage` ❌ |
+
+即：**`COVERAGE_FILE` 优先级高于 `[run] data_file`；而 `--cov-config` 指定的 `data_file`
+在 pytest-cov 路径下不生效**。历史代码把「基础文件名」`<base>` 直接当 `COVERAGE_FILE`
+传给每一段 → 12 段全部追加进**同一个文件**、分片根本不存在 → `combine` 永远无片可合
+（单文件累积"恰好"还能算出正确百分比，所以只在 `--segment` 单段运行时才暴露成 28%）。
+
+现改为：每段 `COVERAGE_FILE=<base>.seg<N>`（真正分片），全部跑完后
+`coverage combine`（无参，按 `<data_file>.*` 收集）合并回 `<base>`，再统一 `report` 判定。
+`atexit` 清理清单同步为各分片。
+
+验证（代码级，直接调用执行器的 `run_segment`，不走主循环）：
+`run_segment(…, cov_file=".probe4.seg11")` → 实际产出 `.probe4.seg11`；
+`coverage combine`（rc `data_file=.probe4`）退出码 0，输出 `Combined data file .probe4.seg11`。
+CI 侧不受影响：流水线走 `scripts/ci_backend_test_segment.sh`（同 job 内 `--cov-append`
+单文件累积，末段 `--mode final` 判阈值），因此已发布的 v1.18.8 安装包与本次改动无关。
+
 ## [1.18.7] - 2026-10-25 — 录入效率包收口 / 数据同步胶囊 / OCR 建议 / 视觉回归 44 页 / 发布工具加固
 
 > **背景**：v1.18.6 之后又合入 24 个提交，集中在「录入效率（③）」「工作协同（④）」

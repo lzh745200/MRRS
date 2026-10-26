@@ -126,11 +126,22 @@ def run_segment(index, name, patterns, is_final, keep_logs, cov_file=None, cov_c
     env = dict(os.environ)
     # 多会话并发：把覆盖率数据写到独立文件，避免彼此的 --cov-append 互相覆盖。
     # 症状：每段都 PASS，但最终 report 只有 50~75%（仿佛分片丢失）。
-    # 注意：pytest-cov **不读** COVERAGE_FILE 环境变量，必须走 --cov-config 的
-    # [run] data_file（实测：仅设 env 时数据仍写默认 .coverage）。
+    #
+    # ⚠️ 2026-10-26 实测纠正（旧的注释写反了）：
+    # coverage 的优先级是 **环境变量 COVERAGE_FILE > --cov-config 的 [run] data_file**。
+    # 实验（同一份测试跑两次）：
+    #   · 只给 --cov-config（data_file=.probe.seg7）→ 生成 .probe.seg7
+    #   · 再设 COVERAGE_FILE=.probe.envwin        → 只生成 .probe.envwin，rc 被忽略
+    # 因此**绝不**在逐段运行时设 COVERAGE_FILE：一旦设了，12 段全部追加进同一个文件，
+    # 逐段分片不存在，`coverage combine` 只会得到 "No data to combine"
+    # （这正是历史上每次全量跑都打印「覆盖率 combine 失败」的真正原因 ——
+    #  而单文件累积"恰好"还能算出正确百分比，所以问题被长期忽略）。
+    # 现在由调用方只传 cov_config（各段写自己的 `<data_file>.seg<N>`），
+    # 全部段跑完后统一 combine。
     if cov_config:
         args += [f"--cov-config={cov_config}"]
     if cov_file:
+        # 仅在**明确**要求单文件（如外部 CI 复用本函数）时才用；默认不传。
         env["COVERAGE_FILE"] = cov_file
     env.setdefault("PYTHONUTF8", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
@@ -281,8 +292,18 @@ def main():
         if selected != SEGMENTS and SEGMENTS[i - 1] not in selected:
             continue
         _seg_rc = seg_rcs[i - 1][1] if seg_rcs else None
+        # ⚠️ 两条实测结论（2026-10-26，均由实验确定，勿凭直觉改）：
+        # ① 覆盖率数据的优先级是 **环境变量 COVERAGE_FILE > --cov-config 的 [run] data_file**；
+        # ② 但 `--cov-config` 指定的 data_file **在走 pytest-cov 时不生效**
+        #    （实测：只传 --cov-config，数据仍落在默认的 backend/.coverage）。
+        # 因此分片只能靠 COVERAGE_FILE 指定：每段写成 `<base>.seg<N>`，
+        # 全部跑完后 `coverage combine`（无参）按 `<data_file>.*` 合并回 `<base>`。
+        # 历史 bug：早期把 `<base>` 本身当 COVERAGE_FILE 传给每段 → 12 段全追加进同一个
+        # 文件、分片不存在 → combine 永远 "No data to combine"（而单文件累积"恰好"
+        # 还能算出正确百分比，于是问题被长期忽略，只在单段运行时暴露成 28%）。
+        _seg_cov_file = f"{cov_file_arg}.seg{i}" if seg_rcs else None
         code = run_segment(
-            i, name, patterns, is_final, args.keep_logs, cov_file_arg or None, _seg_rc
+            i, name, patterns, is_final, args.keep_logs, _seg_cov_file, _seg_rc
         )
         if code != 0:
             failures.append(name)
