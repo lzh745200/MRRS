@@ -197,6 +197,7 @@ describe('创建模式', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     Object.assign(vm.formData, {
+      code: '520102',
       name: '新单位',
       org_type: 'department',
       description: '说明',
@@ -208,7 +209,7 @@ describe('创建模式', () => {
     await clickBtn(wrapper, '保存')
     expect(mockCreateOrganization).toHaveBeenCalledWith({
       name: '新单位',
-      code: undefined, // code 为空 → undefined
+      code: '520102',
       parent_id: null,
       org_type: 'department',
       description: '说明',
