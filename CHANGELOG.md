@@ -26,6 +26,19 @@
   - 验证：单段运行现在输出「覆盖率门禁: 跳过（本次只跑了子集…）」+「子集段通过」；
     全量运行合并成功并给出 100.00%（45,936 语句 / 11,452 分支，Miss 0 / BrPart 0）。
 
+- **`OrganizationService.get_ancestors()` 在 `path` 为 NULL 时抛异常，令数据上报创建直接 500**
+  （`app/services/organization_service.py`）：
+  - 症状：`POST /api/v1/data-reports` 返回 500 `'NoneType' object has no attribute 'strip'`。
+  - 影响面：`get_ancestors` 被上报、数据域、审批等多条链路复用；凡组织 `path` 为 NULL
+    （`repair_organization_paths()` 的注释已说明"早期经 API 直写落库的组织 path/level 为 NULL"，
+    即真实存在）即触发，属历史脏数据把业务操作打成 500。
+  - 次生缺陷：`create_organization` 用 `f"{parent.path}{org.id}/"` 拼接，父级 `path` 为 NULL 时
+    会把子组织写成 `"None12/"`，再让祖先解析抛 `ValueError` —— 脏数据会向下传染。
+  - 修法：祖先解析改为逐段 `int()` 并捕获 `TypeError/ValueError`，解析失败按"无上级"降级（不 500）；
+    建组织时父级 `path` 为空回退为 `/{parent.id}/` 单段路径。
+  - 验证：新增 4 例（NULL path、非数字脏段、合法 path 回归、父级 NULL path 建子组织），
+    组织服务相关 134 例全过；端到端冒烟中「上报创建 + 提交」由 500 恢复为 200。
+
 ### Changed（项目整理：被跟踪文件 4407 → 2527，−1880）
 
 - 删除 `.scratch/tiles-import-test/`（**1423 个文件**）：瓦片导入测试的中间产物，

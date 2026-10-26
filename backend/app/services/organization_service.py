@@ -144,9 +144,11 @@ class OrganizationService:
         self.db.add(org)
         self.db.flush()  # 获取ID
 
-        # 更新路径
+        # 更新路径（父级 path 可能为 NULL —— 直接拼接会得到 "None123/"，
+        # 污染下级 path 并让祖先解析失败，故回退到父 ID 单段路径）
         if parent:
-            org.path = f"{parent.path}{org.id}/"
+            parent_path = parent.path or f"/{parent.id}/"
+            org.path = f"{parent_path}{org.id}/"
         else:
             org.path = f"/{org.id}/"
 
@@ -409,8 +411,22 @@ class OrganizationService:
         if not org:
             return []
 
-        # 从路径解析祖先ID
-        path_ids = [int(id_str) for id_str in org.path.strip("/").split("/") if id_str]
+        # 从路径解析祖先ID。
+        # path 允许为 NULL（早期经 API 直写 Organization(**data) 落库的组织，
+        # 见 repair_organization_paths 的说明），也可能含非数字脏段
+        # （父级 path 为 NULL 时曾拼出 "None123/"）—— 解析失败一律按"无上级"
+        # 处理，绝不让历史脏数据升级成 500。
+        path_ids: List[int] = []
+        for id_str in (org.path or "").strip("/").split("/"):
+            if not id_str:
+                continue
+            try:
+                path_ids.append(int(id_str))
+            except (TypeError, ValueError):
+                logger.warning(
+                    "组织 %s 的 path 含非法段 %r，按无上级处理", org_id, id_str
+                )
+                return []
 
         if not path_ids or path_ids[-1] != org_id:
             return []
