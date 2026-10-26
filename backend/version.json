@@ -1,12 +1,13 @@
 {
-  "version": "1.18.8",
+  "version": "1.18.9",
   "build": "20261026",
   "release_date": "2026-10-26",
-  "description": "全面收口：逐一代码体检 + 项目整理（−1880 零引用文件）+ 分段覆盖率门禁修复 + 文档与 PPT 同步",
+  "description": "应用内更新日志接入唯一账本 + 发布说明一致性门禁（根治版本说明漂移）",
   "features": [
-    "项目整理：移除 1880 个零引用产物 —— `.scratch/tiles-import-test/`（1423，全仓零引用）、`.qoder/`（456，本仓结构说明已标注「机器本地元数据，不参与交付」）、PPT 原始备份（1.0 MB）；被跟踪文件 4407 → 2527。补 .gitignore：`.scratch/tmp/`、`.qoder/`、`.reasonix/`、`.zcode/`、`deliverables/releases/`、`*.exe|*.msi|*.dmg`",
-    "缺陷修复（分段覆盖率门禁）：`coverage combine` 原先被传入**数据文件名当路径**，且各段分片名与 `<data_file>.*` glob 不匹配 → 合并必然失败（只打印空的 stderr 提示）；单段运行还会把 28% 的残缺结果当门禁结论。现改为分片命名 `<data_file>.segN` + 无参 combine，失败时打印 stdout+stderr，**子集运行不再判定阈值**（全量才判）",
-    "全面体检（全部零缺陷）：20 道静态门禁全绿；后端 12 段 0 失败、覆盖率 100.00%（45,936 语句 / 11,452 分支，Miss 0 / BrPart 0）；前端 347 文件 7,356 用例、四项 100%；flake8 app+scripts 0；PII 扫描 0 高危 0 中危；文档死链 0；TODO/FIXME 遗留 0；运行时依赖清单与 requirements.txt 完全一致；Alembic 单 head r43",
-    "文档与 PPT：README/CLAUDE/AGENTS/项目文件结构说明 与实测数字对齐；系统介绍 PPT 版本页脚与数据来源日期同步至 v1.18.8 / 2026-10-26（保持 56 页与既有版式）"
+    "应用内更新日志接入唯一账本：删除 update_log_service.py 里 240 行硬编码历史（原只写到 1.1.1，落后 17 个小版本），改由 scripts/sync_update_log.py 从 CHANGELOG.md 生成 backend/app/services/version_history_data.py（96 个版本，1.0.0 → 1.18.9）",
+    "同一天多版本排序修复：created_at 只按日期写入时 1.18.2 会排在 1.18.3 前面；改为按版本序号加秒偏移（前端只显示日期，不可见）+ 查询 version DESC 兜底，历史库同样稳定",
+    "新增发布说明一致性门禁 scripts/check_update_log.py：生成文件与 CHANGELOG 逐字节比对、version.json 的 version/release_date/build/description 必须等于 CHANGELOG 最新段，已接入 pr-checks 的 static-analysis 与 make test-local",
+    "新增 tests/unit/test_update_log_sync.py（5 例）：生成文件一致、最新版本等于 version.json、版本序列升序无重复、解析跳过 [Unreleased]/[未发布] 段；update_log_service.py 覆盖率 100%",
+    "端到端实测：全新库启动后 GET /api/v1/system/update-logs 返回 96 条，首条 1.18.9，倒序严格按语义化版本排列"
   ]
 }

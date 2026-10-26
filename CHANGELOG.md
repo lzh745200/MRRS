@@ -5,6 +5,48 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.9] - 2026-10-26 — 应用内更新日志接入唯一账本 + 发布说明一致性门禁（根治版本说明漂移）
+
+> **问题**：用户反馈"系统内的更新日志没有更新"。核查发现应用内更新日志由
+> `update_log_service.py` 里**硬编码**的 `VERSION_HISTORY_DATA` 驱动，只写到 **1.1.1**（15 条），
+> 而系统已是 1.18.8 —— 落后 17 个小版本，用户点开更新日志看到的还是两年前的说明。
+> **定性**：这不是"忘了改一次"，而是**两份账本**（`CHANGELOG.md` 与硬编码列表）并存、
+> 后者没有任何门禁。同类问题已第 4 次复发（`version.json` 的 description/features 曾 3 次滞后）。
+
+### Fixed
+
+- **应用内更新日志长期不更新**：`update_log_service.py` 里的 240 行硬编码历史被删除，
+  改由 `backend/app/services/version_history_data.py` 提供，该文件由
+  `scripts/sync_update_log.py` 从 `CHANGELOG.md` 生成（96 个版本，1.0.0 → 1.18.9）。
+  改版本说明只需改 CHANGELOG，不再需要手抄第二份。
+- **同一天多个版本的顺序是随机的**：`created_at` 只按日期写入（1.18.2–1.18.7 全是 2026-10-25），
+  同一时间戳下 `ORDER BY created_at DESC` 的顺序不稳定，实测 1.18.2 会排在 1.18.3 前面。
+  修法：初始化/同步时按版本序号加秒偏移（前端只显示日期，秒级偏移不可见），
+  查询再加 `version DESC` 兜底，历史库里的老数据也能稳定倒序。
+
+### Added
+
+- **`scripts/check_update_log.py` 发布说明一致性门禁**（已接入 `pr-checks` 的 static-analysis 与
+  `make test-local`），一次校验三处：
+  1. `version_history_data.py` 必须与 `CHANGELOG.md` 生成结果**逐字节一致**；
+  2. `backend/version.json` 的 `version` / `release_date` / `build` 必须与 CHANGELOG 最新段一致；
+  3. `version.json` 的 `description` 必须等于 CHANGELOG 最新标题，`features` 不得为空。
+  只改 CHANGELOG 不重跑生成脚本、或只 bump 版本号不改说明，CI 都会直接失败。
+- **单元测试 `tests/unit/test_update_log_sync.py`**：断言生成文件与 CHANGELOG 一致、
+  最新版本等于 `version.json`、版本序列升序无重复、解析跳过 `[Unreleased]` / `[未发布]` 段。
+
+### Changed
+
+- `backend/version.json` 的 `description` 改为与 CHANGELOG 标题严格一致（原先为手工改写版本，
+  已与标题漂移）；`features` 保留人工维护，只要求非空。
+
+### 验证
+
+- `check_update_log.py` / `check_changelog.py` / `check_doc_numbers.py` / `sync-version.js --check` 全部 exit 0。
+- 更新日志相关 29 例测试通过，`app/services/update_log_service.py` 行+分支覆盖率 **100%**（92 语句 / 26 分支）。
+- 端到端实测：全新库启动后 `GET /api/v1/system/update-logs` 返回 **96 条**，首条 1.18.9、
+  次条 1.18.8，倒序严格按语义化版本排列。
+
 ## [1.18.8] - 2026-10-26 — 全面收口：逐一代码体检 + 项目整理 −1880 文件 + 分段覆盖率门禁修复
 
 > **本轮目标**：交付前的最后一次全面体检 —— 逐项检测前后端/数据库/文档，修掉所有能复现的缺陷，

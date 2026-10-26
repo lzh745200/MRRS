@@ -549,6 +549,11 @@ jobs:
       # 纯标准库 + 只读 package.json，故放在本作业（无需安装 backend 依赖）。
       - name: Changelog freshness check
         run: python scripts/check_changelog.py
+      # 应用内更新日志一致性门禁：backend/app/services/version_history_data.py 必须由
+      # CHANGELOG.md 生成且完全一致。缘起：应用内更新日志曾由硬编码列表驱动，与 CHANGELOG
+      # 各写各的，长期停在 1.1.1（落后 17 个小版本），用户升级后看到的仍是旧说明。
+      - name: In-app update log sync check
+        run: python scripts/check_update_log.py
       # Alembic 迁移健康门禁：单 head、无分叉（防再发 4c1ea8a0 MultipleHeads 打包启动失败）
       - name: Alembic migration health check
         run: |
