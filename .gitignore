@@ -481,3 +481,5 @@ deliverables/releases/
 *.exe
 *.msi
 *.dmg
+# ── Office 临时锁文件（~$xxx.pptx 之类，打开文档时自动生成）──
+~$*
