@@ -30,13 +30,24 @@ export interface OrganizationTreeNode extends Organization {
 
 export interface OrganizationCreate {
   name: string
-  code?: string
+  /**
+   * 组织编码 = 6 位行政区划代码（GB/T 2260）—— **后端必填**。
+   *
+   * 2026-10-26 修复：此前这里写成 `code?: string`（可选），与后端
+   * `OrganizationCreate.code`（`Field(...)`，min_length=max_length=6）不一致，
+   * 导致「新增组织」对话框漏了该输入框也不会被类型检查发现，提交后只能吃 422
+   * 「组织编码（行政区划代码）不能为空」。必填性必须与后端逐字段一致
+   * （门禁 `scripts/check_stack_alignment.py` 轴 D 已对此做自动比对）。
+   */
+  code: string
   code_prefix?: string
   parent_id?: number | null
   description?: string
   contact_person?: string
   contact_phone?: string
   address?: string
+  org_type?: string
+  is_active?: boolean
 }
 
 export interface OrganizationUpdate {
@@ -196,10 +207,21 @@ export interface DataReport {
   record_count?: number
 }
 
+/**
+ * 创建数据上报的请求体。
+ *
+ * 2026-10-26 修复（与 `OrganizationCreate.code` 同一类缺陷）：
+ * 后端 `schemas/data_report.py:DataReportCreate` 的必填字段是
+ * `title` / `report_type` / `package_id`，而这里此前
+ * **漏了 `report_type`**、把后端必填的 `title` 写成了可选，
+ * 反而是后端可选的 `target_org_id` 被写成了必填 —— 三者都与后端不一致。
+ * 已按后端逐字段对齐（门禁 `scripts/check_stack_alignment.py` 轴 D 现在会自动比对）。
+ */
 export interface DataReportCreate {
   package_id: number
-  target_org_id: number
-  title?: string
+  title: string
+  report_type: string
+  target_org_id?: number
   description?: string
   deadline?: string
 }

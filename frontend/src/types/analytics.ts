@@ -61,8 +61,11 @@ export interface SupportedVillage {
  */
 export interface SupportedVillageCreate {
   sequenceNo?: number
-  department: string
-  supportUnit: string
+  // 2026-10-26 对齐后端：schemas/supported_village.py 的 department / support_unit
+  // 均为 Optional（历史数据与 Excel 导入常常没有这两项），此前前端声明成必填、
+  // 与后端契约不符。表单层的"建议必填"校验仍保留（product 选择），但类型必须如实。
+  department?: string
+  supportUnit?: string
   villageName: string
   villageId?: number
   // 地域属性 - 贵州省地区选择
@@ -467,7 +470,9 @@ export interface ReportSubscriptionCreate {
   frequency?: SubscriptionFrequency
   sendDay?: number
   sendTime?: string
-  email: string
+  // 后端 schemas/supported_village.py:ReportSubscriptionCreate.email 为 Optional
+  // （注释：单机版保留兼容，站内通知不依赖邮箱）→ 前端不再强制。
+  email?: string
 }
 
 /**

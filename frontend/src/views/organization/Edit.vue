@@ -272,7 +272,9 @@ const handleSubmit = async () => {
       } else {
         await createOrganization({
           name: formData.name,
-          code: formData.code || undefined,
+          // 必填字段不做 `|| undefined` 兜底：那会把校验已通过的编码静默丢弃，
+          // 让用户收到后端的 422「组织编码不能为空」（rules 已保证 6 位数字）。
+          code: formData.code.trim(),
           parent_id: formData.parent_id,
           org_type: formData.org_type,
           description: formData.description || undefined,

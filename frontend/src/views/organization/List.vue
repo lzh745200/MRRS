@@ -176,6 +176,25 @@
         <el-form-item label="组织名称" prop="name">
           <el-input v-model="formData.name" placeholder="请输入组织名称" />
         </el-form-item>
+        <!--
+          组织编码（6 位行政区划代码）—— 2026-10-26 修复：
+          后端 OrganizationCreate.code 是必填（min_length=max_length=6），
+          但本对话框此前**没有这个输入框**，用户点「新增组织」只能吃
+          422「组织编码（行政区划代码）不能为空」。创建后编码不可修改，
+          故编辑态只读展示（与 organization/Edit.vue 同一口径）。
+        -->
+        <el-form-item label="组织编码" prop="code">
+          <el-input
+            v-model="formData.code"
+            data-test="org-code"
+            placeholder="6 位行政区划代码，如 520000 / 520100 / 520102"
+            maxlength="6"
+            :disabled="!!formData.id"
+          />
+          <div class="form-hint">
+            省级 XX0000、市州级 XXYY00、县市级 XXYYZZ；层级由编码自动推导，创建后不可修改。
+          </div>
+        </el-form-item>
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="上级组织" prop="parent_id">
@@ -299,6 +318,7 @@ const formRef = ref<FormInstance>()
 const formData = ref({
   id: null as number | null,
   name: '',
+  code: '',
   parent_id: null as number | null,
   org_type: 'department',
   description: '',
@@ -310,6 +330,11 @@ const formData = ref({
 
 const formRules: FormRules = {
   name: [{ required: true, message: '请输入组织名称', trigger: 'blur' }],
+  // 与后端 OrganizationCreate.code（必填、恰好 6 位）以及 organization/Edit.vue 同口径
+  code: [
+    { required: true, message: '请输入 6 位行政区划代码', trigger: 'blur' },
+    { pattern: /^\d{6}$/, message: '必须是 6 位数字（如 520000）', trigger: 'blur' },
+  ],
   org_type: [{ required: true, message: '请选择组织类型', trigger: 'change' }],
 }
 
@@ -436,6 +461,8 @@ function handleCreate() {
   formData.value = {
     id: null,
     name: '',
+    // 新建必须带编码（后端必填 6 位行政区划代码）
+    code: '',
     parent_id: null,
     org_type: 'department',
     description: '',
@@ -451,6 +478,8 @@ function handleEdit(row: any) {
   formData.value = {
     id: row.id,
     name: row.name || '',
+    // 编码只读：编辑态仅回显（后端对「传入且与库中不同」一律 422）
+    code: row.code || '',
     parent_id: row.parent_id || null,
     org_type: row.org_type || row.type || 'department',
     description: row.description || '',
@@ -485,9 +514,13 @@ async function handleSubmit() {
     delete payload.id
 
     if (formData.value.id) {
+      // 编码创建后不可修改：编辑态不提交该字段（后端对「传入且不同」返回 422）
+      delete payload.code
       await put(`/organizations/${formData.value.id}`, payload)
       // 成功静默：保存成功仅刷新列表
     } else {
+      // 新建：编码必填（后端 OrganizationCreate.code），去空格后提交
+      payload.code = String(formData.value.code || '').trim()
       await post('/organizations', payload)
       ElMessage.success('已创建')
     }
@@ -717,5 +750,14 @@ onMounted(() => {
   .stats-row {
     grid-template-columns: 1fr;
   }
+}
+
+// 表单字段下方的一行灰色提示（与 organization/Edit.vue 同款；
+// 该组件与 Edit.vue 都是"组织编码"的唯一两处填报入口，样式必须一致）
+.form-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
 }
 </style>

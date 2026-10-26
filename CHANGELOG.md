@@ -5,6 +5,54 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.10] - 2026-10-26 — WPS 兼容：.xls/.et 导入打通、格式白名单单一源、导出格式门禁
+
+> **背景**：政务现场主流办公套件是 WPS，但系统此前只在"标准格式"上成立。实测三个缺口：
+> ① 多个导入端点文案承诺"支持 .xlsx / .xls"，解析却全走 openpyxl（只认 OOXML）——
+> 用户按 WPS「97-2003 格式」导出后**必然失败**；② WPS 原生 `.et/.wps/.dps` 在附件白名单
+> 与前端 accept 里**一律不存在**；③ 没有任何"导出文件能被 WPS 打开"的机器校验。
+
+### Added
+
+- **`app/core/office_formats.py`（格式单一事实源）**：容器魔数（zip/OLE2）、可解析表格集合
+  `xlsx/xls/et`、WPS 原生集合、附件 documents 白名单、导出白名单 `xlsx/csv/docx/pdf`、
+  统一的 WPS 指引文案。纯函数、无 IO、无第三方依赖。
+- **`app/services/office_reader.py`（统一读取层）**：按**容器魔数**而非扩展名选择解析器
+  （zip→openpyxl / ole2→xlrd / 其它→统一 400），提供 `read_rows(content, filename)` 与
+  openpyxl 风格 `load_workbook_any()`（含 `iter_rows/max_row/sheetnames/__getitem__` 替身），
+  并把 xlrd 单元格值归一成 openpyxl 口径（空→None、整数→int、日期→datetime）。
+- **`xlrd==2.0.1` 依赖**：`backend/requirements.txt` + `app/core/required_packages.py`
+  （运行时必需）+ 3 个 PyInstaller spec 的 hiddenimports 同步登记。
+- **`scripts/check_office_formats.py` 门禁 + CI 接入**（static-analysis）：导入禁止直连
+  `openpyxl.load_workbook`、白名单禁止硬编码 `endswith((".xlsx",".xls"))`、导出扩展名必须在
+  白名单内、CSV 必须带 UTF-8 BOM；并对 xlsx/xls/两种容器 .et 夹具做运行时自检
+  （未装依赖的 CI 作业自动跳过，pytest 侧覆盖）。
+- **回归用例**：`test_office_formats_wps.py`（14 例）+ `test_office_formats_gate.py`（11 例，
+  含 5 个负向用例保证门禁能红），夹具见 `backend/tests/fixtures/office/`。
+
+### Changed
+
+- **导入解析统一收口到 `office_reader`**：`import_export/import_data`、`projects`、
+  `school`（3 处）、`supported_village`（3 处）、`report_templates`（2 处）、
+  `services/policy_import_service`、`services/excel_importer_service`、
+  `services/batch_import_optimizer`。
+- **白名单统一**：4 处硬编码扩展名判断改为 `office_formats.is_spreadsheet_upload`（含 .et），
+  错误文案统一为"支持 .xlsx/.xls/.et + WPS 另存为指引"。
+- **附件白名单**：`files.py` documents 组改由 `office_formats.DOCUMENT_UPLOAD_EXTS` 提供，
+  新增 `.et/.wps/.dps`（只存不解析，导入仍只接受可解析格式）。
+- **前端 accept 同步**：Excel 上传 8 处补 `.et`（含 YearlyOverview 扩展名校验与提示文案、
+  对应单测期望），区块附件上传补 `.et/.wps/.dps`。
+
+### Fixed
+
+- **`.xls` 可传不可读**（真实死路）：无 xlrd + openpyxl 不支持 OLE2 → 现在按容器走 xlrd。
+- **WPS `.wps/.dps` 附件被拒**：现在可上传（仅存储），导入时给"请另存为 .docx/.pptx"的明确
+  提示，不再抛裸异常。
+
+### Tests
+
+- 待完整回归结果回填：后端 12 段 / 前端全量 / 门禁全套。
+
 ## [1.18.9] - 2026-10-26 — 应用内更新日志接入唯一账本 + 发布说明一致性门禁（根治版本说明漂移）
 
 > **问题**：用户反馈"系统内的更新日志没有更新"。核查发现应用内更新日志由
@@ -26,6 +74,15 @@
 - **升级用户的旧库只补当前一条**：`check_and_record_version_change` 原先只在"版本号变了"时
   补记一条，中间版本仍然缺失（老库会从 1.1.1 直接跳到 1.18.9）。改为每次启动做一次
   **幂等补齐**：一次性取出已记录版本集合，缺哪条补哪条，已存在的不动。
+- **「系统设置」聚合页只有一个页签（归类错位）**：`config-package`（系统配置）被挂在
+  「备份与存储 › 数据包与存储」下，导致「系统设置」只剩「更新日志」一项，页面自己的描述
+  也只能写成"更新日志等基础系统配置"；而 `SettingsOverview.vue` 的「配置管理」分组
+  一直把「系统配置 + 更新日志」并列 —— 两处口径互相矛盾。
+  修法：把 `config-package` 的**父聚合页**从 `system-console-storage` 改为
+  `system-console-settings`，前端分组改为「基础配置 › 系统配置」「版本与日志 › 更新日志」。
+  **tab key / path / roles 全部未变**（`/system/config` 深链与 `allowed_menus` 口径不受影响），
+  tab 总数仍为 30。存量权限包若只勾了「备份与存储」聚合页，需补勾「系统设置」——
+  已在权限包编辑弹窗与该操作说明中显式提示。
 
 ### Added
 
@@ -50,6 +107,51 @@
 - 端到端实测：全新库启动后 `GET /api/v1/system/update-logs` 返回全部历史版本，首条为当前版本、
   次条 1.18.8，倒序严格按语义化版本排列。
 
+### Fixed（2026-10-26 追加：新增组织缺「组织编码」输入 → 前后端请求体对齐 + 门禁补第 4 轴）
+
+**现场症状**：点「新增组织」提交后被拦下，提示「组织编码（行政区划代码）不能为空」，
+但前端表单里**根本没有组织编码输入框** —— 用户无从填写。
+
+**根因（三段同时失守）**：
+
+1. 后端 `schemas/organization.py:OrganizationCreate.code` 必填（`Field(...)`，恰好 6 位）；
+2. 前端 `types/organization.ts:OrganizationCreate.code` 写成 `code?: string`（**可选**），
+   所以"表单漏了必填项"不会被 TypeScript 发现；
+3. `scripts/check_stack_alignment.py` 的 C 轴只比对 **response_model**，
+   **请求体从来没有被比对过** —— 这类「提交少字段 / 必填性不符」既躲过类型检查，
+   也躲过门禁，只能等用户撞 422。
+
+**修复**：
+
+- 前端补字段：`views/organization/List.vue` 新增「组织编码」输入（必填 + `^\d{6}$` 校验 +
+  「省级 XX0000 / 市州级 XXYY00 / 县市级 XXYYZZ」提示），新增态可填、**编辑态只读禁用**
+  （编码创建后不可修改），提交时新增带 `trim` 后的 `code`、编辑**不提交** `code`；
+  与 `views/organization/Edit.vue` 的既有口径完全一致。
+- 类型对齐：`OrganizationCreate.code` 改为必填；顺手修掉同源的三处漂移
+  （D 轴首次运行即抓出，全部真实存在）：
+  | 契约 | 漂移 | 处理 |
+  |---|---|---|
+  | `DataReportCreate` | 前端**缺 `report_type`**、`title` 后端必填前端可选、`target_org_id` 前端必填后端可选 | 按后端逐字段对齐 |
+  | `SupportedVillageCreate` | `department` / `supportUnit` 前端必填、后端可选 | 类型改为可选（表单"建议必填"校验保留，属产品选择） |
+  | `ReportSubscriptionCreate` | `email` 前端必填、后端可选（单机站内通知不依赖邮箱） | 类型改为可选 |
+- `Edit.vue` 的 `code: formData.code || undefined` 改为 `code: formData.code.trim()` ——
+  `|| undefined` 会把已通过校验的必填值静默丢弃，退化成后端 422。
+
+**门禁补强（防"类似所有问题"）**：`check_stack_alignment.py` 新增 **D 轴：请求体必填性** ——
+对**同名且全局唯一**的 `*Create` / `*Update` 契约，前后端必填字段集合必须一致，
+三个方向都报（后端必填前端可选 / 前端缺字段 / 前端过度约束）；同名多义与响应类跳过，
+避免假阳性。`--json` 报告新增 `request_shape_drift` 字段。
+
+**回归测试**：
+
+- 前端 `tests/unit/views/organization/ListCov.test.ts` 追加 5 例（新增态渲染/可编辑、
+  编辑态回填/禁用、校验规则 6 位、新增 payload 带 trim 后的 code、编辑 payload 不含 code）；
+  同时修正既有用例里因新增输入而整体后移的 `ElInput` 索引。
+- 后端新增 `tests/unit/test_stack_alignment_gate_r35_axis_d.py`（9 例：三个漂移方向、
+  非 Create/Update 忽略、同名多义跳过、Update 后缀覆盖、当前仓库零漂移、report 含新字段）。
+
+**验证**：四层对齐门禁 `[OK] 四层对齐无漂移`（A 路径 / B 模型↔库 / C 字段 / D 请求体必填性）；
+`vue-tsc --noEmit` 0 错误；`eslint` 改动文件 0 告警；`ListCov.test.ts` 39/39 通过。
 ## [1.18.8] - 2026-10-26 — 全面收口：逐一代码体检 + 项目整理 −1880 文件 + 分段覆盖率门禁修复
 
 > **本轮目标**：交付前的最后一次全面体检 —— 逐项检测前后端/数据库/文档，修掉所有能复现的缺陷，
@@ -145,7 +247,6 @@
 `coverage combine`（rc `data_file=.probe4`）退出码 0，输出 `Combined data file .probe4.seg11`。
 CI 侧不受影响：流水线走 `scripts/ci_backend_test_segment.sh`（同 job 内 `--cov-append`
 单文件累积，末段 `--mode final` 判阈值），因此已发布的 v1.18.8 安装包与本次改动无关。
-
 ## [1.18.7] - 2026-10-25 — 录入效率包收口 / 数据同步胶囊 / OCR 建议 / 视觉回归 44 页 / 发布工具加固
 
 > **背景**：v1.18.6 之后又合入 24 个提交，集中在「录入效率（③）」「工作协同（④）」

@@ -500,12 +500,14 @@ describe('对话框与表单提交', () => {
 
     const dialog = wrapper.findComponent({ name: 'ElDialog' })
     const inputs = dialog.findAllComponents({ name: 'ElInput' })
-    // name / contact_person / contact_phone / address / description
+    // 顺序：name / code / contact_person / contact_phone / address / description
+    // 2026-10-26 在 name 之后补了「组织编码」输入，索引整体后移一位
     inputs[0].vm.$emit('update:modelValue', '新组织')
-    inputs[1].vm.$emit('update:modelValue', '李四')
-    inputs[2].vm.$emit('update:modelValue', '139')
-    inputs[3].vm.$emit('update:modelValue', '北京市')
-    inputs[4].vm.$emit('update:modelValue', '备注说明')
+    inputs[1].vm.$emit('update:modelValue', '520102')
+    inputs[2].vm.$emit('update:modelValue', '李四')
+    inputs[3].vm.$emit('update:modelValue', '139')
+    inputs[4].vm.$emit('update:modelValue', '北京市')
+    inputs[5].vm.$emit('update:modelValue', '备注说明')
     expect(vm.formData).toMatchObject({
       name: '新组织',
       contact_person: '李四',
@@ -945,5 +947,104 @@ describe('组织启停入口（2026-10-14 新增）', () => {
     mockDeactivateOrg.mockRejectedValueOnce(new Error('boom'))
     await vm.handleToggleActive({ id: 10, name: '丁', is_active: true })
     expect(ElMessage.error).toHaveBeenCalledWith('操作失败')
+  })
+})
+
+/**
+ * 组织「新增/编辑」对话框中的**组织编码（6 位行政区划代码）**回归。
+ *
+ * 缺陷（2026-10-26 现场反馈）：后端 OrganizationCreate.code 必填，
+ * 但本对话框此前**没有这个输入框**，点提交只能收到 422
+ * 「组织编码（行政区划代码）不能为空」。
+ */
+describe('组织编码字段（前后端对齐）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiRequest.mockImplementation(defaultApiImpl)
+  })
+
+  it('新增态：渲染「组织编码」输入（可编辑）并给出编码规则提示', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(vm.formData.code).toBe('') // 初始值
+    vm.handleCreate()
+    await nextTick()
+
+    expect(vm.formData.code).toBe('')
+    const html = wrapper.html()
+    expect(html).toContain('组织编码')
+    expect(html).toContain('6 位行政区划代码')
+    // 稳定钩子：新增态可编辑（无 disabled）
+    const codeBox = wrapper.find('[data-test="org-code"]')
+    expect(codeBox.exists(), '新增对话框必须渲染「组织编码」输入').toBe(true)
+    // ElInput 会把 disabled 透传到根节点（false 时渲染成 "false"），
+    // 故按语义断言：新增态不是 "true" 即可编辑
+    expect(codeBox.attributes('disabled')).not.toBe('true')
+  })
+
+  it('编辑态：回填编码且输入框禁用（创建后不可修改）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.handleEdit({ id: 3, name: '某县', code: '520102', org_type: 'department' })
+    await nextTick()
+
+    expect(vm.formData.code).toBe('520102')
+    const codeBox = wrapper.find('[data-test="org-code"]')
+    expect(codeBox.exists(), '编辑对话框同样展示组织编码').toBe(true)
+    // 编码创建后不可修改：编辑态必须禁用
+    expect(codeBox.attributes('disabled')).toBeDefined()
+  })
+
+  it('校验规则：必填 + 恰好 6 位数字', () => {
+    const wrapper = mountComp()
+    const rules = (wrapper.vm as any).formRules.code
+    expect(Array.isArray(rules)).toBe(true)
+    expect(rules[0].required).toBe(true)
+    expect(rules[0].message).toContain('行政区划代码')
+    const re: RegExp = rules[1].pattern
+    expect(re.test('520000')).toBe(true)
+    expect(re.test('520102')).toBe(true)
+    expect(re.test('52000')).toBe(false)
+    expect(re.test('5201023')).toBe(false)
+    expect(re.test('5201a2')).toBe(false)
+  })
+
+  it('新增提交：payload 带 trim 后的 code', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.handleCreate()
+    vm.formRef = { validate: vi.fn().mockResolvedValue(true), resetFields: vi.fn() }
+    vm.formData.name = '新区县'
+    vm.formData.code = ' 520113 '
+    await vm.handleSubmit()
+
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    const [url, payload] = mockPost.mock.calls[0]
+    expect(url).toBe('/organizations')
+    expect(payload.code).toBe('520113')
+    expect(ElMessage.success).toHaveBeenCalledWith('已创建')
+  })
+
+  it('编辑提交：payload 不含 code（编码只读，避免后端 422）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.handleEdit({ id: 9, name: '旧名', code: '520100', org_type: 'department' })
+    vm.formRef = { validate: vi.fn().mockResolvedValue(true), resetFields: vi.fn() }
+    vm.formData.name = '新名'
+    await vm.handleSubmit()
+
+    expect(mockPut).toHaveBeenCalledTimes(1)
+    const [url, payload] = mockPut.mock.calls[0]
+    expect(url).toBe('/organizations/9')
+    expect('code' in payload).toBe(false)
+    expect(payload.name).toBe('新名')
   })
 })

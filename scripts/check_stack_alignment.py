@@ -441,12 +441,156 @@ def check_field_alignment() -> list[dict]:
 
 # ── 入口 ────────────────────────────────────────────────────────────────────
 
+# ── D 轴：请求体必填性（前端 XxxCreate/XxxUpdate ↔ 后端同名 Pydantic）──────
+#
+# 2026-10-26 事故：后端 ``OrganizationCreate.code`` 必填（6 位行政区划代码），
+# 前端 ``types/organization.ts`` 却写成 ``code?: string``（可选），于是前端
+# 「新增组织」对话框漏掉了这个输入框也没人发现 —— 用户点提交只能收到
+# 422「组织编码（行政区划代码）不能为空」。C 轴只比 ``response_model``，
+# **请求体从来没被比对过**，这类「提交少字段 / 必填性不符」长期无人拦截。
+#
+# D 轴规则（保守，宁漏不误报）：
+#   1. 只看名字以 Create / Update 结尾的契约（请求体）；
+#   2. 前后端**同名**、且各自在全局**唯一**（同名多义则跳过）；
+#   3. 比较"必填字段集合"，两个方向都报（后端必填而前端可选 = 少填；
+#      前端必填而后端可选 = 过度约束）。
+#
+# 后端必填判定：无默认值，或 ``= Field(...)``；注解含 Optional/None 一律视为非必填。
+# 前端必填判定：TypeScript 字段名后**没有** ``?``。
+
+_REQ_SUFFIXES = ("Create", "Update")
+_FE_FIELD_OPT_RE = re.compile(r"^\s{2}(\w+)(\?)?\s*:", re.M)
+
+
+def _annotation_is_optional(ann: ast.AST, source: str) -> bool:
+    """Optional[X] / X | None 视为非必填（取不到源码时按非可选处理，保守）。"""
+    try:
+        text = ast.get_source_segment(source, ann) or ""
+    except Exception:  # noqa: BLE001
+        return False
+    return "Optional" in text or "None" in text
+
+
+def _is_field_ellipsis(value: ast.AST | None) -> bool:
+    """``= Field(...)``（Pydantic v2 必填写法）。"""
+    if not isinstance(value, ast.Call):
+        return False
+    func = value.func
+    name = getattr(func, "id", None) or getattr(func, "attr", None)
+    if name != "Field" or not value.args:
+        return False
+    first = value.args[0]
+    return isinstance(first, ast.Constant) and first.value is Ellipsis
+
+
+def _collect_backend_required_models() -> dict[str, list[tuple[str, set[str], set[str]]]]:
+    """类名 → [(文件, 全部字段, 必填字段)]（仅 BaseModel 子类）。"""
+    found: dict[str, list[tuple[str, set[str], set[str]]]] = {}
+    for path in sorted((BACKEND / "app").rglob("*.py")):
+        try:
+            source = path.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            bases = {getattr(b, "id", None) or getattr(b, "attr", None) for b in node.bases}
+            if "BaseModel" not in bases:
+                continue
+            fields: set[str] = set()
+            required: set[str] = set()
+            for stmt in node.body:
+                if not (isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)):
+                    continue
+                name = stmt.target.id
+                fields.add(name)
+                if _annotation_is_optional(stmt.annotation, source):
+                    continue
+                if stmt.value is None or _is_field_ellipsis(stmt.value):
+                    required.add(name)
+            found.setdefault(node.name, []).append(
+                (str(path.relative_to(ROOT)), fields, required)
+            )
+    return found
+
+
+def _collect_frontend_required_interfaces() -> dict[str, list[tuple[str, set[str], set[str]]]]:
+    """interface 名 → [(文件, 全部字段, 必填字段(无 ``?``))]。"""
+    found: dict[str, list[tuple[str, set[str], set[str]]]] = {}
+    for directory in (FRONTEND_API, FRONTEND_TYPES):
+        if not directory.exists():
+            continue
+        for path in sorted(directory.glob("*.ts")):
+            if path.name.endswith(".test.ts"):
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for match in re.finditer(r"^export interface (\w+)\s*\{", text, re.M):
+                name = match.group(1)
+                start = match.end()
+                depth = 1
+                index = start
+                while index < len(text) and depth:
+                    if text[index] == "{":
+                        depth += 1
+                    elif text[index] == "}":
+                        depth -= 1
+                    index += 1
+                body = text[start:index]
+                pairs = _FE_FIELD_OPT_RE.findall(body)
+                fields = {f for f, _opt in pairs}
+                required = {f for f, opt in pairs if not opt}
+                found.setdefault(name, []).append(
+                    (str(path.relative_to(ROOT)), fields, required)
+                )
+    return found
+
+
+def check_request_shape_alignment() -> list[dict]:
+    """D 轴：前端 Create/Update 契约 ↔ 后端同名模型的**必填字段**差异。"""
+    backend = _collect_backend_required_models()
+    frontend = _collect_frontend_required_interfaces()
+
+    drift: list[dict] = []
+    for name, be_defs in sorted(backend.items()):
+        if not name.endswith(_REQ_SUFFIXES):
+            continue
+        fe_defs = frontend.get(name)
+        # 同名多义（前后端任一侧不唯一）→ 无法安全配对，跳过
+        if not fe_defs or len(fe_defs) != 1 or len(be_defs) != 1:
+            continue
+        be_file, be_fields, be_required = be_defs[0]
+        fe_file, fe_fields, fe_required = fe_defs[0]
+
+        be_req = {to_snake_case(f) for f in be_required} - {"model_config"}
+        fe_req = {to_snake_case(f) for f in fe_required}
+        fe_all = {to_snake_case(f) for f in fe_fields}
+
+        missing = sorted(be_req - fe_req)          # 后端必填但前端未必填/缺失
+        over = sorted(fe_req - be_req)             # 前端必填但后端可选
+        absent = sorted(be_req - fe_all)           # 后端必填但前端根本没有该字段
+        if not (missing or over):
+            continue
+        drift.append(
+            {
+                "name": name,
+                "backend": be_file,
+                "frontend": fe_file,
+                "not_required_in_frontend": [f for f in missing if f not in absent],
+                "missing_in_frontend": absent,
+                "required_only_in_frontend": over,
+            }
+        )
+    return drift
+
+
 def run() -> dict:
-    """跑三条轴，返回结构化报告。"""
+    """跑四条轴，返回结构化报告。"""
     return {
         "path_drift": check_path_alignment(),
         "model_db_drift": check_model_db_alignment(),
         "field_drift": check_field_alignment(),
+        "request_shape_drift": check_request_shape_alignment(),
     }
 
 
@@ -481,6 +625,7 @@ def main() -> int:
         len(report["path_drift"])
         + len(report["model_db_drift"])
         + len(report["field_drift"])
+        + len(report["request_shape_drift"])
     )
 
     if args.json:
@@ -502,8 +647,18 @@ def main() -> int:
                     print(f"        仅后端: {item['only_backend']}")
                 if item["only_frontend"]:
                     print(f"        仅前端: {item['only_frontend']}")
+        if report["request_shape_drift"]:
+            print(f"[FAIL] D 轴 请求体必填性不一致（{len(report['request_shape_drift'])}）:")
+            for item in report["request_shape_drift"]:
+                print(f"    {item['name']} ({item['backend']} <-> {item['frontend']})")
+                if item["missing_in_frontend"]:
+                    print(f"        前端缺字段: {item['missing_in_frontend']}")
+                if item["not_required_in_frontend"]:
+                    print(f"        后端必填但前端可选: {item['not_required_in_frontend']}")
+                if item["required_only_in_frontend"]:
+                    print(f"        前端必填但后端可选: {item['required_only_in_frontend']}")
         if total == 0:
-            print("[OK] 三层对齐无漂移：前端路径 / 模型↔库 / 前后端字段")
+            print("[OK] 四层对齐无漂移：前端路径 / 模型↔库 / 前后端字段 / 请求体必填性")
 
     return 0 if total == 0 else 1
 
