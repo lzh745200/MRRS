@@ -491,3 +491,5 @@ deliverables/releases/
 
 # pre-commit 本地 store（本机 python 无法写 ~/.cache，用 PRE_COMMIT_HOME 指到仓库内时产生）
 .pre-commit-cache/
+# pip install --no-wheel 解包临时目录（根目录残留，2026-10-26 清理 18 个 / 6.42MB）
+pip-unpack-*/
