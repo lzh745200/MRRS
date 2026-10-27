@@ -22,6 +22,25 @@ from app.core.security import get_current_user
 from app.services import ocr_service
 
 
+def _rapidocr_installed() -> bool:
+    """真实 OCR 引擎是否可用（`rapidocr-onnxruntime` 元数据要求 python<3.13）。
+
+    缺失时"真实引擎端到端"用例应 skip 而非 fail —— 见 requirements.txt 中
+    `rapidocr-onnxruntime==1.4.4; python_version < "3.13"` 的环境标记说明。
+    """
+    try:
+        import rapidocr_onnxruntime  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+_RAPIDOCR_SKIP_REASON = (
+    "需要 rapidocr-onnxruntime（元数据 requires_python<3.13，"
+    "Python 3.13 下 pip 按环境标记跳过安装）；CI 用 cp311 会执行本用例"
+)
+
+
 _CJK_FONT_CANDIDATES = (
     r"C:\Windows\Fonts\simhei.ttf",
     r"C:\Windows\Fonts\msyh.ttc",
@@ -155,6 +174,7 @@ class TestOcrVoucherApi:
         assert response.status_code == 400
         assert "OCR 识别失败" in response.json()["detail"]
 
+    @pytest.mark.skipif(not _rapidocr_installed(), reason=_RAPIDOCR_SKIP_REASON)
     def test_real_engine_end_to_end(self, client):
         """真实引擎端到端：上传凭证图片 → 识别出金额与日期"""
         response = _upload(client, _build_voucher_image())

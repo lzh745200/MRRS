@@ -13,6 +13,8 @@
 **测试文件本身始终可编辑**；被测实现是 `scripts/check_stack_alignment.py`。
 """
 
+import contextlib
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -22,6 +24,22 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 GATE = ROOT / "scripts" / "check_stack_alignment.py"
 FRONTEND_API_DIR = ROOT / "frontend" / "src" / "api"
+
+
+@pytest.fixture
+def isolated_api_dir(tmp_path, monkeypatch):
+    """把真实 `frontend/src/api` 复制到 tmp_path，并让门禁只扫这份副本。
+
+    负向用例需要"注入一个坏文件"来验证门禁能抓到漂移。此前直接写真实目录，
+    在 xdist 并行时会与其它 worker 上的门禁测试互相串扰（2026-10-27 实测
+    `-n 6` 下门禁用例与 axis_d 用例同时红），且本机沙箱的 safe-delete shim
+    会让清理失败、残留污染源码树。复制到 tmp_path 后三点全解：
+    注入只影响副本、并行互不可见、清理交给 pytest 的 tmp_path 机制。
+    """
+    dst = tmp_path / "api"
+    shutil.copytree(FRONTEND_API_DIR, dst)
+    monkeypatch.setenv("MRRS_FRONTEND_API_DIR", str(dst))
+    return dst
 
 
 # ── 门禁脚本自身必须存在且可解析 ────────────────────────────────────────────
@@ -154,14 +172,26 @@ def test_gate_leaves_no_reference_db_dirs(gate_report):
 
 # ── 门禁必须真的能抓到漂移（负向验证：改坏后必须 FAIL）────────────────────
 
-def test_gate_detects_injected_path_drift(tmp_path):
+def _clear_injected(path: Path) -> None:
+    """清理注入文件，**绝不因清理失败而崩溃**。
+
+    2026-10-27：本机沙箱的 safe-delete shim 会让 `unlink()` 抛
+    `SystemExit(1)`（不是 OSError），原先 `finally: injected.unlink(...)`
+    会因此把**整个 pytest 进程**带崩（实测 EXIT=1 + 残留文件），
+    比"该用例失败"严重得多。故显式吞掉 BaseException —— 只包一行 unlink，
+    不会影响 KeyboardInterrupt 的正常传播语义。
+    """
+    with contextlib.suppress(BaseException):  # noqa: BLE001 - 见 docstring
+        path.unlink(missing_ok=True)
+
+
+def test_gate_detects_injected_path_drift(isolated_api_dir):
     """把前端调用改成不存在的路径，门禁必须报 path_drift 且非 0 退出。
 
-    实现方式：不造假仓库（门禁需要导入真实后端 app 才能取到路由表），
-    而是在**真实仓库的前端 api 目录**里放一个临时文件，门禁跑完后删掉。
+    注入到 `isolated_api_dir`（真实目录的临时副本），门禁通过
+    `MRRS_FRONTEND_API_DIR` 只扫副本 —— 真实源码树零污染。
     """
-    injected = FRONTEND_API_DIR / "__r35_injected_drift.ts"
-    assert not injected.exists(), "注入文件已存在，先清理"
+    injected = isolated_api_dir / "__r35_injected_drift.ts"
     injected.write_text(
         "export async function r35InjectedBroken() {\n"
         "  return get('/this/path/does/not/exist')\n"
@@ -187,13 +217,12 @@ def test_gate_detects_injected_path_drift(tmp_path):
         ), f"注入的坏路径未被报出: {report['path_drift']}"
         assert proc.returncode != 0, "注入漂移后门禁仍返回 0"
     finally:
-        injected.unlink(missing_ok=True)
+        _clear_injected(injected)
 
 
-def test_gate_detects_injected_field_drift(tmp_path):
+def test_gate_detects_injected_field_drift(isolated_api_dir):
     """后端多返回一个字段而前端没声明时，门禁必须报 field_drift。"""
-    injected = FRONTEND_API_DIR / "__r35_injected_field.ts"
-    assert not injected.exists(), "注入文件已存在，先清理"
+    injected = isolated_api_dir / "__r35_injected_field.ts"
     injected.write_text(
         "export interface R35InjectedDrift {\n"
         "  only_backend_field: string\n"
@@ -214,4 +243,4 @@ def test_gate_detects_injected_field_drift(tmp_path):
             f"未配对的 interface 不应被报为漂移: {report['field_drift']}"
         )
     finally:
-        injected.unlink(missing_ok=True)
+        _clear_injected(injected)

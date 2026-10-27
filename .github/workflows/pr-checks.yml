@@ -392,6 +392,14 @@ jobs:
       # mypy 类型检查（非阻断，但报告类型问题）
       - name: mypy type check
         run: cd backend && python -m mypy app/ --config-file=mypy.ini --ignore-missing-imports || true
+      # 技术债棘轮门禁（阻断）：mypy 错误数 / 前端 `as any` 处数 / 后端宽泛
+      # `except Exception` 处数，三者任一超过 .type-debt-baseline.json 即失败。
+      # 背景（2026-10-27 体检）：mypy 1393 errors / 150 files 一直是 `|| true`
+      # 永不阻断，`as any` 196 处与 `except Exception` 802 处也无任何上限 ——
+      # 三类债只会单向增长。一次性清零等于给全库补类型标注，不现实；但
+      # "不允许继续恶化"可以立刻做到。下调基线直接改小；上调需 PR 说明理由。
+      - name: Type debt ratchet (mypy / as any / broad except)
+        run: cd backend && python ../scripts/check_type_debt.py
       # bandit 安全扫描（低级别，阻断）
       - name: bandit security scan
         run: cd backend && python -m bandit -r app/ -ll

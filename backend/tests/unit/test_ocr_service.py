@@ -17,6 +17,27 @@ from PIL import Image, ImageDraw, ImageFont
 from app.services import ocr_service
 
 
+def _rapidocr_installed() -> bool:
+    """真实 OCR 引擎是否可用。
+
+    2026-10-27：`rapidocr-onnxruntime 1.4.4` 的元数据是 `requires_python = "<3.13"`
+    （PyPI 官方 JSON 核实），因此 CI/打包基座（cp311）能装，而 Python 3.13 环境
+    `pip install -r requirements.txt` 会跳过该行（已加环境标记）。此时"真实引擎"
+    用例应当 **skip 而非 fail** —— 缺依赖不是代码缺陷。
+    """
+    try:
+        import rapidocr_onnxruntime  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+_RAPIDOCR_SKIP_REASON = (
+    "需要 rapidocr-onnxruntime（元数据 requires_python<3.13，"
+    "Python 3.13 下 pip 按环境标记跳过安装）；CI 用 cp311 会执行本用例"
+)
+
+
 # ── 真实图片构造（优先中文字体；无中文字体的 CI 退化为 ASCII 票据）──
 _CJK_FONT_CANDIDATES = (
     r"C:\Windows\Fonts\simhei.ttf",
@@ -204,6 +225,7 @@ class TestEngineLifecycle:
 # ════════════════════════════════════════════════════════════════════
 #  真实引擎识别（本机实测）
 # ════════════════════════════════════════════════════════════════════
+@pytest.mark.skipif(not _rapidocr_installed(), reason=_RAPIDOCR_SKIP_REASON)
 class TestRealRecognition:
     def test_real_engine_recognizes_amount_and_date(self):
         assert ocr_service.available() is True

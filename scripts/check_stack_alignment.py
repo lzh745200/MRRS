@@ -47,6 +47,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -119,12 +120,52 @@ def collect_backend_routes() -> set[str]:
     return routes
 
 
+def _rm_tree(path: Path) -> None:
+    """删除临时目录，**绝不因清理失败而让门禁崩溃**。
+
+    2026-10-27：本机沙箱的 safe-delete shim 在单个 turn 内删除量超过阈值（50）时
+    会抛 `SystemExit(1)` —— 那是 BaseException，`shutil.rmtree(..., ignore_errors=True)`
+    拦不住（它只吞 OSError）。后果：参照库恰好 50 个文件时清理被拦 → 整个门禁进程
+    带着 SystemExit 退出 → stdout 为空 → 调用方（负向测试）只看到"门禁输出非 JSON"，
+    误以为是门禁逻辑坏了。清理失败本就不该影响门禁结论，故显式吞掉 BaseException。
+    """
+    with contextlib.suppress(BaseException):  # noqa: BLE001 - 见 docstring
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def _rel(path: Path) -> str:
+    """展示用的路径：能相对仓库根就相对，不能就返回绝对路径。
+
+    2026-10-27：负向测试用 `MRRS_FRONTEND_API_DIR` 把前端目录指向仓库外的临时副本，
+    原先直接 `path.relative_to(ROOT)` 会抛
+    `ValueError: ... is not in the subpath of ...`，让整个门禁以
+    "[FAIL] 对齐门禁执行失败" 退出 —— 看起来像门禁本身坏了，实际只是路径不在仓库内。
+    """
+    with contextlib.suppress(ValueError):
+        return str(path.relative_to(ROOT))
+    return str(path)
+
+
+def _frontend_api_dir() -> Path:
+    """前端 api 目录。
+
+    默认即真实目录；负向测试（`test_stack_alignment_gate_r35.py`）会用
+    `MRRS_FRONTEND_API_DIR` 指向一份临时副本，把"注入一个坏路径"的验证
+    与真实源码树隔离开 —— 否则 xdist 并行时其它 worker 上的门禁测试会扫到
+    注入文件而误报（2026-10-27 全量实测：`-n 6` 下门禁用例与 axis_d 用例互相串扰）。
+    每次调用都重新读环境变量，保证测试内 monkeypatch.setenv 立即生效。
+    """
+    override = os.environ.get("MRRS_FRONTEND_API_DIR")
+    return Path(override) if override else FRONTEND_API
+
+
 def collect_frontend_calls() -> list[tuple[str, int, str, str]]:
     """扫前端 api 层，返回 [(文件名, 行号, 原始文本, 归一化路径)]。"""
     calls: list[tuple[str, int, str, str]] = []
-    if not FRONTEND_API.exists():
+    api_dir = _frontend_api_dir()
+    if not api_dir.exists():
         return calls
-    for path in sorted(FRONTEND_API.glob("*.ts")):
+    for path in sorted(api_dir.glob("*.ts")):
         if path.name.endswith(".test.ts"):
             continue
         text = _strip_comments(path.read_text(encoding="utf-8", errors="replace"))
@@ -175,9 +216,34 @@ def _load_model_metadata():
     return Base.metadata
 
 
+def _tmp_root() -> Path:
+    """返回临时参照库的落点目录（仓库内 ``.scratch/tmp``）。
+
+    2026-10-27：此前直接 `tempfile.mkdtemp(prefix="stack_align_")`。本机系统
+    TEMP 存在「可创建不可删除」的情形（杀软实时扫描持有句柄），
+    `tempfile._get_default_tempdir()` 的 `_test_support()` 会判定其不可用并
+    **静默回退到 CWD** —— 于是每跑一次门禁就在仓库根留下一个
+    `stack_align_xxxxxxxx/`（含 ~2.8MB SQLite 参照库）。实测已堆到 16 个，
+    且它们不在 `.gitignore` 里，是 `git add -A` 误提交的隐患。
+
+    现显式指定 `ROOT/.scratch/tmp/stack-align/`（`.gitignore` 已覆盖 `.scratch/`），
+    并顺手清掉超过 2 小时的遗留目录 —— 只清"老"的，避免误删并发运行中的。
+    用独立子目录是因为 `.scratch/tmp/` 还存放着历史会话留下的一次性脚本（255 个），
+    混在一起会让"参照库"和"脚本"难以区分。
+    """
+    root = ROOT / ".scratch" / "tmp" / "stack-align"
+    root.mkdir(parents=True, exist_ok=True)
+    cutoff = time.time() - 2 * 3600
+    for stale in root.glob("stack_align_*"):
+        with contextlib.suppress(OSError):
+            if stale.stat().st_mtime < cutoff:
+                _rm_tree(stale)
+    return root
+
+
 def _build_reference_db() -> Path:
     """在临时目录起一个空库并迁移到 head。失败时自动清理并抛出。"""
-    tmp_dir = Path(tempfile.mkdtemp(prefix="stack_align_"))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="stack_align_", dir=str(_tmp_root())))
     db_path = tmp_dir / "reference.db"
     env = dict(os.environ)
     env["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
@@ -187,7 +253,7 @@ def _build_reference_db() -> Path:
         encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        _rm_tree(tmp_dir)
         raise RuntimeError(
             "alembic upgrade head 失败，无法建立参照库:\n"
             f"{proc.stdout}\n{proc.stderr}"
@@ -235,7 +301,7 @@ def check_model_db_alignment() -> list[str]:
         finally:
             engine.dispose()
     finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        _rm_tree(tmp_dir)
 
 
 # ── C 轴：前端 interface ↔ 后端 Pydantic schema ────────────────────────────
@@ -267,7 +333,7 @@ def _collect_backend_schemas() -> dict[str, set[str]]:
                 if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                     fields.add(stmt.target.id)
             found.setdefault(node.name, []).append(
-                (str(path.relative_to(ROOT)), fields)
+                (_rel(path), fields)
             )
     return found
 
@@ -275,7 +341,7 @@ def _collect_backend_schemas() -> dict[str, set[str]]:
 def _collect_frontend_interfaces() -> dict[str, list[tuple[str, set[str]]]]:
     """前端 interface → 字段集合（同名 interface 出现在多个文件时保留多条）。"""
     found: dict[str, list[tuple[str, set[str]]]] = {}
-    for directory in (FRONTEND_API, FRONTEND_TYPES):
+    for directory in (_frontend_api_dir(), FRONTEND_TYPES):
         if not directory.exists():
             continue
         for path in sorted(directory.glob("*.ts")):
@@ -296,7 +362,7 @@ def _collect_frontend_interfaces() -> dict[str, list[tuple[str, set[str]]]]:
                 body = text[start:index]
                 fields = set(_FE_FIELD_RE.findall(body))
                 found.setdefault(name, []).append(
-                    (str(path.relative_to(ROOT)), fields)
+                    (_rel(path), fields)
                 )
     return found
 
@@ -353,7 +419,7 @@ def check_field_alignment() -> list[dict]:
     response_models = _collect_backend_response_models()
 
     drift: list[dict] = []
-    for path in sorted(FRONTEND_API.glob("*.ts")):
+    for path in sorted(_frontend_api_dir().glob("*.ts")):
         if path.name.endswith(".test.ts"):
             continue
         text = _strip_comments(path.read_text(encoding="utf-8", errors="replace"))
@@ -510,7 +576,7 @@ def _collect_backend_required_models() -> dict[str, list[tuple[str, set[str], se
                 if stmt.value is None or _is_field_ellipsis(stmt.value):
                     required.add(name)
             found.setdefault(node.name, []).append(
-                (str(path.relative_to(ROOT)), fields, required)
+                (_rel(path), fields, required)
             )
     return found
 
@@ -518,7 +584,7 @@ def _collect_backend_required_models() -> dict[str, list[tuple[str, set[str], se
 def _collect_frontend_required_interfaces() -> dict[str, list[tuple[str, set[str], set[str]]]]:
     """interface 名 → [(文件, 全部字段, 必填字段(无 ``?``))]。"""
     found: dict[str, list[tuple[str, set[str], set[str]]]] = {}
-    for directory in (FRONTEND_API, FRONTEND_TYPES):
+    for directory in (_frontend_api_dir(), FRONTEND_TYPES):
         if not directory.exists():
             continue
         for path in sorted(directory.glob("*.ts")):
@@ -541,7 +607,7 @@ def _collect_frontend_required_interfaces() -> dict[str, list[tuple[str, set[str
                 fields = {f for f, _opt in pairs}
                 required = {f for f, opt in pairs if not opt}
                 found.setdefault(name, []).append(
-                    (str(path.relative_to(ROOT)), fields, required)
+                    (_rel(path), fields, required)
                 )
     return found
 

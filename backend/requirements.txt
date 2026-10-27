@@ -170,5 +170,15 @@ ponytail==0.9.3
 # 故 docker/Dockerfile.kylin-standalone 不再过滤本行：ARM64 改用
 # opencv-python-headless + `pip install --no-deps` 安装引擎本体，见
 # backend/requirements-arm64-ocr.txt。
+# ------------------------------------------------------------
+# 2026-10-27：补 Python 版本环境标记。`rapidocr-onnxruntime 1.4.4` 的元数据是
+# `requires_python = "<3.13,>=3.6"`（PyPI 官方 JSON 核实，未 yanked），因此：
+#   · CI / 打包基座用 **cp311** → 正常安装，OCR 功能完整；
+#   · 用 **Python 3.13** 的人执行 `pip install -r requirements.txt` 会因本行
+#     "No matching distribution found" 而**整体失败** —— 实测本机 3.13.14 复现。
+# 加环境标记后 3.13 下自动跳过本行，其余依赖照装；代码侧已有降级路径
+# （`ocr_service._create_engine()` 捕获 ModuleNotFoundError → available() False
+# → 接口返回 503「OCR 不可用，请手工录入」），不影响主流程。
+# 若将来要支持 3.13 的 OCR，需升级到声明 3.13 的新版本并重测识别精度。
 # ============================================================
-rapidocr-onnxruntime==1.4.4
+rapidocr-onnxruntime==1.4.4; python_version < "3.13"

@@ -63,6 +63,17 @@ cd backend && python -m venv .venv && .venv\\Scripts\\activate && pip install -r
 cd frontend && npm install && npm run dev
 ```
 
+> **Python 版本**：请用 **3.11**（与 CI / 打包基座一致）。`rapidocr-onnxruntime==1.4.4`
+> 的元数据是 `requires_python<3.13`，3.13 下 `pip install -r requirements.txt` 会跳过该行
+> （已加环境标记，不会整体失败），但 OCR 功能与 2 个真实引擎用例在本地就测不到。
+>
+> **Windows + WorkBuddy 沙箱注意**：若 venv 里的 `Scripts/python.exe` 报
+> `failed to open '...pyvenv.cfg'`（exit 107），是 workspace 目录的
+> `Everyone: Deny DeleteSubdirectoriesAndFiles` ACL 让 venvlauncher 读不到配置。
+> 解法：把 venv 实体放在 workspace 外（如 `C:\mrrs-venv311`），再用
+> `New-Item -ItemType Junction` 链接回 `backend/.venv` —— launcher 会解析到真实路径，
+> 所有既有命令与文档路径不变。`backend/.venv313`（3.13）同理，仅用于 3.13 兼容性验证。
+
 ### 测试
 
 ```bash
