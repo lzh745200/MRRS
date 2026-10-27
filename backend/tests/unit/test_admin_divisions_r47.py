@@ -216,6 +216,110 @@ class TestServicePersistsAdminCode:
             asyncio.run(svc.create_organization(data, created_by=0))
 
 
+class TestHelpers:
+    """内部助手的边界分支（覆盖率门禁要求 100%）。"""
+
+    @pytest.mark.parametrize("bad", ["", "52", "52270", "5227AB", "abcdef"])
+    def test_pattern_level_invalid_returns_none(self, bad):
+        assert ADS.pattern_level(bad) is None
+
+    @pytest.mark.parametrize(
+        ("code", "expected"),
+        [
+            ("520000", None),          # 省级：无上级
+            (QIANNAN, "520000"),       # 市州级：上级为省
+            ("522701", QIANNAN),       # 县市级：上级为所在州
+            ("bad", None),             # 非法格式
+        ],
+    )
+    def test_prefix_parent(self, code, expected):
+        assert ADS.prefix_parent(code) == expected
+
+    def test_table_and_pattern_mismatch_rejected(self, monkeypatch):
+        """表内层级与末位规律矛盾时拒绝（防止脏表悄悄放行）。
+
+        用假表构造：529901 末两位非 00（规律判县市级=3），却声明 level=2。
+        """
+        import app.services.admin_division_service as mod
+
+        fake = {"529901": {"name": "假想区", "level": 2, "parent": "529900"}}
+        monkeypatch.setattr(mod, "_table", lambda: fake)
+        with pytest.raises(ValueError) as exc:
+            mod.AdminDivisionService.validate_code("529901")
+        assert "末位规律与权威表层级不一致" in str(exc.value)
+
+
+class TestEndpointResolver:
+    """`POST /organizations` 的编码终审助手（`_resolve_create_code`）各分支。
+
+    直接调助手而不是走 HTTP：这些分支（层级不符/跨级/别名换码后查重）在端点里
+    一一对应到 422/400，纯函数化测试更稳、也不依赖 R27 的会话夹具。
+    """
+
+    def _resolve(self, db, code, parent, declared=None):
+        from app.api.v1.organization import _resolve_create_code
+
+        return _resolve_create_code(db, code, parent, declared)
+
+    def test_declared_level_mismatch_422(self):
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            self._resolve(MagicMock(), "522701", None, declared="1")
+        assert exc.value.status_code == 422
+        assert "层级与行政区划代码不一致" in exc.value.detail
+
+    def test_skip_level_422(self):
+        from fastapi import HTTPException
+
+        parent = SimpleNamespace(id=1, code="520000", level="1")  # 省级
+        with pytest.raises(HTTPException) as exc:
+            self._resolve(MagicMock(), "522701", parent)  # 直接挂县级 → 跨级
+        assert exc.value.status_code == 422
+        assert "逐级挂接" in exc.value.detail
+
+    def test_ok_returns_code_and_order(self):
+        parent = SimpleNamespace(id=1, code=QIANNAN, level="2", path="/1/")
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        code, order = self._resolve(db, "522701", parent)
+        assert code == "522701"
+        assert order == 3
+
+    def test_alias_change_conflict_400(self, monkeypatch):
+        """别名换码后（520222→520281）若新码已被占用 → 400。"""
+        from fastapi import HTTPException
+
+        import app.api.v1.organization as org_api
+
+        monkeypatch.setattr(
+            org_api.OrganizationCodeService,
+            "validate_admin_code",
+            staticmethod(lambda code, parent=None: "520281"),
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = object()  # 命中冲突
+        parent = SimpleNamespace(id=1, code="520200", level="2", path="/1/")
+        with pytest.raises(HTTPException) as exc:
+            self._resolve(db, "520222", parent)
+        assert exc.value.status_code == 400
+        assert "已存在" in exc.value.detail
+
+    def test_alias_change_ok_returns_new_code(self, monkeypatch):
+        import app.api.v1.organization as org_api
+
+        monkeypatch.setattr(
+            org_api.OrganizationCodeService,
+            "validate_admin_code",
+            staticmethod(lambda code, parent=None: "520281"),
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        parent = SimpleNamespace(id=1, code="520200", level="2", path="/1/")
+        code, _order = self._resolve(db, "520222", parent)
+        assert code == "520281"
+
+
 class TestDegradedMode:
     """表不可用（未打包/文件损坏）时必须降级为"仅末位规律"，绝不误杀。"""
 

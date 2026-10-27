@@ -43,7 +43,7 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **14,851 用例**, 0 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
+| 后端测试 | **14,866 用例**, 0 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
 | 前端测试 | **7,379 passed**（347 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
@@ -64,7 +64,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-26（v1.18.14）— 后端 14,851 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-27（v1.18.14）— 后端 14,866 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
 > 46,088 语句 / 11,500 分支，Miss 0 / BrPart 0）；
@@ -155,7 +155,7 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 14,851（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 14,866（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
 | 前端单元测试 | Vitest | 7,020（339 文件） | API/Store/Component/Composable/Utils |

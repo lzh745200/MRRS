@@ -183,9 +183,7 @@ class AdminDivisionService:
                     f"行政区划代码 {cleaned} 不在权威区划表中（贵州省为全量校验）；"
                     "请核对国家统计局公布的最新 6 位代码"
                 )
-            # 未覆盖省份：退回末位规律
-            if len(cleaned) != 6 or not cleaned.isdigit():
-                raise ValueError("组织编码必须是 6 位纯数字的行政区划代码")
+            # 未覆盖省份：退回末位规律放行（格式已在函数开头校验过，无需重复判长度/数字）
         else:
             expected_level = item["level"]
             pattern_level = AdminDivisionService.pattern_level(cleaned)
