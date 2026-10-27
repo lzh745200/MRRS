@@ -49,14 +49,14 @@ export const VISUAL_BASELINES: VisualBaseline[] = [
     name: 'projects',
     path: '/projects',
     pathPrefix: '/projects',
-    title: '帮扶项目管理',
+    title: '帮扶项目',
     requiredAnyOf: [['table', 'empty']],
   },
   {
     name: 'funds',
     path: '/funds',
     pathPrefix: '/funds',
-    title: '经费管理',
+    title: '经费台账',
     requiredAnyOf: [['table', 'empty']],
   },
   {
@@ -100,7 +100,7 @@ export const VISUAL_BASELINES: VisualBaseline[] = [
     name: 'bigscreen',
     path: '/bigscreen',
     pathPrefix: '/bigscreen',
-    title: '帮扶成效大屏',
+    title: '汇报大屏',
     requiredAnyOf: [['bigscreen']],
   },
 ]
