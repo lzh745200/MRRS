@@ -3179,4 +3179,38 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.13",
+        "date": "2026-10-27",
+        "description": "「数据概览」页改版 + 菜单↔路由标题 23 处对齐（新增门禁规则 F）",
+        "features": [
+            (
+                "「数据管理」页改版为「数据概览」（views/dataManagement/Index.vue 重写）：· 核心指标常驻卡片（帮扶村总数 / 导入次数 / 备份数量；导出审计仅管理员——非"
+                "管理员不再请求 /system/audit/exports，既不每轮刷新打 403，也不再用恒 0 的假数字误导）；· 最近流转记录直接渲染真实记录（导入历史 + 管理员可见的导出审计），"
+                "不再用「前往…」空壳入口；"
+            ),
+            (
+                "路由 meta.title 与菜单 label 对齐 23 处：data-overview 为例，侧栏叫「数据概览」而面包屑/document.title 写「数据管理」，同一页面两个称谓"
+                "。menus.py 是全站唯一菜单源…"
+            ),
+            (
+                "菜单对齐门禁新增规则 F（scripts/check_menu_alignment.py）：kind=page 且带 path 的条目，菜单 label 必须等于前端路由 meta.tit"
+                "le。新增规则首次运行即抓出 23 处不一致，此后由 CI 自动拦截（此前面包屑/文档标题与侧栏文案可长期分叉而无人发现）。"
+            ),
+            (
+                "policies/Edit.test.ts 跨用例污染：该视图 useFormDraft 有 600ms 防抖定时器，会在后续用例执行期间把上一个用例的表单写回共享 localStorag"
+                "e，导致「草稿与离开拦截」用例单跑通过、整文件必红。改用 enableAutoUnmount(afterEach) 统一卸载（仓库 49 个视图测试同款约定）。"
+            ),
+            (
+                "smoke.test.ts 移除 dataManagement/Index.vue 的 bare import：遵守 coverage-merge 不变量（同一被阈值锁定的 .vue 只允"
+                "许一个测试文件执行，第二个文件即使只 bare import 也会在满量按 id 合并 fnMap 时损坏 functions）；可挂载性由 router-index.test.ts 的全"
+                "量路由表保证。"
+            ),
+            "utils/index.test.ts 删除重复覆盖 dataManagement/Index.vue 的内容（已收敛到专属测试文件）。",
+            (
+                "lint：policies/Edit.test.ts 5 处未使用绑定（4 个 const wrapper = mountComp()、1 个 const vm）+ 29 处 pretti"
+                "er 缩进 —— 原改动 eslint 未通过，本版修复后才入库。"
+            ),
+        ],
+    },
 ]

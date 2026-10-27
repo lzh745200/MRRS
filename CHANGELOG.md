@@ -5,6 +5,50 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.13] - 2026-10-27 — 「数据概览」页改版 + 菜单↔路由标题 23 处对齐（新增门禁规则 F）
+
+> 本版把「数据管理」页按实际使用场景重排为「数据概览」，并顺手清掉一类长期存在的
+> **同页两名**问题：侧栏显示一个名字、面包屑与浏览器标题显示另一个名字。
+
+### Changed
+
+- **「数据管理」页改版为「数据概览」**（`views/dataManagement/Index.vue` 重写）：
+  · **核心指标**常驻卡片（帮扶村总数 / 导入次数 / 备份数量；**导出审计仅管理员**——
+    非管理员不再请求 `/system/audit/exports`，既不每轮刷新打 403，也不再用恒 0 的假数字误导）；
+  · **最近流转记录**直接渲染真实记录（导入历史 + 管理员可见的导出审计），不再用「前往…」空壳入口；
+  · 原「数据质量」**页签**内容改为**常驻区块**（帮扶村抽样，后端 `page_size` 上限 200）；
+  · 子组件仍异步加载，保持原分包策略。
+- **路由 `meta.title` 与菜单 label 对齐 23 处**：`data-overview` 为例，侧栏叫「数据概览」而
+  面包屑/`document.title` 写「数据管理」，同一页面两个称谓。`menus.py` 是全站唯一菜单源，
+  故以菜单 label 为准统一（含「汇报大屏」「综合数据录入」「政策法规」「报表模板/报表导出」
+  「工作首页/工作列表」「用户与组织」「安全审计」「健康检查」「机器码管理」「零信任」「错误上报」
+  「地图瓦片」「数据包与批量导入」等）。
+
+### Added
+
+- **菜单对齐门禁新增规则 F**（`scripts/check_menu_alignment.py`）：`kind=page` 且带 `path` 的条目，
+  **菜单 label 必须等于前端路由 `meta.title`**。新增规则首次运行即抓出 **23 处**不一致，
+  此后由 CI 自动拦截（此前面包屑/文档标题与侧栏文案可长期分叉而无人发现）。
+
+### Fixed
+
+- **`policies/Edit.test.ts` 跨用例污染**：该视图 `useFormDraft` 有 600ms 防抖定时器，
+  会在后续用例执行期间把上一个用例的表单写回共享 `localStorage`，导致「草稿与离开拦截」用例
+  **单跑通过、整文件必红**。改用 `enableAutoUnmount(afterEach)` 统一卸载（仓库 49 个视图测试同款约定）。
+- **`smoke.test.ts` 移除 `dataManagement/Index.vue` 的 bare import**：遵守 coverage-merge 不变量
+  （同一被阈值锁定的 `.vue` 只允许一个测试文件执行，第二个文件即使只 bare import 也会在满量
+  按 id 合并 `fnMap` 时损坏 functions）；可挂载性由 `router-index.test.ts` 的全量路由表保证。
+- **`utils/index.test.ts` 删除重复覆盖** `dataManagement/Index.vue` 的内容（已收敛到专属测试文件）。
+- **lint**：`policies/Edit.test.ts` 5 处未使用绑定（4 个 `const wrapper = mountComp()`、
+  1 个 `const vm`）+ 29 处 prettier 缩进 —— 原改动 `eslint` 未通过，本版修复后才入库。
+
+### 验证
+
+- 前端全量 `npm run test:coverage`：**347 文件 / 7,374 用例全过**，`All files 100 | 100 | 100 | 100`；
+- `vue-tsc --noEmit` 0 错误；改动文件 `eslint --max-warnings=0` 0 告警；
+- 21 道静态门禁全绿（含新增规则 F、四层对齐、Office 格式、全仓损坏扫描、版本一致性、更新日志同步）；
+- 布局/菜单/路由相关 88 例（面包屑回退、`Menu.vue`、`router/guards`）全过。
+
 ## [1.18.12] - 2026-10-26 — 贵州 z14 预渲染交付（全省包 283.7MB / 64,900 张；9 市州分包）
 
 > 用户选择“预渲染到 z14”（约 8.6 m/像素，可看清街区/道路）。z14 全省单包 283.7MB，

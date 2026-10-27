@@ -43,7 +43,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/bigscreen',
     name: 'BigScreen',
     component: () => retryImport(() => import('@/views/bigscreen/BigScreen.vue')),
-    meta: { menuKey: 'bigscreen', title: '帮扶成效大屏' },
+    meta: { menuKey: 'bigscreen', title: '汇报大屏' },
   },
   // ── 主布局（带侧边导航栏）──
   {
@@ -74,7 +74,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/schools',
         name: 'Schools',
         component: () => retryImport(() => import('@/views/schools/List.vue')),
-        meta: { menuKey: 'schools', title: '帮扶学校管理' },
+        meta: { menuKey: 'schools', title: '帮扶学校' },
       },
       {
         path: '/schools/create',
@@ -117,7 +117,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/projects',
         name: 'Projects',
         component: () => retryImport(() => import('@/views/projects/List.vue')),
-        meta: { menuKey: 'projects', title: '帮扶项目管理' },
+        meta: { menuKey: 'projects', title: '帮扶项目' },
       },
       {
         path: '/projects/create',
@@ -197,7 +197,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/funds',
         name: 'Funds',
         component: () => retryImport(() => import('@/views/funds/EnhancedList.vue')),
-        meta: { menuKey: 'funds-admin', title: '经费管理' },
+        meta: { menuKey: 'funds-admin', title: '经费台账' },
       },
       {
         path: '/funds/create',
@@ -279,7 +279,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/funds/settlement',
         name: 'FundSettlement',
         component: () => retryImport(() => import('@/views/funds/Settlement.vue')),
-        meta: { menuKey: 'funds-settlement', title: '结算管理' },
+        meta: { menuKey: 'funds-settlement', title: '决算结算' },
       },
       {
         path: '/funds/settlement/:projectId',
@@ -292,7 +292,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/policies',
         name: 'Policies',
         component: () => retryImport(() => import('@/views/policies/List.vue')),
-        meta: { menuKey: 'policies', title: '帮扶政策' },
+        meta: { menuKey: 'policies', title: '政策法规' },
       },
       {
         path: '/policies/create',
@@ -329,7 +329,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/approval',
         name: 'Approval',
         component: () => retryImport(() => import('@/views/approval/Overview.vue')),
-        meta: { menuKey: 'approval-overview', title: '审批管理' },
+        meta: { menuKey: 'approval-overview', title: '审批总览' },
       },
       {
         path: '/approval/pending',
@@ -360,13 +360,13 @@ export const routes: RouteRecordRaw[] = [
         path: '/rural-works',
         name: 'RuralWorks',
         component: () => retryImport(() => import('@/views/ruralWorks/Index.vue')),
-        meta: { menuKey: 'rural-works', title: '乡村振兴' },
+        meta: { menuKey: 'rural-works', title: '工作首页' },
       },
       {
         path: '/rural-works/list',
         name: 'RuralWorksList',
         component: () => retryImport(() => import('@/views/ruralWorks/List.vue')),
-        meta: { menuKey: 'rural-works-list', title: '乡村工作列表' },
+        meta: { menuKey: 'rural-works-list', title: '工作列表' },
       },
       {
         path: '/rural-works/analysis',
@@ -476,7 +476,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-package',
         name: 'DataPackage',
         component: () => retryImport(() => import('@/views/dataPackage/List.vue')),
-        meta: { menuKey: 'data-package', title: '数据包管理' },
+        meta: { menuKey: 'data-package', title: '数据包与批量导入' },
       },
       {
         path: '/data-package/report',
@@ -516,7 +516,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-analysis/dashboard',
         name: 'DataDashboard',
         component: () => retryImport(() => import('@/views/analytics/dashboard/Dashboard.vue')),
-        meta: { menuKey: 'analytics-dashboard', title: '分析仪表板' },
+        meta: { menuKey: 'analytics-dashboard', title: '分析仪表盘' },
       },
       {
         path: '/data-analysis/map',
@@ -534,7 +534,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-analysis/reports',
         name: 'DataReports',
         component: () => retryImport(() => import('@/views/analytics/reports/WorkAnalysis.vue')),
-        meta: { menuKey: 'work-analysis', title: '工作分析报告' },
+        meta: { menuKey: 'work-analysis', title: '工作分析' },
       },
       // ── 旧版路径兼容重定向 ──
       { path: '/analytics/map', redirect: '/data-analysis/map' },
@@ -566,7 +566,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-entry',
         name: 'DataEntry',
         component: () => retryImport(() => import('@/views/dataEntry/ComprehensiveEntry.vue')),
-        meta: { menuKey: 'comprehensive-entry', title: '数据录入' },
+        meta: { menuKey: 'comprehensive-entry', title: '综合数据录入' },
       },
       // ── 系统管理 ──
       {
@@ -579,7 +579,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/health-check',
         name: 'SystemHealthCheck',
         component: () => retryImport(() => import('@/views/system/HealthCheck.vue')),
-        meta: { menuKey: 'health-check', title: '系统体检', roles: ['admin', 'super_admin'] },
+        meta: { menuKey: 'health-check', title: '健康检查', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/system/about',
@@ -591,7 +591,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/users',
         name: 'SystemUsers',
         component: () => retryImport(() => import('@/views/system/UserManagement.vue')),
-        meta: { title: '用户管理', roles: ['admin', 'super_admin'] },
+        meta: { title: '用户与组织', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/system/permission-packs',
@@ -628,7 +628,7 @@ export const routes: RouteRecordRaw[] = [
       {
         path: '/system/roles',
         redirect: '/system/users',
-        meta: { title: '角色管理 (已合并到用户管理)' },
+        meta: { title: '角色管理' },
       },
       {
         path: '/system/user-permissions',
@@ -650,7 +650,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/audit',
         name: 'SystemAudit',
         component: () => retryImport(() => import('@/views/system/AuditManagement.vue')),
-        meta: { menuKey: 'audit', title: '审计管理', roles: ['admin', 'super_admin'] },
+        meta: { menuKey: 'audit', title: '安全审计', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/system/backup',
@@ -716,7 +716,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/map-tiles',
         name: 'SystemMapTiles',
         component: () => retryImport(() => import('@/views/system/MapTileManager.vue')),
-        meta: { menuKey: 'map-tiles', title: '地图瓦片管理', roles: ['admin', 'super_admin'] },
+        meta: { menuKey: 'map-tiles', title: '地图瓦片', roles: ['admin', 'super_admin'] },
       },
       // ── 管理面板 ──
       {
@@ -738,7 +738,7 @@ export const routes: RouteRecordRaw[] = [
         // 该路径是后端菜单 system-console-security.tab(machine-code) 的落点，
         // 必须带 meta.menuKey；此前 menuKey 只挂在 /admin/machine-code 上，
         // 从菜单/聚合页 Tab 进入本页时守卫不做菜单可见性校验（菜单级权限形同虚设）。
-        meta: { menuKey: 'machine-code', title: '机器码设置', roles: ['admin', 'super_admin'] },
+        meta: { menuKey: 'machine-code', title: '机器码管理', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/admin/subordinates',
@@ -757,7 +757,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/zero-trust',
         name: 'SystemZeroTrust',
         component: () => retryImport(() => import('@/views/system/ZeroTrust.vue')),
-        meta: { menuKey: 'zero-trust', title: '零信任安全', roles: ['admin', 'super_admin'] },
+        meta: { menuKey: 'zero-trust', title: '零信任', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/system/secrets',
@@ -775,7 +775,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/system/error-reports',
         name: 'SystemErrorReports',
         component: () => retryImport(() => import('@/views/system/ErrorReports.vue')),
-        meta: { menuKey: 'error-reports', title: '错误报告', roles: ['admin', 'super_admin'] },
+        meta: { menuKey: 'error-reports', title: '错误上报', roles: ['admin', 'super_admin'] },
       },
       {
         path: '/system/tasks',
@@ -883,7 +883,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/export/report',
         name: 'ExportReport',
         component: () => retryImport(() => import('@/views/export/ReportExport.vue')),
-        meta: { menuKey: 'report-export', title: '报告导出' },
+        meta: { menuKey: 'report-export', title: '报表导出' },
       },
       {
         path: '/import/data',
@@ -895,7 +895,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/report/templates',
         name: 'ReportTemplates',
         component: () => retryImport(() => import('@/views/reportTemplates/Index.vue')),
-        meta: { menuKey: 'report-templates', title: '报告模板' },
+        meta: { menuKey: 'report-templates', title: '报表模板' },
       },
       {
         path: '/data-verify',

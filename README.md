@@ -1,31 +1,26 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.12
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.13
 
-![Version](https://img.shields.io/badge/version-1.18.12-blue)
+![Version](https://img.shields.io/badge/version-1.18.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.12）
+## 本版亮点（v1.18.13）
 
-- **贵州 z14 高清瓦片交付**：全省包 64,900 张 / **283.7MB**（约 8.6 m/像素，可看清街区与道路），
-  低于 512MB 导入上限；另提供 **9 个市州分包**（21.5~63.8MB）供按需导入，每包 MANIFEST 写
-  region/zoom/tileCount/license；与内置 z5–12、z13 包**可叠加**（同名覆盖），同时导入后 5..14 级连续
-- **WPS 办公格式真正打通**：`app/services/office_reader.py` 按**容器魔数**（zip→openpyxl / OLE2→xlrd）
-  选解析器，`.xls` 与 WPS 旧版 `.et` 不再"能选不能读"；格式白名单收敛到 `app/core/office_formats.py`
-  单一来源，附件可传 `.et/.wps/.dps`；新增 `scripts/check_office_formats.py` 门禁并接入 CI
-  （导入禁止直连 `openpyxl.load_workbook`、导出白名单、CSV 必须 UTF-8 BOM）
-- **瓦片底图直接显示村名/校名**：`zoom>=12` 常显帮扶村名、`zoom>=13` 常显学校名（文本取系统库名称，
-  像素格贪心防遮挡、不拦截拖拽）；OSM 提取新增 `pois` 图层（贵州实测 682 处学校类 POI）
-- **新增组织缺「组织编码」输入（真实 422 缺陷）**：后端要求 6 位行政区划代码，前端表单却没有输入项，
-  用户点提交只能吃 422。已补字段（必填 + `^\d{6}$` + 编码规则提示，编辑态只读），并修掉同源的
-  3 处请求体漂移；**三层对齐门禁扩为四层**，新增 **D 轴「请求体必填性」**（同名且唯一的
-  `*Create/*Update` 契约前后端必填字段必须一致，三个方向都报），从此"表单少字段"由 CI 自动拦截
-- **门禁与仓库卫生**：新增全仓损坏扫描（mojibake / NUL / 非 UTF-8，跳过 `.gitignore` 命中的运行时产物）；
-  清理根目录 18 个 `pip` 解包临时目录（6.42MB）；修掉 `.gitignore` 里 3 行 GBK 双编；删除误入库的
-  `docs/~$*.pptx` 锁文件
+- **「数据管理」页改版为「数据概览」**：核心指标常驻卡片（帮扶村总数 / 本月导入 / 备份数量）、
+  **最近流转记录直接渲染真实数据**（不再「前往…」空壳入口）、原「数据质量」页签改为**常驻区块**；
+  **导出审计仅管理员请求**——非管理员不再每轮刷新打 403，也不再看恒 0 的假数字
+- **23 处「同页两名」一次性对齐**：侧栏叫「数据概览」而面包屑/浏览器标题写「数据管理」这类分叉，
+  以 `menus.py`（唯一菜单源）为准统一 23 条路由的 `meta.title`（含汇报大屏/政策法规/报表模板/
+  工作首页/用户与组织/安全审计/健康检查/机器码管理/零信任/错误上报/地图瓦片/数据包与批量导入…）
+- **菜单对齐门禁新增规则 F**：`kind=page` 带 `path` 的条目，菜单 label 必须等于路由 `meta.title`；
+  原 A~E 规则**从不校验文案**，所以上述 23 处可长期存在。新规则首次运行即全部抓出，此后由 CI 拦截
+- **测试稳定性**：`policies/Edit.test.ts` 用 `enableAutoUnmount` 修掉 600ms 防抖定时器写入共享
+  localStorage 造成的跨用例污染（单跑通过、整文件必红）；`smoke.test.ts` 遵守 coverage-merge 不变量，
+  移除同一视图的 bare import；`utils/index.test.ts` 删除重复覆盖
 - **历史亮点（v1.18.1 起）**：
 
 - **登录页务实化改造**：修掉「注册账户」死链（默认不开放自助注册却无条件显示，现已按 `public-config` 显隐、
@@ -69,7 +64,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-26（v1.18.12）— 后端 14,818 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-26（v1.18.13）— 后端 14,818 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
 > 46,088 语句 / 11,500 分支，Miss 0 / BrPart 0）；

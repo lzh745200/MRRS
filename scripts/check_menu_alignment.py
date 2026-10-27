@@ -81,13 +81,18 @@ def _iter_entries(definitions: list) -> list:
 
 
 def _load_router(path: Path) -> dict:
-    """解析前端路由：返回 {paths: [...], menu_keys: set()}（path 含 alias）。"""
+    """解析前端路由：返回 {paths, menu_keys, path_titles}（path 含 alias）。
+
+    ``path_titles`` 为「路由 path → meta.title」，供规则 F 比对菜单 label
+    （meta.title 驱动面包屑与 document.title，与侧栏文案不一致会造成同页两名）。
+    """
     if not path.exists():
         raise SystemExit(f"[FAIL] 前端路由文件不存在: {path}")
     text = path.read_text(encoding="utf-8", errors="replace")
 
     route_paths: list[str] = []
     menu_keys: set[str] = set()
+    path_titles: dict[str, str] = {}
     matches = list(re.finditer(r"\bpath:\s*['\"]([^'\"]+)['\"]", text))
     for index, match in enumerate(matches):
         # 本路由对象的文本片段：从 path 到下一个 path（足够覆盖同一对象的 meta/alias）
@@ -101,10 +106,13 @@ def _load_router(path: Path) -> dict:
         route_paths.append(route_path)
         route_paths.extend(re.findall(r"\balias:\s*['\"]([^'\"]+)['\"]", chunk))
         menu_keys.update(re.findall(r"\bmenuKey:\s*['\"]([A-Za-z0-9_-]+)['\"]", chunk))
+        title_match = re.search(r"\btitle:\s*['\"]([^'\"]+)['\"]", chunk)
+        if title_match:
+            path_titles.setdefault(route_path, title_match.group(1))
 
     # 兜底：菜单 key 不依赖路由片段切分，全文再扫一遍（防止 meta 位于 children 之后）
     menu_keys.update(re.findall(r"\bmenuKey:\s*['\"]([A-Za-z0-9_-]+)['\"]", text))
-    return {"paths": route_paths, "menu_keys": menu_keys}
+    return {"paths": route_paths, "menu_keys": menu_keys, "path_titles": path_titles}
 
 
 def _path_matcher(route: str):
@@ -296,6 +304,33 @@ def _check_rule_e(definitions: list, sections: list) -> tuple:
     return errors, warnings
 
 
+def _check_rule_f(entries: list, path_titles: dict) -> list:
+    """规则 F（2026-10-27 新增）：菜单 label ↔ 前端路由 meta.title 必须一致。
+
+    缘起：``data-overview`` 侧栏叫「数据概览」、路由 meta.title 却写「数据管理」，
+    于是**面包屑与 document.title 显示一个名字、侧栏与页头显示另一个名字**，
+    同一页面两个称谓。同类不一致当时共 10 处，全部是 meta.title 落后于菜单改名。
+
+    口径：``menus.py`` 是全站唯一菜单源 → 菜单 ``label`` 为准；只比对**两侧都存在**
+    的条目（未声明 meta.title 的路由由规则 A/B 覆盖，不在本规则范围）。
+    """
+    errors: list[str] = []
+    for entry, _role in entries:
+        path = entry.get("path")
+        label = entry.get("label")
+        if not path or not label:
+            continue
+        title = path_titles.get(path)
+        if title is None:
+            continue
+        if title != label:
+            errors.append(
+                f"[F] {path}: 菜单 label「{label}」≠ 路由 meta.title「{title}」"
+                f"（面包屑/文档标题会与侧栏不一致）"
+            )
+    return errors
+
+
 def main() -> int:
     source = _load_backend_source(BACKEND_MENUS)
     definitions = source["MENU_DEFINITIONS"]
@@ -313,11 +348,13 @@ def main() -> int:
     rule_c, legacy_exempt = _check_rule_c(entries, router["menu_keys"], matchers)
     rule_d = _check_rule_d(entries)
     rule_e, rule_e_warnings = _check_rule_e(definitions, sections)
+    rule_f = _check_rule_f(entries, router["path_titles"])
     errors.extend(rule_a)
     errors.extend(rule_b)
     errors.extend(rule_c)
     errors.extend(rule_d)
     errors.extend(rule_e)
+    errors.extend(rule_f)
     warnings.extend(rule_e_warnings)
 
     backend_keys = {entry.get("key") for entry, _role in entries}
@@ -337,7 +374,7 @@ def main() -> int:
 
     if errors:
         print("\n[FAIL] 前后端菜单对齐检查未通过，共 %d 项:" % len(errors))
-        for rule_name in ("[A]", "[B]", "[C]", "[D]", "[E]"):
+        for rule_name in ("[A]", "[B]", "[C]", "[D]", "[E]", "[F]"):
             grouped = [error for error in errors if error.startswith(rule_name)]
             if not grouped:
                 continue
@@ -345,12 +382,12 @@ def main() -> int:
             for error in grouped:
                 print("    -", error)
         print(
-            "\n[FAIL] 汇总: A=%d B=%d C=%d D=%d E=%d"
-            % (len(rule_a), len(rule_b), len(rule_c), len(rule_d), len(rule_e))
+            "\n[FAIL] 汇总: A=%d B=%d C=%d D=%d E=%d F=%d"
+            % (len(rule_a), len(rule_b), len(rule_c), len(rule_d), len(rule_e), len(rule_f))
         )
         return 1
 
-    print("[OK] 前后端菜单对齐检查通过（规则 A~E 全部满足）")
+    print("[OK] 前后端菜单对齐检查通过（规则 A~F 全部满足）")
     return 0
 
 
