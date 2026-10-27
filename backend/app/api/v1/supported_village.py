@@ -1685,8 +1685,16 @@ def _coerce_section_value(model: Any, attr: str, value: Any) -> Any:
 
 
 def _import_section_sheet(ws, model: Any, village_id: int, year: int, db: Session) -> Dict[str, int]:
-    """解析单个工作表并按年写库（upsert）。返回 {imported, failed}。"""
+    """解析单个工作表并按年写库（upsert）。返回 {imported, failed}。
+
+    2026-10-27：此前三个失败分支都是**静默计数**（只把 failed+1，不记原因），
+    现场只看到「导入 5 条、失败 3 条」却无从排查 —— 与同类导入接口
+    （`import_villages` / `import_schools_excel` / `report_templates`）把逐行原因
+    回给用户的做法不一致。现补 `logger.warning`（带行号与异常栈），
+    返回结构保持不变（`{imported, failed}` 契约不动，避免影响前端）。
+    """
     label_map = _section_label_map(model)
+    model_name = getattr(model, "__name__", str(model))
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         return {"imported": 0, "failed": 0}
@@ -1707,11 +1715,19 @@ def _import_section_sheet(ws, model: Any, village_id: int, year: int, db: Sessio
             attr_by_col = hits
             break
     if header_idx is None:
+        logger.warning(
+            "分段导入未识别到表头：village_id=%s model=%s 前 %d 行均未命中 ≥2 个字段标签，"
+            "整表按失败计数（请核对模板列名）",
+            village_id,
+            model_name,
+            min(len(rows), 10),
+        )
         return {"imported": 0, "failed": max(0, len(rows) - 1)}
 
     imported = 0
     failed = 0
-    for row in rows[header_idx + 1:]:
+    # offset 取 Excel 的 1-based 行号（header_idx 为 0-based，数据从 header_idx+1 开始）
+    for offset, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
         if not row or not any(c is not None and str(c).strip() for c in row):
             continue
         if any(isinstance(c, str) and "示例行" in c for c in row):
@@ -1726,12 +1742,28 @@ def _import_section_sheet(ws, model: Any, village_id: int, year: int, db: Sessio
         row_year = data.pop("year", None) or year
         if not data:
             failed += 1
+            logger.warning(
+                "分段导入第 %d 行无可写入字段，已跳过：village_id=%s model=%s year=%s"
+                "（该行有内容但全部列转换失败，请核对数值/日期格式）",
+                offset,
+                village_id,
+                model_name,
+                row_year,
+            )
             continue
         try:
             _save_section_data(db, model, village_id, int(row_year), data)
             imported += 1
-        except Exception:
+        except Exception as exc:
             failed += 1
+            logger.warning(
+                "分段导入第 %d 行写库失败：village_id=%s model=%s year=%s",
+                offset,
+                village_id,
+                model_name,
+                row_year,
+                exc_info=exc,
+            )
     return {"imported": imported, "failed": failed}
 
 
