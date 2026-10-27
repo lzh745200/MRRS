@@ -3262,6 +3262,17 @@ VERSION_HISTORY_DATA = [
                 "gap_batch3 / test_org_write_scope_r27）到新契约；R27 夹具改用真实代码（520000 / 520100 / 520103 / 520200 / 52"
                 "0201）。"
             ),
+        ],
+    },
+    {
+        "version": "1.18.15",
+        "date": "2026-10-27",
+        "description": "分段导入补日志 + 文档/PPT 实测数字追平 + 仓库卫生",
+        "features": [
+            (
+                "帮扶村「分段数据」导入的三个失败分支改为带行号记日志（_import_section_sheet）：此前「表头未识别（整表白导）」「行内有内容但全部列转换失败」「写库异常」三种情况都只做f"
+                "ailed += 1，现场只看到 {\"imported\": 5, \"failed\": 3}，无从知道是第几行、什么原因，只能整份重来。"
+            ),
             (
                 "三份 PPT 的实测数字全部同步到本轮真值（15 处 run）：后端 14,722 → 14,870、前端 7,356 → 7,374、合计 22,078 → 22,244、前端测试文件 "
                 "347 → 344（与 check_doc_numbers 的 *.test.ts(x) 口径一致）、封面/封底日期 2026-10-26 → 2026-10-27、版本标记 V1.18."
@@ -3269,8 +3280,15 @@ VERSION_HISTORY_DATA = [
             ),
             (
                 "文档入口页版本号从 v1.18.1 追平到 v1.18.14：docs/README.md、docs/INDEX.md、docs/04-部署文档/README.md、docs/01-快速开"
-                "始/README.md 共 6 处 —— 此前入口页仍指向RELEASE_NOTES-v1.18.1，读者按图索骥会拿到 13 个版本前的发布说明。backend/wf_*/、backen"
-                "d/_scratch_lazy/。"
+                "始/README.md 共 6 处 —— 此前入口页仍指向RELEASE_NOTES-v1.18.1，读者按图索骥会拿到 13 个版本前的发布说明。"
+            ),
+            (
+                ".gitignore 补齐三类每次跑测试都会新生的目录：backend/verify_*/（280 个）、backend/wf_*/、backend/_scratch_lazy/。此前只忽"
+                "略了 bumofu_pytest_appdata_*/，另外两类每次全量测试后都会让 git status 变脏，是 git add -A 误提交的隐患。"
+            ),
+            (
+                "清理测试残留 1405 个目录 / 6.6 GB（backend/bumofu_pytest_appdata_* 等一次性隔离根）与顶层 28 个 pip 空临时目录、空 archives"
+                "/、探测脚本 _probe_menus.py。均为未跟踪产物，仓库跟踪文件零改动。"
             ),
         ],
     },

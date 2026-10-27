@@ -1,14 +1,26 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.14
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.15
 
-![Version](https://img.shields.io/badge/version-1.18.14-blue)
+![Version](https://img.shields.io/badge/version-1.18.15-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.14）
+## 本版亮点（v1.18.15）
+
+- **帮扶村「分段数据」导入失败时能看到原因了**：此前导入结束只报「成功 5 条、失败 3 条」，
+  既不知道是哪一行、也不知道为什么，只能整份重来。现在三个失败分支
+  （表头未识别 / 行内有内容但全部列转换失败 / 写库异常）都会记下
+  **Excel 行号 + 字段模型 + 年份 + 异常栈**，现场把日志发给运维即可定位
+- **表头识别失败不再静默白导**：模板列名被改或贴错工作表时，整表按失败计数并明确告警
+- **文档与三份 PPT 的实测数字全部追平真值**：后端 14,870 / 前端 7,374 / 合计 22,244，
+  此前 PPT 停留在 v1.18.8 的旧值（14,722 / 7,356），与 README 自相矛盾
+- **仓库卫生**：清理 1,405 个测试残留目录（6.6 GB）；`.gitignore` 补齐
+  `backend/verify_*/` 等三类每次跑测试都会新生的目录
+
+## 历史亮点（v1.18.14）
 
 - **组织编码接入权威行政区划表**：新增 `backend/app/data/admin_divisions.json`（省级 34 全量、
   贵州 9 市州 + 88 县级全量，取自仓库内置 geojson adcode，另存区划调整换码），
@@ -64,7 +76,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-27（v1.18.14）— 后端 14,870 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-27（v1.18.15）— 后端 14,870 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
 > 46,237 语句 / 11,558 分支，Miss 0 / BrPart 0）；
