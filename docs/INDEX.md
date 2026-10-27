@@ -25,7 +25,9 @@
 | UI 设计规范 | [03-开发文档/07-UI设计规范/UI设计方案](03-开发文档/07-UI设计规范/UI设计方案.md)（v2.0 Token/主题 3 套/显示偏好 4 档/全局组件类/视觉回归；v1.15.15 精细化方案 C） |
 | UI 精细化设计契约 | [design/tokens](design/tokens.md) / [design/pages](design/pages.md) / [design/components](design/components.md) |
 | 大屏对象筛选与下钻方案 | [design/汇报大屏对象筛选与下钻方案](design/汇报大屏对象筛选与下钻方案.md) |
-| 架构决策记录 | [docs/adr/](adr/)（ADR-0001 ~ ADR-0012） |
+| 通知与提醒 UI 规范 | [design/ui-notification-guideline](design/ui-notification-guideline.md) |
+| 架构决策记录 | [docs/adr/](adr/)（ADR-0001 ~ ADR-0012）<br>逐篇：[0003 组织删除守卫](adr/0003-org-delete-guard.md) / [0005 PII 加密](adr/0005-pii-encryption.md) / [0006 PyInstaller onedir](adr/0006-pyinstaller-onedir.md) / [0007 前端指令](adr/0007-frontend-directives.md) / [0008 破窗找回密码](adr/0008-breakglass-password-recovery.md) / [0010 备份单一事实源](adr/0010-backup-single-source-of-truth.md) / [0012 轻量甘特](adr/0012-lightweight-gantt.md) |
+| Agent 约定（供 AI 协作） | [agents/issue-tracker](agents/issue-tracker.md)（本地工单）/ [agents/triage-labels](agents/triage-labels.md)（标签）/ [agents/domain](agents/domain.md)（领域文档约定）/ [agents/ci-failure-lessons](agents/ci-failure-lessons.md)（CI 失败教训） |
 | 文件结构 | [项目文件结构说明.md](../项目文件结构说明.md)（仓库根目录） |
 | 安装包获取 | [GitHub Releases](https://github.com/lzh745200/MRRS/releases)（推送 `v*` 标签自动构建 Windows x64 + 麒麟 ARM64 两个安装包） |
 | 遗留风险治理 | [治理计划与执行进度](../deliverables/遗留风险彻底解决方案计划-2026-09-12.md) |
