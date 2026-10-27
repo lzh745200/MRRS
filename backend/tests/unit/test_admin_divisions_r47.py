@@ -215,6 +215,36 @@ class TestServicePersistsAdminCode:
         with pytest.raises(ValueError):
             asyncio.run(svc.create_organization(data, created_by=0))
 
+    def test_service_cross_level_rejected(self):
+        """服务层校验逐级挂接：父级 level 数据异常（贵阳市记成 level=1）时拒绝。
+
+        正常数据里权威表已保证父子相邻，这条是**历史脏数据**的兜底：
+        若父级 level 被记错，直接按"父+1"落库会把孙子挂成儿子。
+        """
+        parent = SimpleNamespace(id=1, code="520100", level="1", path="/1/")
+        svc, _ = self._svc([parent, None])
+        data = SimpleNamespace(
+            parent_id=1, code="520102", code_prefix="ORG", name="南明区",
+            is_active=True, description=None, contact_person=None,
+            contact_phone=None, address=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            asyncio.run(svc.create_organization(data, created_by=0))
+        assert "逐级挂接" in str(exc.value)
+
+    def test_service_undetermined_level_rejected(self):
+        """防御分支：层级无法判定时必须报错，不得落库成 level=0。"""
+        svc, _ = self._svc([None])
+        svc.code_service.infer_level = lambda code: None
+        data = SimpleNamespace(
+            parent_id=None, code=QIANNAN, code_prefix="ORG", name="黔南州",
+            is_active=True, description=None, contact_person=None,
+            contact_phone=None, address=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            asyncio.run(svc.create_organization(data, created_by=0))
+        assert "无法判定层级" in str(exc.value)
+
 
 class TestHelpers:
     """内部助手的边界分支（覆盖率门禁要求 100%）。"""
@@ -305,6 +335,18 @@ class TestEndpointResolver:
         assert exc.value.status_code == 400
         assert "已存在" in exc.value.detail
 
+    def test_parent_mismatch_422(self):
+        """522701（都匀市）挂到 520100（贵阳市）下 → 422（权威表父子校验）。"""
+        from fastapi import HTTPException
+
+        parent = SimpleNamespace(id=1, code="520100", level="2", path="/1/")
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        with pytest.raises(HTTPException) as exc:
+            self._resolve(db, "522701", parent)
+        assert exc.value.status_code == 422
+        assert "上级应为" in exc.value.detail or "同一行政区划" in exc.value.detail
+
     def test_alias_change_ok_returns_new_code(self, monkeypatch):
         import app.api.v1.organization as org_api
 
@@ -362,6 +404,21 @@ class TestInitRootCodeLevels:
         assert _resolve_root_org_code("520000") == "520000"
         assert _resolve_root_org_code(QIANNAN) == QIANNAN
         assert _resolve_root_org_code("522701") == "522701"
+
+    def test_undetermined_level_400(self, monkeypatch):
+        """防御分支：编码合法但层级推不出时给 400 可操作提示。"""
+        from fastapi import HTTPException
+
+        from app.api.v1.system.init import _resolve_root_org_code
+
+        monkeypatch.setattr(
+            "app.services.organization_code_service.OrganizationCodeService.infer_level",
+            staticmethod(lambda code: None),
+        )
+        with pytest.raises(HTTPException) as exc:
+            _resolve_root_org_code("520000")
+        assert exc.value.status_code == 400
+        assert "无法判定层级" in exc.value.detail
 
     def test_unknown_code_rejected(self):
         from fastapi import HTTPException
