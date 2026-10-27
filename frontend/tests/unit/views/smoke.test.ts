@@ -221,7 +221,10 @@ describe('System view imports', () => {
 
 describe('Data and workflow view imports', () => {
   const dataViews = [
-    ['Data Management', '@/views/dataManagement/Index.vue'],
+    // Data Management（dataManagement/Index.vue）刻意不在此 bare import：coverage-merge 不变量
+    // ——该视图由 tests/unit/views/dataManagement/Index.test.ts 专属全量覆盖，
+    // 第二个测试文件即使只 bare import 也会在满量按 id 合并 fnMap 时损坏 functions。
+    // 可挂载性由路由懒加载（router-index.test.ts 全量路由表）保证。
     ['Data Package List', '@/views/dataPackage/List.vue'],
     ['Data Sync Export', '@/views/dataSync/Export.vue'],
     ['Data Sync Import', '@/views/dataSync/Import.vue'],

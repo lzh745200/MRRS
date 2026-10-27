@@ -6,8 +6,14 @@
  * 模板 v-model 与按钮。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+
+// 本文件多数用例不手动 unmount：组件内 useFormDraft 的 600ms 防抖定时器会
+// 在后续用例执行期间触发，把上一个用例的表单写回共享的 localStorage，
+// 污染「草稿与离开拦截」用例（实测单跑通过、整文件必红）。
+// 统一在 afterEach 自动卸载，卸载钩子会清掉待触发的定时器（仓库 49 个视图测试同款约定）。
+enableAutoUnmount(afterEach)
 
 const {
   ElMessage,
@@ -38,7 +44,10 @@ const {
 }))
 
 // ③ 离开拦截（useDirtyGuard）会 import onBeforeRouteLeave：只 mock useRoute 会让 setup 直接抛错。
-vi.mock('vue-router', () => ({ useRoute: () => routeBox, onBeforeRouteLeave: onBeforeRouteLeaveMock }))
+vi.mock('vue-router', () => ({
+  useRoute: () => routeBox,
+  onBeforeRouteLeave: onBeforeRouteLeaveMock,
+}))
 
 vi.mock('element-plus', () => ({
   ElMessage,
@@ -108,12 +117,11 @@ function mountComp() {
         'el-row': { template: '<div class="el-row-stub"><slot /></div>' },
         'el-col': { template: '<div class="el-col-stub"><slot /></div>' },
         'el-input': {
-          template:
-            '<div class="el-input-stub" @click="$emit(\'update:modelValue\', \'V\')" />',
+          template: '<div class="el-input-stub" @click="$emit(\'update:modelValue\', \'V\')" />',
         },
         'el-select': {
           template:
-            '<div class="el-select-stub" @click="$emit(\'update:modelValue\', \'military\'); $emit(\'change\', \'military\')"><slot /></div>',
+            "<div class=\"el-select-stub\" @click=\"$emit('update:modelValue', 'military'); $emit('change', 'military')\"><slot /></div>",
         },
         'el-option': { template: '<div class="el-option-stub" />' },
         'el-date-picker': {
@@ -144,10 +152,12 @@ beforeEach(() => {
   vi.resetAllMocks()
   routeBox.params = {}
   policyStore.current = null
-  policyStore.fetchPolicy.mockResolvedValue({ code: 200, data: { id: 5, title: "政策标题" } })
+  policyStore.fetchPolicy.mockResolvedValue({ code: 200, data: { id: 5, title: '政策标题' } })
   policyStore.updatePolicy.mockResolvedValue({ code: 200, data: { id: 5 } })
   policyStore.createPolicy.mockResolvedValue({ code: 200, data: { id: 6 } })
-  getLevelOptionsMock.mockResolvedValue({ data: { data: [{ value: 'national', label: '国家级' }] } })
+  getLevelOptionsMock.mockResolvedValue({
+    data: { data: [{ value: 'national', label: '国家级' }] },
+  })
   authStorageMock.getToken.mockReturnValue('token-123')
   validateMock.mockResolvedValue(true)
 })
@@ -170,7 +180,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('编辑模式：isEdit true + loadData 回填', async () => {
     routeBox.params = { id: '5' }
-    policyStore.fetchPolicy.mockResolvedValue({ code: 200, data: { id: 5, title: "政策标题" } })
+    policyStore.fetchPolicy.mockResolvedValue({ code: 200, data: { id: 5, title: '政策标题' } })
     policyStore.current = editPolicy
     const wrapper = mountComp()
     await flushPromises()
@@ -190,7 +200,7 @@ describe('新增/编辑模式与初始化', () => {
 
   it('编辑模式：无 id/NaN → 不加载', async () => {
     routeBox.params = { id: 'abc' }
-    const wrapper = mountComp()
+    mountComp()
     await flushPromises()
     expect(policyStore.fetchPolicy).not.toHaveBeenCalled()
   })
@@ -198,7 +208,7 @@ describe('新增/编辑模式与初始化', () => {
   it('loadData 无政策 → 错误 + 返回列表', async () => {
     routeBox.params = { id: '5' }
     policyStore.current = null
-    const wrapper = mountComp()
+    mountComp()
     await flushPromises()
     expect(ElMessage.error).toHaveBeenCalledWith('未找到该政策')
     expect(pushSafeMock).toHaveBeenCalledWith('/policies')
@@ -207,7 +217,7 @@ describe('新增/编辑模式与初始化', () => {
   it('loadData 失败 → 错误 + 返回列表', async () => {
     routeBox.params = { id: '5' }
     policyStore.fetchPolicy.mockRejectedValue(new Error('加载失败'))
-    const wrapper = mountComp()
+    mountComp()
     await flushPromises()
     expect(ElMessage.error).toHaveBeenCalledWith('加载失败')
     expect(pushSafeMock).toHaveBeenCalledWith('/policies')
@@ -274,7 +284,7 @@ describe('新增/编辑模式与初始化', () => {
   it('loadData 失败无 message → 兜底文案', async () => {
     routeBox.params = { id: '5' }
     policyStore.fetchPolicy.mockRejectedValue({})
-    const wrapper = mountComp()
+    mountComp()
     await flushPromises()
     expect(ElMessage.error).toHaveBeenCalledWith('加载政策数据失败')
     expect(pushSafeMock).toHaveBeenCalledWith('/policies')
@@ -468,7 +478,6 @@ describe('提交', () => {
   it('保存按钮 → handleSubmit', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    const vm = wrapper.vm as any
     const save = wrapper.findAll('.el-button-stub').find((b) => b.text().includes('保存'))
     await save!.trigger('click')
     await flushPromises()
@@ -518,7 +527,10 @@ describe('导航与模板', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.uploadAction).toBe('/api/v1/files/upload')
-    expect(vm.uploadHeaders).toMatchObject({ Authorization: 'Bearer token-123', 'X-CSRF-Token': 'test-csrf' })
+    expect(vm.uploadHeaders).toMatchObject({
+      Authorization: 'Bearer token-123',
+      'X-CSRF-Token': 'test-csrf',
+    })
 
     authStorageMock.getToken.mockReturnValue('')
     const w2 = mountComp()
@@ -555,29 +567,29 @@ describe('导航与模板', () => {
   })
 })
 
-  it('createPolicy 响应非 200 → 抛错提示', async () => {
-    routeBox.params = {}
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.formData.title = 'T'
-    policyStore.createPolicy.mockResolvedValueOnce({ code: 500, message: '服务异常' })
-    await vm.handleSubmit()
-    expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
-    wrapper.unmount()
-  })
+it('createPolicy 响应非 200 → 抛错提示', async () => {
+  routeBox.params = {}
+  const wrapper = mountComp()
+  await flushPromises()
+  const vm = wrapper.vm as any
+  vm.formData.title = 'T'
+  policyStore.createPolicy.mockResolvedValueOnce({ code: 500, message: '服务异常' })
+  await vm.handleSubmit()
+  expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
+  wrapper.unmount()
+})
 
-  it('createPolicy 响应非 200 → 抛错提示', async () => {
-    routeBox.params = {}
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.formData.title = 'T'
-    policyStore.createPolicy.mockResolvedValueOnce({ code: 500, message: '服务异常' })
-    await vm.handleSubmit()
-    expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
-    wrapper.unmount()
-  })
+it('createPolicy 响应非 200 → 抛错提示', async () => {
+  routeBox.params = {}
+  const wrapper = mountComp()
+  await flushPromises()
+  const vm = wrapper.vm as any
+  vm.formData.title = 'T'
+  policyStore.createPolicy.mockResolvedValueOnce({ code: 500, message: '服务异常' })
+  await vm.handleSubmit()
+  expect(ElMessage.error).toHaveBeenCalledWith('服务异常')
+  wrapper.unmount()
+})
 
 describe('提交失败分支', () => {
   it('updatePolicy code!=200 → 抛错', async () => {

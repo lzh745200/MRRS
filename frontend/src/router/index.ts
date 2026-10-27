@@ -501,7 +501,7 @@ export const routes: RouteRecordRaw[] = [
         path: '/data-management',
         name: 'DataManagement',
         component: () => retryImport(() => import('@/views/dataManagement/Index.vue')),
-        meta: { menuKey: 'data-overview', title: '数据管理' },
+        meta: { menuKey: 'data-overview', title: '数据概览' },
       },
       // /data-management/backup 和 /data-management/logs 已整合到系统管理模块
       // 重定向定义见下方"旧版路径兼容重定向"区域

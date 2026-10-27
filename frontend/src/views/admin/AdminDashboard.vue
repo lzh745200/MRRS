@@ -277,7 +277,7 @@ const quickActions = [
   { icon: Files, label: '数据备份', path: '/system/backup' },
   { icon: Document, label: '操作审计', path: '/system/audit' },
   { icon: Setting, label: '系统配置', path: '/system/config' },
-  { icon: DataAnalysis, label: '数据总览', path: '/data-management' },
+  { icon: DataAnalysis, label: '数据概览', path: '/data-management' },
 ]
 
 const pendingItems = ref<any[]>([])
