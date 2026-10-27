@@ -493,3 +493,6 @@ deliverables/releases/
 .pre-commit-cache/
 # pip install --no-wheel 解包临时目录（根目录残留，2026-10-26 清理 18 个 / 6.42MB）
 pip-unpack-*/
+
+# CodeGraph 索引（本机工具产物：.codegraph/codegraph.db 约 183MB，由 `codegraph init` 重建，不入库）
+.codegraph/

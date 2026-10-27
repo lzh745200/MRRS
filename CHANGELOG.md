@@ -49,6 +49,15 @@
 - 21 道静态门禁全绿（含新增规则 F、四层对齐、Office 格式、全仓损坏扫描、版本一致性、更新日志同步）；
 - 布局/菜单/路由相关 88 例（面包屑回退、`Menu.vue`、`router/guards`）全过。
 
+### Tooling
+
+- **接入 CodeGraph 预索引代码图谱（本机开发效率）**：安装 @colbymchenry/codegraph 1.6.2 CLI +
+  DSH 插件 @jiangzhenguo/dsh-codegraph 1.2.2（desktop profile，core 面 4 个工具
+  codegraph_status/init/sync/explore，重启 DSH 后生效），并对本仓库执行 codegraph init
+  （2,093 文件 / 52,382 节点 / 129,646 边，39s）。**已关闭上报告警用的匿名遥测**
+  （codegraph telemetry off）——本系统要求完全离线，不允许任何外联。
+  .gitignore 新增 .codegraph/（索引数据库约 183MB，本机产物不入库）。
+
 ## [1.18.12] - 2026-10-26 — 贵州 z14 预渲染交付（全省包 283.7MB / 64,900 张；9 市州分包）
 
 > 用户选择“预渲染到 z14”（约 8.6 m/像素，可看清街区/道路）。z14 全省单包 283.7MB，
@@ -111,7 +120,6 @@
   **本机未执行 `pre-commit install`**：本机 python 子进程无法写 `%TEMP%`/`~/.cache`，
   装上会让每一次 `git commit` 失败（违反"不得新增问题"），故本轮的强制点是 CI；
   在正常 shell 里执行一次 `python -m pre_commit install` 即启用。
-
 
 ## [1.18.11] - 2026-10-26 — 瓦片底图常显村/校名称 + 贵州 z13（16,422 张 / 95MB）+ 学校 POI 图层
 
@@ -1780,7 +1788,8 @@ Release 正文由 `scripts/prepare_release_body.py` 以本仓库发布说明为*
   修复：backend-test **恢复单进程全量**（pytest tests/ -q --tb=short -rR --cov=app --cov-branch
   --cov-report=... --reruns 2），本地以同一命令实测 **13,710 passed / 1 skipped / 100% 行+分支**；
   配合 v1.15.5 已固定的 **ubuntu-24.04** runner（规避 Ubuntu 26 迁移导致的进程崩溃），
-  以及 v1.15.7 已修复的 action SHA。保留 PIPESTATUS 退出码捕获与 ree -m 诊断。
+  以及 v1.15.7 已修复的 action SHA。保留 PIPESTATUS 退出码捕获与 
+ree -m 诊断。
 
 - 说明：本版本仅修 CI 执行方式；产品代码与 UI v2.0 内容与 v1.15.0 完全一致。
 
@@ -4679,8 +4688,10 @@ critical 36 · high 177 · medium 458 · low 247），逐条甄别后修复其�
 ### 修复
 - 🐛 **安装器真机全部中止（截图故障）**：NSIS 对双引号字符串做 C 风格转义，
   钩子把 `$INSTDIR
-esourcescredist\...` 中的 `
-`/`` 转成 CR/VT 传给
+esources
+credist\...` 中的 `
+`/`
+` 转成 CR/VT 传给
   PowerShell，Get-FileHash 恒定报错 exit 1，被误判"哈希不匹配"而中止所有
   真机安装。修复：钩子路径反斜杠全部 `\`；校验改为 FileWrite 写出 .ps1 后
   `-File` 执行（不再使用行内 `-Command`）；校验脚本执行后清理。

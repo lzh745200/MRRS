@@ -3211,6 +3211,10 @@ VERSION_HISTORY_DATA = [
                 "lint：policies/Edit.test.ts 5 处未使用绑定（4 个 const wrapper = mountComp()、1 个 const vm）+ 29 处 pretti"
                 "er 缩进 —— 原改动 eslint 未通过，本版修复后才入库。"
             ),
+            (
+                "接入 CodeGraph 预索引代码图谱（本机开发效率）：安装 @colbymchenry/codegraph 1.6.2 CLI +DSH 插件 @jiangzhenguo/dsh-co"
+                "degraph 1.2.2（desktop profile，core 面 4 个工具codegraph_status/init/sync/explore，重启 DSH 后生效）…"
+            ),
         ],
     },
 ]
