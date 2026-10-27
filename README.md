@@ -1,14 +1,29 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.15
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.16
 
-![Version](https://img.shields.io/badge/version-1.18.15-blue)
+![Version](https://img.shields.io/badge/version-1.18.16-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.15）
+## 本版亮点（v1.18.16）
+
+- **修掉发布流水线的竞态缺陷**：Windows 作业的 electron-builder 在有 `GH_TOKEN` 时
+  会按 `onTagOrDraft` 自行发布；若 ARM64 作业先把 Release 发成正式版，它判定
+  「existing type not compatible」→ **exe/blockmap/latest.yml 全部跳过**，
+  v1.18.15 因此只剩 6 个资产（v1.18.14 是 8 个）。现改 `--publish never`，
+  上传统一由 softprops 负责，并把两个元数据文件显式列入清单
+- **新增构建期守卫**：NSIS 构建缺 `latest.yml` / `.exe.blockmap` 直接失败并打印 dist 清单，
+  不让「Release 少文件」留到发版后才发现
+- **依赖版本 pin**：`bcrypt==5.0.0` / `cryptography==50.0.2` / `setuptools==84.2.1` /
+  `wheel==0.48.0` —— 此前本地 bcrypt 4.0.1、CI 实装 5.0.0，本地与 CI 测的不是同一套依赖
+- **纠正一处文档误述**：`latest.yml` 不是「Windows 自动更新所需」——本系统没有
+  `electron-updater` 也没有更新检查代码（离线部署，升级 = 覆盖安装）
+- **docs/INDEX 补齐 12 篇漏收录文档**（7 篇 ADR + 4 篇 Agent 约定 + 通知 UI 规范）
+
+## 历史亮点（v1.18.15）
 
 - **帮扶村「分段数据」导入失败时能看到原因了**：此前导入结束只报「成功 5 条、失败 3 条」，
   既不知道是哪一行、也不知道为什么，只能整份重来。现在三个失败分支

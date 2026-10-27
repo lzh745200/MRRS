@@ -3292,4 +3292,31 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.16",
+        "date": "2026-10-27",
+        "description": "发布流水线竞态修复（latest.yml 丢失）+ 依赖版本 pin",
+        "features": [
+            (
+                "发布资产缺失（latest.yml / .exe.blockmap）：Windows 作业的 electron-builder在有 GH_TOKEN 时默认按 onTagOrDraft 自"
+                "行发布（建 draft Release）。"
+            ),
+            (
+                "新增构建期守卫 Verify updater metadata produced：NSIS 构建必然同时产出latest.yml 与 MRRS-Setup-<版本>-x64.exe.blo"
+                "ckmap，缺一即红并打印 dist 清单 ——不让「Release 少文件」留到发版后才发现。"
+            ),
+            (
+                "依赖版本 pin（构建可复现）：backend/requirements.txt 里setuptools / wheel / bcrypt / cryptography 由 >= 改为精确"
+                "版本（84.2.1 / 0.48.0 / 5.0.0 / 50.0.2，取自 CI 已全绿验证的实装记录）。"
+            ),
+            (
+                "纠正「latest.yml 是 Windows 自动更新所需」的不准确表述：本系统没有electron-updater 依赖、也没有任何更新检查代码（离线单机部署，升级 = 覆盖安装）。改"
+                "为说明它是 electron-builder 的 NSIS 产物、当前不被消费、保留上传只为发布物清单稳定（项目文件结构说明.md）。"
+            ),
+            (
+                "docs/INDEX.md 补齐此前只有目录级链接的文档：7 篇 ADR（0003/0005/0006/0007/0008/0010/0012）、4 篇 Agent 约定、1 篇通知与提醒"
+                " UI 规范 —— 18/18 篇 docs 现在都有显式入口。"
+            ),
+        ],
+    },
 ]

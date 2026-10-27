@@ -308,10 +308,43 @@ jobs:
 
       # 10. electron-builder 打包（CSC_LINK/CSC_KEY_PASSWORD 由 8.5 步按需写入
       #     GITHUB_ENV——secret 缺失时不设置，避免空串被当作证书路径）
+      #
+      # 2026-10-27（v1.18.16）：必须显式 `--publish never` —— 存在 GH_TOKEN 时
+      # electron-builder 默认 publish 策略是 onTagOrDraft，会在 tag 构建里**自己**
+      # 建 draft Release 上传产物。而本仓 Release 由三个作业的 softprops 步骤发布：
+      #   * Windows 作业先跑完 → electron-builder 建 draft → softprops 正式发布（正常）；
+      #   * ARM64 作业先把 Release 发成正式版 → Windows 的 electron-builder 发现
+      #     `existingType=release` 与自己的 `publishingType=draft` 不兼容 → 三个文件
+      #     **全部 skipped** → latest.yml / .exe.blockmap 永久丢失（v1.18.15 实测只剩
+      #     6 个资产，正是这条竞态）。改为单一发布路径：electron-builder 只构建，
+      #     上传一律由下面的 softprops 步骤负责（与 build-arm64.yml 第 209 行同口径）。
       - name: Build installer (electron-builder)
-        run: npx electron-builder --win --x64
+        run: npx electron-builder --win --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 10.1 产物存在性守卫（v1.18.16）：electron-builder 只要正常产出 NSIS 安装包，
+      #      就必然同时写出 latest.yml 与 .exe.blockmap。缺了说明配置或版本行为变了，
+      #      必须在构建期就红，而不是等用户发现 Release 少文件。
+      - name: Verify updater metadata produced
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $required = @(
+            "dist/electron/latest.yml",
+            "dist/electron/MRRS-Setup-$version-x64.exe",
+            "dist/electron/MRRS-Setup-$version-x64.exe.blockmap"
+          )
+          $missing = $required | Where-Object { -not (Test-Path $_) }
+          if ($missing) {
+            Write-Host "::error::electron-builder 缺少预期产物：$($missing -join ', ')"
+            Get-ChildItem dist/electron -ErrorAction SilentlyContinue |
+              Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
+            exit 1
+          }
+          Get-ChildItem dist/electron/latest.yml, "dist/electron/MRRS-Setup-$version-x64.exe.blockmap" |
+            ForEach-Object { Write-Host ("OK  {0}  {1:N0} B" -f $_.Name, $_.Length) }
 
       # 10.2 安装产物自包含冒烟（v1.13.1 引入；v1.13.3 增加诊断输出与动态端口）：
       #      直接运行 electron-builder 解包后的打包后端 exe（onedir），按 Electron 运行期
@@ -468,12 +501,18 @@ jobs:
           Get-Content $sums
 
       # 11. 上传制品
+      #     2026-10-27（v1.18.16）：补上 latest.yml 与 .exe.blockmap —— 它们是
+      #     electron-builder 的 NSIS 产物（本系统**不消费**，升级走离线安装包），
+      #     但作为发布物应保持稳定可复现：v1.18.14 是 8 个资产、v1.18.15 因上面那条
+      #     publish 竞态只剩 6 个，同一套流水线产出不同资产清单本身就该修。
       - name: Upload installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-installer-x64
           path: |
             dist/electron/*.exe
+            dist/electron/*.blockmap
+            dist/electron/latest.yml
             dist/electron/SHA256SUMS-windows-x64.txt
           retention-days: 30
 
@@ -495,6 +534,8 @@ jobs:
         with:
           files: |
             dist/electron/*.exe
+            dist/electron/*.blockmap
+            dist/electron/latest.yml
             dist/electron/SHA256SUMS-windows-x64.txt
           generate_release_notes: false
           body_path: ${{ runner.temp }}/release-body.md

@@ -5,6 +5,54 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.16] - 2026-10-27 — 发布流水线竞态修复（latest.yml 丢失）+ 依赖版本 pin
+
+> 起因：v1.18.15 的 Release 只有 **6 个资产**，而 v1.18.14 有 8 个 —— 同一套流水线
+> 产出不同清单。翻构建日志定位到 electron-builder 的 publish 竞态，并顺带把
+> 「构建不可复现」的依赖漂移一并钉住。
+
+### Fixed
+
+- **发布资产缺失（latest.yml / .exe.blockmap）**：Windows 作业的 electron-builder
+  在有 `GH_TOKEN` 时默认按 `onTagOrDraft` **自行发布**（建 draft Release）。
+  若 ARM64 作业先把 Release 发成正式版，它会判定
+  `existing type not compatible with publishing type`（existingType=release /
+  publishingType=draft）→ **exe / blockmap / latest.yml 三个文件全部 skipped**，
+  随后只有 softprops 步骤把 exe 传上去，元数据永久丢失（v1.18.15 实测）。
+  修复：Windows 侧改 `--publish never`（与 `build-arm64.yml` 第 209 行同口径），
+  **上传只走 softprops 单一发布路径**，并把 `latest.yml` / `*.blockmap` 显式列入
+  制品与 Release 文件清单。
+- **新增构建期守卫** `Verify updater metadata produced`：NSIS 构建必然同时产出
+  `latest.yml` 与 `MRRS-Setup-<版本>-x64.exe.blockmap`，缺一即红并打印 dist 清单 ——
+  不让「Release 少文件」留到发版后才发现。
+
+### Changed
+
+- **依赖版本 pin（构建可复现）**：`backend/requirements.txt` 里
+  `setuptools` / `wheel` / `bcrypt` / `cryptography` 由 `>=` 改为精确版本
+  （`84.2.1` / `0.48.0` / `5.0.0` / `50.0.2`，取自 CI 已全绿验证的实装记录）。
+  此前本地 bcrypt 4.0.1、CI 实装 5.0.0（差 3 个大版本），
+  `>=4.2.0` 的约束连本地都不满足 —— 本地与 CI 测的不是同一套依赖是真实风险。
+  注：bcrypt 5.0 移除 `__about__`，`app/core/security.py` 的兼容 shim 与 passlib 1.7.4
+  回退路径已由 CI 覆盖；哈希格式仍为 `$2b$`，与 4.x 存量密码完全互通。
+
+### Docs
+
+- 纠正「`latest.yml` 是 Windows 自动更新所需」的**不准确表述**：本系统**没有**
+  `electron-updater` 依赖、也没有任何更新检查代码（离线单机部署，升级 = 覆盖安装）。
+  改为说明它是 electron-builder 的 NSIS 产物、当前不被消费、保留上传只为发布物清单稳定
+  （`项目文件结构说明.md`）。
+- `docs/INDEX.md` 补齐此前只有目录级链接的文档：7 篇 ADR（0003/0005/0006/0007/0008/
+  0010/0012）、4 篇 Agent 约定、1 篇通知与提醒 UI 规范 —— 18/18 篇 docs 现在都有显式入口。
+
+### 验证
+
+- `.github/workflows/build-windows.yml` YAML 可解析（27 个步骤，含新守卫）；
+- `npm run test:electron` **11 例全过**（含 ci-wiring 守护：发布门禁等待预算 / main 不取消 /
+  check_main_ci 接线）；
+- 本地门禁 20 项全绿；`check_doc_numbers --full` 一致（后端 14,870 例）；
+- 本次 tag 构建将验证 Release **8 个资产**（v1.18.14 口径）。
+
 ## [1.18.15] - 2026-10-27 — 分段导入补日志 + 文档/PPT 实测数字追平 + 仓库卫生
 
 > 本轮是 v1.18.14 之后的收口轮：修掉一处**只报「失败 N 条」却无原因**的导入可观测性缺陷，
