@@ -1,13 +1,14 @@
 {
-  "version": "1.18.16",
+  "version": "1.18.17",
   "build": "20261027",
   "release_date": "2026-10-27",
-  "description": "发布流水线竞态修复（latest.yml 丢失）+ 依赖版本 pin",
+  "description": "工程治理收口：技术债棘轮上线（并修掉它自身两个会失效的点）",
   "features": [
-    "Release 资产恢复稳定 8 件：latest.yml / .exe.blockmap 不再因发布竞态丢失",
-    "Windows 构建改 --publish never：上传只走 softprops 单一发布路径",
-    "新增构建期守卫：NSIS 元数据缺失即构建失败，不再留到发版后才发现",
-    "依赖 pin（bcrypt 5.0.0 / cryptography 50.0.2 / setuptools 84.2.1 / wheel 0.48.0），构建可复现",
-    "纠正 latest.yml 的文档表述（本系统不消费自动更新，升级走离线安装包）"
+    "技术债棘轮门禁：mypy 错误数 / as any 处数 / except Exception 处数只许降不许涨",
+    "基线记录精确位置，超限直接列出新增项（不是只报多了几条）",
+    "修掉新门禁自身两个坑：基线口径偏差（一提交就红）与测不到时静默放行",
+    "CI 固定 mypy==1.19.1，防上游改检查规则导致全量计数漂移",
+    "Python 3.13 兼容：rapidocr 加环境标记，3.13 下不再让整个依赖安装失败",
+    "门禁隔离：对齐参照库落仓库内临时目录，清理失败不再带崩门禁进程"
   ]
 }

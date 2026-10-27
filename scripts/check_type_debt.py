@@ -44,6 +44,15 @@ FRONTEND_SRC = ROOT / "frontend" / "src"
 MYPY_SUMMARY_RE = re.compile(r"Found (\d+) errors? in \d+ files?")
 
 
+class MypyUnavailable(RuntimeError):
+    """mypy 没有给出可解析的汇总行（未安装 / 配置错误 / 输出格式变了）。
+
+    为什么必须抛错而不是按 0 处理：门禁的全部价值在于「测到了并守住上限」。
+    若 mypy 因版本漂移改了输出格式（或压根没装），静默按 0 会让三条指标里的
+    第一条**永久失效**却仍显示绿色 —— 这正是本仓此前 `mypy ... || true` 的老毛病。
+    """
+
+
 def count_mypy_errors() -> tuple[int, list[str]]:
     """跑 mypy，返回 (错误总数, 前若干条错误行)。"""
     proc = subprocess.run(
@@ -64,11 +73,10 @@ def count_mypy_errors() -> tuple[int, list[str]]:
     out = (proc.stdout or "") + (proc.stderr or "")
     m = MYPY_SUMMARY_RE.search(out)
     if not m:
-        # mypy 自身异常（配置错误/崩溃）—— 当作 0 但显式告警，避免静默放过
-        if "error:" in out:
-            print("[warn] 未能解析 mypy 汇总行，按 0 处理：", file=sys.stderr)
-            print(out[-800:], file=sys.stderr)
-        return 0, []
+        raise MypyUnavailable(
+            f"mypy 未能给出可解析的汇总行（returncode={proc.returncode}）。"
+            "为避免门禁静默失效，按失败处理。输出尾部：\n" + (out.strip()[-800:] or "(空)")
+        )
     errors = [ln for ln in out.splitlines() if " error: " in ln]
     return int(m.group(1)), errors
 
@@ -126,7 +134,17 @@ def main() -> int:
     detail: dict[str, list[str]] = {}
 
     if not args.no_mypy:
-        current["mypy_errors"], detail["mypy_errors"] = count_mypy_errors()
+        try:
+            current["mypy_errors"], detail["mypy_errors"] = count_mypy_errors()
+        except MypyUnavailable as exc:
+            # 区分于「恶化」(exit 1)：这是门禁自身测不了，必须显式报警而非放行。
+            print(f"[ERROR] {exc}", file=sys.stderr)
+            print(
+                "提示：CI 固定 `pip install \"mypy==1.19.1\"` 与基线口径一致；"
+                "本地若只想查另两项可加 --no-mypy。",
+                file=sys.stderr,
+            )
+            return 2
     n_as_any, detail["as_any"] = count_as_any()
     current["as_any"] = n_as_any
     n_except, detail["broad_except"] = count_broad_except()

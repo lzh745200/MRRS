@@ -5,6 +5,51 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.17] - 2026-10-27 — 工程治理收口：技术债棘轮上线（并修掉它自身两个会失效的点）
+
+> 本轮把「三类技术债只涨不降」这件事装上了闸门，同时排掉新门禁**自身**的两个坑：
+> 基线口径与实测不一致（一提交就红）、以及测不到时静默放行（门禁永久假绿）。
+
+### Added
+
+- **技术债棘轮门禁** `scripts/check_type_debt.py`（CI `static-analysis` 阻断）：
+  守住三个此前无人看管的指标 —— mypy 错误数、前端 `as any` 处数、后端
+  `except Exception` 处数。基线 `.type-debt-baseline.json` 记录**数量 + 精确位置**，
+  任一指标超过即失败并列出**新增位置**（不是只报"多了几条"）。
+  `--update` 只应下调；上调需在 PR 说明理由。
+  > 背景：mypy 此前在 CI 里是 `|| true`（永不阻断），另两项更无任何上限 ——
+  > 一次性清零等于给全库补类型标注，不现实；但"不允许继续恶化"可以立刻做到。
+- **Python 3.13 兼容**：`rapidocr-onnxruntime==1.4.4; python_version < "3.13"`。
+  该包元数据 `requires_python<3.13`（PyPI 官方 JSON 核实、未 yanked），
+  3.13 下原会让整个 `pip install -r requirements.txt` 报
+  "No matching distribution found" 而**整体失败**；加环境标记后自动跳过该行，
+  其余依赖照装，OCR 走既有降级路径（`available()=False` → 接口 503 提示手工录入）。
+- **门禁隔离**：三层对齐门禁的参照库改落到 `.scratch/tmp/stack-align/`（`.gitignore` 兜底），
+  并让清理函数吞掉 `BaseException` —— 本机沙箱的 safe-delete shim 在单次删除量超阈值时
+  会抛 `SystemExit`，那是 `BaseException`，`shutil.rmtree(ignore_errors=True)` 拦不住，
+  会把门禁进程带崩、stdout 变空，负向用例误判成"门禁逻辑坏了"。
+
+### Fixed
+
+- **新门禁一提交就是红的**：基线记为 `mypy_errors=1393`，实测稳定 **1394**
+  （连跑三次 + `--no-incremental` 均 1394）。核对后确认 1394 条与最近 3 个提交改动的
+  `app/` 文件**无交集** —— 属存量口径偏差而非新缺陷，故按实测重生成基线，
+  并把该结论写进本段以免被后人误判为"放宽标准"。
+- **门禁测不到时会静默放行**：原实现在 mypy 无法解析汇总行时 `return 0`，
+  等于 mypy 一旦改输出格式或没装，第一条指标就永久失效却仍显示绿色（正是
+  `|| true` 的老毛病换个马甲）。现改为 **fail-closed**：抛 `MypyUnavailable` →
+  `exit 2`（区别于"恶化"的 `exit 1`）并打印输出尾部与修复提示。
+- **mypy 版本漂移**：CI 由 `pip install mypy` 改为 `mypy==1.19.1`（与
+  `requirements-dev.txt` 及基线测量口径一致）。棘轮把错误数当上限守着，
+  不 pin 则上游发版换个检查规则就能让全量计数整体漂移 —— 要么假红、要么假绿。
+
+### 验证
+
+- `python scripts/check_type_debt.py`：**1394 / 196 / 802 全部持平 ✓**（exit 0）；
+- fail-closed 分支单独验证：注入 `returncode=2` 的假 mypy 输出 → 正确抛 `MypyUnavailable`；
+- 三层对齐门禁四轴无漂移；并行会话改过的 58 个相关用例全过；
+- `check_doc_numbers --full` 一致（后端 14,870 例 / 前端 344 文件 / 端点 849）。
+
 ## [1.18.16] - 2026-10-27 — 发布流水线竞态修复（latest.yml 丢失）+ 依赖版本 pin
 
 > 起因：v1.18.15 的 Release 只有 **6 个资产**，而 v1.18.14 有 8 个 —— 同一套流水线

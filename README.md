@@ -1,14 +1,27 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.16
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.17
 
-![Version](https://img.shields.io/badge/version-1.18.16-blue)
+![Version](https://img.shields.io/badge/version-1.18.17-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.16）
+## 本版亮点（v1.18.17）
+
+- **技术债棘轮上线**：mypy 错误数 / 前端 `as any` / 后端 `except Exception` 三类此前
+  无人看管的指标装上了闸门 —— 基线存**数量 + 精确位置**，超限直接列出新增项；
+  `--update` 只许下调，上调需 PR 说明理由
+- **修掉新门禁自身两个会失效的点**：① 基线 1393 与实测 1394 不一致（一提交就红，
+  核实为存量口径偏差后按实测重建）；② mypy 解析失败时原会**静默按 0 放行** ——
+  改为 fail-closed（exit 2），不再是 `|| true` 换马甲
+- **CI 固定 `mypy==1.19.1`**：棘轮把计数当上限守着，不 pin 则上游换规则就能让全量计数漂移
+- **Python 3.13 兼容**：`rapidocr-onnxruntime` 加 `python_version < "3.13"` 标记，
+  3.13 下不再让整个 `pip install -r requirements.txt` 失败（OCR 走既有 503 降级）
+- **门禁隔离**：三层对齐的参照库落仓库内临时目录，清理失败不再带崩门禁进程
+
+## 历史亮点（v1.18.16）
 
 - **修掉发布流水线的竞态缺陷**：Windows 作业的 electron-builder 在有 `GH_TOKEN` 时
   会按 `onTagOrDraft` 自行发布；若 ARM64 作业先把 Release 发成正式版，它判定

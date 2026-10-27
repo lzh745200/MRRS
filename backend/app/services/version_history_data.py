@@ -3319,4 +3319,38 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.17",
+        "date": "2026-10-27",
+        "description": "工程治理收口：技术债棘轮上线（并修掉它自身两个会失效的点）",
+        "features": [
+            (
+                "技术债棘轮门禁 scripts/check_type_debt.py（CI static-analysis 阻断）：守住三个此前无人看管的指标 —— mypy 错误数、前端 as any "
+                "处数、后端except Exception 处数。基线 .type-debt-baseline.json 记录数量 + 精确位置，任一指标超过即失败并列出新增位置（不是只报\"多了几条\""
+                "）。--update 只应下调；上调需在 PR 说明理由。"
+            ),
+            (
+                "Python 3.13 兼容：rapidocr-onnxruntime==1.4.4; python_version < \"3.13\"。该包元数据 requires_python<3."
+                "13（PyPI 官方 JSON 核实、未 yanked），3.13 下原会让整个 pip install -r requirements.txt 报\"No matching distri"
+                "bution found\" 而整体失败；"
+            ),
+            (
+                "门禁隔离：三层对齐门禁的参照库改落到 .scratch/tmp/stack-align/（.gitignore 兜底），并让清理函数吞掉 BaseException —— 本机沙箱的 sa"
+                "fe-delete shim 在单次删除量超阈值时会抛 SystemExit，那是 BaseException，shutil.rmtree(ignore_errors=True) 拦不住，"
+                "会把门禁进程带崩、stdout 变空…"
+            ),
+            (
+                "新门禁一提交就是红的：基线记为 mypy_errors=1393，实测稳定 1394（连跑三次 + --no-incremental 均 1394）。核对后确认 1394 条与最近 3 个"
+                "提交改动的app/ 文件无交集 —— 属存量口径偏差而非新缺陷，故按实测重生成基线，并把该结论写进本段以免被后人误判为\"放宽标准\"。"
+            ),
+            (
+                "门禁测不到时会静默放行：原实现在 mypy 无法解析汇总行时 return 0，等于 mypy 一旦改输出格式或没装，第一条指标就永久失效却仍显示绿色（正是|| true 的老毛病换个马甲"
+                "）。现改为 fail-closed：抛 MypyUnavailable →exit 2（区别于\"恶化\"的 exit 1）并打印输出尾部与修复提示。"
+            ),
+            (
+                "mypy 版本漂移：CI 由 pip install mypy 改为 mypy==1.19.1（与requirements-dev.txt 及基线测量口径一致）。棘轮把错误数当上限守着，不"
+                " pin 则上游发版换个检查规则就能让全量计数整体漂移 —— 要么假红、要么假绿。"
+            ),
+        ],
+    },
 ]

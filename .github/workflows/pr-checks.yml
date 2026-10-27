@@ -381,7 +381,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
-      - run: pip install flake8 mypy bandit
+      # mypy 固定版本（2026-10-27 v1.18.17）：技术债棘轮把 mypy 错误数**当基线守住**，
+      # 不 pin 的话上游发新版换个检查规则就能让计数整体漂移 —— 要么假红、要么假绿。
+      # 1.19.1 与 backend/requirements-dev.txt 及本地基线测量口径一致；
+      # 升级 mypy 必须同步 `python scripts/check_type_debt.py --update` 并说明理由。
+      - run: pip install flake8 "mypy==1.19.1" bandit
       # flake8 零错误门禁
       - run: cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
       # 运维脚本同一口径零错误门禁。复杂度阈值放宽到 40：scripts/ 下多为一次性
