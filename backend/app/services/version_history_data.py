@@ -3217,4 +3217,51 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.14",
+        "date": "2026-10-27",
+        "description": "组织编码接入权威区划表：修掉 4 处真实缺陷（初始化编码被随机替换等）",
+        "features": [
+            (
+                "P1 初始化建根组织时编码被随机替换（严重）：system/init.py 传入OrganizationCreate(code=522700)，但 OrganizationService."
+                "create_organization() 内部走generate_code() 生成随机 ORG-XXXXXXXX，完全忽略传入编码（实测传 522700 →落库 ORG-848B7F7"
+                "C、level=1）。跨机匹配与组织树全部失效。"
+            ),
+            (
+                "P2 初始化强制省级编码（严重）：_resolve_root_org_code 要求末四位 0000，市州级单位（黔南州 522700）首启必然被拒，只能先造省本级根再手工建州。现省 / "
+                "市州 / 县级均可作为首启单位。"
+            ),
+            "P3 不校验代码是否真实存在：只按末位规律判层级，522799、999999 都能入库并被判为县市级。现接入权威表，贵州省为全量校验（空号直接拒绝）。",
+            (
+                "P4 不校验父子是否同一行政区划：只校验「层级 = 父级+1」，522701（都匀市）可挂到520100（贵阳市）下 —— 组织树与按 path 前缀计算的数据权限会把黔南的县市算进贵阳子"
+                "树。现要求父子同属一个区划（表内用表中 parent，表外用前缀）。"
+            ),
+            (
+                "P5 越权探测（顺带修复）：POST /organizations 原先先查编码重复、后判越权，越权者可用 400 与其它响应的差异反推其它分支的组织编码（编��是跨机匹配标识）。现越权 "
+                "403 先行返回。"
+            ),
+            (
+                "权威行政区划表 backend/app/data/admin_divisions.json（11KB）：省级 34 全量；贵州 9 市州 + 88 县级全量（取自仓库内置 frontend"
+                "/src/assets/geo/guizhou.json 的官方 adcode）；aliases 存区划调整换码（520222 盘县 → 520281 盘州市）。"
+            ),
+            (
+                "app/services/admin_division_service.py：存在性 / 层级 / 父子一致 / 别名归一 的单一判定口径；OrganizationCodeService."
+                "validate_admin_code(code, parent_code) 为落库路径统一入口。表文件缺失或损坏时自动降级为「仅末位规律」并告警（不得因缺文件把合法编码判非法）。"
+            ),
+            (
+                "Windows 打包补数据文件：assistance-backend.spec 原先只收 alembic 等，漏了 app/data（两个 Linux spec 收的是整个 app），会让"
+                "安装包内的组织编码校验找不到表 —— 已显式收集。"
+            ),
+            (
+                "新增 backend/tests/unit/test_admin_divisions_r47.py（30 例）：表完整性（省级 34 / 贵州市州 9 /县级 88 / 父子闭合 / 层级"
+                "与规律一致）、存在性（522799 等空号拒绝）、父子一致（522701 挂 520100 拒绝、12 县市挂 522700 通过）、表外省份规律兜底、缺表/坏表降级、Organizati"
+                "onService 落真实编码、首启层级（省/市州/县级）。"
+            ),
+            (
+                "同步更新 4 个旧用例（test_p3_init_org_code_branches / test_cov_b4a_organization_service /test_coverage_"
+                "gap_batch3 / test_org_write_scope_r27）到新契约；R27 夹具改用真实代码（520000 / 520100 / 520103 / 520200 / 52"
+                "0201）。"
+            ),
+        ],
+    },
 ]

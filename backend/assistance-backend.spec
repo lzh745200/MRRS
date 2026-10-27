@@ -46,6 +46,10 @@ datas = [
     (os.path.join(backend_dir, 'alembic'), 'alembic'),
     (os.path.join(backend_dir, 'alembic.ini'), '.'),
     (os.path.join(backend_dir, '.env.example'), '.'),
+    # 2026-10-27：行政区划权威表（组织编码校验的数据源）。
+    # Linux 两个 spec 收的是整个 app 目录，Windows spec 只收 alembic 等，
+    # 漏掉这里会让安装包内的组织编码校验找不到表（降级成"仅末位规律校验"）。
+    (os.path.join(backend_dir, 'app', 'data'), os.path.join('app', 'data')),
 ]
 
 # H12（2026-10-14）：构建元数据由 CI 在打包前经 scripts/generate_build_info.py

@@ -66,7 +66,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,818 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,851 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -268,13 +268,26 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     深链守卫兼容）；前端路由 `meta.menuKey` 改为 `villages`（跟随帮扶村管理权限）；
     旧链接 `/households`、`/households/:id` 保留可直达。
   - 需要挂靠帮扶村权限的新页面按此模式复用 `meta.menuKey`，不要新增侧栏一级菜单。
-- **组织编码 = 行政区划代码** (2026-10-22, v1.16.4): `organizations.code` 是跨机匹配的唯一依据，
-  统一 **6 位行政区划代码**（GB/T 2260）：`XX0000` 省级 / `XXYY00` 市州级 / `XXYYZZ` 县市级。
-  判定口径只在 `services/organization_code_service.py`（`normalize_admin_code` / `infer_level` / `level_order`），
-  **禁止在其它模块重复实现**。组织层级固定 **3 级**（`OrganizationLevel` 只有 level_1~3）；
-  创建时编码必填、层级由编码推导、**必须逐级挂接**（根只能是省级，跨级 422）；
-  创建后 **编码不可修改**（需变更只能停用后新建）。自助注册默认关闭（`SELF_REGISTER_MODE=off`），
-  注册流程 **不得自动创建组织**（组织树只由管理员或上级授权包建立）。
+- **组织编码 = 行政区划代码** (2026-10-22, v1.16.4；2026-10-27 v1.18.14 接入权威表):
+  `organizations.code` 是跨机匹配的唯一依据，统一 **6 位行政区划代码**（GB/T 2260）：
+  `XX0000` 省级 / `XXYY00` 市州级 / `XXYYZZ` 县市级（如 **522700 黔南州**、**522701 都匀市**）。
+  判定口径只在 `services/organization_code_service.py` + `services/admin_division_service.py`，
+  **禁止在其它模块重复实现**。
+  - **权威表优先**：`backend/app/data/admin_divisions.json`（省级 34 全量；贵州 9 市州 + 88 县级
+    全量，取自仓库内置 geojson adcode；`aliases` 存换码如 520222→520281）。表内覆盖的省份
+    **存在性强制**（`522799` 这类空号直接拒绝）；表外省份退回末位规律并标记 unverified。
+    数据文件缺失/损坏时**自动降级**为仅规律校验（不得因缺文件把合法编码判非法）。
+  - 校验入口：`OrganizationCodeService.validate_admin_code(code, parent_code)`
+    = 格式 → 别名归一 → 存在性 → **父子同属一个行政区划**（522701 只能挂在 522700 下）。
+    落库路径（`POST /organizations`、`system/init`、`OrganizationService.create_organization`）
+    都必须走它；`normalize_admin_code` 只做格式。
+  - **首启单位不限于省级**（v1.18.14）：省 / 市州 / 县级都可作为根组织，下级从该层级逐级挂接。
+  - 越权校验（`_assert_org_write_scope`）必须**早于**编码查重 —— 否则越权者可用 400/其它响应
+    差异反推其它分支的组织编码。
+  - 组织层级固定 **3 级**（`OrganizationLevel` 只有 level_1~3）；创建后 **编码不可修改**
+    （需变更只能停用后新建）。自助注册默认关闭（`SELF_REGISTER_MODE=off`），
+    注册流程 **不得自动创建组织**（组织树只由管理员或上级授权包建立）。
+  - 回归：`backend/tests/unit/test_admin_divisions_r47.py`（表完整性 / 存在性 / 父子 / 降级 / 首启层级）。
 - **遗留表清理契约** (2026-10-22, v1.16.2): 迁移清理"代码零引用"的历史表时**禁止直接 DROP 有数据的表** ——
   统一走 `r35_drop_legacy_tables_001` 的三分支策略：表不存在→跳过；**0 行→DROP**；**有数据→改名 `legacy_<表名>` 归档**
   （数据保留、退出活跃 schema、升级永不中断）。「允许消失」的表必须登记在

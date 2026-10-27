@@ -8,7 +8,7 @@ from app.api.v1.system.init import _ensure_root_organization, _resolve_root_org_
 
 
 class TestResolveRootOrgCode:
-    """编码校验：缺失 / 非法 / 非省级 / 正常。"""
+    """编码校验：缺失 / 非法 / 不存在 / 别名 / 各省层级均可首启。"""
 
     def test_missing_code_400(self):
         with pytest.raises(HTTPException) as exc:
@@ -26,11 +26,28 @@ class TestResolveRootOrgCode:
             _resolve_root_org_code("abcdef")
         assert exc.value.status_code == 400
 
-    def test_non_province_400(self):
+    def test_prefecture_code_allowed(self):
+        """P2（2026-10-27）：市州级单位可直接作为首启单位。
+
+        此前硬性要求「根组织必须是省级（XX0000）」，黔南州（522700）首启必被拒，
+        只能先造省本级根再手工建州 —— 现按代码实际层级建根。
+        """
+        assert _resolve_root_org_code("522700") == "522700"
+
+    def test_county_code_allowed(self):
+        """县级单位（如都匀市 522701）同样可作为首启单位。"""
+        assert _resolve_root_org_code("522701") == "522701"
+
+    def test_unknown_code_400(self):
+        """P3：贵州省为全量校验，表中查不到的代码（522799）必须拒绝。"""
         with pytest.raises(HTTPException) as exc:
-            _resolve_root_org_code("520100")  # 市州级
+            _resolve_root_org_code("522799")
         assert exc.value.status_code == 400
-        assert "省级" in exc.value.detail
+        assert "权威区划表" in exc.value.detail
+
+    def test_alias_normalized(self):
+        """区划调整换码归一：520222（盘县）→ 520281（盘州市）。"""
+        assert _resolve_root_org_code("520222") == "520281"
 
     def test_valid_province_ok(self):
         assert _resolve_root_org_code("520000") == "520000"

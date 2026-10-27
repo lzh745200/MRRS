@@ -660,6 +660,49 @@ async def get_organization(org_id: int, current_user=Depends(get_current_user), 
     return success_response(data=org, message="success")
 
 
+def _resolve_create_code(db: Session, org_code: str, parent, declared_level) -> tuple:
+    """创建组织时的编码/层级终审，返回 ``(归一化编码, 子级层级序号)``。
+
+    顺序与语义（与端点其它校验保持一致，错误一律 422 / 400）：
+
+    1. **层级一致**：显式传入的 ``level`` 必须与代码推导层级一致；
+    2. **逐级挂接**：子级序号必须恰为父级 +1（无父级即根，可为任一层级）；
+    3. **权威区划**（2026-10-27）：存在性 + 父子同属一个行政区划 + 别名归一。
+       此前只按末位规律判层级 —— `522799` 这类不存在的代码能入库，
+       `522701`（都匀市）也能挂到 `520100`（贵阳市）下，组织树与按 path 前缀计算的
+       数据权限都会把黔南的县市算进贵阳子树；
+    4. **换码查重**：别名归一后（如 520222 盘县 → 520281 盘州市）需重新查重。
+    """
+    inferred_level = OrganizationCodeService.infer_level(org_code)
+    if declared_level and OrganizationCodeService.level_order(declared_level) != (
+        OrganizationCodeService.level_order(inferred_level)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="组织层级与行政区划代码不一致：省级 XX0000 / 市州级 XXYY00 / 县市级 XXYYZZ",
+        )
+    child_order = OrganizationCodeService.level_order(inferred_level) or 0
+    parent_order = (
+        OrganizationCodeService.level_order(parent.level) if parent is not None else 0
+    )
+    if child_order != parent_order + 1:
+        raise HTTPException(
+            status_code=422,
+            detail="层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）",
+        )
+    try:
+        resolved_code = OrganizationCodeService.validate_admin_code(
+            org_code, parent.code if parent is not None else None
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if resolved_code != org_code:
+        conflict = db.query(Organization).filter(Organization.code == resolved_code).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="组织编码已存在")
+    return resolved_code, child_order
+
+
 @router.post("", response_model=OrganizationEnvelopeResponse)
 async def create_organization(
     data: OrganizationCreate,
@@ -674,14 +717,11 @@ async def create_organization(
     ) and not is_superuser(current_user):
         raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
 
-    # 编码即行政区划代码（省 2 位 / 市州 4 位 / 县市 6 位），是跨机匹配的唯一依据，必填
+    # 编码即行政区划代码（6 位），是跨机匹配的唯一依据，必填
     try:
         org_code = OrganizationCodeService.normalize_admin_code(data.code)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    existing = db.query(Organization).filter(Organization.code == org_code).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="组织编码已存在")
 
     # 转换枚举类型
     org_data = data.model_dump(exclude_defaults=False)
@@ -704,28 +744,18 @@ async def create_organization(
         # R27（2026-10-14）：跨组织越权守卫 —— 部门级管理员只能在自身组织
         # 子树内创建组织（OrganizationCreate 无 organization_id 字段，树归属
         # 完全由 parent_id 决定，校验父级即可）。
+        #
+        # 2026-10-27：越权校验必须**早于**「编码是否已存在」的查询。此前先查重再判越权，
+        # 越权者可用同一请求对比 400（编码已存在）/ 其它响应，**反推其它分支的组织编码**
+        # （组织编码是跨机匹配标识，可被枚举即信息泄漏）。现在越权一律 403 先返回。
         _assert_org_write_scope(db, current_user, [org_data["parent_id"]], action="创建组织")
 
-    # 层级由行政区划代码长度推导（省=2 位 / 市州=4 位 / 县市=6 位），不允许与编码矛盾
-    inferred_level = OrganizationCodeService.infer_level(org_code)
-    declared_level = org_data.get("level")
-    if declared_level and OrganizationCodeService.level_order(declared_level) != (
-        OrganizationCodeService.level_order(inferred_level)
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail="组织层级与行政区划代码不一致：省级 XX0000 / 市州级 XXYY00 / 县市级 XXYYZZ",
-        )
-    # 跨级校验：子级必须恰为父级 +1（根组织只能建省级）
-    child_order = OrganizationCodeService.level_order(inferred_level) or 0
-    parent_order = (
-        OrganizationCodeService.level_order(parent.level) if parent is not None else 0
-    )
-    if child_order != parent_order + 1:
-        raise HTTPException(
-            status_code=422,
-            detail="层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）",
-        )
+    existing = db.query(Organization).filter(Organization.code == org_code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="组织编码已存在")
+
+    # 层级 / 跨级 / 权威区划（存在性 + 父子同区划 + 别名归一 + 换码查重）统一在助手内完成
+    org_code, child_order = _resolve_create_code(db, org_code, parent, org_data.get("level"))
 
     org_data["level"] = str(child_order)  # 落库保持历史"深度数字"口径
 

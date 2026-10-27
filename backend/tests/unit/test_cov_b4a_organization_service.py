@@ -53,16 +53,20 @@ class TestGetAncestorsNullPath:
 
 
 class TestCreateOrganizationNullParentPath:
-    """父级 path 为 NULL 时，子组织 path 不得拼成 "None{id}/"."""
+    """父级 path 为 NULL 时，子组织 path 不得拼成 "None{id}/".
 
-    @patch("app.services.organization_service.OrganizationCodeService")
-    def test_parent_path_none_uses_parent_id_segment(self, MockCodeService):
+    2026-10-27：编码改为以传入的行政区划代码为准（不再是随机 ORG-XXXX），
+    故父级用真实代码 522700（黔南州），子级 522701（都匀市）。
+    """
+
+    def test_parent_path_none_uses_parent_id_segment(self):
         from app.services.organization_service import OrganizationService
 
-        MockCodeService.return_value.generate_code.return_value = "ORG002"
         db = MagicMock()
-        parent = SimpleNamespace(id=1, code="ORG001", level=1, path=None)
-        db.query.return_value.filter.return_value.first.return_value = parent
+        parent = SimpleNamespace(id=1, code="522700", level="2", path=None)
+        # 第一次查询取父级，第二次查编码是否重复（无冲突）
+        db.query.return_value.filter.return_value.first.side_effect = [parent, None]
+        db.query.return_value.filter.return_value.scalar.return_value = 0
 
         created = {}
 
@@ -77,8 +81,10 @@ class TestCreateOrganizationNullParentPath:
 
         svc = OrganizationService(db=db)
         data = SimpleNamespace(
-            parent_id=1, code_prefix="ORG", name="Child", is_active=True,
+            parent_id=1, code="522701", name="Child", is_active=True,
             description=None, contact_person=None, contact_phone=None, address=None,
         )
         org = asyncio.run(svc.create_organization(data, created_by=1))
         assert org.path == "/1/42/", "父级 path 为 NULL 时应回退为父 ID 单段路径"
+        assert org.code == "522701", "编码必须取传入的行政区划代码"
+        assert str(org.level) == "3", "都匀市应为县市级（level 3）"

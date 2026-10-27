@@ -83,15 +83,38 @@ class OrganizationCodeService:
 
     @staticmethod
     def infer_level(code: str) -> Optional[str]:
-        """由 6 位行政区划代码的末位规律推断层级；非法返回 None。"""
+        """由 6 位行政区划代码推断层级；非法返回 None。
+
+        2026-10-27 起**以权威区划表为准**（`admin_division_service`：存在性 + 层级），
+        表未覆盖的代码才退回「末位规律」（XX0000 / XXYY00 / XXYYZZ）。
+        这样即便某地代码的末两位不遵循常规（区划调整、省直辖县等），也按表定为正确层级。
+        """
         cleaned = str(code or "").strip()
         if len(cleaned) != ADMIN_AREA_CODE_LENGTH or not cleaned.isdigit():
             return None
+        from app.services.admin_division_service import AdminDivisionService
+
+        table_level = AdminDivisionService.level_key_of(cleaned)
+        if table_level:
+            return table_level
         if cleaned[2:] == "0000":
             return "level_1"
         if cleaned[4:] == "00":
             return "level_2"
         return "level_3"
+
+    @staticmethod
+    def validate_admin_code(code: str, parent_code: Optional[str] = None) -> str:
+        """权威校验（存在性 + 层级 + 父子一致），返回归一化后的代码。
+
+        与 ``normalize_admin_code``（只查格式）的分工：
+        - ``normalize_admin_code``：长度/字符/别名归一，供「只关心格式」的旧调用点使用；
+        - ``validate_admin_code``：组织创建/初始化等**落库路径**必须用它 ——
+          它会拒绝不存在的代码（贵州全省全量校验），并校验子码与父码同属一个区划。
+        """
+        from app.services.admin_division_service import AdminDivisionService
+
+        return AdminDivisionService.validate_code(code, parent_code)
 
     @staticmethod
     def level_order(level: Any) -> Optional[int]:

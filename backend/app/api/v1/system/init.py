@@ -116,28 +116,35 @@ async def initialize_system(
 
 
 def _resolve_root_org_code(raw_code: Optional[str]) -> str:
-    """校验并规范化根组织编码（6 位行政区划代码，必须是省级 XX0000）。
+    """校验并规范化根组织编码（6 位行政区划代码）。
 
     组织编码是 v1.16.4 起的强制契约（跨机匹配唯一依据）；初始化缺失/非法时
     必须给 400 可操作指引，不得让 OrganizationCreate 的校验错误冒泡成 500。
+
+    2026-10-27（P2）：**不再强制省级**。此前面向省本级部署，市州级单位（如黔南州
+    522700）首启必然被拒 —— 只能先造一个省本级根再手工建州，既反直觉，又与
+    「逐级挂接从本单位起算」矛盾。现按代码实际层级建根（省/市州/县市均可），
+    下级组织从该层级逐级挂接；县级根不再允许建下级（业务只有三级）。
     """
+    from app.services.admin_division_service import AdminDivisionService
     from app.services.organization_code_service import OrganizationCodeService
 
     code = (raw_code or "").strip()
     if not code:
         raise HTTPException(
             status_code=400,
-            detail="首次初始化必须提供单位编码（6 位行政区划代码，如 520000）",
+            detail="首次初始化必须提供本单位编码（6 位行政区划代码，如 520000 省本级 / 522700 黔南州 / 522701 都匀市）",
         )
     try:
         root_code = OrganizationCodeService.normalize_admin_code(code)
+        # 权威区划校验：存在性 + 别名归一（贵州为全量校验，查不到即非法代码）
+        root_code = AdminDivisionService.validate_code(root_code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    level = OrganizationCodeService.infer_level(root_code)
-    if OrganizationCodeService.level_order(level) != 1:
+    if OrganizationCodeService.infer_level(root_code) is None:
         raise HTTPException(
             status_code=400,
-            detail="根组织必须是省级单位（编码末四位为 0000，如 520000）",
+            detail="单位编码无法判定层级，请核对 6 位行政区划代码（如 520000 / 522700 / 522701）",
         )
     return root_code
 

@@ -43,15 +43,17 @@ def _seed_tree(db):
 
     db.add_all(
         [
-            Organization(id=1, name="总公司", code="R27-ROOT", parent_id=None,
+            # 2026-10-27：组织编码改为真实行政区划代码（权威表校验 + 父子同区划），
+            # 占位码（原 R27-ROOT/R27-A/...）不再合法，见 tests/unit/test_admin_divisions_r47.py。
+            Organization(id=1, name="总公司", code="520000", parent_id=None,
                          path="/1/", level=1, org_type="department", sort_order=1),
-            Organization(id=2, name="部门A", code="R27-A", parent_id=1,
+            Organization(id=2, name="部门A", code="520100", parent_id=1,
                          path="/1/2/", level=2, org_type="department", sort_order=2),
-            Organization(id=3, name="A子组", code="R27-A3", parent_id=2,
+            Organization(id=3, name="A子组", code="520103", parent_id=2,
                          path="/1/2/3/", level=3, org_type="department", sort_order=3),
-            Organization(id=8, name="部门B", code="R27-B", parent_id=1,
+            Organization(id=8, name="部门B", code="520200", parent_id=1,
                          path="/1/8/", level=2, org_type="department", sort_order=8),
-            Organization(id=9, name="B子组", code="R27-B9", parent_id=8,
+            Organization(id=9, name="B子组", code="520201", parent_id=8,
                          path="/1/8/9/", level=3, org_type="department", sort_order=9),
         ]
     )
@@ -288,7 +290,7 @@ class TestR27SuperuserUnchanged:
 
     def test_create_under_other_branch_ok(self, super_client, org_db):
         resp = super_client.post(
-            "/api/v1/organizations", json={"name": "B新小组", "parent_id": 8, "code": "520103"}
+            "/api/v1/organizations", json={"name": "B新小组", "parent_id": 8, "code": "520203"}
         )
         assert resp.status_code == 200
         from app.models.organization import Organization

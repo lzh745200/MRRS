@@ -1,26 +1,26 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.13
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.14
 
-![Version](https://img.shields.io/badge/version-1.18.13-blue)
+![Version](https://img.shields.io/badge/version-1.18.14-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.13）
+## 本版亮点（v1.18.14）
 
-- **「数据管理」页改版为「数据概览」**：核心指标常驻卡片（帮扶村总数 / 本月导入 / 备份数量）、
-  **最近流转记录直接渲染真实数据**（不再「前往…」空壳入口）、原「数据质量」页签改为**常驻区块**；
-  **导出审计仅管理员请求**——非管理员不再每轮刷新打 403，也不再看恒 0 的假数字
-- **23 处「同页两名」一次性对齐**：侧栏叫「数据概览」而面包屑/浏览器标题写「数据管理」这类分叉，
-  以 `menus.py`（唯一菜单源）为准统一 23 条路由的 `meta.title`（含汇报大屏/政策法规/报表模板/
-  工作首页/用户与组织/安全审计/健康检查/机器码管理/零信任/错误上报/地图瓦片/数据包与批量导入…）
-- **菜单对齐门禁新增规则 F**：`kind=page` 带 `path` 的条目，菜单 label 必须等于路由 `meta.title`；
-  原 A~E 规则**从不校验文案**，所以上述 23 处可长期存在。新规则首次运行即全部抓出，此后由 CI 拦截
-- **测试稳定性**：`policies/Edit.test.ts` 用 `enableAutoUnmount` 修掉 600ms 防抖定时器写入共享
-  localStorage 造成的跨用例污染（单跑通过、整文件必红）；`smoke.test.ts` 遵守 coverage-merge 不变量，
-  移除同一视图的 bare import；`utils/index.test.ts` 删除重复覆盖
+- **组织编码接入权威行政区划表**：新增 `backend/app/data/admin_divisions.json`（省级 34 全量、
+  贵州 9 市州 + 88 县级全量，取自仓库内置 geojson adcode，另存区划调整换码），
+  落库前统一校验 **存在性 + 层级 + 父子同区划 + 别名归一**
+- **修掉 4 个真实缺陷**（均由「黔南州代码 522700」这条反馈顺线查出）：
+  ① 初始化建根组织时编码被**随机替换**成 `ORG-XXXXXXXX`（实测传 522700 落库 ORG-848B7F7C）；
+  ② 初始化**强制省级编码**，黔南州（市州级）首启必被拒；③ 不校验代码**是否真实存在**
+  （522799 能入库）；④ 不校验**父子同区划**（都匀市 522701 能挂到贵阳市 520100 下，
+  组织树与数据权限会把黔南的县市算进贵阳子树）
+- **越权探测顺带修复**：`POST /organizations` 改为**越权 403 先行**，越权者无法再用
+  400/其它响应差异反推其它分支的组织编码（编码是跨机匹配标识，可枚举即信息泄漏）
+- **缺表自动降级**：权威表文件缺失/损坏时回落「末位规律」并告警，绝不因缺文件把合法编码判非法
 - **历史亮点（v1.18.1 起）**：
 
 - **登录页务实化改造**：修掉「注册账户」死链（默认不开放自助注册却无条件显示，现已按 `public-config` 显隐、
@@ -43,7 +43,7 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **14,818 用例**, 0 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
+| 后端测试 | **14,851 用例**, 0 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
 | 前端测试 | **7,379 passed**（347 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
@@ -64,7 +64,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-26（v1.18.13）— 后端 14,818 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-26（v1.18.14）— 后端 14,851 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
 > 46,088 语句 / 11,500 分支，Miss 0 / BrPart 0）；
@@ -155,7 +155,7 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 14,818（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 14,851（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
 | 前端单元测试 | Vitest | 7,020（339 文件） | API/Store/Component/Composable/Utils |

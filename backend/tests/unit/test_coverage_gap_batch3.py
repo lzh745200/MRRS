@@ -667,51 +667,53 @@ class TestOrganizationService:
         with pytest.raises(ValueError, match="OrganizationService requires"):
             OrganizationService(db=None)
 
-    @patch("app.services.organization_service.OrganizationCodeService")
-    def test_create_org_root(self, MockCodeService):
+    def test_create_org_root(self):
+        """2026-10-27：编码以传入的行政区划代码为准（不再生成随机 ORG-XXXX）。"""
         db = MagicMock()
-        mock_code_service = MockCodeService.return_value
-        mock_code_service.generate_code.return_value = "ORG001"
+        db.query.return_value.filter.return_value.first.return_value = None  # 无重码
+        db.query.return_value.filter.return_value.scalar.return_value = 0
         svc = self._make_service(db)
         data = MagicMock()
         data.parent_id = None
-        data.code_prefix = "ORG"
+        data.code = "522700"  # 黔南布依族苗族自治州（市州级）
         data.name = "Root Org"
         data.is_active = True
         data.description = None
         data.contact_person = None
         data.contact_phone = None
         data.address = None
-        result = _run_async(
-            svc.create_organization(data, created_by=1)
-        )
+        _run_async(svc.create_organization(data, created_by=1))
         assert db.add.called
+        org = db.add.call_args[0][0]
+        assert org.code == "522700"
+        assert str(org.level) == "2"
 
-    @patch("app.services.organization_service.OrganizationCodeService")
-    def test_create_org_with_parent(self, MockCodeService):
+    def test_create_org_with_parent(self):
+        """子级编码必须与父级同属一个行政区划，层级恰为父级 +1。"""
         db = MagicMock()
-        mock_code_service = MockCodeService.return_value
-        mock_code_service.generate_code.return_value = "ORG002"
         parent = MagicMock()
         parent.id = 1
-        parent.code = "ORG001"
-        parent.level = 1
+        parent.code = "522700"  # 黔南州
+        parent.level = "2"
         parent.path = "/1/"
-        db.query.return_value.filter.return_value.first.return_value = parent
+        # 第一次查询取父级，第二次查询查重码（无冲突）
+        db.query.return_value.filter.return_value.first.side_effect = [parent, None]
+        db.query.return_value.filter.return_value.scalar.return_value = 0
         svc = self._make_service(db)
         data = MagicMock()
         data.parent_id = 1
-        data.code_prefix = "ORG"
+        data.code = "522701"  # 都匀市（黔南州辖）
         data.name = "Child Org"
         data.is_active = True
         data.description = None
         data.contact_person = None
         data.contact_phone = None
         data.address = None
-        result = _run_async(
-            svc.create_organization(data, created_by=1)
-        )
+        _run_async(svc.create_organization(data, created_by=1))
         assert db.add.called
+        org = db.add.call_args[0][0]
+        assert org.code == "522701"
+        assert str(org.level) == "3"
 
     def test_create_org_parent_not_found(self):
         db = MagicMock()

@@ -107,11 +107,33 @@ class OrganizationService:
                 raise OrganizationNotFoundError(data.parent_id)
 
             parent_code = parent.code
-            level = parent.level + 1
+            level = self.code_service.level_order(parent.level) or 0
 
-        # 生成编码
-        prefix = data.code_prefix or "ORG"
-        code = self.code_service.generate_code(parent_code=parent_code, prefix=prefix)
+        # 编码即行政区划代码（2026-10-27 P1 修复）：
+        # 此前这里调用 generate_code() 生成随机 `ORG-XXXXXXXX`，把调用方传入的
+        # 6 位行政区划代码**整个丢弃** —— 系统初始化（system/init.py）正是走这条路径，
+        # 于是首启建出的根组织编码成了随机串（实测传 522700 落库 ORG-848B7F7C、level=1），
+        # 与「编码 = 行政区划代码、跨机匹配唯一依据」的契约直接冲突。
+        # 现在以传入编码为准：格式 → 权威表（存在性/别名）→ 父子一致 → 层级推导。
+        code = self.code_service.normalize_admin_code(getattr(data, "code", None) or "")
+        code = self.code_service.validate_admin_code(code, parent_code)
+
+        inferred_level = self.code_service.infer_level(code)
+        level = self.code_service.level_order(inferred_level) or 0
+        if not level:
+            raise ValueError("组织编码无法判定层级，请核对 6 位行政区划代码")
+
+        # 跨级校验：根组织可为任一层级（省/市州/县市），下级必须恰为父级 +1
+        if parent is not None:
+            parent_level = self.code_service.level_order(parent.level) or 0
+            if level != parent_level + 1:
+                raise ValueError(
+                    "层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）"
+                )
+
+        # 编码唯一性：跨机匹配依赖它，重复即拒绝
+        if self.db.query(Organization).filter(Organization.code == code).first():
+            raise OrganizationCodeDuplicateError(code)
 
         # 排序值自动递增：新增组织默认排到同级末尾
         max_order = (
@@ -130,7 +152,7 @@ class OrganizationService:
             code=code,
             name=data.name,
             parent_id=data.parent_id,
-            level=level,
+            level=str(level),  # 与端点同口径：落库保持历史"深度数字"字符串
             path=path,  # 临时路径，创建后更新
             is_active=data.is_active,
             sort_order=sort_order,
