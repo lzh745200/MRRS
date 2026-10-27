@@ -3262,6 +3262,16 @@ VERSION_HISTORY_DATA = [
                 "gap_batch3 / test_org_write_scope_r27）到新契约；R27 夹具改用真实代码（520000 / 520100 / 520103 / 520200 / 52"
                 "0201）。"
             ),
+            (
+                "三份 PPT 的实测数字全部同步到本轮真值（15 处 run）：后端 14,722 → 14,870、前端 7,356 → 7,374、合计 22,078 → 22,244、前端测试文件 "
+                "347 → 344（与 check_doc_numbers 的 *.test.ts(x) 口径一致）、封面/封底日期 2026-10-26 → 2026-10-27、版本标记 V1.18."
+                "8 → V1.18.14。"
+            ),
+            (
+                "文档入口页版本号从 v1.18.1 追平到 v1.18.14：docs/README.md、docs/INDEX.md、docs/04-部署文档/README.md、docs/01-快速开"
+                "始/README.md 共 6 处 —— 此前入口页仍指向RELEASE_NOTES-v1.18.1，读者按图索骥会拿到 13 个版本前的发布说明。backend/wf_*/、backen"
+                "d/_scratch_lazy/。"
+            ),
         ],
     },
 ]

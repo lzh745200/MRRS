@@ -420,6 +420,11 @@ probe_*
 mrr_w24_probe_*/
 bumofu_pytest_appdata_*/
 backend/bumofu_pytest_appdata_*/
+# 备份/恢复与组织初始化用例会在 backend/ 下建一次性隔离根（verify_<rand>/、wf_<rand>/），
+# 每跑一次全量测试就新增若干，此前未被忽略 → git status 长期变脏。
+backend/verify_*/
+backend/wf_*/
+backend/_scratch_lazy/
 pytest-of-*/
 backend/pytest-of-*/
 backend/tmp*/
