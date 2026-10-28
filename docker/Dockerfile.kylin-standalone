@@ -246,7 +246,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.18.23
+ARG VERSION=1.18.24
 WORKDIR /package
 
 # 创建目录结构

@@ -1,14 +1,23 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.23
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.24
 
-![Version](https://img.shields.io/badge/version-1.18.23-blue)
+![Version](https://img.shields.io/badge/version-1.18.24-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-22%2C280-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.23）
+## 本版亮点（v1.18.24）
+
+- **出包链路修复**：v1.18.21~23 三个 tag 构建**全部失败**（自 v1.18.17 后再无安装包），
+  根因是两处发布流水线缺陷 —— Windows 侧 `npm ci` 网络抖动直接堵死构建、
+  ARM64 侧"构建成功却无产物"（退避 `sleep` 被当成 `echo` 参数 + 循环后没有失败出口）
+- **加固**：两个平台的前端依赖安装都改为三次退避 + npm fetch 重试参数；
+  容器内 `npm install` 同样加退避，三次仍失败才显式报错
+- **发布说明补齐**：新增 v1.18.18→v1.18.21 的发布说明，Release 正文不再落到兜底占位
+
+## 历史亮点（v1.18.23）
 
 - **门禁统一入口 `scripts/run_gates.py`**：29 道门禁的「在哪跑 / 带什么参数 / 编码怎么设」
   固化成注册表，本地一条命令与 CI 同款；收口实测 **34 道 PASS / 0 FAIL / 0 SKIP**。
