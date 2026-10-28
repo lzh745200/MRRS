@@ -80,7 +80,8 @@ class MachineCodeService:
                         _,
                     )
                 )
-            except Exception:  # pragma: no cover - 防御兜底：单条机器信息探测启动失败时记空并跳过
+            except Exception as exc:  # pragma: no cover - 防御兜底：单条机器信息探测启动失败时记空并跳过  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('_collect_wmic_info 兜底失败（已降级）: %s', exc, exc_info=True)
                 procs.append((None, _))
 
         info = []

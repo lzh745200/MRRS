@@ -148,7 +148,8 @@ def _score_contract_fulfillment(db, project_id: int) -> float:
             .filter(FundContract.project_id == project_id)
             .all()
         )
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_score_contract_fulfillment 兜底失败（已降级）: %s', exc, exc_info=True)
         return 90.0
     if not rows:
         return 90.0

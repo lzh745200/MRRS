@@ -732,6 +732,7 @@ class PermissionPackageService:
                 if source_id is not None:
                     source_map[source_id] = target
             except Exception as e:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
+                logger.warning('_import_organizations 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(f"组织「{org_data.get('name', '未知')}」导入失败: {e}")
 
         # 第二阶段（M26）：新建行按父链回填 parent_id/path/level。
@@ -776,6 +777,7 @@ class PermissionPackageService:
                 for perm in role_data.get("permissions", []):
                     self.db.add(RolePermission(role_id=new_id, permission=perm))
             except Exception as e:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
+                logger.warning('_import_roles 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(f"角色「{role_data.get('name', '未知')}」导入失败: {e}")
         return role_id_map, stats, errors
 
@@ -836,6 +838,7 @@ class PermissionPackageService:
                 ))
                 stats["user_roles_assigned"] += 1
             except Exception as e:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
+                logger.warning('_import_user_roles 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(f"用户-角色关联导入失败: {e}")
         return stats, errors
 
@@ -905,6 +908,7 @@ class PermissionPackageService:
                 ))
                 stats["user_permissions_assigned"] += 1
             except Exception as e:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
+                logger.warning('_import_user_permissions 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(f"用户权限导入失败: {e}")
         return stats, errors
 
@@ -937,6 +941,7 @@ class PermissionPackageService:
                     user.allowed_menus = json.dumps(incoming, ensure_ascii=False)
                 stats["user_menus_updated"] += 1
             except Exception as e:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
+                logger.warning('_import_user_menus 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(f"用户菜单「{username}」导入失败: {e}")
         return stats, errors
 
@@ -993,6 +998,7 @@ class PermissionPackageService:
                         user.organization_id = None
                 stats["user_legacy_updated"] += 1
             except Exception as e:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
+                logger.warning('_import_user_legacy 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(f"用户遗留权限「{username}」导入失败: {e}")
         return stats, errors
 

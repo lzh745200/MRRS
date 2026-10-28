@@ -84,7 +84,8 @@ def _resolve_local_machine_code() -> str:
             return MachineCodeService(session).get_machine_code() or ""
         finally:
             session.close()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_resolve_local_machine_code 兜底失败（已降级）: %s', exc, exc_info=True)
         return ""
 
 

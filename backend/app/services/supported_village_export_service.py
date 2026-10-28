@@ -310,14 +310,16 @@ class SupportedVillageExportService:
             from decimal import Decimal
             if isinstance(value, Decimal):
                 return float(value)
-        except Exception:  # pragma: no cover - 标准库 import 永不失败
+        except Exception as exc:  # pragma: no cover - 标准库 import 永不失败  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('_coerce_cell 兜底失败（已降级）: %s', exc, exc_info=True)
             pass
         # enum.Enum → 取 .value
         try:
             import enum
             if isinstance(value, enum.Enum):
                 return value.value
-        except Exception:  # pragma: no cover - 标准库 import 永不失败
+        except Exception as exc:  # pragma: no cover - 标准库 import 永不失败  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('_coerce_cell 兜底失败（已降级）: %s', exc, exc_info=True)
             pass
         # 其它一律转字符串（兜底，保证不会因类型问题崩溃）
         return str(value)

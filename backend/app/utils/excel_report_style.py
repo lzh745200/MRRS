@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import logging
 import datetime as _dt
 from typing import Any, Dict, Optional, Sequence
 
@@ -26,6 +27,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
 from openpyxl.worksheet.properties import PageSetupProperties
+
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════
 # 配色常量（与数据导入模板 excel_template_service 保持一致）
@@ -91,14 +94,16 @@ def _coerce(value: Any) -> Any:
 
         if isinstance(value, Decimal):
             return float(value)
-    except Exception:  # pragma: no cover - 标准库 import 永不失败
+    except Exception as exc:  # pragma: no cover - 标准库 import 永不失败  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_coerce 兜底失败（已降级）: %s', exc, exc_info=True)
         pass
     try:
         import enum
 
         if isinstance(value, enum.Enum):
             return value.value
-    except Exception:  # pragma: no cover - 防御兜底：enum 为标准库、isinstance 恒不抛错
+    except Exception as exc:  # pragma: no cover - 防御兜底：enum 为标准库、isinstance 恒不抛错  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_coerce 兜底失败（已降级）: %s', exc, exc_info=True)
         pass
     return str(value)
 

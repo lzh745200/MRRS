@@ -269,7 +269,8 @@ class BackupService:
         try:
             bind = self.db.get_bind()
             url = str(bind.url)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('_resolve_database_path 兜底失败（已降级）: %s', exc, exc_info=True)
             url = ""
         from app.utils.paths import db_file_from_url
 
@@ -589,7 +590,8 @@ class BackupService:
         try:
             with zipfile.ZipFile(backup_file_path, "r") as _zf:
                 _has_db = "data/rural_revitalization.db" in _zf.namelist()
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('create_backup 兜底失败（已降级）: %s', exc, exc_info=True)
             _has_db = False
         if not _has_db:
             try:
@@ -783,7 +785,8 @@ class BackupService:
             try:
                 from app.core.database import engine as _engine
                 _engine.dispose()
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('_restore_database_from_backup 兜底失败（已降级）: %s', exc, exc_info=True)
                 pass
 
         # T046：恢复后立即做一致性自检（fail-fast，防止损坏库被静默启用）
@@ -1608,7 +1611,8 @@ class BackupService:
                 try:
                     backup_info_data = read_zip_member(zipf, "backup_info.json")
                     backup_info = _parse_backup_info(backup_info_data)
-                except Exception:
+                except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                    logger.warning('verify_backup 兜底失败（已降级）: %s', exc, exc_info=True)
                     backup_info = None
 
                 # 获取文件列表

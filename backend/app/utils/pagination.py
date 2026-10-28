@@ -157,7 +157,8 @@ def keyset_paginate(
     # 兼容 ORM 对象和标量查询
     try:
         items = result.scalars().unique().all()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('keyset_paginate 兜底失败（已降级）: %s', exc, exc_info=True)
         items = result.all()
 
     # 5. 判断是否有下一页并截断

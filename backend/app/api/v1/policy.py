@@ -725,7 +725,8 @@ def _build_policies_pdf(policies_list: List[Policy]) -> bytes:
     try:
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
         _FONT = "STSong-Light"
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_build_policies_pdf 兜底失败（已降级）: %s', exc, exc_info=True)
         _FONT = "Helvetica"
 
     level_display = _level_display_map()

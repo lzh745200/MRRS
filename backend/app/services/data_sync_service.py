@@ -223,6 +223,7 @@ class DataSyncService:
                         total_records += len(records)
                         self.logger.info(f"表 {table_name} 导出 {len(records)} 条记录")
                     except Exception as e:
+                        logger.warning('export_incremental 兜底失败（已降级）: %s', e, exc_info=True)
                         export_errors[table_name] = str(e)
                         export_data["data"][table_name] = []
 
@@ -236,6 +237,7 @@ class DataSyncService:
                 try:
                     export_data["report_ledger"] = self._export_report_ledger(db)
                 except Exception as e:  # pragma: no cover - 防御分支
+                    logger.warning('export_incremental 兜底失败（已降级）: %s', e, exc_info=True)
                     export_errors["report_ledger"] = str(e)
                     export_data["report_ledger"] = []
 

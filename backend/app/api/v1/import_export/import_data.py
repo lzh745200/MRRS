@@ -299,7 +299,8 @@ async def _import_entities(
         finally:
             try:
                 dry_db.rollback()
-            except Exception:  # pragma: no cover - 防御性回滚：dry-run 会话仅在未预期异常时需要回滚
+            except Exception as exc:  # pragma: no cover - 防御性回滚：dry-run 会话仅在未预期异常时需要回滚  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('_import_entities 兜底失败（已降级）: %s', exc, exc_info=True)
                 pass
             dry_db.close()
     else:

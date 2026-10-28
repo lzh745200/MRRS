@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import logging
+
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+logger = logging.getLogger(__name__)
+
 try:  # pragma: no cover - 项目内模块必然可导入，此防御回退不可达
     from app.models.fund import FundSource, FundStatus, FundType
-except Exception:  # noqa: BLE001  # pragma: no cover —— app.models.fund 为项目内模块必然可导入，防御回退不可达
+except Exception as exc:  # noqa: BLE001  # pragma: no cover —— app.models.fund 为项目内模块必然可导入，防御回退不可达
+    logger.warning("模块导入兜底失败（已降级）: %s", exc, exc_info=True)
 
     class FundType(str, Enum):  # type: ignore[override]
         PROJECT = "project"

@@ -12,11 +12,14 @@ S1 修复：口令密钥派生从裸 SHA-256 升级为 PBKDF2-HMAC-SHA256（随�
 :func:`looks_encrypted` 同时识别两种格式，确保旧加密包仍可导入。
 """
 from cryptography.fernet import Fernet, InvalidToken
+import logging
 import base64
 import hashlib
 import struct
 
 from app.services.password_encryption_service import PasswordEncryptionService
+
+logger = logging.getLogger(__name__)
 
 # 新格式魔术包头（二进制，绝不与裸 Fernet token 的 base64url 文本或 ZIP 的
 # 'PK' 前缀冲突）。长度固定，便于 looks_encrypted 快速判定。
@@ -114,5 +117,6 @@ def looks_encrypted(raw: bytes) -> bool:
     try:
         raw_b64 = base64.urlsafe_b64decode(raw)
         return raw_b64[:1] == b"\x80"
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('looks_encrypted 兜底失败（已降级）: %s', exc, exc_info=True)
         return False

@@ -842,6 +842,7 @@ async def import_villages(
                     raise _ImportRowRejected(error_msg or f"第{row_idx}行: 校验失败")
             imported += 1
         except Exception as e:
+            logger.warning('import_villages 兜底失败（已降级）: %s', e, exc_info=True)
             # savepoint 已将原始异常包装为 DatabaseError(raise ... from e)；
             # 取 __cause__ 还原可读的行内错误信息，避免消息嵌套重复
             cause = getattr(e, "__cause__", None) or e

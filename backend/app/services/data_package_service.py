@@ -50,6 +50,7 @@ from app.services.organization_service import OrganizationService
 from app.services.package_record_validator import validate_records
 from app.core.transaction import safe_commit
 
+
 # 支持的数据包版本
 SUPPORTED_VERSIONS = ["1.0", "1.1"]
 CURRENT_VERSION = "1.0"
@@ -486,6 +487,7 @@ class DataPackageService:
                 try:
                     manifest = DataPackageManifest(**manifest_dict)
                 except Exception as e:
+                    logger.warning('_validate_package_sync 兜底失败（已降级）: %s', e, exc_info=True)
                     errors.append(DataPackageValidationError(field="manifest", message=f"manifest格式错误: {str(e)}"))
 
                 self._check_pii_key_fingerprint(manifest_dict, errors)
@@ -516,11 +518,13 @@ class DataPackageService:
                             ))
 
         except HTTPException as e:
+            logger.warning('_validate_package_sync 兜底失败（已降级）: %s', e, exc_info=True)
             # 解压后超限（压缩炸弹）是可读的业务结论，不该降级成"验证失败: ..." 噪声
             errors.append(DataPackageValidationError(field="file", message=str(e.detail)))
         except zipfile.BadZipFile:
             errors.append(DataPackageValidationError(field="file", message="ZIP文件损坏"))
         except Exception as e:
+            logger.warning('_validate_package_sync 兜底失败（已降级）: %s', e, exc_info=True)
             errors.append(DataPackageValidationError(field="file", message=f"验证失败: {str(e)}"))
 
         return DataPackageValidationResult(
@@ -677,6 +681,7 @@ class DataPackageService:
                 skipped_counts=skipped_counts, error_counts=error_counts, errors=errors,
             )
         except Exception as e:
+            logger.warning('confirm_import 兜底失败（已降级）: %s', e, exc_info=True)
             self.db.rollback()
             package.status = PackageStatus.failed.value
             package.error_message = str(e)
@@ -842,6 +847,7 @@ class DataPackageService:
                 if cleaned is not None:
                     clean_records.append(cleaned)
             except Exception as e:
+                logger.warning('_bulk_upsert_records 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(DataPackageValidationError(
                     field=model.__tablename__, message=f"行{i}数据清洗失败: {e}", row=i + 1, data_type=model.__tablename__
                 ))
@@ -895,6 +901,7 @@ class DataPackageService:
                     imported += max(0, written)
                     skipped += max(0, len(group_records) - max(0, written))
             except Exception as e:
+                logger.warning('_bulk_upsert_records 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(DataPackageValidationError(
                     field=model.__tablename__, message=f"批量写入数据库失败: {e}", data_type=model.__tablename__
                 ))
@@ -908,6 +915,7 @@ class DataPackageService:
                     self.db.execute(sqlite_insert(model).values([payload]))
                 imported += 1
             except Exception as e:
+                logger.warning('_bulk_upsert_records 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(DataPackageValidationError(
                     field=model.__tablename__,
                     message=f"主键 {rec.get(pk_name)} 与本地记录冲突且业务键不同，改用新 id 插入失败: {e}",
@@ -1113,6 +1121,7 @@ class DataPackageService:
             return {"success": True, "message": "导入并解决冲突完成"}
 
         except Exception as e:
+            logger.warning('confirm_import_with_conflict_resolution 兜底失败（已降级）: %s', e, exc_info=True)
             self.db.rollback()
             package.status = PackageStatus.failed.value
             package.error_message = str(e)

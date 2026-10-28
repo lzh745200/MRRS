@@ -32,12 +32,16 @@
 """
 
 import ast
+import re
 import sys
 
 from _gate_common import BACKEND, iter_py_files, rel, run_gate
 
 GATE = "silent_swallow"
 EXEMPT_MARKER = "nosec:swallow"
+# 只认真实的 Exception / BaseException：HTTPException、CancelledError 等是具体异常，
+# 不属于「宽泛兜底」，不该被本门禁检查（2026-10-28 修：原先前缀匹配把它们也算进来）。
+EXCEPTION_TYPE_RE = re.compile(r"(?<![A-Za-z_])(?:Base)?Exception\b")
 # 日志调用标记
 LOG_MARKERS = ("logger", "logging", "_log", "warn(", "warning(", "error(", "exception(", "print(")
 # 失败已"显式外化"到输出里的标记：把 error_type / failed / unavailable 等写进返回值或结果字典，
@@ -86,7 +90,7 @@ def scan_text(rel_path: str, text: str) -> list:
         if not isinstance(node, ast.ExceptHandler) or node.type is None:
             continue
         type_src = ast.get_source_segment(text, node.type) or ""
-        if "Exception" not in type_src and "BaseException" not in type_src:
+        if not EXCEPTION_TYPE_RE.search(type_src):
             continue
         segment = ast.get_source_segment(text, node) or ""
         if not _handler_is_silent(node, segment):

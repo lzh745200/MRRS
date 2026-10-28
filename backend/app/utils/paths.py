@@ -15,10 +15,13 @@
   指向只读安装目录时数据/密钥/备份全部落到不可写路径）。
 """
 
+import logging
 import os
 import platform
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class PathTraversalError(ValueError):
@@ -310,7 +313,8 @@ def get_database_path() -> Path:
             from app.core.config import settings
 
             url = settings.DATABASE_URL or ""
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('get_database_path 兜底失败（已降级）: %s', exc, exc_info=True)
             url = ""
     candidate = db_file_from_url(url)
     if candidate is not None:
@@ -356,7 +360,8 @@ def get_runtime_uploads_path(sub_path: str = "") -> Path:
             from app.core.config import settings
 
             upload_dir = settings.UPLOAD_DIR or ""
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('get_runtime_uploads_path 兜底失败（已降级）: %s', exc, exc_info=True)
             upload_dir = ""
     if upload_dir:
         path = Path(upload_dir)

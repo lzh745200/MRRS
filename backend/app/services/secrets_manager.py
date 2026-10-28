@@ -120,7 +120,8 @@ class SecretsManager:
                         f.write(default_key)
             except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
                 default_key = self._generate_fallback_key()
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('_init_default_key 兜底失败（已降级）: %s', exc, exc_info=True)
                 # 磁盘不可写/权限不足：仍需给出可用的 Fernet key
                 default_key = self._generate_fallback_key()
         self._secrets["default"] = default_key

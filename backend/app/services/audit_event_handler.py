@@ -29,7 +29,8 @@ def _resolve_actor_id():
         from app.middleware.audit_context import get_current_user as _get_ctx_user_id
 
         ctx_user_id = _get_ctx_user_id()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_resolve_actor_id 兜底失败（已降级）: %s', exc, exc_info=True)
         ctx_user_id = None
 
     if ctx_user_id is not None:

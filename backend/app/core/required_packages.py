@@ -21,8 +21,11 @@
 
 from dataclasses import dataclass
 from importlib import util as importlib_util
+import logging
 import sys
 from typing import Dict, List, Optional, Sequence, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -92,7 +95,8 @@ def installed_version(distribution: str) -> Optional[str]:
         from importlib.metadata import version
 
         return version(distribution)
-    except Exception:  # pragma: no cover - 元数据损坏/缺失时静默降级
+    except Exception as exc:  # pragma: no cover - 元数据损坏/缺失时静默降级  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('installed_version 兜底失败（已降级）: %s', exc, exc_info=True)
         return None
 
 

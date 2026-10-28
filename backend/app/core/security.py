@@ -48,7 +48,8 @@ try:
         def _patched_finalize(cls, name, dryrun):
             try:
                 return _orig_finalize(cls, name, dryrun)
-            except Exception:  # noqa: BLE001 - 任何后端检测失败都跳过（原 (ValueError, Exception) 冗余）
+            except Exception as exc:  # noqa: BLE001 - 任何后端检测失败都跳过（原 (ValueError, Exception) 冗余）
+                logger.warning('_patched_finalize 兜底失败（已降级）: %s', exc, exc_info=True)
                 return True  # 跳过 passlib 的 bcrypt wrap-bug 检测
 
         _pb._BcryptCommon._finalize_backend_mixin = classmethod(_patched_finalize)
@@ -475,7 +476,8 @@ async def get_current_user(
             from app.middleware.audit_context import set_current_user
 
             set_current_user(getattr(user, "id", None))
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('get_current_user 兜底失败（已降级）: %s', exc, exc_info=True)
             # 审计归因不应阻断主流程
             pass
 

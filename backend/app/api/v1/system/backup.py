@@ -51,7 +51,8 @@ def _check_database_included(file_path: str, is_encrypted: bool):
 
         with zipfile.ZipFile(file_path, "r") as _zf:
             return _ZIP_DB_MEMBER in _zf.namelist()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_check_database_included 兜底失败（已降级）: %s', exc, exc_info=True)
         return None
 
 
@@ -101,7 +102,8 @@ def _resolve_auto_backup_password(provided: Optional[str]) -> Optional[str]:
         from app.utils.runtime_secrets import get_or_create_secret
 
         return get_or_create_secret("BACKUP_ENCRYPTION_KEY")
-    except Exception:  # pragma: no cover - 密钥存储异常时按未提供处理
+    except Exception as exc:  # pragma: no cover - 密钥存储异常时按未提供处理  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_resolve_auto_backup_password 兜底失败（已降级）: %s', exc, exc_info=True)
         return None
 
 
@@ -387,7 +389,8 @@ async def list_backups(
                         _f.read(len(BackupService._ENCRYPTED_MARKER))
                         == BackupService._ENCRYPTED_MARKER
                     )
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('list_backups 兜底失败（已降级）: %s', exc, exc_info=True)
                 # 文件缺失/不可读/记录为 mock 路径时按未加密处理
                 is_encrypted = False
 
@@ -706,7 +709,8 @@ async def preview_backup(
             ]
             try:
                 meta = json.loads(read_zip_member(zf, "backup_info.json"))
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('preview_backup 兜底失败（已降级）: %s', exc, exc_info=True)
                 # 无元信息文件或内容加密时降级为空 dict
                 meta = {}
     except zipfile.BadZipFile:

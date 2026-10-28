@@ -333,7 +333,8 @@ def health():
         same_volume = backups_share_volume_with_database(
             str(get_database_path()), str(get_backup_path())
         )
-    except Exception:  # pragma: no cover — /health 不得因附带信号失败（路径解析异常）
+    except Exception as exc:  # pragma: no cover — /health 不得因附带信号失败（路径解析异常）  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('health 兜底失败（已降级）: %s', exc, exc_info=True)
         same_volume = None
 
     # R36（离线长期运行可靠性）：
@@ -348,12 +349,14 @@ def health():
 
     try:
         clock = _clock_health()
-    except Exception:  # noqa: BLE001 - 附带信号失败不得让 /health 5xx
+    except Exception as exc:  # noqa: BLE001 - 附带信号失败不得让 /health 5xx
+        logger.warning('health 兜底失败（已降级）: %s', exc, exc_info=True)
         clock = {"status": "unknown", "behind_days": None}
 
     try:
         database_snapshot = _database_health()
-    except Exception:  # pragma: no cover - 快照读取为纯内存操作，理论上不会失败
+    except Exception as exc:  # pragma: no cover - 快照读取为纯内存操作，理论上不会失败  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('health 兜底失败（已降级）: %s', exc, exc_info=True)
         database_snapshot = {}
     # 尚未建立过连接（或快照被清空）时明确回报 unknown，而不是缺字段
     database_snapshot.setdefault("journal_mode", "unknown")
@@ -557,6 +560,7 @@ def _init_database_tables():
         try:
             getattr(app.models, _name)
         except Exception as _e:
+            logger.warning('_init_database_tables 兜底失败（已降级）: %s', _e, exc_info=True)
             _missing_models.append(f"{_name}({_e})")
     if _missing_models:
         logger.warning("部分模型导入失败: %s", ", ".join(_missing_models))
@@ -611,7 +615,8 @@ def _run_alembic_upgrade():
         # 记录目标 head 版本号（仅读脚本目录，不连数据库），供健康检查暴露
         try:
             _migration_status["head"] = ScriptDirectory.from_config(cfg).get_current_head()
-        except Exception:  # pragma: no cover - head 推断失败不阻断迁移
+        except Exception as exc:  # pragma: no cover - head 推断失败不阻断迁移  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('_run_alembic_upgrade 兜底失败（已降级）: %s', exc, exc_info=True)
             _migration_status["head"] = None
 
         # 检查是否需要 stamp（表已存在但无 alembic_version 表）

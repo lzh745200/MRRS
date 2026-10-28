@@ -420,11 +420,13 @@ async def list_user_sessions(
     try:
         from app.core.token_blacklist import count as blacklist_count_fn
         blacklisted = blacklist_count_fn()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('list_user_sessions 兜底失败（已降级）: %s', exc, exc_info=True)
         try:
             from app.models.token_blacklist import TokenBlacklist
             blacklisted = db.query(TokenBlacklist).count()
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('list_user_sessions 兜底失败（已降级）: %s', exc, exc_info=True)
             blacklisted = 0
 
     # 2026-10-14：user_sessions 表上线后返回真实活跃会话

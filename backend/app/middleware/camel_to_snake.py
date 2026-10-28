@@ -21,6 +21,7 @@ json.dumps 的代价（大列表响应尤其昂贵），并被 BaseHTTPMiddlewar
 - 真正需要补信封时才解码 → 补 → 重建响应（沿用旧实现：完整复制响应头、
   跳过 content-length、透传 background）。
 """
+import logging
 import json
 from typing import Any, Dict, Optional
 
@@ -29,6 +30,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.utils.common import StringHelper  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 def _convert_keys(obj: Any, converter) -> Any:
@@ -137,5 +140,6 @@ class CamelToSnakeMiddleware(BaseHTTPMiddleware):
                 new_response.headers[header_name] = header_value
             new_response.background = response.background
             return new_response
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('dispatch 兜底失败（已降级）: %s', exc, exc_info=True)
             return response

@@ -150,7 +150,8 @@ class LocalTaskQueue:
         for wt in self._worker_tasks:
             try:
                 await wt
-            except (asyncio.CancelledError, Exception):
+            except (asyncio.CancelledError, Exception) as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('stop 兜底失败（已降级）: %s', exc, exc_info=True)
                 pass
         self._worker_tasks.clear()
         # 深审 #67：原实现只置 _running=False 而不清 _queue，submit() 的自愈
@@ -262,7 +263,8 @@ class LocalTaskQueue:
                 task = await asyncio.wait_for(self._queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('_worker 兜底失败（已降级）: %s', exc, exc_info=True)
                 break
 
             # 检查任务是否已被取消

@@ -853,7 +853,8 @@ class ApprovalWorkflowService:
                 failed += 1
                 try:
                     self.db.rollback()
-                except Exception:  # pragma: no cover - 防御分支
+                except Exception as exc:  # pragma: no cover - 防御分支  # noqa: BLE001 - 兜底但必须留痕
+                    logger.warning('auto_approve_all_pending 兜底失败（已降级）: %s', exc, exc_info=True)
                     pass
                 logger.warning("自动批量审批失败 task_id=%s: %s", task.id, e)
         return {"total_pending": len(pending), "approved": approved, "failed": failed}

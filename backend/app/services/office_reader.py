@@ -74,7 +74,8 @@ def _xlrd_cell(book, cell) -> Any:
     if ctype == xlrd.XL_CELL_DATE:
         try:
             return xlrd.xldate_as_datetime(value, book.datemode)
-        except Exception:  # pragma: no cover - 极端损坏文件
+        except Exception as exc:  # pragma: no cover - 极端损坏文件  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('_xlrd_cell 兜底失败（已降级）: %s', exc, exc_info=True)
             return value
     if ctype == xlrd.XL_CELL_BOOLEAN:
         return bool(value)
@@ -128,6 +129,7 @@ def read_rows(content: bytes, filename: Optional[str] = None) -> List[List[Any]]
         except ImportError as exc:  # 依赖缺失单独指出，避免误判为"文件坏了"
             failures.append(f"{engine}: 依赖缺失（{exc}）")
         except Exception as exc:  # noqa: BLE001 - 各解析器异常类型都不一致
+            logger.warning('read_rows 兜底失败（已降级）: %s', exc, exc_info=True)
             failures.append(f"{engine}: {exc}")
         logger.debug("表格解析失败 engine=%s file=%s: %s", engine, filename, failures[-1])
 

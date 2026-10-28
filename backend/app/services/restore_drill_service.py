@@ -173,7 +173,8 @@ def run_restore_drill(db=None, backup_dir: Optional[str] = None) -> Dict[str, An
             from app.services.system_config_service import get_config
 
             configured = (get_config("backup_target_dir", "") or "").strip()
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('run_restore_drill 兜底失败（已降级）: %s', exc, exc_info=True)
             configured = ""
         if configured and os.path.isdir(configured):
             backup_dir = configured
@@ -237,7 +238,8 @@ def is_drill_due(interval_days: int = 30) -> bool:
                 return not get_config(_CFG_LAST_TIME, "")
             finally:
                 db.close()
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('is_drill_due 兜底失败（已降级）: %s', exc, exc_info=True)
             return True
     try:
         last = datetime.fromisoformat(current["checked_at"])

@@ -3,6 +3,7 @@ Smart Conflict Resolver
 智能冲突解决服务 - 处理数据导入时的ID和业务键冲突
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 from app.models.project import Fund, Project
 from app.models.school import School
 from app.models.supported_village import SupportedVillage
+
+logger = logging.getLogger(__name__)
 
 
 class ConflictStrategy:
@@ -76,11 +79,13 @@ def _model_columns(model_class: Any) -> set:
     if mapper is not None:
         try:
             return {c.key for c in mapper.column_attrs}
-        except Exception:  # pragma: no cover — 防御
+        except Exception as exc:  # pragma: no cover — 防御  # noqa: BLE001 - 兜底但必须留痕
+            logger.warning('_model_columns 兜底失败（已降级）: %s', exc, exc_info=True)
             pass
     try:
         return {c.key for c in sa_inspect(model_class).mapper.column_attrs}
-    except Exception:  # pragma: no cover — 非映射类
+    except Exception as exc:  # pragma: no cover — 非映射类  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_model_columns 兜底失败（已降级）: %s', exc, exc_info=True)
         return set()
 
 

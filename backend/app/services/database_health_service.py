@@ -354,6 +354,7 @@ class DatabaseHealthService:
                     cursor.execute(f"PRAGMA index_info({index_name})")
                     cursor.fetchall()
                 except Exception as e:
+                    logger.warning('check_indexes 兜底失败（已降级）: %s', e, exc_info=True)
                     issues.append(f"索引 {index_name} 异常: {e}")
 
             conn.close()

@@ -284,6 +284,15 @@
   `school.py`（3）、`startup/preflight.py`（1），消息统一带**函数名**（如 `get_village_analysis 兜底失败（已降级）`）
   便于定位；`core/logging_config.py` 的 2 处加 `nosec:swallow` 豁免（logger 自身不可用，无法再留痕）。
   基线 110 → 71（门禁 total=71 baseline=71 NEW=0）。
+- **静默吞异常清零（71 → 0），门禁转为「零容忍」**：35 个文件、71 处宽泛兜底全部改为
+  **留痕降级**（`logger.warning('<函数名> 兜底失败（已降级）: %s', exc, exc_info=True)`），
+  行为不变、可观测性补齐；10 个原本没有 logger 的模块同时补 `import logging` + 模块 logger。
+  **门禁语义再校正一处**：原先用前缀匹配，把 `except HTTPException:`、
+  `except (asyncio.CancelledError, Exception):` 这类**具体异常**也算进来（误报）—— 现改为
+  `(?<![A-Za-z_])(?:Base)?Exception` 精确匹配，只查真正的宽泛兜底；基线文件已收敛为 **0 条**
+  （`gate_baselines/silent_swallow.txt` 为空 = 新增一处即红）。
+  验证：`check_silent_swallow` total=0 baseline=0 NEW=0；`flake8 app/` 0；`import app.main` 通过；
+  seg02（313 passed）+ seg03（178 passed）全绿。
 - **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
   bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
   会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；

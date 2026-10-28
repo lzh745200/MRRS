@@ -158,7 +158,8 @@ class ChunkedUploadService:
                 from app.utils.paths import get_uploads_path
 
                 temp_dir = str(get_uploads_path("chunks"))
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('__init__ 兜底失败（已降级）: %s', exc, exc_info=True)
                 from app.utils.paths import get_uploads_path
 
                 temp_dir = str(get_uploads_path("chunks"))
@@ -167,7 +168,8 @@ class ChunkedUploadService:
                 from app.utils.paths import get_uploads_path
 
                 final_dir = str(get_uploads_path("files"))
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                logger.warning('__init__ 兜底失败（已降级）: %s', exc, exc_info=True)
                 from app.utils.paths import get_uploads_path
 
                 final_dir = str(get_uploads_path("files"))

@@ -1,3 +1,4 @@
+import logging
 """
 Excel模板生成服务 — 正式风格 A4 打印版
 提供帮扶村/项目/资金/学校数据导入模板的生成和下载功能
@@ -12,6 +13,8 @@ from datetime import date
 from app.core.config import settings
 from app.services.entity_import_validator import EntityImportValidator
 
+logger = logging.getLogger(__name__)
+
 
 def _system_version() -> str:
     """系统版本号（单一事实源：settings.PROJECT_VERSION，读取失败回落占位）。
@@ -22,7 +25,8 @@ def _system_version() -> str:
         from app.core.config import settings
 
         return getattr(settings, "PROJECT_VERSION", "") or "1.0.0"
-    except Exception:  # pragma: no cover - 配置不可用时兜底
+    except Exception as exc:  # pragma: no cover - 配置不可用时兜底  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_system_version 兜底失败（已降级）: %s', exc, exc_info=True)
         return "1.0.0"
 
 

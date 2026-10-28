@@ -86,6 +86,7 @@ def safe_api_call(operation: str, status_code: int = status.HTTP_500_INTERNAL_SE
             except HTTPException:
                 raise
             except Exception as e:
+                logger.warning('async_wrapper 兜底失败（已降级）: %s', e, exc_info=True)
                 handle_service_error(operation, e, status_code)
 
         @functools.wraps(func)
@@ -95,6 +96,7 @@ def safe_api_call(operation: str, status_code: int = status.HTTP_500_INTERNAL_SE
             except HTTPException:
                 raise
             except Exception as e:
+                logger.warning('sync_wrapper 兜底失败（已降级）: %s', e, exc_info=True)
                 handle_service_error(operation, e, status_code)
 
         import asyncio

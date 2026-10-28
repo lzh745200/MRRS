@@ -75,6 +75,7 @@ def handle_db_errors(func: F) -> F:
         try:
             return func(*args, **kwargs)
         except (IntegrityError, OperationalError, SQLAlchemyError, HTTPException, BusinessError, Exception) as e:
+            logger.warning('wrapper 兜底失败（已降级）: %s', e, exc_info=True)
             _handle_db_exception(func.__name__, db, e)
 
     return wrapper  # type: ignore
@@ -91,6 +92,7 @@ def handle_db_errors_async(func: F) -> F:
         try:
             return await func(*args, **kwargs)
         except (IntegrityError, OperationalError, SQLAlchemyError, HTTPException, BusinessError, Exception) as e:
+            logger.warning('wrapper 兜底失败（已降级）: %s', e, exc_info=True)
             _handle_db_exception(func.__name__, db, e)
 
     return wrapper  # type: ignore

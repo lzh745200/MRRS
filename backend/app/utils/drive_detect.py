@@ -6,10 +6,13 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import string
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 # 常见挂载点(非 Windows)
 _LINUX_MOUNT_BASES = ["/media", "/mnt", "/run/media", "/Volumes"]
@@ -32,7 +35,8 @@ def _drive_type_windows(drive_letter: str) -> str:
         if t == DRIVE_REMOTE:
             return "network"
         return "unknown"
-    except Exception:  # pragma: no cover - 非 Windows 或 ctypes 不可用
+    except Exception as exc:  # pragma: no cover - 非 Windows 或 ctypes 不可用  # noqa: BLE001 - 兜底但必须留痕
+        logger.warning('_drive_type_windows 兜底失败（已降级）: %s', exc, exc_info=True)
         return "unknown"
 
 
