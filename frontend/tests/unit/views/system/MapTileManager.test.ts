@@ -111,7 +111,11 @@ function findByText(wrapper: ReturnType<typeof mount>, text: string) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetTileInfo.mockResolvedValue({ success: true, data: TILE_INFO })
-  mockImportTiles.mockResolvedValue({ success: true, message: '瓦片包已导入 1200 张', tileCount: 1200 })
+  mockImportTiles.mockResolvedValue({
+    success: true,
+    message: '瓦片包已导入 1200 张',
+    tileCount: 1200,
+  })
   mockClearTiles.mockResolvedValue({ success: true, message: '瓦片缓存已清理' })
   ElMessageBox.confirm.mockResolvedValue('confirm')
 })
@@ -212,7 +216,10 @@ describe('MapTileManager.vue — 导入瓦片包', () => {
     await (w.vm as any).handleImportTiles()
     await flushPromises()
 
-    expect(mockImportTiles).toHaveBeenCalledWith(file)
+    expect(mockImportTiles).toHaveBeenCalledWith(
+      file,
+      expect.objectContaining({ onProgress: expect.any(Function) })
+    )
     expect(ElMessage.success).toHaveBeenCalledWith('瓦片包已导入 1200 张')
     expect(mockClearFiles).toHaveBeenCalled()
     expect(mockGetTileInfo).toHaveBeenCalledTimes(2) // 挂载 + 导入后刷新
@@ -242,6 +249,45 @@ describe('MapTileManager.vue — 导入瓦片包', () => {
     await (w.vm as any).handleImportTiles()
 
     expect(ElMessage.error).toHaveBeenCalledWith('瓦片包解压失败：缺少 z/x/y 目录')
+    expect((w.vm as any).importing).toBe(false)
+  })
+
+  it('导入中展示上传进度与“勿关闭页面”提示（大包解压 60s+）', async () => {
+    let resolveImport: (value: any) => void = () => {}
+    mockImportTiles.mockImplementation((_file: File, opts: any) => {
+      opts?.onProgress?.(42)
+      return new Promise((resolve) => {
+        resolveImport = resolve
+      })
+    })
+    const w = await mountComp()
+    uploadStub(w).props('onChange')({ name: 'tiles.zip', raw: new File(['x'], 'tiles.zip') })
+    const pending = (w.vm as any).handleImportTiles()
+    await nextTick()
+
+    expect((w.vm as any).importing).toBe(true)
+    expect((w.vm as any).importPercent).toBe(42)
+    expect(w.text()).toContain('此期间请勿关闭页面')
+    expect(w.find('.import-progress').exists()).toBe(true)
+
+    resolveImport({ success: true, message: '瓦片包已导入 64900 张', tileCount: 64900 })
+    await pending
+    await flushPromises()
+    expect((w.vm as any).importing).toBe(false)
+    expect((w.vm as any).importPercent).toBe(0)
+  })
+
+  it('请求超时 → 明确提示改用市州分包/稍后刷新', async () => {
+    mockImportTiles.mockRejectedValue(
+      Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' })
+    )
+    const w = await mountComp()
+    uploadStub(w).props('onChange')({ name: 'tiles.zip', raw: new File(['x'], 'tiles.zip') })
+    await (w.vm as any).handleImportTiles()
+
+    const last = (ElMessage.error as any).mock.calls.at(-1)?.[0] as string
+    expect(last).toContain('导入超时')
+    expect(last).toContain('市州分包')
     expect((w.vm as any).importing).toBe(false)
   })
 

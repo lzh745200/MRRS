@@ -22,7 +22,7 @@ vi.mock('@/api/request', () => {
 
 import { restoreFund, previewPurgeFund, purgeFund } from '@/api/fundsRecycle'
 import { restoreSchool, previewPurgeSchool, purgeSchool } from '@/api/schoolsRecycle'
-import { clearTiles, importTiles } from '@/api/offlineMap'
+import { clearTiles, importTiles, TILE_IMPORT_TIMEOUT_MS } from '@/api/offlineMap'
 
 describe('api/fundsRecycle', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -97,6 +97,27 @@ describe('api/offlineMap', () => {
     const [url, body] = mockPost.mock.calls[0]
     expect(url).toBe('/map/tiles/import')
     expect((body as FormData).get('file')).toBe(file)
+  })
+
+  it('importTiles 使用 15 分钟超时（大包解压 60s+，全局 30s 会误报超时）', async () => {
+    await importTiles(new File(['x'], 'tiles.zip'))
+    const config = mockPost.mock.calls[0][2] as any
+    expect(config.timeout).toBe(TILE_IMPORT_TIMEOUT_MS)
+    expect(TILE_IMPORT_TIMEOUT_MS).toBe(15 * 60 * 1000)
+  })
+
+  it('importTiles 支持自定义超时与上传进度回调（0~100 截断）', async () => {
+    const seen: number[] = []
+    await importTiles(new File(['x'], 'tiles.zip'), {
+      timeoutMs: 1234,
+      onProgress: (p) => seen.push(p),
+    })
+    const config = mockPost.mock.calls[0][2] as any
+    expect(config.timeout).toBe(1234)
+    config.onUploadProgress({ loaded: 50, total: 100 })
+    config.onUploadProgress({ loaded: 200, total: 100 })
+    config.onUploadProgress({ loaded: 0, total: 0 }) // total 未知 → 忽略
+    expect(seen).toEqual([50, 100])
   })
 
   it('clearTiles 走 DELETE /offline-map/clear', async () => {

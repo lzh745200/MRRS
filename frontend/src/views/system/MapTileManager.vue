@@ -86,6 +86,14 @@
           导入瓦片包
         </el-button>
       </div>
+
+      <div v-if="importing" class="import-progress">
+        <el-progress :percentage="importPercent" :stroke-width="8" />
+        <p class="upload-tip">
+          正在导入瓦片包：上传 {{ importPercent }}%；上传完成后后端解压落盘还需约 1 分钟 （z14
+          全省包 283MB / 64,900 张实测 62 秒），此期间请勿关闭页面或刷新。
+        </p>
+      </div>
     </el-card>
   </div>
 </template>
@@ -122,6 +130,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 const tileInfo = ref<TileInfo>(normalizeTileInfo(null))
 const loading = ref(false)
 const importing = ref(false)
+const importPercent = ref(0)
 /** 是否已完成一次状态读取（未读完时不展示"未预置"提示，避免闪烁） */
 const loaded = ref(false)
 const pendingFile = ref<File | null>(null)
@@ -177,8 +186,16 @@ async function handleImportTiles() {
     return
   }
   importing.value = true
+  importPercent.value = 0
   try {
-    const outcome = normalizeTileImportResult(await importTiles(pendingFile.value))
+    // 大包上传+后端解压可能超过全局 30s 超时，importTiles 内部单独放宽到 15 分钟
+    const outcome = normalizeTileImportResult(
+      await importTiles(pendingFile.value, {
+        onProgress: (percent) => {
+          importPercent.value = percent
+        },
+      })
+    )
     if (!outcome.ok) {
       ElMessage.error(outcome.message)
       return
@@ -188,10 +205,19 @@ async function handleImportTiles() {
     uploadRef.value?.clearFiles()
     await loadTileInfo()
   } catch (error: any) {
+    const isTimeout =
+      error?.code === 'ECONNABORTED' || String(error?.message || '').includes('timeout')
+    if (isTimeout) {
+      ElMessage.error(
+        '导入超时：瓦片包较大或磁盘较慢。可改用市州分包（≤64MB）重试，或等待后端完成后再刷新状态。'
+      )
+      return
+    }
     // 后端中文失败原因（detail/message）经拦截器挂到 userMessage，由 getErrorMessage 提取
     ElMessage.error(getErrorMessage(error, '导入瓦片包失败'))
   } finally {
     importing.value = false
+    importPercent.value = 0
   }
 }
 
@@ -281,6 +307,14 @@ onMounted(() => {
   margin-top: 8px;
   color: var(--color-info);
   font-size: 12px;
+}
+
+.import-progress {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-hover);
 }
 
 .actions {
