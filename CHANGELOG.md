@@ -54,6 +54,15 @@
   信封/裸载荷，角色、权限、菜单三处响应改为显式形状取值（权限键顺手过滤非字符串）。
   `vue-tsc` 0 错误、两文件 eslint 0 警告，相关组件测试 **55 passed**（OfflineMap 10 +
   PermissionAssignmentDrawer 45）。
+- **`as any` 政策模块清零（181 → 172）并修掉一处假传参**：新增 `types/policy.ts`
+  （`PolicyRecord` 边界类型 + `PolicyPayload`），`stores/policy.ts` 的 `policyList`/`current`
+  由 `ref<any>` 改为 `ref<PolicyRecord[]>`/`ref<PolicyRecord | null>`，`createPolicy`/`updatePolicy`
+  入参由 `any` 改为 `PolicyPayload`；`views/policies/Edit.vue` 相应去掉 9 处宽松断言。
+  **同时发现一处真实的接口谎报**：`(getLevelOptions as any)(formData.category)` 传了参数，
+  但后端 `/policies/options/levels` 签名是 `get_level_options()`（**不接收任何参数**），
+  参数一直被静默忽略 —— 现在按真实契约调用。表单回填对可选字段统一补默认值
+  （`policy.title ?? ''` 等），不再把 `undefined` 塞进必填字段。`vue-tsc` 0 错误，
+  policy 相关测试 **68 passed**（store 25 + api 43）。
 
 ### Added（批 3 起：性能基线）
 

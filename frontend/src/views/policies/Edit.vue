@@ -266,9 +266,11 @@ async function loadLevelOptions() {
   }
   levelOptionsLoading.value = true
   try {
-    const res = await (getLevelOptions as any)(formData.category)
+    // 后端 /policies/options/levels 不接收分类参数（曾用 (fn as any)(category) 假传，
+    // 参数被静默忽略）；这里按真实契约调用，去掉无效入参。
+    const res = await getLevelOptions()
     const data = res?.data?.data ?? res?.data ?? res
-    levelOptions.value = Array.isArray(data) ? data : []
+    levelOptions.value = Array.isArray(data) ? (data as { value: string; label: string }[]) : []
   } catch {
     levelOptions.value = []
   } finally {
@@ -311,22 +313,24 @@ const loadData = async () => {
 
   loading.value = true
   try {
-    await (policyStore as any).fetchPolicy(id)
-    const policy = (policyStore as any).current
+    await policyStore.fetchPolicy(id)
+    const policy = policyStore.current
 
     if (policy) {
-      formData.title = policy.title
-      formData.category = policy.category
-      formData.organization_level = policy.organization_level
-      formData.publish_date = policy.publish_date
-      formData.effective_date = (policy as any).effective_date || ''
-      formData.issuing_authority = policy.department || (policy as any).issuing_authority || ''
-      formData.content = policy.content
+      // 边界类型把字段声明为可选（后端可能省略），表单要求字符串 → 统一给默认值，
+      // 避免把 undefined 塞进必填字段（此前靠宽松断言躲过了编译期检查）。
+      formData.title = policy.title ?? ''
+      formData.category = policy.category ?? ''
+      formData.organization_level = policy.organization_level ?? ''
+      formData.publish_date = policy.publish_date ?? ''
+      formData.effective_date = policy.effective_date || ''
+      formData.issuing_authority = policy.department || policy.issuing_authority || ''
+      formData.content = policy.content ?? ''
       formData.summary = policy.summary || ''
       formData.document_number = policy.document_number || ''
-      formData.keywords = (policy as any).keywords || ''
+      formData.keywords = policy.keywords || ''
       formData.attachment_urls = policy.attachment_urls || []
-      formData.status = policy.status
+      formData.status = (policy.status as typeof formData.status) || 'draft'
 
       // 处理附件列表
       if (policy.attachment_urls && policy.attachment_urls.length > 0) {
@@ -354,19 +358,26 @@ const handleBack = () => {
 }
 
 // 上传成功处理（兼容新旧两种响应格式：{url} 直返 与 {code,data:{url}} 信封）
+/** el-upload 的 file 对象在运行时会被我们回填 url / 保存原始响应（类型上未声明） */
+type UploadedFileLike = UploadFile & {
+  url?: string
+  response?: { data?: { url?: string }; url?: string }
+}
+
 const handleUploadSuccess = (response: any, _file: UploadFile) => {
   const url = response?.data?.url ?? response?.url
   if (url) {
     formData.attachment_urls.push(url)
     // 关键：回填 file.url，否则点"移除"无法从 attachment_urls 中删除该附件
-    ;(_file as any).url = url
+    ;(_file as UploadedFileLike).url = url
   }
   ElMessage.success('上传成功')
 }
 
 // 上传移除处理（优先 file.url，回退响应体；比较前去除首尾空白以增强健壮性）
 const handleUploadRemove = (file: UploadFile) => {
-  const raw = (file as any).url ?? (file as any).response?.data?.url ?? (file as any).response?.url
+  const shaped = file as UploadedFileLike
+  const raw = shaped.url ?? shaped.response?.data?.url ?? shaped.response?.url
   const url = typeof raw === 'string' ? raw.trim() : ''
   if (!url) return
   const index = formData.attachment_urls.findIndex((u) => typeof u === 'string' && u.trim() === url)
@@ -429,12 +440,12 @@ const handleSubmit = async () => {
       if (isEdit.value) {
         // 更新政策
         const id = safeRouteParam(route.params.id)
-        const res: any = await (policyStore as any).updatePolicy(id, data)
+        const res = await policyStore.updatePolicy(id, data)
         if (res?.code !== 200) throw new Error(res?.message || '更新失败，请稍后重试')
         ElMessage.success('更新成功')
       } else {
         // 新增政策
-        const res: any = await (policyStore as any).createPolicy(data)
+        const res = await policyStore.createPolicy(data)
         if (res?.code !== 200 || !res?.data) {
           throw new Error(res?.message || '新增失败，请稍后重试')
         }

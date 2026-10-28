@@ -3,10 +3,11 @@ import { unwrapList } from '@/utils/unwrapList'
 import { ref } from 'vue'
 import { get, post, put, del } from '@/api/request'
 import { logger } from '@/utils/logger'
+import type { PolicyPayload, PolicyRecord } from '@/types/policy'
 
 export const usePolicyStore = defineStore('policy', () => {
-  const policyList = ref<any[]>([])
-  const current = ref<any>(null)
+  const policyList = ref<PolicyRecord[]>([])
+  const current = ref<PolicyRecord | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
   const total = ref(0)
@@ -37,7 +38,7 @@ export const usePolicyStore = defineStore('policy', () => {
       if (seq !== _listSeq) return // 已被更新的请求取代，丢弃过期响应
       if (res.code === 200 && res.data) {
         // 兼容三种响应形状：旧 bare data=[...] / 新信封 data={items,total} / 拦截器展开 items
-        const items = unwrapList(res).items
+        const items = unwrapList(res).items as PolicyRecord[]
         policyList.value = items
         total.value = res.total ?? items.length
       }
@@ -57,8 +58,8 @@ export const usePolicyStore = defineStore('policy', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await get<{ code: number; data: any }>('/policies/' + id)
-      if (res.code === 200) current.value = res.data
+      const res = await get<{ code: number; data?: PolicyRecord }>('/policies/' + id)
+      if (res.code === 200) current.value = res.data ?? null
     } catch (e: any) {
       error.value = _errMessage(e, '加载政策详情失败')
       logger.error('[policy] 加载政策详情失败', e)
@@ -67,10 +68,13 @@ export const usePolicyStore = defineStore('policy', () => {
     }
   }
 
-  async function createPolicy(data: any) {
+  async function createPolicy(data: PolicyPayload) {
     error.value = null
     try {
-      const res = await post<any>('/policies', data)
+      const res = await post<{ code: number; data?: PolicyRecord; message?: string }>(
+        '/policies',
+        data
+      )
       if (res.code === 200 && res.data) {
         policyList.value.unshift(res.data)
         total.value++
@@ -84,12 +88,12 @@ export const usePolicyStore = defineStore('policy', () => {
     }
   }
 
-  async function updatePolicy(id: number, data: any) {
+  async function updatePolicy(id: number, data: PolicyPayload) {
     error.value = null
     try {
-      const res = await put<any>('/policies/' + id, data)
+      const res = await put<{ code: number; message?: string }>('/policies/' + id, data)
       if (res.code === 200) {
-        const idx = policyList.value.findIndex((p: any) => p.id === id)
+        const idx = policyList.value.findIndex((p) => p.id === id)
         if (idx >= 0) policyList.value[idx] = { ...policyList.value[idx], ...data }
       }
       return res
@@ -107,7 +111,7 @@ export const usePolicyStore = defineStore('policy', () => {
       if (res.code === 200) {
         // 与 funds store 同理：total 是服务端总数，只有确实移除当前页记录才递减
         const before = policyList.value.length
-        policyList.value = policyList.value.filter((p: any) => p.id !== id)
+        policyList.value = policyList.value.filter((p) => p.id !== id)
         if (policyList.value.length < before) {
           total.value = Math.max(0, total.value - 1)
         }

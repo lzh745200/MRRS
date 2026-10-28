@@ -3479,6 +3479,10 @@ VERSION_HISTORY_DATA = [
                 " as const。"
             ),
             (
+                "as any 政策模块清零（181 → 172）并修掉一处假传参：新增 types/policy.ts（PolicyRecord 边界类型 + PolicyPayload），stores/"
+                "policy.ts 的 policyList/current由 ref<any> 改为 ref<PolicyRecord[]>/ref<PolicyRecord | null>…"
+            ),
+            (
                 "scripts/bench.py（关键路径性能基线，只报警不阻断）：固定 5,000 行数据测三条热路径 ——xlsx 解析（经统一读取层）、CSV 导出（含 UTF-8 BOM）、帮扶村"
                 "模板生成；输出 JSON 并与scripts/gate_baselines/bench_baseline.json 比较，超基线 50% 只 WARN（CI 机器噪声大，硬阈值只会制造假红"
                 "），--strict 才非 0。"
@@ -3487,11 +3491,10 @@ VERSION_HISTORY_DATA = [
                 "新增 backend/tests/unit/test_gate_entrypoints.py（8 例）：CI worklow 里出现的每个check_*.py 必须在统一入口注册（防漏跑）"
                 "、注册脚本必须真实存在、门禁名唯一、../scripts/门禁必须在 backend 下运行；no-print 的正/负/误报三例；dist 体积棘轮的增长检测与容差边界。"
             ),
-            "新增 backend/tests/unit/test_segmented_runner_lock.py（5 例，见上一版）。",
             (
-                "python scripts/run_gates.py 一键跑 33 道（默认档）结果：PASS 31 / SKIP 2 / FAIL 0。importTiles 上传进度回调的空值/钳位"
-                "分支（tests/unit/api/recycleAndOfflineMap.test.ts +3 例：无回调早退、事件与 total 缺失、loaded 缺失或为负）与 MapTileM"
-                "anager 超时判定的单侧命中/空错误分支（tests/uni…"
+                "新增 backend/tests/unit/test_segmented_runner_lock.py（5 例，见上一版）。importTiles 上传进度回调的空值/钳位分支（tests"
+                "/unit/api/recycleAndOfflineMap.test.ts +3 例：无回调早退、事件与 total 缺失、loaded 缺失或为负）与 MapTileManager 超"
+                "时判定的单侧命中/空错误分支（tests/unit/views/…"
             ),
         ],
     },
