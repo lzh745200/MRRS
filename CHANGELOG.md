@@ -39,6 +39,14 @@
   → 补理由，`check_pragma_reasons --max-bare 0` 恢复全绿（此前门禁在总 222 处 pragma 里恰好卡
   这 1 处）。
 
+### Changed（批 2 起：类型债分片清零，本片 = 基础设施层）
+
+- **`as any` 基础设施层清零（196 → 188）**：`api/request.ts`（CSRF 取 token、`_retry`/`silent`
+  扩展标记）、`api/milestones.ts`（数组/信封双形态）、`stores/organization.ts`（列表载荷）、
+  `stores/user.ts`（头像响应）、`utils/desensitize.ts`（索引写入）改为**显式形状 + 类型守卫**，
+  不再用宽松断言吞掉契约变化；`request.ts` 新增 `InternalRequestConfig`（拦截器内部标记，
+  不进对外契约）。`vue-tsc` 0 错误，相关 19 个测试文件 **472 passed**。
+  注：门禁按字面量计数，注释里出现该字样也会被计入 —— 注释措辞已同步改掉（188 为真实值）。
 ### Tests
 
 - 新增 `backend/tests/unit/test_gate_entrypoints.py`（8 例）：CI worklow 里出现的**每个**

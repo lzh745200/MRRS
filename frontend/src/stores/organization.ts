@@ -15,7 +15,12 @@ export const useOrganizationStore = defineStore('organization', () => {
     try {
       const res = await get<ApiResponse<any>>('/organizations', params)
       if (res.code === 200 && res.data) {
-        orgs.value = Array.isArray(res.data) ? (res.data as any[]) : (res.items as any[]) || []
+        const payload = res as { data?: unknown; items?: unknown }
+        orgs.value = Array.isArray(payload.data)
+          ? payload.data
+          : Array.isArray(payload.items)
+            ? payload.items
+            : []
       }
     } catch {
       /* silent */

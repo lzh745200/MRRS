@@ -256,15 +256,15 @@ export function desensitizeObject<T extends Record<string, any>>(
 ): T {
   if (!obj || typeof obj !== 'object') return obj
 
-  const result = { ...obj }
+  const result: Record<string, unknown> = { ...obj }
   for (const key of Object.keys(result)) {
     const value = result[key]
     if (typeof value === 'string' || typeof value === 'number') {
       const desensitized = autoDesensitize(value, key, role)
       if (desensitized !== String(value)) {
-        ;(result as any)[key] = desensitized
+        result[key] = desensitized
       }
     }
   }
-  return result
+  return result as T
 }

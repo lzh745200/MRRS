@@ -1,7 +1,11 @@
 /**
  * Axios HTTP 请求封装
  */
-import axios, { type AxiosRequestConfig, type Canceler } from 'axios'
+import axios, {
+  type AxiosRequestConfig,
+  type Canceler,
+  type InternalAxiosRequestConfig,
+} from 'axios'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { AuthStorage } from '@/utils/authStorage'
@@ -23,6 +27,16 @@ const request = axios.create({
 })
 
 export type RequestConfig = AxiosRequestConfig
+
+/**
+ * 拦截器内部扩展标记（不进对外契约）：
+ * - _retry：401 刷新已重试过，防无限刷新循环
+ * - silent：页面明确不要任何错误提示（连全局兜底也跳过）
+ */
+type InternalRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+  silent?: boolean
+}
 
 // 跟踪待处理请求
 const pendingRequests = new Map<string, Canceler>()
@@ -149,11 +163,19 @@ async function _ensureCsrfToken(): Promise<string | null> {
           (import.meta.env.VITE_API_BASE_URL || '/api/v1') + _CSRF_TOKEN_ENDPOINT,
           { withCredentials: true }
         )
+        // 服务端既可能返回 {data:{csrf_token}}（信封）也可能直接返回 {csrf_token}；
+        // 用显式形状 + 类型守卫取，避免宽松断言静默吞掉契约变化。
+        const envelope = res.data as
+          | { data?: { csrf_token?: unknown }; csrf_token?: unknown }
+          | null
+          | undefined
+        const asToken = (value: unknown): string | null =>
+          typeof value === 'string' && value ? value : null
         const token =
-          (res.data && (res.data as any)?.data?.csrf_token) ||
-          (res.data && (res.data as any)?.csrf_token) ||
+          asToken(envelope?.data?.csrf_token) ??
+          asToken(envelope?.csrf_token) ??
           _readCookie(_CSRF_COOKIE_NAME)
-        if (token) _csrfToken = token as string
+        if (token) _csrfToken = token
         return _csrfToken
       } catch {
         // 获取失败不阻断请求；服务端会返回 403 由响应拦截器处理
@@ -353,7 +375,7 @@ request.interceptors.response.use(
       if (status === 401) {
         // W3-T5：已带 _retry 标记的请求再次 401 → refresh 已试过仍失败，
         // 直接登出，严禁再进入刷新流程（防止无限刷新循环）
-        if (originalRequest && (originalRequest as any)._retry) {
+        if (originalRequest && (originalRequest as InternalRequestConfig)._retry) {
           _cachedToken = null
           _isRefreshing = false
           _onRefreshFailed(new Error('refresh 已重试仍 401'))
@@ -509,7 +531,7 @@ request.interceptors.response.use(
     }
 
     // silent 配置：页面明确不需要任何错误提示（连全局兜底也跳过）
-    if ((originalRequest as any)?.silent) {
+    if ((originalRequest as InternalRequestConfig | undefined)?.silent) {
       error.__silent = true
     }
 

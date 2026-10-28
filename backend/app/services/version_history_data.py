@@ -3469,6 +3469,11 @@ VERSION_HISTORY_DATA = [
                 "easons --max-bare 0 恢复全绿（此前门禁在总 222 处 pragma 里恰好卡这 1 处）。"
             ),
             (
+                "as any 基础设施层清零（196 → 188）：api/request.ts（CSRF 取 token、_retry/silent扩展标记）、api/milestones.ts（数组/"
+                "信封双形态）、stores/organization.ts（列表载荷）、stores/user.ts（头像响应）、utils/desensitize.ts（索引写入）改为显式形状 + 类型"
+                "守卫，不再用宽松断言吞掉契约变化；"
+            ),
+            (
                 "新增 backend/tests/unit/test_gate_entrypoints.py（8 例）：CI worklow 里出现的每个check_*.py 必须在统一入口注册（防漏跑）"
                 "、注册脚本必须真实存在、门禁名唯一、../scripts/门禁必须在 backend 下运行；no-print 的正/负/误报三例；dist 体积棘轮的增长检测与容差边界。"
             ),

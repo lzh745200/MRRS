@@ -211,7 +211,8 @@ export const useUserStore = defineStore('user', () => {
       `/users/${id}/avatar`,
       formData
     )
-    return res.data || (res as any)
+    // 兼容两种响应：信封内的 data，或后端直接回 {avatar_url,url}
+    return res.data || (res as unknown as { avatar_url?: string; url?: string })
   }
 
   return {
