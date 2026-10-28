@@ -47,6 +47,16 @@
   不再用宽松断言吞掉契约变化；`request.ts` 新增 `InternalRequestConfig`（拦截器内部标记，
   不进对外契约）。`vue-tsc` 0 错误，相关 19 个测试文件 **472 passed**。
   注：门禁按字面量计数，注释里出现该字样也会被计入 —— 注释措辞已同步改掉（188 为真实值）。
+
+### Added（批 3 起：性能基线）
+
+- **`scripts/bench.py`（关键路径性能基线，只报警不阻断）**：固定 5,000 行数据测三条热路径 ——
+  xlsx 解析（经统一读取层）、CSV 导出（含 UTF-8 BOM）、帮扶村模板生成；输出 JSON 并与
+  `scripts/gate_baselines/bench_baseline.json` 比较，**超基线 50% 只 WARN**（CI 机器噪声大，
+  硬阈值只会制造假红），`--strict` 才非 0。首测基线：xlsx 解析 **0.322s** / CSV **0.005s** /
+  模板生成 **0.052s**（5,000 行）。已注册进 `run_gates --slow`，配套 2 例阈值语义测试
+  （50% 边界、rows 不参与比较）。
+
 ### Tests
 
 - 新增 `backend/tests/unit/test_gate_entrypoints.py`（8 例）：CI worklow 里出现的**每个**

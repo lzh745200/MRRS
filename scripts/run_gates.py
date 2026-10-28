@@ -119,6 +119,8 @@ GATES: List[Gate] = [
           why="分支覆盖率棘轮（需新鲜 coverage-branch.json；默认跳过，--slow 启用）"),
     _gate("upgrade_rehearsal", "scripts/upgrade_rehearsal.py", backend=True, slow=True,
           why="旧库升级演练（慢，需后端依赖）"),
+    # 性能基线只报警不阻断（CI 机器噪声大），--slow 时纳入观察
+    _gate("bench", "scripts/bench.py", slow=True, why="关键路径性能基线（只报警不阻断）"),
     # 打 tag 前确认 main 的 PR Checks 已 success（需 gh 已登录 + 网络，默认跳过）
     _gate("main_ci", "scripts/check_main_ci.py", slow=True, why="tag 前确认 main CI 已绿"),
 ]

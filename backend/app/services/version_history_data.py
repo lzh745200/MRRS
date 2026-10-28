@@ -3474,6 +3474,11 @@ VERSION_HISTORY_DATA = [
                 "守卫，不再用宽松断言吞掉契约变化；"
             ),
             (
+                "scripts/bench.py（关键路径性能基线，只报警不阻断）：固定 5,000 行数据测三条热路径 ——xlsx 解析（经统一读取层）、CSV 导出（含 UTF-8 BOM）、帮扶村"
+                "模板生成；输出 JSON 并与scripts/gate_baselines/bench_baseline.json 比较，超基线 50% 只 WARN（CI 机器噪声大，硬阈值只会制造假红"
+                "），--strict 才非 0。"
+            ),
+            (
                 "新增 backend/tests/unit/test_gate_entrypoints.py（8 例）：CI worklow 里出现的每个check_*.py 必须在统一入口注册（防漏跑）"
                 "、注册脚本必须真实存在、门禁名唯一、../scripts/门禁必须在 backend 下运行；no-print 的正/负/误报三例；dist 体积棘轮的增长检测与容差边界。"
             ),

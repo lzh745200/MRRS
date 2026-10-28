@@ -120,3 +120,21 @@ class TestDistSizeGate:
 
         assert gate.compare({"total_bytes": 1020, "file_count": 3, "br_count": 1}, baseline) == []
         assert gate.compare({"total_bytes": 1100, "file_count": 3, "br_count": 1}, baseline)
+
+class TestBenchCompare:
+    """性能基线只报警不阻断：阈值 50%，rows 不参与比较。"""
+
+    def test_compare_flags_only_beyond_threshold(self):
+        bench = _load("bench", "scripts/bench.py")
+        baseline = {"rows": 5000, "xlsx_parse_s": 1.0, "csv_export_s": 0.1, "template_build_s": 0.5}
+
+        assert bench.compare({"rows": 5000, "xlsx_parse_s": 1.4, "csv_export_s": 0.1,
+                              "template_build_s": 0.5}, baseline) == []
+
+        problems = bench.compare({"rows": 5000, "xlsx_parse_s": 1.6, "csv_export_s": 0.1,
+                                  "template_build_s": 0.5}, baseline)
+        assert len(problems) == 1 and "xlsx_parse_s" in problems[0]
+
+    def test_rows_key_is_never_compared(self):
+        bench = _load("bench2", "scripts/bench.py")
+        assert bench.compare({"rows": 999999, "xlsx_parse_s": 1.0}, {"xlsx_parse_s": 1.0}) == []
