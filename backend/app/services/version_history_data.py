@@ -3424,6 +3424,10 @@ VERSION_HISTORY_DATA = [
                 "免点清零）。check_soft_delete_usage、check_doc_numbers --full、check_type_debt 复跑全绿。"
             ),
             (
+                "分段执行器单实例锁（scripts/run_backend_tests_segmented.py）：两个会话同时跑 12 段时，后启动的一方会在清理阶段重置 .coverage，先启动那次"
+                "覆盖率从 100% 掉成 28%/53% ——现象是「12 段全 PASS 但覆盖率门禁红」，本轮实测两次。"
+            ),
+            (
                 "新增元测试 electron/tests/build-temp-wiring.test.js（3 例）：锁住「三个构建脚本必须经包装脚本」「包装脚本必须改 TEMP/TMP/TMPDIR "
                 "且有失败兜底」「.scratch/ 必须被忽略」，防止后人把它简化回裸 vite build 而无声复发。npm run test:electron 14 passed。"
             ),

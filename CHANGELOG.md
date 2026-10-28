@@ -27,6 +27,17 @@
   `except Exception 802 → 801`（只紧不松）、软删除基线 29 条重新收敛（STALE 豁免点清零）。
   `check_soft_delete_usage`、`check_doc_numbers --full`、`check_type_debt` 复跑全绿。
 
+
+### Added
+
+- **分段执行器单实例锁**（`scripts/run_backend_tests_segmented.py`）：两个会话同时跑 12 段时，
+  后启动的一方会在清理阶段重置 `.coverage`，先启动那次覆盖率从 100% 掉成 28%/53% ——
+  现象是「12 段全 PASS 但覆盖率门禁红」，本轮实测两次。现在用 `O_CREAT|O_EXCL` 原子锁 +
+  pid 存活探测（陈旧锁自动接管），第二个进程直接得到可读提示并退出码 3，
+  也可 `--wait-lock 秒数` 排队。**踩坑**：Windows 上 `os.kill(pid, 0)` 走 TerminateProcess 语义，
+  会把正在跑的会话杀掉 —— 存活探测必须用 `OpenProcess + GetExitCodeProcess`（已按此实现）。
+  新增 5 例回归（`test_segmented_runner_lock.py`）。
+
 ### Tests
 
 - 新增元测试 `electron/tests/build-temp-wiring.test.js`（3 例）：锁住「三个构建脚本必须

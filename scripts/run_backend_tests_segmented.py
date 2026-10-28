@@ -40,6 +40,9 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
 COVERAGE_FILE = BACKEND_DIR / ".coverage"
 LOG_DIR = BACKEND_DIR.parent / "logs" / "pytest-segments"
+# 单实例锁：两个会话同时跑全量会互相重置 `.coverage` → 覆盖率假红（实测 28%/53%/82%）。
+# 锁文件放在 backend/ 下（.gitignore 已忽略 .coverage* 之外的临时文件需显式忽略，见下）。
+LOCK_FILE = BACKEND_DIR / ".pytest-segmented.lock"
 
 # (段名, 目标路径/glob 模式, 是否最后一段)
 # 与 `.github/workflows/pr-checks.yml` 的 12 个 step 一一对应。
@@ -176,6 +179,101 @@ def run_segment(index, name, patterns, is_final, keep_logs, cov_file=None, cov_c
     return proc.returncode
 
 
+def _pid_alive(pid: int) -> bool:
+    """进程是否还活着（用于识别崩溃遗留的陈旧锁）。
+
+    注意：Windows 上绝不能直接用 os.kill(pid, 0) —— 它对任意 sig 都走
+    TerminateProcess 语义，会把**正在跑的那个会话**杀掉（2026-10-28 实测）。
+    这里改为 OpenProcess + GetExitCodeProcess 的只读探测。
+    """
+    if pid <= 0:
+        return False
+
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+            if not handle:
+                return False
+            try:
+                code = ctypes.c_ulong()
+                if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                    return False
+                return code.value == 259  # STILL_ACTIVE
+            finally:
+                kernel32.CloseHandle(handle)
+        except Exception:  # pragma: no cover - 极端平台差异
+            return False
+
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    except Exception:  # pragma: no cover
+        return True
+    return True
+
+
+def acquire_run_lock(lock_path: Path = LOCK_FILE, wait_seconds: int = 0) -> bool:
+    """获取「同一时刻只允许一个分段全量」的锁（跨进程、跨平台、纯标准库）。
+
+    背景（2026-10-28 实测两次）：两个会话同时跑 12 段时，后启动的会在清理阶段
+    重置 `.coverage`，先启动的那次覆盖率判定就从 100% 掉成 28%/53% —— 表现为
+    "12 段全 PASS 但覆盖率门禁红"，排查成本极高。加锁后第二个进程会直接得到
+    可读提示，而不是静默互相破坏。
+
+    实现：O_CREAT|O_EXCL 原子创建锁文件并写入 pid；已存在时读 pid 判断存活，
+    陈旧锁（进程已退出）自动接管。wait_seconds>0 时轮询等待。
+
+    Returns:
+        True = 已持有锁；False = 超时仍未获取。
+    """
+    deadline = time.time() + max(wait_seconds, 0)
+    while True:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, str(os.getpid()).encode("ascii"))
+            finally:
+                os.close(fd)
+            return True
+        except FileExistsError:
+            stale = False
+            try:
+                holder = int(lock_path.read_text(encoding="ascii").strip() or "0")
+            except (OSError, ValueError):
+                holder = 0
+            if holder and not _pid_alive(holder):
+                stale = True
+            elif not holder:
+                # 空/不可读的锁文件：可能是创建瞬间被读到，给它一次机会
+                time.sleep(0.2)
+                try:
+                    stale = lock_path.stat().st_size == 0
+                except OSError:
+                    stale = True
+            if stale:
+                try:
+                    lock_path.unlink()
+                except OSError:
+                    pass
+                continue
+            if time.time() >= deadline:
+                return False
+            time.sleep(1.0)
+
+
+def release_run_lock(lock_path: Path = LOCK_FILE) -> None:
+    """释放锁（只删自己持有的那个文件；进程崩溃时依赖 pid 存活探测接管）。"""
+    try:
+        if lock_path.exists():
+            lock_path.unlink()
+    except OSError:  # pragma: no cover - 并发删除/只读介质
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="按 CI 12 段运行后端测试")
     parser.add_argument("--segment", type=int, help="只跑指定段（1-12）")
@@ -198,6 +296,13 @@ def main():
         action="store_true",
         help="跳过跑完后的统一覆盖率判定（仅排障用）",
     )
+    parser.add_argument(
+        "--wait-lock",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help="另一个分段全量正在运行时的等待秒数（默认 0：立即退出；999 等很久）",
+    )
     args = parser.parse_args()
 
     if args.list:
@@ -208,6 +313,24 @@ def main():
     if not BACKEND_DIR.is_dir():
         print(f"找不到 backend 目录: {BACKEND_DIR}", file=sys.stderr)
         return 1
+
+    # 单实例锁（2026-10-28）：两个会话同时跑 12 段会互相重置 .coverage，
+    # 表现为「12 段全 PASS 但覆盖率门禁红」（实测 28%/53%），排错成本极高。
+    if not acquire_run_lock(wait_seconds=args.wait_lock):
+        holder = ""
+        try:
+            holder = LOCK_FILE.read_text(encoding="ascii").strip()
+        except OSError:
+            pass
+        print(
+            f"另一个分段全量正在运行（锁 {LOCK_FILE}，pid={holder or '?'}）：\n"
+            "  并发跑会互相重置 .coverage 导致覆盖率假红。\n"
+            "  处理：等它跑完；或删掉该锁文件（确认无进程在跑）；"
+            "或加 --wait-lock 秒数 排队。",
+            file=sys.stderr,
+        )
+        return 3
+    atexit.register(release_run_lock)
 
     # 覆盖率门禁依赖 backend/.coveragerc 的 fail_under；文件缺失时 pytest-cov 退回默认
     # 配置，门禁会【静默失效】（历史踩坑：清理分片误删它）。此处 fail-fast。
