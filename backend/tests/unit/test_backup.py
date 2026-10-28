@@ -89,16 +89,23 @@ class TestCreateBackup:
 
         安全性依据：本端点只在服务器上生成文件、不返回内容；下载 / 恢复 / 删除
         仍由 require_admin 把关，故放开创建不会造成跨组织数据外流。
+
+        这里把 service 打桩：本用例要验的是**授权口径**，不是备份机制。原写法真跑
+        create_backup（真的落盘 + 写库），在「大量备份用例同进程」时会因外部状态
+        （备份目录/库连接被前序用例改过）返回 500，表现成随机失败。
         """
         regular = MagicMock()
         regular.role = "user"
         regular.is_superuser = False
         regular.username = "user"
-        with patch("app.core.security.get_current_user", return_value=regular):
+        with patch("app.api.v1.system.backup.get_backup_service") as mock_get_svc, \
+                patch("app.core.security.get_current_user", return_value=regular):
+            mock_get_svc.return_value.create_backup.return_value = MagicMock()
             resp = client_with_regular_user_auth.post(
                 BASE, json={}, headers={"Authorization": "Bearer fake-token"}
             )
-        assert resp.status_code == 200, resp.text
+            assert resp.status_code == 200, resp.text
+            mock_get_svc.return_value.create_backup.assert_called_once()
 
     def test_viewer_cannot_create(self, client_with_regular_user_auth):
         """viewer 是只读角色，不应产生写副作用。"""
@@ -125,16 +132,22 @@ class TestCreateBackup:
         assert resp.status_code == 403, resp.text
 
     def test_superuser_flag_bypasses_role_check(self, client_with_regular_user_auth):
-        """显式 is_superuser 标记即使 role 为空也放行（历史账号）。"""
+        """显式 is_superuser 标记即使 role 为空也放行（历史账号）。
+
+        同 test_regular_user_can_create：service 打桩，用例只钉授权口径。
+        """
         su = MagicMock()
         su.role = ""
         su.is_superuser = True
         su.username = "root"
-        with patch("app.core.security.get_current_user", return_value=su):
+        with patch("app.api.v1.system.backup.get_backup_service") as mock_get_svc, \
+                patch("app.core.security.get_current_user", return_value=su):
+            mock_get_svc.return_value.create_backup.return_value = MagicMock()
             resp = client_with_regular_user_auth.post(
                 BASE, json={}, headers={"Authorization": "Bearer fake-token"}
             )
-        assert resp.status_code == 200, resp.text
+            assert resp.status_code == 200, resp.text
+            mock_get_svc.return_value.create_backup.assert_called_once()
 
 
 # ── list_backups ─────────────────────────────────────────────────────
