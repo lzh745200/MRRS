@@ -219,6 +219,15 @@ jobs:
       # ① setup-node 启用 npm 缓存（~/.npm）；② fetch 重试 + 超时；
       # ③ npm ci 5 轮递增退避且 --prefer-offline（网络不可达时优先命中缓存）；
       # ④ 全部失败后 npm install 兜底（只救网络，lock 漂移由 npm ci 前几轮先行拦截）。
+      # 2026-10-28（v1.18.24）：带 restore-keys 的 ~/.npm 缓存。
+      # setup-node 的缓存 key 绑死 lock 文件，lock 一变即 miss；restore-keys 让**上一次的
+      # 旧缓存**也能复用 —— 配合 install 步骤首试 `npm ci --offline`，缓存命中时零网络安装。
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
       - name: Install frontend dependencies
         run: |
           cd frontend
@@ -233,6 +242,12 @@ jobs:
           # `--prefer-offline` 仍需全量下载，于是「重试 5 次 + 兜底」全部落在同一故障窗口。
           # 镜像只在默认源失败后启用，产物语义不变（仍是 npm ci + package-lock）。
           MIRROR="https://registry.npmmirror.com"
+          # 首试：完全离线（只吃 ~/.npm 缓存）。缓存命中时**零网络**即可安装 ——
+          # 这是 registry 整段不可达时唯一还能出包的路径；未命中会秒失败，不影响后续在线重试。
+          if npm ci --legacy-peer-deps --offline --no-fund --no-audit; then
+            echo "npm ci OK (offline cache)"
+            exit 0
+          fi
           for i in 1 2 3 4 5; do
             echo "===== npm ci attempt $i (default registry) ====="
             if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
@@ -698,6 +713,13 @@ jobs:
       # 2026-10-06 的 5b63d72 运行即因本步骤失败（同一批次里带重试的 frontend-check
       # 反而通过），而失败形态只有一个"Run cd frontend"步骤名，真因被完全掩盖。
       # 与 frontend-check 保持同款：提高 fetch 重试/超时 + 外层 3 次幂等重试。
+      # 2026-10-28（v1.18.24）：同 frontend-check，带 restore-keys 的 ~/.npm 缓存
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
       - name: Install frontend deps and Playwright browser
         run: |
           cd frontend
@@ -710,6 +732,11 @@ jobs:
           # ECONNRESET 时（本仓实测同一 commit 重跑两次仍红）改用镜像再试，避免 E2E 作业
           # 因下载依赖失败而阻断整轮 PR Checks（进而阻断 tag 发布的 release gate）。
           MIRROR="https://registry.npmmirror.com"
+          # 首试：完全离线（只吃 ~/.npm 缓存）。缓存命中时**零网络**即可安装 ——
+          # 这是 registry 整段不可达时唯一还能出包的路径；未命中会秒失败，不影响后续在线重试。
+          if npm ci --legacy-peer-deps --offline --no-fund --no-audit; then
+            echo "npm ci OK (offline cache)"
+          else
           for i in 1 2 3 4 5; do
             echo "===== npm ci attempt $i (default registry) ====="
             if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
@@ -737,6 +764,7 @@ jobs:
             echo "npm ci attempt $i failed; retrying in $((i * 20))s"
             sleep $((i * 20))
           done
+          fi
           for i in 1 2 3; do
             echo "===== playwright install attempt $i ====="
             if npx playwright install chromium --with-deps; then

@@ -40,6 +40,14 @@
   Windows %TEMP% ACL 构建兜底、门禁统一入口 + no-print/dist 棘轮、mypy 1394→1385、
   as any 196→172 等），避免 Release 正文落到兜底占位。
 
+### Changed（补：离线缓存优先）
+
+- **`pr-checks.yml` 的 `frontend-check` / `e2e-test` 加「离线缓存优先」**：
+  先给 `~/.npm` 叠一层带 **restore-keys** 的 `actions/cache`（setup-node 的缓存 key 绑死
+  `package-lock.json`，lock 一变即 miss，这正是重试全落在同一故障窗口的原因），
+  安装时**首试 `npm ci --offline`**（只吃本地缓存，零网络），未命中才走原有的
+  5 轮退避 → 镜像兜底 → `npm install`。缓存命中时 registry 整段不可达也能装出依赖。
+
 ### Tests
 
 - `npm run test:electron` **14 例全过**（含 ci-wiring 守护：发布门禁等待预算 /
