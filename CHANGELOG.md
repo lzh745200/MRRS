@@ -5,6 +5,47 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.21] - 2026-10-28 — 门禁统一入口 + no-print/dist 两道棘轮 + 端点口径写明
+
+> **背景**：体检时 29 道门禁调用方式各异，我一天内踩了三次"门禁自己跑不起来"（cwd 错、
+> 缺 --json/--baseline、GBK 控制台崩），差点被误判成代码红；同时发现"生产代码 print"
+> 这类在桌面端**永远看不到输出**的问题没有任何约束，前端产物膨胀也没有上限。
+
+### Added
+
+- **`scripts/run_gates.py`（门禁统一入口）**：把「每个门禁在哪跑、带什么参数」固化成注册表
+  （37 道，含 3 道需外部产物的慢门禁），本地一条命令与 CI 同款；支持 `--list / --only / --json /
+  --slow / --stop-on-fail`。需要 `coverage-branch.json` 或 gh 网络的慢门禁默认 SKIP（不伪装成绿），
+  避免用陈旧覆盖率产物制造假红。
+- **`scripts/check_no_print.py`（no-print 门禁）**：生产代码禁止 print —— 桌面端无控制台窗口，
+  print 输出用户与排障都看不到。允许项仅 2 处（`main.py` 启动横幅、`logging_config` handler
+  关闭兜底），均属 logger 不可用的兜底路径。**先纠错**：体检时按 `print(` 粗匹配得到 38 处，
+  实际是误报（命中了 `fingerprint(` / `setup_print(`）；本门禁用行首锚定，真正的 print 只有 3 行。
+- **`scripts/check_dist_size.py`（前端产物体积棘轮）**：dist 总字节 / 文件数 / br 数三项对比基线，
+  超基线 +5% 即失败；当前基线 **9.2 MB / 674 文件 / 114 个 br**。接进 Windows 与 ARM64 出包流水线
+  （构建之后、上传产物之前）。
+
+### Changed
+
+- **CI 接线**：`pr-checks.yml` 的 static-analysis 加 `check_no_print.py`；`build-windows.yml` 与
+  `build-arm64.yml` 在 `npm run build` 之后加 `check_dist_size.py`。
+- **端点计数口径写明**（CLAUDE.md）：`check_doc_numbers` 统计 `/api` 前缀端点（**845**），
+  另有 4 条非 `/api` 路由（`/health`、`/favicon.ico`、`/version.json`、SPA catch-all），
+  全部路由合计 **849**（`check_route_auth` 口径）。两个数字不是矛盾，避免再次被误读成"删了接口"。
+
+### Fixed
+
+- **`scripts/run_backend_tests_segmented.py` 的一处裸 pragma**（`# pragma: no cover` 无理由）
+  → 补理由，`check_pragma_reasons --max-bare 0` 恢复全绿（此前门禁在总 222 处 pragma 里恰好卡
+  这 1 处）。
+
+### Tests
+
+- 新增 `backend/tests/unit/test_gate_entrypoints.py`（8 例）：CI worklow 里出现的**每个**
+  `check_*.py` 必须在统一入口注册（防漏跑）、注册脚本必须真实存在、门禁名唯一、`../scripts/`
+  门禁必须在 backend 下运行；no-print 的正/负/误报三例；dist 体积棘轮的增长检测与容差边界。
+- 新增 `backend/tests/unit/test_segmented_runner_lock.py`（5 例，见上一版）。
+- `python scripts/run_gates.py` 一键跑 33 道（默认档）结果：PASS 31 / SKIP 2 / FAIL 0。
 ## [1.18.20] - 2026-10-28 — 构建链路兜底（Windows %TEMP% ACL）+ 门禁自身健壮性
 
 > **起因**：本轮全量体检发现 `npm run build` 在本机**直接失败**（不是警告）：

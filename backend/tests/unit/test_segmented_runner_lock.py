@@ -74,5 +74,7 @@ def test_wait_lock_times_out_and_returns_false(tmp_path):
 
 def test_release_is_idempotent_when_lock_missing(tmp_path):
     runner = _load_runner()
+    missing = tmp_path / "never-existed.lock"
 
-    runner.release_run_lock(tmp_path / "never-existed.lock")  # 不得抛错
+    runner.release_run_lock(missing)  # 不得抛错
+    assert not missing.exists()

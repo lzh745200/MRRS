@@ -3438,4 +3438,42 @@ VERSION_HISTORY_DATA = [
             "全量门禁复跑（30 道）仅剩 3 处调用方式问题（需 --json/--baseline 或 cwd=backend），修正调用后全绿；关键功能定向回归 182 passed。",
         ],
     },
+    {
+        "version": "1.18.21",
+        "date": "2026-10-28",
+        "description": "门禁统一入口 + no-print/dist 两道棘轮 + 端点口径写明",
+        "features": [
+            (
+                "scripts/run_gates.py（门禁统一入口）：把「每个门禁在哪跑、带什么参数」固化成注册表（37 道，含 3 道需外部产物的慢门禁），本地一条命令与 CI 同款；支持 --li"
+                "st / --only / --json /--slow / --stop-on-fail。需要 coverage-branch.json 或 gh 网络的慢门禁默认 SKIP（不伪装成绿"
+                "），避免用陈旧覆盖率产物制造假红。"
+            ),
+            (
+                "scripts/check_no_print.py（no-print 门禁）：生产代码禁止 print —— 桌面端无控制台窗口，print 输出用户与排障都看不到。允许项仅 2 处（ma"
+                "in.py 启动横幅、logging_config handler关闭兜底），均属 logger 不可用的兜底路径。"
+            ),
+            (
+                "scripts/check_dist_size.py（前端产物体积棘轮）：dist 总字节 / 文件数 / br 数三项对比基线，超基线 +5% 即失败；当前基线 9.2 MB / 674"
+                " 文件 / 114 个 br。接进 Windows 与 ARM64 出包流水线（构建之后、上传产物之前）。"
+            ),
+            (
+                "CI 接线：pr-checks.yml 的 static-analysis 加 check_no_print.py；build-windows.yml 与build-arm64.yml 在"
+                " npm run build 之后加 check_dist_size.py。"
+            ),
+            (
+                "端点计数口径写明（CLAUDE.md）：check_doc_numbers 统计 /api 前缀端点（845），另有 4 条非 /api 路由（/health、/favicon.ico、/"
+                "version.json、SPA catch-all），全部路由合计 849（check_route_auth 口径）。两个数字不是矛盾，避免再次被误读成\"删了接口\"。"
+            ),
+            (
+                "scripts/run_backend_tests_segmented.py 的一处裸 pragma（# pragma: no cover 无理由）→ 补理由，check_pragma_r"
+                "easons --max-bare 0 恢复全绿（此前门禁在总 222 处 pragma 里恰好卡这 1 处）。"
+            ),
+            (
+                "新增 backend/tests/unit/test_gate_entrypoints.py（8 例）：CI worklow 里出现的每个check_*.py 必须在统一入口注册（防漏跑）"
+                "、注册脚本必须真实存在、门禁名唯一、../scripts/门禁必须在 backend 下运行；no-print 的正/负/误报三例；dist 体积棘轮的增长检测与容差边界。"
+            ),
+            "新增 backend/tests/unit/test_segmented_runner_lock.py（5 例，见上一版）。",
+            "python scripts/run_gates.py 一键跑 33 道（默认档）结果：PASS 31 / SKIP 2 / FAIL 0。",
+        ],
+    },
 ]

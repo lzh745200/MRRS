@@ -76,6 +76,10 @@ jobs:
         working-directory: ./frontend
         run: npm run build 2>&1  # stderr 重定向避免 GitHub Actions 误标失败注释
 
+      # 产物体积棘轮（2026-10-28）：与 Windows 出包同口径
+      - name: Frontend bundle size ratchet
+        run: python scripts/check_dist_size.py
+
       - name: Upload frontend artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -155,6 +155,13 @@ jobs:
           # 将 Vite/Rollup 的进度输出误判为错误并产生 false annotation
           npm run build 2>&1
 
+      # 产物体积棘轮（2026-10-28）：总字节/文件数/br 数只紧不松；
+      # 无意膨胀（多引主题/重复瓦片/压缩产物翻倍）在这里就被拦下，而不是等用户
+      # 抱怨安装包变大。确属功能需要时人工 --update 并在 CHANGELOG 说明。
+      - name: Frontend bundle size ratchet
+        shell: bash
+        run: python scripts/check_dist_size.py
+
       # M55（2026-10-14）：此处原有 "Sync frontend to resources"（cp frontend/dist →
       # resources/frontend）。已删除——electron-builder 的 extraResources 直接以
       # `from: frontend/dist` 复制到安装包内 resources/frontend（electron/main.js

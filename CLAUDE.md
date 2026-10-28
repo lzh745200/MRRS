@@ -77,7 +77,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,883 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 14,891 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -215,6 +215,10 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     `backend/tests/unit/test_stack_alignment_gate_r35.py`（含负向用例：注入坏路径必须被抓到并非 0 退出）。
   - **新增/修改端点或前端 api 函数后必须跑这个门禁**，否则 CI 的 `Stack alignment check` 会拦。
 
+- **端点计数口径** (2026-10-28): `check_doc_numbers.py` 统计的是 **`/api` 前缀**端点（**845**）；
+  另有 4 条非 `/api` 路由（`/health`、`/favicon.ico`、`/version.json`、SPA catch-all），
+  全部 FastAPI 路由合计 **849**（由 `check_route_auth.py` 统计）。两个数字不是矛盾，是口径不同 ——
+  讨论端点数量时请写明口径，避免像 v1.18.18 那样"校正 849 → 845"被误读为删了接口。
 - **W22 功能迭代** (2026-10-18, v1.14.0):
   - **一户一档**：新表 `households` / `household_members` / `household_risk_records`；API `/households/*`；
     预警规则（连续未走访 >90 天且非一般户→medium；大病/住房不安全/突发困难→high，服务层实时计算不落库）；

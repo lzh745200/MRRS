@@ -566,6 +566,10 @@ jobs:
       # 缘起：v1.18.1 交付当日代码与发布都改了，更新日志漏记 4 条最贵的踩坑
       # （E2E 选择器失效、Release 正文 0 字符、Windows runner 上 shell 崩溃、哈希写死必过期）。
       # 纯标准库 + 只读 package.json，故放在本作业（无需安装 backend 依赖）。
+      # 生产代码禁止 print（2026-10-28）：桌面端无控制台窗口，print 输出用户与排障都看不到；
+      # 允许项仅 2 处（main.py 启动横幅 / logging_config handler 关闭兜底）。
+      - name: No-print guard (logging single exit)
+        run: python scripts/check_no_print.py
       - name: Changelog freshness check
         run: python scripts/check_changelog.py
       # 应用内更新日志一致性门禁：backend/app/services/version_history_data.py 必须由

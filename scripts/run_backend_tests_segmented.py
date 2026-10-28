@@ -211,7 +211,7 @@ def _pid_alive(pid: int) -> bool:
         os.kill(pid, 0)
     except OSError:
         return False
-    except Exception:  # pragma: no cover
+    except Exception:  # pragma: no cover - 非 POSIX/非 Windows 的异常实现兜底
         return True
     return True
 
