@@ -101,10 +101,23 @@ export const getPolicyRelated = (policyId: number) => get(`/policies/${policyId}
 export const batchDeletePolicies = (ids: number[]) => post('/policies/batch-delete', { ids })
 
 // ── Import/export ──
+/** 导入错误明细（后端逐行回报） */
+export interface PolicyImportError {
+  row?: number
+  title?: string
+  error?: string
+}
+
+export interface PolicyImportResult {
+  imported?: number
+  failed?: number
+  errors?: PolicyImportError[]
+}
+
 export const importPolicies = (file: File) => {
   const fd = new FormData()
   fd.append('file', file)
-  return post('/policies/import', fd, {
+  return post<PolicyImportResult>('/policies/import', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }

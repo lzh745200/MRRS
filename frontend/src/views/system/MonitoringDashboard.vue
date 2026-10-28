@@ -599,13 +599,26 @@ function pushHistory(cpu: number, mem: number, disk: number) {
   if (history.value.length > maxHistory) history.value.shift()
 }
 
+/**
+ * 监控类接口的响应形状有三种：裸载荷、信封 `{data}`、再包一层 `{data:{data}}`。
+ * 统一在这里解包，调用方拿到内层对象即可 —— 以前每处都写 `(res as any)?.data?.data ?? ...`。
+ */
+function unwrapMonitorPayload<T extends Record<string, unknown>>(raw: unknown): T {
+  const body = raw as { data?: unknown } | null | undefined
+  const first = body?.data
+  if (first && typeof first === 'object' && 'data' in (first as Record<string, unknown>)) {
+    return ((first as { data?: unknown }).data ?? {}) as T
+  }
+  return (first ?? {}) as T
+}
+
 // ── Data fetching ──
 async function fetchSnapshot() {
   try {
     const res = await get('/system/monitor/snapshot')
-    const data = (res as any)?.data?.data ?? (res as any)?.data ?? {}
-    snapshot.value = data
-    return data as SnapshotData | null
+    const data = unwrapMonitorPayload<Record<string, unknown>>(res)
+    snapshot.value = data as unknown as SnapshotData
+    return snapshot.value
   } catch {
     snapshot.value = null
     return null
@@ -619,8 +632,8 @@ async function fetchApiStats() {
       url: '/system/monitor/api-stats',
       params: { hours: 24 },
     })
-    const data = (res as any)?.data?.data ?? (res as any)?.data ?? {}
-    apiStats.value = data?.top_endpoints ?? []
+    const data = unwrapMonitorPayload<{ top_endpoints?: typeof apiStats.value }>(res)
+    apiStats.value = data.top_endpoints ?? []
     return apiStats.value
   } catch {
     apiStats.value = []
@@ -631,9 +644,9 @@ async function fetchApiStats() {
 async function fetchHealth() {
   try {
     const res = await get('/health/full')
-    const data = (res as any)?.data ?? {}
-    healthData.value = data
-    return data as HealthData | null
+    const data = unwrapMonitorPayload<Record<string, unknown>>(res)
+    healthData.value = data as unknown as HealthData
+    return healthData.value
   } catch {
     healthData.value = null
     return null
@@ -650,8 +663,10 @@ async function fetchHealthChecks() {
     const res = await get('/system/health/full')
     const elapsed = Math.round(performance.now() - start)
     responseTime.value = elapsed
-    const data = (res as any)?.data?.data ?? (res as any)?.data ?? {}
-    healthChecksData.value = data
+    healthChecksData.value = unwrapMonitorPayload<Record<string, boolean>>(res) as Record<
+      string,
+      boolean
+    >
   } catch {
     // Endpoint may not exist – derive from existing snapshot data
     const elapsed = Math.round(performance.now() - start)
@@ -682,7 +697,7 @@ async function refreshAll() {
 
     // 系统日志：优先展示后端真实日志（/system/admin/logs），后端不可用时回退资源摘要
     /* c8 ignore next -- fetchSystemLogs 内部已吞错，allSettled 永为 fulfilled（rejected 分支不可达） */
-    const sysLogsData = sysLogs.status === 'fulfilled' ? (sysLogs as any).value : null
+    const sysLogsData = 'value' in sysLogs ? sysLogs.value : null
     if (Array.isArray(sysLogsData) && sysLogsData.length) {
       recentLogs.value = sysLogsData
     } else if (snapData) {
@@ -877,14 +892,20 @@ watch(
 
 // ── Lifecycle ──
 let pollTimer: ReturnType<typeof setInterval> | null = null
+// 卸载标志：onMounted 里的 await 挂起期间组件可能已被销毁（用户进页面 1~3 秒就切走）。
+// 此时 onUnmounted 先执行、pollTimer 还是 null（清理成了空操作），await 归来后
+// 旧代码会照旧新建 interval → 已销毁的页面在后台每 30s 发 5 个请求并写已卸载的 ref。
+let unmounted = false
 
 onMounted(async () => {
   await refreshAll()
+  if (unmounted) return
   nextTick(() => buildChart())
   pollTimer = setInterval(refreshAll, 30000)
 })
 
 onUnmounted(() => {
+  unmounted = true
   if (pollTimer) clearInterval(pollTimer)
   if (chartInstance) chartInstance.dispose()
 })

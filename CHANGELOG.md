@@ -5,6 +5,48 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.24] - 2026-10-28 — 出包链路收口：v1.18.21~23 三个 tag 构建失败的根因修复
+
+> v1.18.21、v1.18.22、v1.18.23 三次 tag 构建**全部失败**，因此自 v1.18.17 之后再没
+> 产出过安装包。两轮排查定位到三个叠加缺陷（都在**发布流水线**，不在业务代码），
+> 本版把它们一并收口，确保下一次 tag 能真正出包。
+
+### Fixed
+
+- **Windows：`npm ci` 网络抖动直接堵死发布**（`build-windows.yml`）
+  `smoke-test` 作业的 `npm ci` 报 `npm error code ECONNRESET` → exit 152；而它是
+  `build-windows` 的 `needs` 前置，一抖整个 Windows 安装包**根本没开始构建**。
+  原写法只有一次 `|| npm install` 兜底，两次尝试落在同一段故障窗口里。
+  现改为 **三次退避重试**（20s/40s）+ `fetch-retries=5` /
+  `fetch-retry-mintimeout=20s` / `fetch-retry-maxtimeout=120s`，并在三次仍失败时
+  给出明确 `::error::`（"若日志是 ECONNRESET/ETIMEDOUT 属 CI 网络问题，重跑即可"）。
+  同一加固应用到主构建的 `Build frontend`。
+- **ARM64：构建"成功却无产物"**（`build-arm64.yml` + `Dockerfile.kylin-standalone`）
+  两个缺陷叠加：
+  1. **退避从未生效** —— `echo "... diagnostics ====="            sleep $((i * 60))`
+     写在同一行，`sleep` 被当成 `echo` 的**参数打印**，三次重试之间根本没有等待；
+  2. **失败被吞** —— `for ... done` 之后没有失败出口，步骤退出码取到最后一条
+     `echo`/`grep ... || true`，于是三次全红仍报 **success**；
+     问题被推到下一步才炸（`ls: cannot access 'dist/deb/output/*.deb'`），
+     表现成"构建成功却没有产物"，极难定位。
+  修复：`sleep` 拆独立行 + 循环后 `::error::` 与 `exit 1`；
+  同时给容器内 `npm install` 加 npm 重试参数与三次退避
+  （真实错误本来就是容器内 `npm error network ... ECONNRESET`）。
+
+### Added
+
+- `docs/04-部署文档/RELEASE_NOTES-v1.18.21.md`：v1.18.18→v1.18.21 的发布说明
+  （6 个系统接口不可达、4 条重复路由、路由鉴权门禁、大瓦片包导入超时 30s→15 分钟、
+  Windows %TEMP% ACL 构建兜底、门禁统一入口 + no-print/dist 棘轮、mypy 1394→1385、
+  as any 196→172 等），避免 Release 正文落到兜底占位。
+
+### Tests
+
+- `npm run test:electron` **14 例全过**（含 ci-wiring 守护：发布门禁等待预算 /
+  main 不取消 / check_main_ci 接线）；
+- 两个 build 工作流 YAML 可解析；全仓扫描"退避失效/失败被吞"同类模式，
+  仅 `pr-checks.yml` 的 playwright 重试疑似——细查其循环后第 721 行已有 `exit 1`，非隐患。
+
 ## [1.18.23] - 2026-10-28 — 发布收口重建（补齐应用内更新日志同步）
 
 > **为什么还要 1.18.23**：v1.18.22 的 tag 打在 `4dc1db7`，而该提交的
@@ -147,6 +189,18 @@
   rows)"` 内联箭头参数被推断为隐式 any（main 上 `vue-tsc` 因此变红，来自提交 `3ae18cd`），
   收敛为具名处理器 `handleBindSelectionChange(rows: PackSelectionRow[])`，并把 id 收紧为
   `number`（`bindPackUsers` 要的就是 number[]）。`vue-tsc` 0 错误，项目相关 **91 passed**。
+- **`as any` 政策列表 / 监控台 / 数据分级三片清零（144 → 131）**：
+  `api/policy.ts` 补 `PolicyImportResult`/`PolicyImportError`（逐行错误明细），列表页错误提示改用
+  `importErrors` 局部变量（顺带给 `result.imported` 补默认值 0，避免提示里出现 `undefined 条`）；
+  `views/system/MonitoringDashboard.vue` 抽出 `unwrapMonitorPayload()` 统一处理「裸载荷 / `{data}` /
+  `{data:{data}}`」三种监控响应形态（此前 4 处各自写 `(res as any)?.data?.data ?? ...`），
+  `allSettled` 结果改用 `'value' in result` 收窄；`system/DataTier.vue` 去掉对 `StorageStats`
+  索引签名的冗余断言，`listArchives` 返回类型由 `ArchiveList | Record<string, any>` 收窄为
+  `Partial<ArchiveList>`（两层归档各自可选，缺省即空列表）。
+  `vue-tsc` 0 错误，监控/分级相关 **91 passed**（监控 47 + 分级 44）。
+- **环境事件（记录，不掩盖）**：验证中发现 `frontend/node_modules` 被清空（只剩空目录）、
+  `backend/.venv` 的 mypy 也消失 —— 属于并发会话为出包做的依赖重建。已用 `npm ci` 恢复前端依赖
+  （543 包，约 1 分钟），逐条修完类型再复绿；mypy 待其 venv 重建完成后再验证下一批模块收紧。
 
 ### Added（批 3 起：性能基线）
 

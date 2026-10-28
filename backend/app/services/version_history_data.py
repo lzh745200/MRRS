@@ -3538,4 +3538,27 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.24",
+        "date": "2026-10-28",
+        "description": "出包链路收口：v1.18.21~23 三个 tag 构建失败的根因修复",
+        "features": [
+            (
+                "Windows：npm ci 网络抖动直接堵死发布（build-windows.yml）smoke-test 作业的 npm ci 报 npm error code ECONNRESET "
+                "→ exit 152；而它是build-windows 的 needs 前置，一抖整个 Windows 安装包根本没开始构建。原写法只有一次 || npm install 兜底，两次尝试落"
+                "在同一段故障窗口里。"
+            ),
+            "ARM64：构建\"成功却无产物\"（build-arm64.yml + Dockerfile.kylin-standalone）两个缺陷叠加",
+            (
+                "docs/04-部署文档/RELEASE_NOTES-v1.18.21.md：v1.18.18→v1.18.21 的发布说明（6 个系统接口不可达、4 条重复路由、路由鉴权门禁、大瓦片包导"
+                "入超时 30s→15 分钟、Windows %TEMP% ACL 构建兜底、门禁统一入口 + no-print/dist 棘轮、mypy 1394→1385、as any 196→172 "
+                "等），避免 Release 正文落到兜底占位。"
+            ),
+            "npm run test:electron 14 例全过（含 ci-wiring 守护：发布门禁等待预算 /main 不取消 / check_main_ci 接线）；",
+            (
+                "两个 build 工作流 YAML 可解析；全仓扫描\"退避失效/失败被吞\"同类模式，仅 pr-checks.yml 的 playwright 重试疑似——细查其循环后第 721 行已有"
+                " exit 1，非隐患。"
+            ),
+        ],
+    },
 ]

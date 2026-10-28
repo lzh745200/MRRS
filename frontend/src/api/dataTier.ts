@@ -97,7 +97,8 @@ export async function archiveModel(
 }
 
 /** 列出归档文件 */
-export async function listArchives(tier?: string): Promise<ArchiveList | Record<string, any>> {
+/** 归档列表：后端可能只返回某一层（cold/warm 各自可选） */
+export async function listArchives(tier?: string): Promise<Partial<ArchiveList>> {
   return get('/data-tier/archives', tier ? { tier } : undefined)
 }
 

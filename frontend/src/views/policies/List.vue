@@ -220,7 +220,7 @@ const policyStore = usePolicyStore()
 const authStore = useAuthStore()
 
 // Store uses different property names; bridge with computed
-const policiesData = computed(() => (policyStore as any).policyList ?? [])
+const policiesData = computed(() => policyStore.policyList ?? [])
 const loadError = ref(false)
 
 // 搜索表单
@@ -419,24 +419,22 @@ const handleImport = () => {
 
     try {
       const result = await importPolicies(file)
-      if ((result as any).errors && (result as any).errors.length > 0) {
-        const errorDetails = (result as any).errors
+      const importErrors = result.errors ?? []
+      if (importErrors.length > 0) {
+        const errorDetails = importErrors
           .slice(0, 5)
-          .map((err: any) => `第${err.row}行「${err.title}」: ${err.error}`)
+          .map((err) => `第${err.row ?? '?'}行「${err.title ?? ''}」: ${err.error ?? ''}`)
           .join('\n')
-        const moreText =
-          (result as any).errors.length > 5
-            ? `\n...还有 ${(result as any).errors.length - 5} 条错误`
-            : ''
+        const moreText = importErrors.length > 5 ? `\n...还有 ${importErrors.length - 5} 条错误` : ''
 
         ElMessage.warning({
-          message: `导入完成：成功${result.imported}条，${result.errors.length}条有错误`,
+          message: `导入完成：成功${result.imported ?? 0}条，${importErrors.length}条有错误`,
           duration: 5000,
         })
 
         // 显示详细错误对话框
         ElMessageBox.alert(
-          `导入完成：成功${result.imported}条，${result.errors.length}条有错误\n\n错误详情：\n${errorDetails}${moreText}`,
+          `导入完成：成功${result.imported ?? 0}条，${importErrors.length}条有错误\n\n详情：\n${errorDetails}${moreText}`,
           '导入结果',
           {
             confirmButtonText: '确定',

@@ -338,13 +338,13 @@ const totalSize = computed(() => {
 
 function countPercent(tier: string): number {
   if (totalCount.value === 0) return 0
-  const val = Number((stats.value as any)[`${tier}_count`]) || 0
+  const val = Number(stats.value[`${tier}_count`]) || 0
   return Math.round((val / totalCount.value) * 100)
 }
 
 function sizePercent(tier: string): number {
   if (totalSize.value === 0) return 0
-  const val = Number((stats.value as any)[`${tier}_size_mb`]) || 0
+  const val = Number(stats.value[`${tier}_size_mb`]) || 0
   return Math.round((val / totalSize.value) * 100)
 }
 
@@ -390,14 +390,9 @@ async function loadStats() {
 async function loadArchives() {
   try {
     const data = await dataTierApi.listArchives()
-    // handle both ArchiveList shape and Record<string, any> shape
-    if (data && 'cold_archives' in data) {
-      coldArchives.value = (data as any).cold_archives || []
-      warmArchives.value = (data as any).warm_archives || []
-    } else {
-      coldArchives.value = []
-      warmArchives.value = []
-    }
+    // 两层归档各自可选（后端可能只返回其中一层），缺省即空列表
+    coldArchives.value = data.cold_archives ?? []
+    warmArchives.value = data.warm_archives ?? []
   } catch {
     ElMessage.error('加载归档列表失败')
   }
