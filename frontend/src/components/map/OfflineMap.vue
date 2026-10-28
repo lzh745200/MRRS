@@ -34,6 +34,17 @@ interface RouteLine {
   label: string
 }
 
+/** 本组件只用到的 GeoJSON 字段（不引入 echarts 内部类型，避免深度依赖） */
+interface GeoFeature {
+  properties?: { name?: string; prefecture?: string; [key: string]: unknown }
+}
+interface GeoJson {
+  type?: string
+  features?: GeoFeature[]
+}
+/** registerMap 期望的 GeoJSON 载荷类型（从 echarts 类型反推，不写死内部路径） */
+type RegisterMapPayload = Parameters<typeof echarts.registerMap>[1]
+
 const props = withDefaults(
   defineProps<{
     width?: string
@@ -67,11 +78,11 @@ const emit = defineEmits<{
 
 const chartRef = ref<HTMLDivElement>()
 let chart: echarts.ECharts | null = null
-let geoJson: object | null = null
+let geoJson: GeoJson | null = null
 
 onMounted(async () => {
   if (props.geoJsonData) {
-    geoJson = props.geoJsonData
+    geoJson = props.geoJsonData as GeoJson
   } else {
     try {
       const module = await import('@/assets/geo/guizhou.json')
@@ -90,7 +101,7 @@ function initChart() {
   if (!chartRef.value || !geoJson) return
 
   chart = echarts.init(chartRef.value)
-  echarts.registerMap('guizhou', geoJson as any)
+  echarts.registerMap('guizhou', geoJson as RegisterMapPayload)
 
   renderMap()
 
@@ -129,13 +140,13 @@ function initChart() {
 function renderMap() {
   if (!chart) return
 
-  const features = (geoJson as any)?.features || []
+  const features = geoJson?.features ?? []
 
   // Build county → prefecture mapping
   const prefList: string[] = []
   const prefSet = new Set<string>()
   const countyPrefMap: Record<string, string> = {}
-  features.forEach((f: any) => {
+  features.forEach((f) => {
     const pref = f.properties?.prefecture || ''
     const name = f.properties?.name || ''
     if (pref && !prefSet.has(pref)) {
@@ -146,7 +157,7 @@ function renderMap() {
   })
 
   // 按 prefecture index 给每个县赋值（用于 series data）
-  const mapData = features.map((f: any) => {
+  const mapData = features.map((f) => {
     const pref = f.properties?.prefecture || ''
     const idx = prefList.indexOf(pref)
     return { name: f.properties?.name || '', value: idx >= 0 ? idx : 0 }
@@ -208,7 +219,7 @@ function renderMap() {
       itemStyle: {
         borderColor: '#999',
         borderWidth: 0.5,
-        borderType: 'dashed' as any,
+        borderType: 'dashed' as const,
         areaColor: '#f8f8f8',
       },
     },
@@ -317,8 +328,8 @@ watch(
   () => [props.markers, props.regionData, props.routeLines, props.originMarker, props.geoJsonData],
   async () => {
     if (props.geoJsonData && props.geoJsonData !== geoJson) {
-      geoJson = props.geoJsonData
-      echarts.registerMap('guizhou', geoJson as any)
+      geoJson = props.geoJsonData as GeoJson
+      echarts.registerMap('guizhou', geoJson as RegisterMapPayload)
     }
     await nextTick()
     renderMap()

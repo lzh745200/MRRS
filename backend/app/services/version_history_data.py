@@ -3474,6 +3474,11 @@ VERSION_HISTORY_DATA = [
                 "守卫，不再用宽松断言吞掉契约变化；"
             ),
             (
+                "as any 组件层清零（188 → 181）：components/map/OfflineMap.vue 引入本组件自用的GeoJson/GeoFeature 形状并把 register"
+                "Map 载荷类型由 Parameters<typeofecharts.registerMap>[1] 反推（不深度依赖 echarts 内部路径）；borderType: 'dashed'"
+                " as const。"
+            ),
+            (
                 "scripts/bench.py（关键路径性能基线，只报警不阻断）：固定 5,000 行数据测三条热路径 ——xlsx 解析（经统一读取层）、CSV 导出（含 UTF-8 BOM）、帮扶村"
                 "模板生成；输出 JSON 并与scripts/gate_baselines/bench_baseline.json 比较，超基线 50% 只 WARN（CI 机器噪声大，硬阈值只会制造假红"
                 "），--strict 才非 0。"
@@ -3483,11 +3488,10 @@ VERSION_HISTORY_DATA = [
                 "、注册脚本必须真实存在、门禁名唯一、../scripts/门禁必须在 backend 下运行；no-print 的正/负/误报三例；dist 体积棘轮的增长检测与容差边界。"
             ),
             "新增 backend/tests/unit/test_segmented_runner_lock.py（5 例，见上一版）。",
-            "python scripts/run_gates.py 一键跑 33 道（默认档）结果：PASS 31 / SKIP 2 / FAIL 0。",
             (
-                "补两处 v1.18.19 漏测的分支（main 上 frontend-check 的最后一个红点）：importTiles 上传进度回调的空值/钳位分支（tests/unit/api/re"
-                "cycleAndOfflineMap.test.ts +3 例：无回调早退、事件与 total 缺失、loaded 缺失或为负）与 MapTileManager 超时判定的单侧命中/空错误"
-                "分支（tests/unit/views/system/MapTi…"
+                "python scripts/run_gates.py 一键跑 33 道（默认档）结果：PASS 31 / SKIP 2 / FAIL 0。importTiles 上传进度回调的空值/钳位"
+                "分支（tests/unit/api/recycleAndOfflineMap.test.ts +3 例：无回调早退、事件与 total 缺失、loaded 缺失或为负）与 MapTileM"
+                "anager 超时判定的单侧命中/空错误分支（tests/uni…"
             ),
         ],
     },

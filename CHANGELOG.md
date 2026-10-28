@@ -47,6 +47,13 @@
   不再用宽松断言吞掉契约变化；`request.ts` 新增 `InternalRequestConfig`（拦截器内部标记，
   不进对外契约）。`vue-tsc` 0 错误，相关 19 个测试文件 **472 passed**。
   注：门禁按字面量计数，注释里出现该字样也会被计入 —— 注释措辞已同步改掉（188 为真实值）。
+- **`as any` 组件层清零（188 → 181）**：`components/map/OfflineMap.vue` 引入本组件自用的
+  `GeoJson`/`GeoFeature` 形状并把 `registerMap` 载荷类型由 `Parameters<typeof
+  echarts.registerMap>[1]` 反推（不深度依赖 echarts 内部路径）；`borderType: 'dashed' as const`。
+  `components/permission/PermissionAssignmentDrawer.vue` 抽出 `unwrapPayload()` 统一解包
+  信封/裸载荷，角色、权限、菜单三处响应改为显式形状取值（权限键顺手过滤非字符串）。
+  `vue-tsc` 0 错误、两文件 eslint 0 警告，相关组件测试 **55 passed**（OfflineMap 10 +
+  PermissionAssignmentDrawer 45）。
 
 ### Added（批 3 起：性能基线）
 

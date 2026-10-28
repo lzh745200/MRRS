@@ -247,12 +247,24 @@ function isStale(seq: number, userId: number): boolean {
   return seq !== loadSeq || props.user?.id !== userId
 }
 
+/**
+ * 后端响应有两种形态：信封 {data:...} 或裸载荷。这里统一解包，
+ * 返回 unknown 交调用方按具体形状取值 —— 避免宽松断言把契约变化静默吃掉。
+ */
+function unwrapPayload(raw: unknown): unknown {
+  if (raw && typeof raw === 'object' && 'data' in raw) {
+    const inner = (raw as { data?: unknown }).data
+    if (inner !== undefined && inner !== null) return inner
+  }
+  return raw
+}
+
 async function loadAllRoles(seq: number = loadSeq) {
   try {
-    const res = await get('/rbac/roles')
+    const raw: unknown = await get('/rbac/roles')
     if (seq !== loadSeq) return // 已有更新的加载，丢弃过期响应
-    const data = (res as any)?.data || res || []
-    allRoles.value = Array.isArray(data) ? data : []
+    const data = unwrapPayload(raw)
+    allRoles.value = Array.isArray(data) ? (data as RbacRole[]) : []
   } catch {
     if (seq !== loadSeq) return
     allRoles.value = []
@@ -265,11 +277,17 @@ async function loadCurrentPermissions(
 ) {
   if (!userId) return
   try {
-    const res = await get(`/rbac/user/${userId}/permissions`)
+    const raw: unknown = await get(`/rbac/user/${userId}/permissions`)
     if (isStale(seq, userId)) return // 用户已切换：丢弃属于上一个用户的响应
-    const payload = (res as any)?.data || res
-    const perms = payload?.permissions || payload || []
-    currentPermissions.value = Array.isArray(perms) ? perms : []
+    const payload = unwrapPayload(raw)
+    const declared =
+      payload && typeof payload === 'object' && 'permissions' in payload
+        ? (payload as { permissions?: unknown }).permissions
+        : undefined
+    const perms = Array.isArray(declared) ? declared : payload
+    currentPermissions.value = Array.isArray(perms)
+      ? perms.filter((key): key is string => typeof key === 'string')
+      : []
     permissionsLoadFailed.value = false
     loadedPermissionsUserId.value = userId
   } catch {
@@ -286,13 +304,16 @@ async function loadMenuConfig(
 ) {
   if (!userId) return
   try {
-    const res = await get(`/menus/user-menus/${userId}`)
+    const raw: unknown = await get(`/menus/user-menus/${userId}`)
     if (isStale(seq, userId)) return // 用户已切换：丢弃属于上一个用户的响应
-    const data = (res as any)?.data || res
+    const data = unwrapPayload(raw) as
+      | { menu_keys?: string[]; is_customized?: boolean; role_default_keys?: string[] }
+      | null
+      | undefined
     if (data) {
-      currentMenuKeys.value = data.menu_keys || []
-      isMenuCustomized.value = data.is_customized || false
-      roleDefaultKeys.value = data.role_default_keys || []
+      currentMenuKeys.value = data.menu_keys ?? []
+      isMenuCustomized.value = Boolean(data.is_customized)
+      roleDefaultKeys.value = data.role_default_keys ?? []
     }
   } catch {
     if (isStale(seq, userId)) return
