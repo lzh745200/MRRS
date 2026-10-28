@@ -104,7 +104,14 @@ jobs:
             sleep "${wait_s}"
           done
           if [ "${installed}" != "1" ]; then
-            echo "::error::npm ci 连续 3 次失败 —— 若日志为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑该作业"
+            echo "::warning::默认 registry 连续 3 次失败，改用镜像重试"
+            if npm ci --legacy-peer-deps --registry "https://registry.npmmirror.com"; then
+              installed=1
+              echo "npm ci OK via mirror"
+            fi
+          fi
+          if [ "${installed}" != "1" ]; then
+            echo "::error::npm ci 连续 3 次失败（默认源与镜像均失败）—— 若日志为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑该作业"
             exit 1
           fi
           npx vue-tsc --noEmit 2>&1 | tee "$RUNNER_TEMP/frontend-tsc.log"
@@ -188,7 +195,14 @@ jobs:
             sleep $((attempt * 20))
           done
           if [ "${installed}" != "1" ]; then
-            echo "::error::npm ci 连续 3 次失败 —— 若为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑"
+            echo "::warning::默认 registry 连续 3 次失败，改用镜像重试"
+            if npm ci --legacy-peer-deps --registry "https://registry.npmmirror.com"; then
+              installed=1
+              echo "npm ci OK via mirror"
+            fi
+          fi
+          if [ "${installed}" != "1" ]; then
+            echo "::error::npm ci 连续 3 次失败（默认源与镜像均失败）—— 若为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑"
             exit 1
           fi
           # 2>&1 将 stderr 重定向到 stdout，避免 GitHub Actions 在 Windows 上

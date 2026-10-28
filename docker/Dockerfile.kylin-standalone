@@ -48,7 +48,14 @@ RUN cd frontend \
         sleep $((attempt * 20)); \
     done; \
     if [ "${installed}" != "1" ]; then \
-        echo "ERROR: npm install 连续 3 次失败（多为容器内 registry 网络抖动）"; \
+        echo "npm install 默认源连续失败，改用镜像 registry.npmmirror.com"; \
+        if npm install --legacy-peer-deps --no-fund --no-audit \
+             --registry "https://registry.npmmirror.com" > /tmp/npm-install.log 2>&1; then \
+            installed=1; \
+        fi; \
+    fi; \
+    if [ "${installed}" != "1" ]; then \
+        echo "ERROR: npm install 连续 3 次失败（默认源与镜像均失败）"; \
         tail -30 /tmp/npm-install.log || true; \
         exit 1; \
     fi

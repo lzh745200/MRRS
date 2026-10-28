@@ -227,8 +227,14 @@ jobs:
           npm config set fetch-retry-maxtimeout 120000
           npm config set fetch-timeout 300000
           npm cache verify || true
+          # 2026-10-28（v1.18.24）：默认 registry 连续 ECONNRESET 时**切镜像重试**。
+          # 实测本仓 runner 的 registry 连接会整段不可用（同一 commit 重跑两次仍红），
+          # 而 setup-node 的缓存 key 绑在 package-lock.json 上 —— lock 一改缓存即 miss，
+          # `--prefer-offline` 仍需全量下载，于是「重试 5 次 + 兜底」全部落在同一故障窗口。
+          # 镜像只在默认源失败后启用，产物语义不变（仍是 npm ci + package-lock）。
+          MIRROR="https://registry.npmmirror.com"
           for i in 1 2 3 4 5; do
-            echo "===== npm ci attempt $i ====="
+            echo "===== npm ci attempt $i (default registry) ====="
             if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
               echo "npm ci OK (attempt $i)"
               exit 0
@@ -236,7 +242,16 @@ jobs:
             echo "npm ci attempt $i failed; retrying in $((i * 20))s"
             sleep $((i * 20))
           done
-          echo "::warning::npm ci 连续 5 次失败，回退 npm install --prefer-offline（网络兜底）"
+          echo "::warning::默认 registry 连续 5 次失败，改用镜像 $MIRROR 重试"
+          for i in 1 2 3; do
+            echo "===== npm ci attempt $i (mirror) ====="
+            if npm ci --legacy-peer-deps --no-fund --no-audit --registry "$MIRROR"; then
+              echo "npm ci OK via mirror (attempt $i)"
+              exit 0
+            fi
+            sleep $((i * 20))
+          done
+          echo "::warning::镜像 npm ci 也失败，回退 npm install --prefer-offline（网络兜底）"
           for i in 1 2; do
             if npm install --legacy-peer-deps --no-fund --no-audit --prefer-offline; then
               echo "npm install OK (attempt $i)"
@@ -691,18 +706,32 @@ jobs:
           npm config set fetch-retry-maxtimeout 120000
           npm config set fetch-timeout 300000
           npm cache verify || true
+          # 2026-10-28（v1.18.24）：与 frontend-check 同款镜像兜底 —— 默认 registry 整段
+          # ECONNRESET 时（本仓实测同一 commit 重跑两次仍红）改用镜像再试，避免 E2E 作业
+          # 因下载依赖失败而阻断整轮 PR Checks（进而阻断 tag 发布的 release gate）。
+          MIRROR="https://registry.npmmirror.com"
           for i in 1 2 3 4 5; do
-            echo "===== npm ci attempt $i ====="
+            echo "===== npm ci attempt $i (default registry) ====="
             if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
               echo "npm ci OK (attempt $i)"
               break
             fi
             if [ "$i" = "5" ]; then
-              echo "::warning::npm ci 连续 5 次失败，回退 npm install --prefer-offline"
-              npm install --legacy-peer-deps --no-fund --no-audit --prefer-offline || {
-                echo "::error::npm ci/npm install 连续失败 —— 疑似 registry 网络故障"
-                exit 1
-              }
+              echo "::warning::默认 registry 连续 5 次失败，改用镜像 $MIRROR"
+              INSTALLED=0
+              for j in 1 2 3; do
+                if npm ci --legacy-peer-deps --no-fund --no-audit --registry "$MIRROR"; then
+                  echo "npm ci OK via mirror (attempt $j)"; INSTALLED=1; break
+                fi
+                sleep $((j * 20))
+              done
+              if [ "$INSTALLED" != "1" ]; then
+                echo "::warning::镜像 ci 也失败，回退 npm install --prefer-offline"
+                npm install --legacy-peer-deps --no-fund --no-audit --prefer-offline || {
+                  echo "::error::npm ci/npm install 连续失败（默认源与镜像均失败）"
+                  exit 1
+                }
+              fi
               break
             fi
             echo "npm ci attempt $i failed; retrying in $((i * 20))s"
