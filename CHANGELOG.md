@@ -5,6 +5,34 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.22] - 2026-10-28 — 发布收口：换 tag 重建 + 修复两处交付前回归
+
+> **为什么有 1.18.22 而不是直接发 1.18.21**：`v1.18.21` 标签当时打在 `fe5c395` 上，
+> 而该提交比收口基线落后 9 个提交；其 tag 构建的 `smoke-test` 作业在
+> **Frontend release smoke subset** 步骤失败——真实原因是 GitHub runner 上
+> `npm ci` 连续两次 `ECONNRESET`（exit 152），前端冒烟子集根本没跑起来，
+> 不是代码缺陷。已发布的 tag 不改写，因此把**同一批变更 + 收口修复**以
+> `v1.18.22` 重新出包，让 tag 指向真正验证过的提交。
+
+### Fixed（交付收口 · 实测复现的回归）
+
+- **`api/milestones.ts` 的 `milestoneProgress` 在 `items` 为 `null`/`undefined` 时抛
+  `TypeError`**（`tests/unit/api/milestones.test.ts` 2 例红）：信封守卫只容忍"缺 `items` 键"，
+  不容忍响应体本身为 `null`/`undefined`（204 空体、接口降级返回）。改为显式
+  `{ items?: T[] } | null | undefined` + 可选链，未回退到宽松断言。修复后 13/13 绿。
+- **政策编辑页不再臆造 `status` 默认值**：`|| 'draft'` 会让"详情省略 status"的已发布政策
+  在用户保存时被静默降级为草稿（且与新增表单默认 `active` 矛盾）。改为只透传。
+- **两处过时测试断言按真实契约更新**：`getLevelOptions` 现按真实契约**无参**调用
+  （后端不接收分类参数）；结对页帮扶村 mock 补齐 `villageName`（后端 `to_dict` 两种都返回）。
+- **`types/policy.ts` 缺文件尾换行**导致 `lint:check`（`--max-warnings=0`）失败，会拦 CI lint 作业。
+
+### Changed
+
+- 版本号单源同步到 **1.18.22**（`node scripts/sync-version.js --write --version 1.18.22`，
+  14 个目标文件；`--check` 通过）。文档（README 本版亮点 / docs/INDEX 索引 /
+  RELEASE_NOTES-v1.18.22）与三份 PPT（介绍 56 页 / 零基础 44 页 / 操作培训 60 页）
+  同步到本版版本与实测数字（后端 **14,896** 用例 / 前端 **7,384** 用例）。
+
 ## [1.18.21] - 2026-10-28 — 门禁统一入口 + no-print/dist 两道棘轮 + 端点口径写明
 
 > **背景**：体检时 29 道门禁调用方式各异，我一天内踩了三次"门禁自己跑不起来"（cwd 错、

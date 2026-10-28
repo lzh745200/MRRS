@@ -1,14 +1,32 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.21
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.22
 
-![Version](https://img.shields.io/badge/version-1.18.21-blue)
+![Version](https://img.shields.io/badge/version-1.18.22-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
+![Tests](https://img.shields.io/badge/tests-22%2C280-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.18）
+## 本版亮点（v1.18.22）
+
+- **门禁统一入口 `scripts/run_gates.py`**：29 道门禁的「在哪跑 / 带什么参数 / 编码怎么设」
+  固化成注册表，本地一条命令与 CI 同款；收口实测 **34 道 PASS / 0 FAIL / 0 SKIP**。
+  背景很实在：一天内三次"门禁自己跑不起来"（cwd 错、缺 `--json`、GBK 控制台崩），
+  差点被误判成代码红
+- **新增三道门禁**：`no-print`（桌面端没有控制台，`print` 输出用户和排障都看不到）、
+  `dist_size`（前端产物体积棘轮，当前 9.2 MB / 674 文件 / 114 个 .br）、
+  `bench`（关键路径性能基线，5,000 行 xlsx 解析 0.32s / CSV 导出 0.005s / 模板生成 0.05s；只报警不阻断）
+- **修掉一处真实回归**：`milestoneProgress` 在响应体为 `null`/`undefined` 时抛
+  `TypeError`（"as any 清零"把守卫改成了只容忍"信封里缺 items 键"）—— 改为显式
+  `| null | undefined` + 可选链，**不**回退到宽松断言
+- **端点计数口径写明**：`check_doc_numbers` 统计 `/api` 前缀端点 **845**；全部 FastAPI 路由
+  合计 **849**（含 `/health`、`/favicon.ico`、`/version.json`、SPA catch-all）。两个数字是口径差异，
+  不是删了接口
+- **分段测试执行器加单实例锁**：根治"并发跑全量 → `.coverage` 被重置 → 覆盖率假红"
+- **技术债继续单向下压**：mypy **1394 → 1385**；`as any` **196 → 172**
+
+## 历史亮点（v1.18.18）
 
 - **修掉 6 个系统接口全部不可达**：`system.py` 与聚合器重复加了 `/system` 前缀，实际注册成 `/api/v1/system/system/info` —— 正确路径**全部 404**（含关机/重启），因无人调用一直没被发现；顺带清掉 `config_package` 重复注册多出的 4 条错误路径，路由总数 853 → 849
 - **新增路由认证覆盖门禁**：`api_v1_router` 无全局认证依赖，少写一行 `Depends` 就是越权入口；门禁用运行时依赖树递归判定，58 个无认证路由逐个核查并登记理由（**无真实漏洞**）
@@ -86,7 +104,7 @@
   **前端 TS interface ↔ 后端 Pydantic 字段**，专治"单测全绿、真机全废"；上线即抓到两处契约漂移
   （行业模型列名与 `r42` 迁移不一致、数据上报 schema 字段名与 service 返回不一致）并已修复
 - **100% 覆盖率门禁真绿复验**：发现 `backend/.coveragerc` 被误删导致 `fail_under=100` 静默失效
-  （12/12 段"通过"实为 99%），恢复后补齐 7 处缺口，现为 **46,237 语句 / 11,558 分支，Miss 0 / BrPart 0**
+  （12/12 段"通过"实为 99%），恢复后补齐 7 处缺口，现为 **46,243 语句 / 11,560 分支，Miss 0 / BrPart 0**
 - **离线可靠性**：备份携带 PII 密钥指纹（跨机恢复 409 + 显式放行 + 审计）、备份启动补跑、
   `OFFLINE_MODE` 统一开关、`/health` 暴露时钟漂移与 WAL 状态
 - **介质链路治理**（v1.17.0 起）：四类包统一**整包查重（SHA256）+ 导入台账 + 回执**、
@@ -117,11 +135,11 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-27（v1.18.15）— 后端 14,870 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-28（v1.18.22）— 后端 14,896 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
-> 46,237 语句 / 11,558 分支，Miss 0 / BrPart 0）；
-> 前端 **347 个 `.test.ts` / 7,374 用例、12 组 glob 100%**；E2E 199（含 44 页视觉回归基线）；
+> 46,243 语句 / 11,560 分支，Miss 0 / BrPart 0）；
+> 前端 **347 个 `.test.ts` / 7,384 用例、12 组 glob 100%**；E2E 199（含 44 页视觉回归基线）；
 > flake8 app+scripts 0 / vue-tsc 0 / eslint 0 / 硬编码色 146（棘轮 146/146）/ 版本单一来源一致 /
 > Alembic 单 head（63 版本，r43）/ 门禁脚本全绿（含三层对齐、零断言棘轮、同步覆盖率、菜单对齐、单 head 迁移）
 
