@@ -299,7 +299,7 @@ async function handleGenerateMachinePassCode() {
         machine_code: machineForm.machine_code.trim(),
         description: machineForm.description.trim() || undefined,
       })
-      const passCode = (response as any)?.pass_code ?? (response as any)?.data?.pass_code
+      const passCode = response?.pass_code ?? response?.data?.pass_code
       if (passCode) {
         machineGeneratedPassCode.value = passCode
         ElMessage.success('通行码生成成功')
@@ -402,8 +402,8 @@ const loadOrganizations = async () => {
     if (Array.isArray(response)) {
       treeData = response
     } else if (response && typeof response === 'object' && 'data' in response) {
-      const dataField = (response as any).data
-      treeData = Array.isArray(dataField) ? dataField : []
+      const dataField: unknown = (response as { data?: unknown }).data
+      treeData = Array.isArray(dataField) ? (dataField as OrganizationTreeNode[]) : []
     }
     organizationList.value = flattenTree(treeData)
   } catch (error) {
@@ -421,7 +421,7 @@ const handleOrganizationChange = async (orgId: number) => {
   try {
     const response = await getOrganizationVerificationCode(orgId)
     // 兼容两种响应格式：展开后的顶层字段 或 嵌套在 data 中
-    const code = response?.verification_code ?? (response as any)?.data?.verification_code
+    const code = response?.verification_code ?? response?.data?.verification_code
     if (code) {
       generateForm.verification_code = code
     } else {
@@ -444,7 +444,7 @@ const handleGenerate = async () => {
       generating.value = true
       const response = await createOrganizationPassCode(generateForm)
       // 兼容两种响应格式
-      const passCode = response?.pass_code ?? (response as any)?.data?.pass_code
+      const passCode = response?.pass_code ?? response?.data?.pass_code
       if (passCode) {
         generatedPassCode.value = passCode
         ElMessage.success('通行证码生成成功')

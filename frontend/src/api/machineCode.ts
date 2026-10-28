@@ -55,7 +55,14 @@ export function createMachineCode(data: {
   description?: string
   pass_code?: string
 }) {
-  return apiRequest<{ code: number; pass_code: string; id: number }>({
+  // 后端可能直接返回 {pass_code,id}，也可能包一层 {data:{...}}；两种都写进类型，
+  // 视图就不必再用宽松断言兜底。
+  return apiRequest<{
+    code: number
+    pass_code?: string
+    id?: number
+    data?: { pass_code?: string }
+  }>({
     url: '/machine-code/admin/create',
     method: 'post',
     data,

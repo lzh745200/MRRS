@@ -407,7 +407,8 @@ const handleCreate = async () => {
       ElMessage.success('机器码录入成功')
 
       // 显示生成的通行码
-      generatedPassCode.value = response.pass_code
+      // 兼容顶层 pass_code 与信封 {data:{pass_code}}；缺失时回退空串（不显示 undefined）
+      generatedPassCode.value = response.pass_code ?? response.data?.pass_code ?? ''
       passCodeDialogVisible.value = true
 
       // 刷新列表

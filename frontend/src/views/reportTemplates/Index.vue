@@ -564,7 +564,7 @@ async function loadModuleFieldsForFill(module: string) {
 }
 
 async function handleFillExport() {
-  const XLSX = (await import('xlsx')) as any
+  const XLSX = await import('xlsx')
   const header = fillFields.value.map((f) => f.label || f.key)
   const row = fillFields.value.map((f) => fillRow.value[f.key] ?? '')
   const ws = XLSX.utils.aoa_to_sheet([header, row])
@@ -654,18 +654,28 @@ function onFilterChange() {
   // displayTemplates 是 computed，自动响应
 }
 
+/**
+ * 报表模板列表响应：兼容「直接数组 / {data:[...]} / {items:[...]}」三种历史形态。
+ * 以前在 loadTemplates 里三层三元表达式 + 宽松断言，读起来像猜谜；收敛为具名函数。
+ */
+interface TemplateListPayload {
+  data?: Template[]
+  items?: Template[]
+}
+
+function pickTemplateList(raw: unknown): Template[] {
+  if (Array.isArray(raw)) return raw as Template[]
+  const payload = raw as TemplateListPayload | null | undefined
+  if (Array.isArray(payload?.data)) return payload.data
+  return payload?.items ?? []
+}
+
 // API
 async function loadTemplates() {
   loading.value = true
   try {
     const data = await get('/report-templates')
-    // 兼容多种后端响应格式: 直接数组 / { data: [...] } / { items: [...] }
-    const list = Array.isArray(data)
-      ? data
-      : Array.isArray((data as any)?.data)
-        ? (data as any).data
-        : (data as any)?.items || []
-    templates.value = list as Template[]
+    templates.value = pickTemplateList(data)
   } catch {
     templates.value = []
   } finally {

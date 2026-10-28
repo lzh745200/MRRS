@@ -20,17 +20,27 @@ export type OrganizationPassCodeResponse = {
 }
 
 /** 获取组织校验码 — 返回已解包数据，可直接访问 .verification_code */
+/** 兼容两种形态：展开后的顶层字段，或包一层 data */
+export type VerificationCodePayload = {
+  verification_code?: string
+  organization_id?: number
+  organization_name?: string
+  data?: { verification_code?: string }
+}
+
 export const getOrganizationVerificationCode = (orgId: number) =>
-  get<{ verification_code: string; organization_id: number; organization_name: string }>(
-    `/machine-code/organization/${orgId}/verification-code`
-  )
+  get<VerificationCodePayload>(`/machine-code/organization/${orgId}/verification-code`)
 
 /** 创建组织通行证码 — 返回已解包数据，可直接访问 .pass_code */
+export type CreatedPassCodePayload = {
+  pass_code?: string
+  id?: number
+  organization_id?: number
+  data?: { pass_code?: string }
+}
+
 export const createOrganizationPassCode = (data: CreateOrganizationPassCodeRequest) =>
-  post<{ pass_code: string; id: number; organization_id: number }>(
-    '/machine-code/organization/create',
-    data
-  )
+  post<CreatedPassCodePayload>('/machine-code/organization/create', data)
 
 /** 查询组织通行证码列表 — 返回已解包数据，可直接访问 .items / .total */
 export const getOrganizationPassCodeList = (params?: {

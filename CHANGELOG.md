@@ -198,6 +198,15 @@
   索引签名的冗余断言，`listArchives` 返回类型由 `ArchiveList | Record<string, any>` 收窄为
   `Partial<ArchiveList>`（两层归档各自可选，缺省即空列表）。
   `vue-tsc` 0 错误，监控/分级相关 **91 passed**（监控 47 + 分级 44）。
+- **`as any` 报表模板 / 通行码两片清零（131 → 123）**：
+  `reportTemplates/Index.vue` 的 `(await import('xlsx')) as any` 实测**根本不需要断言**（依赖自带类型），
+  模板列表三层三元表达式收敛为 `pickTemplateList()`（直接数组 / `{data}` / `{items}` 三形态）；
+  通行码链路把「顶层字段或 `data` 信封」两种形态**写进 API 返回类型**
+  （`machineCode.createMachineCode`、`organizationPassCode.getOrganizationVerificationCode` /
+  `createOrganizationPassCode`），`organization/PassCodeManagement.vue` 去掉 4 处断言。
+  **连带修掉一个真缺陷**：`admin/MachineCodeManagement.vue` 直接赋 `response.pass_code` 给
+  `ref<string>`，类型收紧后暴露「信封形态下会是 `undefined`」—— 改为 `pass_code ?? data?.pass_code ?? ''`，
+  不再把 `undefined` 塞进展示字段。`vue-tsc` 0 错误，报表/通行码相关 **84 passed**。
 - **环境事件（记录，不掩盖）**：验证中发现 `frontend/node_modules` 被清空（只剩空目录）、
   `backend/.venv` 的 mypy 也消失 —— 属于并发会话为出包做的依赖重建。已用 `npm ci` 恢复前端依赖
   （543 包，约 1 分钟），逐条修完类型再复绿；mypy 待其 venv 重建完成后再验证下一批模块收紧。
