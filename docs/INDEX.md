@@ -40,7 +40,7 @@ docs/
 ├── 02-用户手册/          # 使用指南、经费/审批/备份/权限包/数据分析/介质导入与自检操作说明
 ├── 03-开发文档/          # 00-需求规格说明书 / 01-架构设计 / 02-开发指南 / 03-API文档 / 04-安全文档 /
 │                         # 05-性能优化 / 06-运维文档 / 07-UI设计规范 / 08-数据设计
-├── 04-部署文档/          # Windows/Linux/Docker 部署 + OFFLINE_UPGRADE + RELEASE_NOTES-v1.18.18
+├── 04-部署文档/          # Windows/Linux/Docker 部署 + OFFLINE_UPGRADE + RELEASE_NOTES-v1.18.22
 ├── adr/                  # 架构决策记录（ADR-0001 ~ ADR-0012）
 ├── agents/               # 本地工单 / 标签 / 领域文档约定（供 AI Agent 使用）
 ├── design/               # UI 精细化设计契约（tokens / pages / components）+ 大屏方案
