@@ -213,6 +213,12 @@
   `api/supportedVillage.ts` 的 `getYearlyData` 改为**泛型**（默认 `YearlyDataPayload`，调用方传自己的
   具体类型），年度数据不再靠宽松断言赋值。两个详情页里的私有过渡字段 `_transitionFundingItems`
   也改为显式扩展类型后 `delete`。`vue-tsc` 0 错误，政策/帮扶村相关 **260 passed**（11 个文件）。
+- **`as any` 数据看板 / 角色管理清零（114 → 103）**：`api/dashboard.ts` 补
+  `DashboardStatsPayload` / `YearlyTrendsPayload`（trends 四项 + 三年数组，索引签名放行扩展字段）；
+  图表 `click` 回调改为 `(params) => void handleRegionClick(params)` —— echarts 要求回调返回
+  `boolean|void`，直接传 async 函数会被类型拒绝（原写法只能 `as any` 绕过）；
+  角色页 4 处模板断言收敛为 `toRoleItem(row)` 单一收窄点（el-table 插槽 row 是宽泛的
+  `DefaultRow`，与 `RoleItem` 不兼容）。`vue-tsc` 0 错误，看板/角色相关 **106 passed**。
 - **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
   bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
   会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；

@@ -59,7 +59,7 @@
         <el-table-column prop="description" label="描述" min-width="200" />
         <el-table-column label="用户数" width="100" align="center">
           <template #default="{ row }">
-            <el-button type="text" @click="handleViewUsers(row as any)">
+            <el-button type="text" @click="handleViewUsers(toRoleItem(row))">
               {{ row.userCount }} 人
             </el-button>
           </template>
@@ -74,9 +74,9 @@
         </el-table-column>
         <el-table-column label="操作" width="250" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" @click="handleEdit(row as any)">编辑</el-button>
-            <el-button type="success" @click="handlePermission(row as any)">权限</el-button>
-            <el-button type="danger" @click="handleDelete(row as any)">删除</el-button>
+            <el-button type="primary" @click="handleEdit(toRoleItem(row))">编辑</el-button>
+            <el-button type="success" @click="handlePermission(toRoleItem(row))">权限</el-button>
+            <el-button type="danger" @click="handleDelete(toRoleItem(row))">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -206,6 +206,8 @@ import { useDesensitize } from '@/composables/useDesensitize'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { get, post, put, del } from '@/api/request'
 
+/** el-table 插槽的 row 是宽泛的 DefaultRow，统一在此收窄（避免模板里 4 处宽松断言） */
+
 interface RoleItem {
   id: string
   name: string
@@ -214,6 +216,11 @@ interface RoleItem {
   userCount: number
   createTime: string
   status: string
+}
+
+/** el-table 插槽 row → RoleItem（唯一收窄点） */
+function toRoleItem(row: unknown): RoleItem {
+  return row as RoleItem
 }
 
 interface RoleUser {

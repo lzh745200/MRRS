@@ -316,7 +316,7 @@ const sparkReal = ref<Record<'villages' | 'population' | 'income' | 'investment'
 async function fetchKpiTrends() {
   try {
     const [statsRes, yearlyRes] = await Promise.all([getDashboardStats(false), getYearlyTrends(5)])
-    const t = (statsRes as any)?.trends ?? {}
+    const t = statsRes?.trends ?? {}
     kpiTrends.value = {
       villages: t.villages ?? 0,
       population: t.population_yoy ?? 0,
@@ -324,10 +324,10 @@ async function fetchKpiTrends() {
       investment: t.funds ?? 0,
     }
     sparkReal.value = {
-      villages: (yearlyRes as any)?.villages ?? [],
-      population: (yearlyRes as any)?.population ?? [],
-      income: (yearlyRes as any)?.income ?? [],
-      investment: ((yearlyRes as any)?.trends ?? []).map((r: any) => r?.total_actual ?? 0),
+      villages: yearlyRes?.villages ?? [],
+      population: yearlyRes?.population ?? [],
+      income: yearlyRes?.income ?? [],
+      investment: (yearlyRes?.trends ?? []).map((r) => r.total_actual ?? 0),
     }
   } catch (e) {
     logger.warn('KPI趋势获取失败，使用默认值', e)
@@ -602,7 +602,7 @@ const updateCharts = async () => {
 
     try {
       // 后端 years 参数上限 10（ge=1, le=10），超限会 422
-      const trendData = (await getYearlyTrends(Math.min(years.length, 10))) as any
+      const trendData = await getYearlyTrends(Math.min(years.length, 10))
       if (trendData && trendData.years) {
         years = trendData.years
         villagesData = trendData.villages ?? villagesData
@@ -861,7 +861,10 @@ const initCharts = () => {
   // 主图表
   if (regionChartRef.value) {
     regionChart = echarts.init(regionChartRef.value, getCurrentTheme())
-    regionChart.on('click', handleRegionClick as any)
+    // echarts 回调要求返回 boolean|void；异步处理用 void 丢弃返回值（不阻塞事件派发）
+    regionChart.on('click', (params) => {
+      void handleRegionClick(params)
+    })
   }
   if (investmentChartRef.value) {
     investmentChart = echarts.init(investmentChartRef.value, getCurrentTheme())
@@ -889,13 +892,17 @@ const initCharts = () => {
 // 事件处理
 // =========================================================================
 
-const handleRegionClick = async (params: { name: string }) => {
+// echarts 的 click 回调参数是 ECElementEvent（含 name 等字段）；这里按 unknown 接收再收窄，
+// 既满足 chart.on 的签名，也不必用宽松断言。
+const handleRegionClick = async (raw: unknown) => {
+  const name = (raw as { name?: unknown } | null)?.name
+  if (typeof name !== 'string' || !name) return
   try {
-    drillDownTitle.value = `${params.name} - 详细数据`
+    drillDownTitle.value = `${name} - 详细数据`
     drillDownData.value = await drillDown({
       // 后端钻取维度为 province（非 region）
       dimension: 'province',
-      value: params.name,
+      value: name,
     })
   } catch (error) {
     logger.error('钻取查询失败:', error)

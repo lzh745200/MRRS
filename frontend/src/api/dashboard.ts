@@ -8,7 +8,18 @@ import { get, post, put, del, apiRequest } from '@/api/request'
 const BASE_URL = '/dashboard'
 
 /** 获取仪表盘统计数据 */
-export function getDashboardStats(refresh?: boolean): Promise<any> {
+/** 概览统计（视图只读 trends 四项，用索引签名放行其它字段） */
+export interface DashboardStatsPayload {
+  trends?: {
+    villages?: number
+    population_yoy?: number
+    income_yoy?: number
+    funds?: number
+  }
+  [key: string]: unknown
+}
+
+export function getDashboardStats(refresh?: boolean): Promise<DashboardStatsPayload> {
   return apiRequest({
     method: 'GET',
     url: `${BASE_URL}/stats`,
@@ -58,6 +69,16 @@ export function getKpiTrends(): Promise<any> {
 }
 
 /** 年度趋势对比数据 */
-export function getYearlyTrends(years?: number): Promise<any> {
+/** 年度趋势（years/villages/population/income 为对齐的数组，trends 为明细） */
+export interface YearlyTrendsPayload {
+  years?: number[]
+  villages?: number[]
+  population?: number[]
+  income?: number[]
+  trends?: Array<{ total_actual?: number } & Record<string, unknown>>
+  [key: string]: unknown
+}
+
+export function getYearlyTrends(years?: number): Promise<YearlyTrendsPayload> {
   return get(`${BASE_URL}/yearly-trends`, { years: years ?? 5 })
 }
