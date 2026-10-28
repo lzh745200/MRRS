@@ -773,7 +773,13 @@ async def restore_backup(
         file_path = _resolve_backup_file_path(body.filename)
 
         svc = get_backup_service(db)
-        result = svc.restore_backup(
+        # R19：恢复是比备份更重的同步活（zip 解压 + 覆盖数据库文件 + PRAGMA
+        # integrity_check + 上传目录 copytree），且内部 maintenance_window 会
+        # **轮询等待在途请求归零**。此前直接跑在事件循环线程上 → 在途计数由
+        # async 中间件递减，事件循环被占死时永远降不下来，于是固定空转满 10s
+        # 并打 ERROR，随后整个恢复期间全站无响应（登录/健康检查/前端轮询全挂）。
+        result = await run_in_thread(
+            svc.restore_backup,
             file_path,
             password=_resolve_auto_backup_password(body.password),
             allow_key_mismatch=body.allow_key_mismatch,
@@ -937,9 +943,10 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
                     detail="上传的文件不是有效的备份包（缺少数据库文件 data/rural_revitalization.db）",
                 )
 
-        # 调用恢复逻辑
+        # 调用恢复逻辑（同 /restore：同步重活必须离开事件循环，见上方说明）
         svc = get_backup_service(db)
-        result = svc.restore_backup(
+        result = await run_in_thread(
+            svc.restore_backup,
             file_path,
             password=password,
             allow_key_mismatch=allow_key_mismatch,

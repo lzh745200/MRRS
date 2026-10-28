@@ -77,6 +77,31 @@ class TestReadUploadWithLimit:
         assert data == b""
 
 
+class TestDataPackageStreamingUpload:
+    """数据包上传必须边读边写，不得先在内存拼出完整 100MB bytes。"""
+
+    @pytest.mark.asyncio
+    async def test_exact_chunk_then_eof(self):
+        from app.api.v1.data.data.data_packages import _UPLOAD_CHUNK_SIZE, _stream_upload_to_file
+
+        source = type("Source", (), {"read": AsyncMock(side_effect=[b"a" * _UPLOAD_CHUNK_SIZE, b""])})()
+        dest = io.BytesIO()
+        total = await _stream_upload_to_file(source, dest, _UPLOAD_CHUNK_SIZE, "too large")
+        assert total == _UPLOAD_CHUNK_SIZE
+        assert len(dest.getvalue()) == _UPLOAD_CHUNK_SIZE
+
+    @pytest.mark.asyncio
+    async def test_over_limit_does_not_write_oversized_chunk(self):
+        from app.api.v1.data.data.data_packages import _UPLOAD_CHUNK_SIZE, _stream_upload_to_file
+
+        source = type("Source", (), {"read": AsyncMock(return_value=b"a" * (_UPLOAD_CHUNK_SIZE + 1))})()
+        dest = io.BytesIO()
+        with pytest.raises(HTTPException) as exc:
+            await _stream_upload_to_file(source, dest, _UPLOAD_CHUNK_SIZE, "too large")
+        assert exc.value.status_code == 413
+        assert dest.getvalue() == b""
+
+
 class TestZipGuards:
     """压缩炸弹防护（R2 第三层）。"""
 

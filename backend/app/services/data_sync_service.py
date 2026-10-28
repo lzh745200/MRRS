@@ -88,6 +88,19 @@ _SYNC_TABLE_LABELS = {
 _ALLOWED_TABLES = _ALLOWED_TABLES | frozenset(_SYNC_TABLE_LABELS)
 
 
+def _sha256_of_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """分块计算文件 SHA-256。
+
+    原先用 ``path.read_bytes()`` 整包读入再哈希：512MB 的数据包会额外占用
+    512MB 峰值内存（外加一份 bytes 拷贝）。分块读取把峰值压到 1MB。
+    """
+    digest = _hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 @dataclass
 class ExportConfig:
     """导出配置参数对象"""
@@ -317,7 +330,9 @@ class DataSyncService:
 
         with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             # 保存数据JSON
-            zipf.writestr("data.json", json.dumps(export_data, ensure_ascii=False, indent=2))
+            # 不缩进：data.json 主要供程序解析，indent=2 会让大包序列化体积膨胀约
+            # 30%~50%，在 100MB 量级上直接放大内存峰值与压缩耗时。
+            zipf.writestr("data.json", json.dumps(export_data, ensure_ascii=False, separators=(",", ":")))
 
             # 如果需要，打包上传文件
             if include_files:
@@ -417,8 +432,9 @@ class DataSyncService:
                 # 这一分支（原内联 try/except 只能靠完整 import_package 流程触发）。
                 self._apply_report_ledger(db, import_data, result)
 
-                # 更新同步日志
-                sync_log.status = "completed"
+                # 更新同步日志（有逐表错误时不能标记为 completed / success）
+                result_success = not result["errors"]
+                sync_log.status = "completed" if result_success else "failed"
                 sync_log.total_records = result["total_records"]
                 sync_log.success_records = result["success_records"]
                 sync_log.failed_records = result["failed_records"]
@@ -427,9 +443,9 @@ class DataSyncService:
                 sync_log.details = result
                 safe_commit(db, self.logger)
 
-                result["success"] = True
+                result["success"] = result_success
                 result["sync_log_id"] = sync_log.id
-                result["message"] = "数据导入成功"
+                result["message"] = "数据导入成功" if result_success else "数据导入完成，但存在失败项"
 
                 self.logger.info("data_imported: %s", result)
                 return result
@@ -888,6 +904,7 @@ class DataSyncService:
                 # 准备导出数据
                 export_data = {}
                 total_records = 0
+                export_errors: Dict[str, str] = {}
 
                 for table_name in tables_to_export:
                     if table_name not in self.syncable_tables:
@@ -899,8 +916,16 @@ class DataSyncService:
                         total_records += len(records)
                         self.logger.info(f"表 {table_name} 导出 {len(records)} 条记录")
                     except Exception as e:
-                        self.logger.warning(f"导出表 {table_name} 失败: {str(e)}")
-                        export_data[table_name] = []
+                        # 缺表的包在目标机就是“静默丢数据”，不能继续产出完整包。
+                        export_errors[table_name] = str(e)
+                        self.logger.error(f"导出表 {table_name} 失败: {str(e)}")
+
+                if export_errors:
+                    raise BusinessLogicError(
+                        "数据导出不完整，已中止：" + "；".join(
+                            f"{table}={error}" for table, error in export_errors.items()
+                        )
+                    )
 
                 # 准备元数据
                 metadata = {
@@ -919,14 +944,17 @@ class DataSyncService:
                     "metadata": metadata,
                     "data": export_data,
                 }
-                create_encrypted_package(
+                # 加密打包是纯 CPU 重活（PBKDF2-SHA256 迭代 600k 次 + 全量 AES-GCM），
+                # 跑在事件循环上会让导出期间全站请求排队，必须移入线程池。
+                await run_in_thread(
+                    create_encrypted_package,
                     data=package_data,
                     output_path=str(package_path),
                     password=password,
                 )
 
-                # 计算文件哈希
-                file_hash = _hashlib.sha256(package_path.read_bytes()).hexdigest()
+                # 计算文件哈希（分块读取：既避免整包进内存，也避免阻塞事件循环）
+                file_hash = await run_in_thread(_sha256_of_file, package_path)
                 file_size = package_path.stat().st_size
 
                 # 保存导出记录
@@ -1003,7 +1031,11 @@ class DataSyncService:
 
             # 读取并解密文件 (AES-256-GCM + PBKDF2-SHA256)
             try:
-                package_data = extract_encrypted_package(str(package_file), password)
+                # 解密与读包同属同步重活（PBKDF2 600k 次 + 整包读入/解密），
+                # 跑在事件循环上会让导入期间全站请求排队，必须移入线程池。
+                package_data = await run_in_thread(
+                    extract_encrypted_package, str(package_file), password
+                )
             except ValueError as e:
                 raise BusinessLogicError(str(e))
 
@@ -1062,8 +1094,9 @@ class DataSyncService:
                         result["errors"].append(error_msg)
                         self.logger.error(error_msg)
 
-                # 更新同步日志
-                sync_log.status = "completed"
+                # 更新同步日志（逐表错误必须反映到 success 与日志状态）
+                result_success = not result["errors"]
+                sync_log.status = "completed" if result_success else "failed"
                 sync_log.total_records = result["total_records"]
                 sync_log.success_records = result["success_records"]
                 sync_log.failed_records = result["failed_records"]
@@ -1072,9 +1105,9 @@ class DataSyncService:
                 sync_log.details = result
                 safe_commit(db, self.logger)
 
-                result["success"] = True
+                result["success"] = result_success
                 result["sync_log_id"] = sync_log.id
-                result["message"] = "数据导入成功"
+                result["message"] = "数据导入成功" if result_success else "数据导入完成，但存在失败项"
 
                 self.logger.info("encrypted_data_imported: %s", result)
                 return result

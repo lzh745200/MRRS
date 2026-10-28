@@ -25,6 +25,8 @@ class TestVersionAuthority:
             encoding="utf-8",
         )
         monkeypatch.setattr(bi, "_BUILD_INFO_FILE", fp)
+        # 模拟打包外壳（无 .git）：此时才允许沿用冻结指纹
+        monkeypatch.setattr(bi, "_has_git_worktree", lambda *a, **k: False)
 
         from app.core.config import settings
 
@@ -60,6 +62,7 @@ class TestVersionAuthority:
             encoding="utf-8",
         )
         monkeypatch.setattr(bi, "_BUILD_INFO_FILE", fp)
+        monkeypatch.setattr(bi, "_has_git_worktree", lambda *a, **k: False)
 
         info = bi.get_build_info()
         assert info["version"] == settings.PROJECT_VERSION

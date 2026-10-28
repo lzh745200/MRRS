@@ -159,6 +159,39 @@ def _seed_source(Session):
 
 
 class TestS4ConfirmChecksumReverify:
+    @pytest.mark.parametrize("manifest_bytes", [b"{not-json", b'"not-an-object"'])
+    def test_malformed_manifest_fails_closed(self, tmp_path, manifest_bytes):
+        """manifest 无法解析或类型错误时不得与“旧包无校验和”混为一谈。"""
+        package = tmp_path / "malformed_manifest.zip"
+        with zipfile.ZipFile(package, "w") as zf:
+            zf.writestr("manifest.json", manifest_bytes)
+
+        svc = PermissionPackageService(MagicMock())
+        error = svc._verify_content_checksum(str(package), {"roles": []})
+
+        assert error is not None
+        assert "校验" in error
+
+    def test_checksum_read_failure_fails_closed(self, tmp_path):
+        """ZIP/manifest 读取异常必须拒绝，不能跳过完整性校验后清空既有权限。"""
+        package = tmp_path / "unreadable.zip"
+        package.write_bytes(b"not-a-zip")
+        svc = PermissionPackageService(MagicMock())
+
+        error = svc._verify_content_checksum(str(package), {"roles": []})
+
+        assert error is not None
+        assert "校验" in error
+
+    def test_legacy_package_without_manifest_remains_compatible(self, tmp_path):
+        """仅结构有效的旧包（无 manifest/content_checksum）保留兼容语义。"""
+        package = tmp_path / "legacy.zip"
+        with zipfile.ZipFile(package, "w") as zf:
+            zf.writestr("data/roles.json", "[]")
+        svc = PermissionPackageService(MagicMock())
+
+        assert svc._verify_content_checksum(str(package), {"roles": []}) is None
+
     def test_tampered_package_rejected_in_confirm(self, tmp_path):
         """篡改包直接 confirm 必须被拒（integrity_failed），且不破坏既有数据。"""
         # ── 源机导出合法权限包 ──

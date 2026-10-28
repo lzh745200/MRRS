@@ -709,6 +709,9 @@ def fund_statistics_overview(
     stmt = select(
         func.count(Fund.id).label("total_count"),
         func.coalesce(func.sum(Fund.amount), 0).label("total_amount"),
+        # planned 是 FundStatus 的合法取值（规划中），此前统计口径漏了这一档，
+        # 前端「规划中」卡片只能恒显 0（与列表里筛得出数据的现象自相矛盾）。
+        func.sum(case((Fund.status == "planned", 1), else_=0)).label("planned_count"),
         func.sum(case((Fund.status == "pending", 1), else_=0)).label("pending_count"),
         func.sum(case((Fund.status == "approved", 1), else_=0)).label("approved_count"),
         func.sum(case((Fund.status == "allocated", 1), else_=0)).label("allocated_count"),
@@ -742,6 +745,7 @@ def fund_statistics_overview(
         "year": year,
         "total_count": row.total_count,
         "total_amount": total_amount,
+        "planned_count": row.planned_count,
         "pending_count": row.pending_count,
         "approved_count": row.approved_count,
         "allocated_count": row.allocated_count,
@@ -759,6 +763,7 @@ def fund_statistics_overview(
 @router.get("/statistics/multi-dimension")
 def fund_statistics_multi_dimension(
     group_by: str = Query("type", description="分组维度: period, type, source, status"),
+    fund_type: Optional[str] = Query(None, description="经费类型筛选（与分组维度正交）"),
     start_date: str = Query(None, description="起始日期 YYYY-MM-DD"),
     end_date: str = Query(None, description="结束日期 YYYY-MM-DD"),
     period_type: str = Query("monthly", description="时间粒度: monthly, quarterly, yearly"),
@@ -776,6 +781,11 @@ def fund_statistics_multi_dimension(
             stmt = stmt.where(Fund.date <= datetime.strptime(end_date, "%Y-%m-%d").date())
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+
+    # 类型筛选：此前前端把类型塞进 `type` 参数，FastAPI 忽略未知 query →
+    # 报表页按类型筛选时图形不跟着变（只有表格变），图形与表格口径不一致。
+    if fund_type:
+        stmt = stmt.where(Fund.fund_type == fund_type)
 
     agg_cols = [
         func.count(Fund.id).label("count"),

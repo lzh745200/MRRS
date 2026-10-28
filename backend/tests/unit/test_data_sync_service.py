@@ -1,4 +1,5 @@
 """数据同步服务单元测试 (100% coverage)"""
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -370,6 +371,7 @@ class TestDataSyncService:
                         mock_imp.side_effect = Exception("import error")
                         result = await service.import_package("/tmp/test.zip")
                         assert len(result["errors"]) == 1
+                        assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_import_package_general_exception(self, service):
@@ -739,78 +741,87 @@ class TestDataSyncService:
             await service.export_encrypted(password="1234567")
 
     @pytest.mark.asyncio
-    async def test_export_encrypted_full(self, service):
+    async def test_export_encrypted_full(self, tmp_path, service):
+        def _fake_create(data, output_path, password):
+            # 真实落一个文件：哈希断言必须基于真实字节，不能靠 mock sha256 自证
+            Path(output_path).write_bytes(b"fake-rrs-bytes")
+
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
             with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
                 me.return_value = [{"id": 1}]
-                with patch("app.services.data_sync_service.create_encrypted_package"):
-                    with patch("app.services.data_sync_service._hashlib.sha256") as mh:
-                        h = MagicMock()
-                        h.hexdigest.return_value = "abc"
-                        mh.return_value = h
-                        with patch.object(Path, "read_bytes", return_value=b"d"):
-                            with patch.object(Path, "stat") as ms:
-                                ms.return_value.st_size = 512
-                                r = await service.export_encrypted(export_type="full", password="password123")
-                                assert r["success"] is True
-                                assert r["file_hash"] == "abc"
+                with patch(
+                    "app.services.data_sync_service.create_encrypted_package",
+                    side_effect=_fake_create,
+                ):
+                    service.sync_dir = tmp_path
+                    r = await service.export_encrypted(export_type="full", password="password123")
+                    assert r["success"] is True
+                    assert r["file_hash"] == hashlib.sha256(b"fake-rrs-bytes").hexdigest()
 
     @pytest.mark.asyncio
-    async def test_export_encrypted_selective(self, service):
+    async def test_export_encrypted_selective(self, tmp_path, service):
+        def _fake_create(data, output_path, password):
+            Path(output_path).write_bytes(b"selective-bytes")
+
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
             with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
                 me.return_value = []
-                with patch("app.services.data_sync_service.create_encrypted_package"):
-                    with patch("app.services.data_sync_service._hashlib.sha256") as mh:
-                        h = MagicMock()
-                        h.hexdigest.return_value = "def"
-                        mh.return_value = h
-                        with patch.object(Path, "read_bytes", return_value=b"d"):
-                            with patch.object(Path, "stat") as ms:
-                                ms.return_value.st_size = 10
-                                r = await service.export_encrypted(export_type="selective", tables=["supported_villages"], password="password123")
-                                assert r["success"] is True
+                with patch(
+                    "app.services.data_sync_service.create_encrypted_package",
+                    side_effect=_fake_create,
+                ):
+                    service.sync_dir = tmp_path
+                    r = await service.export_encrypted(
+                        export_type="selective", tables=["supported_villages"], password="password123"
+                    )
+                    assert r["success"] is True
+                    assert r["file_hash"] == hashlib.sha256(b"selective-bytes").hexdigest()
 
     @pytest.mark.asyncio
-    async def test_export_encrypted_skip_unknown(self, service):
+    async def test_export_encrypted_skip_unknown(self, tmp_path, service):
+        def _fake_create(data, output_path, password):
+            Path(output_path).write_bytes(b"skip-bytes")
+
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
             with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
-                with patch("app.services.data_sync_service.create_encrypted_package"):
-                    with patch("app.services.data_sync_service._hashlib.sha256") as mh:
-                        h = MagicMock()
-                        h.hexdigest.return_value = "111"
-                        mh.return_value = h
-                        with patch.object(Path, "read_bytes", return_value=b"d"):
-                            with patch.object(Path, "stat") as ms:
-                                ms.return_value.st_size = 1
-                                r = await service.export_encrypted(export_type="selective", tables=["unknown"], password="password123")
-                                assert r["success"] is True
-                                me.assert_not_called()
+                with patch(
+                    "app.services.data_sync_service.create_encrypted_package",
+                    side_effect=_fake_create,
+                ):
+                    service.sync_dir = tmp_path
+                    r = await service.export_encrypted(
+                        export_type="selective", tables=["unknown"], password="password123"
+                    )
+                    assert r["success"] is True
+                    me.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_export_encrypted_export_error(self, service):
+    async def test_export_encrypted_export_error(self, tmp_path, service):
+        def _fake_create(data, output_path, password):
+            Path(output_path).write_bytes(b"err-bytes")
+
+        service.sync_dir = tmp_path
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
             with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
                 me.side_effect = Exception("fail")
-                with patch("app.services.data_sync_service.create_encrypted_package"):
-                    with patch("app.services.data_sync_service._hashlib.sha256") as mh:
-                        h = MagicMock()
-                        h.hexdigest.return_value = "222"
-                        mh.return_value = h
-                        with patch.object(Path, "read_bytes", return_value=b"d"):
-                            with patch.object(Path, "stat") as ms:
-                                ms.return_value.st_size = 1
-                                r = await service.export_encrypted(export_type="full", password="password123")
-                                assert r["success"] is True
-                                service.logger.warning.assert_called()
+                with patch(
+                    "app.services.data_sync_service.create_encrypted_package",
+                    side_effect=_fake_create,
+                ):
+                    from app.core.error_handler import BusinessLogicError
+
+                    # 缺表的加密包同样不得以成功返回（收包方会把它当完整数据）
+                    with pytest.raises(BusinessLogicError, match="数据导出不完整"):
+                        await service.export_encrypted(export_type="full", password="password123")
+                    service.logger.error.assert_called()
 
     @pytest.mark.asyncio
     async def test_export_encrypted_general_exception(self, service):
@@ -873,6 +884,7 @@ class TestDataSyncService:
                         mi.side_effect = Exception("err")
                         r = await service.import_encrypted("/tmp/test.rrs", "pwd123")
                         assert len(r["errors"]) == 1
+                        assert r["success"] is False
 
     @pytest.mark.asyncio
     async def test_import_encrypted_general_exception(self, service):

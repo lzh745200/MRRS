@@ -110,6 +110,7 @@ class TestGetBuildInfoWithoutGit:
     def test_metadata_present_skips_dev_fallback(self, monkeypatch):
         """有 _build_info.json 时（CI 产物）不探测 git，直接用元数据。"""
         monkeypatch.setattr(bi, "_load", lambda: {"git_hash": "cihash", "build_time": "t", "builder": "ci"})
+        monkeypatch.setattr(bi, "_has_git_worktree", lambda *a, **k: False)
         subprocess_mock = MagicMock(side_effect=AssertionError("不得调用子进程"))
         monkeypatch.setattr(bi.subprocess, "check_output", subprocess_mock)
 

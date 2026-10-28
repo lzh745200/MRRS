@@ -63,23 +63,32 @@ def get_build_info() -> dict:
         return _cached
 
     info = _load()
-    if not info:
+    if _has_git_worktree():
+        # 源码工作树优先用当前 HEAD：_build_info.json 是 gitignore 的 CI 产物，
+        # 本地长期存在时会残留旧提交号，使 /health 与诊断包指向错误版本。
+        # 打包产物没有 .git，才会沿用冻结指纹。
         git_hash = "dev"
-        if _has_git_worktree():
-            try:
-                git_hash = (
-                    subprocess.check_output(
-                        ["git", "rev-parse", "--short", "HEAD"],
-                        stderr=subprocess.DEVNULL,
-                        timeout=2,
-                    )
-                    .decode()
-                    .strip()
+        try:
+            git_hash = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
                 )
-            except Exception:
-                logger.debug("获取git hash失败", exc_info=True)
+                .decode()
+                .strip()
+            )
+        except Exception:
+            logger.debug("获取git hash失败", exc_info=True)
         info = {
+            **info,
             "git_hash": git_hash,
+            "build_time": None,
+            "builder": "dev",
+        }
+    elif not info:
+        info = {
+            "git_hash": "dev",
             "build_time": None,
             "builder": "dev",
         }

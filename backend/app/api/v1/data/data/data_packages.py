@@ -21,7 +21,6 @@ from app.core.database import get_db
 from app.core.exceptions import BusinessError, NotFoundException
 from app.utils.upload_helper import (
     ensure_zip_within_limit,
-    read_upload_with_limit,
     read_zip_member,
 )
 from app.core.response import success_response
@@ -69,6 +68,34 @@ ORG_NOT_BOUND_ERROR = "当前用户未绑定组织，无法执行此操作。请
 
 # 一键上报默认导出的数据类型
 ONE_CLICK_DATA_TYPES = ["villages", "projects", "funds", "schools"]
+
+# 上传流式落盘粒度与上限（100MB；与前端/文档口径一致）
+_UPLOAD_CHUNK_SIZE = 1024 * 1024
+_DATA_PACKAGE_MAX_BYTES = 100 * 1024 * 1024
+
+
+async def _stream_upload_to_file(file, dest, max_bytes: int, error_detail: str) -> int:
+    """分块把上传流写入已打开的目标文件，返回字节数。
+
+    原实现先 ``read_upload_with_limit`` 拼出完整 bytes 再写盘，100MB 包会同时
+    占住等量 Python 内存；这里边读边写，峰值只多一个分块。
+    """
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=error_detail,
+            )
+        dest.write(chunk)
+        if len(chunk) < _UPLOAD_CHUNK_SIZE:
+            # 短读即 EOF；同时兼容测试里固定返回同一字节流的替身。
+            break
+    return total
 
 
 def get_package_service(db: Session = Depends(get_db)) -> DataPackageService:
@@ -549,22 +576,21 @@ async def import_data_package(
     # 保存上传文件到临时目录
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
     try:
-        # R2 第二层：分块读取 + 滚动计数（原 `await file.read()` 先整包入内存，
-        # 100MB 上限下峰值不可控）。空文件与超限语义保持不变（422 / 413）。
-        content = await read_upload_with_limit(
-            file, 100 * 1024 * 1024,
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            error_detail="文件过大，数据包大小不能超过 100MB",
+        # R2 第二层：分块读入并直接落盘，避免 100MB 包在内存中物化整份 bytes。
+        file_size = await _stream_upload_to_file(
+            file,
+            temp_file,
+            _DATA_PACKAGE_MAX_BYTES,
+            "文件过大，数据包大小不能超过 100MB",
         )
 
         # 检查文件大小
-        if len(content) == 0:
+        if file_size == 0:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="文件为空，请选择有效的数据包文件"
             )
 
-        temp_file.write(content)
         temp_file.close()
 
         # P2：整包校验和查重（重复且未 force → 409，口径见 package_import_guard）
@@ -595,7 +621,7 @@ async def import_data_package(
             org_id=target_org_id,
             user_id=current_user.id,
             file_name=file.filename,
-            file_size=len(content),
+            file_size=file_size,
             record_count=sum(result.manifest.record_counts.values()) if result.manifest else 0,
             data_types=result.manifest.data_types if result.manifest else [],
             duration_ms=duration_ms,
@@ -1479,15 +1505,14 @@ async def upload_encrypted_package(
     os.close(_fd)
 
     try:
-        # R2 第二层：分块读取 + 滚动计数（原一次性读完再落盘，100MB 上限下
-        # 峰值不可控）。与 /import 端点同口径：上限 100MB。
-        content = await read_upload_with_limit(
-            file, 100 * 1024 * 1024,
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            error_detail="文件过大，加密数据包大小不能超过 100MB",
-        )
+        # R2 第二层：分块直接落盘（与 /import 端点同口径：上限 100MB）。
         with open(temp_file_path, "wb") as f:
-            f.write(content)
+            await _stream_upload_to_file(
+                file,
+                f,
+                _DATA_PACKAGE_MAX_BYTES,
+                "文件过大，加密数据包大小不能超过 100MB",
+            )
 
         # 检测是否加密
         import zipfile

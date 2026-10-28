@@ -542,8 +542,8 @@ async def get_dashboard_stats(
         return success_response(data=result)
     except Exception as e:
         logger.error("仪表盘统计查询失败: %s", e, exc_info=True)
-        # 降级返回 None，让前端显示空状态
-        return None
+        # 故障必须与“确实没有数据”区分；否则前端会把查询失败展示成 0。
+        raise HTTPException(status_code=500, detail="仪表盘统计查询失败，请稍后重试")
 
 
 @router.get("/kpi-trends", summary="KPI 趋势汇总（当前年度核心指标）")
@@ -575,7 +575,7 @@ async def get_kpi_trends(
         )
     except Exception as e:
         logger.error("KPI 趋势查询失败: %s", e, exc_info=True)
-        return success_response(data={"villages": 0, "population": 0, "income": 0, "investment": 0}, message="获取失败")
+        raise HTTPException(status_code=500, detail="KPI 趋势查询失败，请稍后重试")
 
 
 def _build_yearly_trends(db: Session, data_scope: OrgScopeFilter, years: int) -> dict:
@@ -714,7 +714,7 @@ async def get_yearly_trends(
         )
     except Exception as e:
         logger.error("年度趋势查询失败: %s", e, exc_info=True)
-        return success_response(data={"years": [], "trends": []}, message="获取失败")
+        raise HTTPException(status_code=500, detail="年度趋势查询失败，请稍后重试")
 
 
 def _avg_per_capita_income(db: Session, data_scope: OrgScopeFilter, year: Optional[int] = None) -> float:
@@ -766,7 +766,7 @@ async def get_dashboard_summary(
         stats = {**village_stats, **fund_stats, **project_stats}
     except Exception as e:
         logger.error("仪表盘汇总统计失败: %s", e, exc_info=True)
-        stats = {}
+        raise HTTPException(status_code=500, detail="仪表盘汇总查询失败，请稍后重试")
 
     # 复用 recent-activities 逻辑（必须显式透传已解析的数据域：直接函数调用不会
     # 走 FastAPI 依赖注入，漏传会把 Depends 哨兵当成 OrgScopeFilter 使用）

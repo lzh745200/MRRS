@@ -80,17 +80,20 @@ class TestListEndpoint:
         assert resp.status_code == 200
         assert mocked.call_args.kwargs["include_ignored"] is True
 
-    def test_list_exception_returns_empty_with_stats(self, api_client):
+    def test_list_exception_returns_500_not_fake_empty_stats(self, api_client):
+        """故障必须外显为 500。
+
+        旧实现 catch 住异常后返回 `200 + items=[] + 全 0 统计`，前端会把
+        「提醒服务不可用」显示成「今天没有待办提醒」——故障伪装成真实业务数据，
+        用户与审计都无法察觉。本用例原先钉的正是这个旧行为，已随修复一并纠正。
+        """
         client, _db, _user, _app = api_client
         with patch(
             "app.services.reminder_orchestrator.list_reminders",
             side_effect=RuntimeError("boom"),
         ):
             resp = client.get("/api/v1/reminders")
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert data["items"] == []
-        assert data["stats"] == {"pending": 0, "handled": 0, "ignored": 0, "snoozed": 0, "total": 0}
+        assert resp.status_code == 500
 
 
 class TestDispositionEndpoints:

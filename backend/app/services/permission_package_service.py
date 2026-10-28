@@ -1087,10 +1087,16 @@ class PermissionPackageService:
             with zipfile.ZipFile(file_path, "r") as zf:
                 ensure_zip_within_limit(zf)  # R2 第三层：校验和比对前先卡总量
                 if "manifest.json" not in zf.namelist():
+                    # 真正的旧版包（结构有效但无 manifest）保持兼容；损坏包走下方异常路径。
                     return None
                 manifest = json.loads(read_zip_member(zf, "manifest.json").decode("utf-8"))
-        except Exception:  # pragma: no cover - 权限包内容异常兜底：逐条收集错误、不中断整包导入
-            return None
+        except Exception as exc:
+            # fail-closed：损坏 ZIP、无法解码的 manifest、解压超限都不能被当作
+            # “旧包无校验和”放行——调用方随后会执行 _clear_existing_data()。
+            logger.warning("权限包完整性校验无法完成，拒绝导入: %s", exc, exc_info=True)
+            return "内容校验失败：权限包无法读取或 manifest 已损坏"
+        if not isinstance(manifest, dict):
+            return "内容校验失败：manifest 结构非法"
         expected = manifest.get("content_checksum")
         if not expected:
             return None

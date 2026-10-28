@@ -77,6 +77,7 @@ def test_get_build_info_with_existing_metadata(monkeypatch):
         "_load",
         lambda: {"git_hash": "abc1234", "build_time": "2026-10-07T00:00:00", "builder": "ci"},
     )
+    monkeypatch.setattr(bi, "_has_git_worktree", lambda *a, **k: False)
 
     info = bi.get_build_info()
 

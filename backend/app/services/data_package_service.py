@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from fastapi import HTTPException
 
+from app.core.async_utils import run_in_thread
 from app.core.database import db_coordinator
 from app.core.exceptions import BusinessError
 from app.core.json_encoder import CustomJSONEncoder
@@ -448,7 +449,11 @@ class DataPackageService:
             ))
 
     async def validate_package(self, file_path: str) -> DataPackageValidationResult:
-        """验证数据包 (同步方法)"""
+        """在线程池中验证数据包，避免 ZIP 解压/JSON 解析阻塞事件循环。"""
+        return await run_in_thread(self._validate_package_sync, file_path)
+
+    def _validate_package_sync(self, file_path: str) -> DataPackageValidationResult:
+        """验证数据包（同步实现，只做 CPU/文件 I/O）。"""
         errors = []
         warnings = []
         manifest = None
@@ -547,7 +552,13 @@ class DataPackageService:
     async def preview_package_data_from_file(
         self, file_path: str, sample_size: int = 10
     ) -> List[DataPackagePreviewData]:
-        """从文件预览数据 (同步方法)"""
+        """在线程池中解包预览，避免大包解析阻塞事件循环。"""
+        return await run_in_thread(self._preview_package_data_from_file_sync, file_path, sample_size)
+
+    def _preview_package_data_from_file_sync(
+        self, file_path: str, sample_size: int = 10
+    ) -> List[DataPackagePreviewData]:
+        """从文件预览数据（同步实现）。"""
         preview_list = []
         try:
             with zipfile.ZipFile(file_path, "r") as zf:

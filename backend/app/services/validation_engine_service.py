@@ -139,7 +139,13 @@ class ValidationEngineService:
             self._errors = errors
             return errors
         except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
-            logger.debug("DB规则加载失败，跳过", exc_info=True)
+            # 这条兜底是"fail-open"：返回空错误列表 = 本次校验判定全部通过。
+            # 用 debug 级别等于把它藏起来 —— 规则表锁冲突/结构漂移时会静默放行
+            # 脏数据且生产日志里毫无痕迹，故提为 error 并写明后果。
+            logger.error(
+                "DB 校验规则加载失败，本次校验降级为「无错误」（数据可能未按规则校验）",
+                exc_info=True,
+            )
             return []
 
     def _check_typed_rule(self, rule_type: str, value, params: dict) -> bool:  # noqa: C901 - 校验规则多类型分支,保持单函数便于审计

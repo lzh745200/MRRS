@@ -10,6 +10,7 @@ W18 收口说明：
   模型（含 DateTime/String 列）驱动真实清洗/分组/编译路径，只 mock 数据库会话。
 """
 import json
+import threading
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -285,6 +286,30 @@ class TestDataPackageService:
             assert m.writestr.call_count == 2
 
     # ===================== validate_package =====================
+    async def test_validate_package_blocking_io_leaves_event_loop_thread(self, service):
+        """ZIP 校验的同步 I/O 必须在线程池执行，不能只是 async 空壳。"""
+        caller_thread = threading.get_ident()
+        io_threads = []
+        with patch("os.path.exists", side_effect=lambda _path: io_threads.append(threading.get_ident()) or False):
+            result = await service.validate_package("/tmp/nonexistent.zip")
+
+        assert not result.is_valid
+        assert io_threads and io_threads[0] != caller_thread
+
+    async def test_preview_package_blocking_io_leaves_event_loop_thread(self, service):
+        """预览解包同样不得占住事件循环线程。"""
+        caller_thread = threading.get_ident()
+        io_threads = []
+
+        def _record_thread(*_args, **_kwargs):
+            io_threads.append(threading.get_ident())
+            raise zipfile.BadZipFile("stop after thread probe")
+
+        with patch("zipfile.ZipFile", side_effect=_record_thread):
+            assert await service.preview_package_data_from_file("/tmp/probe.zip") == []
+
+        assert io_threads and io_threads[0] != caller_thread
+
     async     def test_validate_package_file_not_exists(self, service):
         with patch("os.path.exists", return_value=False):
             result = await service.validate_package("/tmp/nonexistent.zip")

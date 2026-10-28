@@ -3,11 +3,15 @@
 
 from unittest.mock import MagicMock, patch
 
+from datetime import datetime, timedelta, timezone
+
 from app.models.organization import Organization
+from app.services import self_check_service as svc
 from app.services.self_check_service import (
     LEVEL_ERROR,
     LEVEL_OK,
     LEVEL_WARN,
+    RECENT_IMPORT_DAYS,
     collect_self_check,
 )
 
@@ -204,3 +208,32 @@ class TestSummary:
         assert result["summary"]["warn_count"] == 0
         assert result["generated_at"]
         assert len(result["checks"]) == 6
+
+
+class TestTimeBasisUsesUtc:
+    """回归：自检的时间阈值必须走 utcnow()，不能拿本地墙钟比 UTC 列。
+
+    判据取「传给 SQL 的绑定参数是否等于被 patch 的 utcnow 返回值」——
+    这种断言与时区无关（CI 跑在 UTC 时也能区分），旧实现用
+    ``datetime.now()`` 会拿到本地墙钟而非哨兵值，直接失败。
+    """
+
+    SENTINEL = datetime(2024, 5, 1, 3, 0, 0, tzinfo=timezone.utc)
+
+    def test_locked_users_threshold_is_utc(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.count.return_value = 0
+        with patch("app.services.self_check_service.utcnow", return_value=self.SENTINEL):
+            svc._check_locked_users(db)
+        criteria = db.query.return_value.filter.call_args[0]
+        threshold = criteria[-1].right.value
+        assert threshold == self.SENTINEL
+
+    def test_recent_import_window_is_utc_relative(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.count.return_value = 0
+        with patch("app.services.self_check_service.utcnow", return_value=self.SENTINEL):
+            svc._check_recent_imports(db)
+        criteria = db.query.return_value.filter.call_args[0]
+        since = criteria[-1].right.value
+        assert since == self.SENTINEL - timedelta(days=RECENT_IMPORT_DAYS)

@@ -370,7 +370,12 @@ class TestDashboardSummary:
             resp = cov_client.get("/api/v1/dashboard/summary")
             assert resp.json()["data"] == {"stats": {}, "recent_activities": []}
 
-    def test_summary_stats_exception_degrades(self, cov_client):
+    def test_summary_stats_exception_returns_500(self, cov_client):
+        """汇总统计异常 → 500（不能再伪装成 200 + 全 0 统计）。
+
+        旧实现把异常吞成 `stats = {}` 并回 200，前端渲染出来就是「各项均为 0」，
+        与「确实没有数据」无法区分（故障被展示成真实业务数字）。
+        """
         db = MagicMock()
         db.query = MagicMock(side_effect=Exception("db boom"))
         _override_db(cov_client, db)
@@ -379,8 +384,8 @@ class TestDashboardSummary:
                 return {"items": []}
             m_act.side_effect = fake_act
             resp = cov_client.get("/api/v1/dashboard/summary")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["stats"] == {}
+        assert resp.status_code == 500
+        assert "仪表盘汇总查询失败" in resp.json()["detail"]
 
 
 # ==================== _fetch_* 动态获取器 ====================
@@ -800,15 +805,15 @@ class TestCacheAndFallbackBranches:
         assert resp.status_code == 200
         assert resp.json() is None
 
-    def test_stats_exception_returns_null(self, cov_client):
-        """统计查询异常 → 降级返回 None（覆盖 except 分支）"""
+    def test_stats_exception_returns_500(self, cov_client):
+        """统计查询异常 → 500（旧实现 return None 让前端显示空状态）"""
         db = MagicMock()
         db.query = MagicMock(side_effect=Exception("db boom"))
         _override_db(cov_client, db)
         with patch.object(dash, "_cache", None):
             resp = cov_client.get("/api/v1/dashboard/stats")
-        assert resp.status_code == 200
-        assert resp.json() is None
+        assert resp.status_code == 500
+        assert "仪表盘统计查询失败" in resp.json()["detail"]
 
     def test_cache_read_write_exception_still_computes(self, cov_client):
         """缓存读/写均异常 → 正常计算并返回（覆盖 _get_cached/_set_cached 异常分支）"""

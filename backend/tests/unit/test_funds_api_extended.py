@@ -664,7 +664,7 @@ class TestFundStatisticsOverview:
     def test_statistics_overview(self, client, mock_db):
         """Overview returns aggregate counts."""
         row = SimpleObj(total_count=150, total_amount=Decimal("500000.00"),
-                        pending_count=23, approved_count=100,
+                        planned_count=7, pending_count=23, approved_count=100,
                         allocated_count=10, in_use_count=5, completed_count=2,
                         used_amount=Decimal("80000.00"), allocated_amount=Decimal("300000.00"))
         r = MagicMock()
@@ -678,6 +678,8 @@ class TestFundStatisticsOverview:
         data = resp.json()["data"]
         assert data["total_count"] == 150
         assert data["total_amount"] == 500000.0
+        # planned 是 FundStatus 合法取值，统计口径必须带这一档
+        assert data["planned_count"] == 7
         assert data["pending_count"] == 23
         assert data["approved_count"] == 100
         assert data["allocated_count"] == 10
@@ -691,7 +693,7 @@ class TestFundStatisticsOverview:
     def test_statistics_overview_zero_data(self, client, mock_db):
         """Overview with zero data."""
         row = SimpleObj(total_count=0, total_amount=Decimal("0.00"),
-                        pending_count=0, approved_count=0,
+                        planned_count=0, pending_count=0, approved_count=0,
                         allocated_count=0, in_use_count=0, completed_count=0,
                         used_amount=Decimal("0.00"), allocated_amount=Decimal("0.00"))
         r = MagicMock()
@@ -720,6 +722,18 @@ class TestFundStatisticsMultiDimension:
         data = resp.json()
         assert data["success"] is True
         assert data["data"][0]["label"] == "项目经费"
+
+    def test_filters_by_fund_type(self, client, mock_db):
+        """fund_type 必须真正进 WHERE（前端曾传 type，被 FastAPI 静默忽略）。"""
+        mock_db.execute.return_value = _exec_with_all([])
+
+        resp = client.get(
+            "/api/v1/funds/statistics/multi-dimension?group_by=type&fund_type=project"
+        )
+        assert resp.status_code == 200
+        stmt = mock_db.execute.call_args[0][0]
+        sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "funds.fund_type = 'project'" in sql, sql
 
     def test_by_source(self, client, mock_db):
         """Group by source."""

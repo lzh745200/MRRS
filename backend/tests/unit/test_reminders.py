@@ -149,6 +149,36 @@ def test_reminders_api_list():
         app.dependency_overrides.clear()
 
 
+def test_reminders_api_list_failure_returns_500_not_empty_success():
+    from app.main import app
+    from fastapi.testclient import TestClient
+    from app.core.security import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1, role="admin")
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        with patch("app.services.reminder_orchestrator.list_reminders", side_effect=RuntimeError("db down")):
+            resp = client.get("/api/v1/reminders")
+        assert resp.status_code == 500
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_reminders_api_scan_failure_returns_500_not_fake_created_zero():
+    from app.main import app
+    from fastapi.testclient import TestClient
+    from app.core.security import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1, role="admin")
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        with patch("app.services.reminder_orchestrator.run_reminder_scans", side_effect=RuntimeError("db down")):
+            resp = client.post("/api/v1/reminders/scan")
+        assert resp.status_code == 500
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_reminders_api_scan():
     from app.main import app
     from fastapi.testclient import TestClient

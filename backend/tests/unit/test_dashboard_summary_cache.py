@@ -48,6 +48,16 @@ class TestDashboardSummaryUnit:
             q.order_by.return_value = q
             q.group_by.return_value = q
             q.count.return_value = 0
+            # 聚合查询会走 `db.query(func.count()).select_from(subq).scalar()` 与
+            # `filter_by`/`join`/`limit` 等链式调用：这些方法若返回**新的** MagicMock，
+            # 链尾的 scalar() 就不再是配置好的 0，而是 MagicMock —— 与 int 比较直接
+            # TypeError。旧实现在 except 里吞掉异常（stats={}）才让本用例"通过"，
+            # 实际从未真正跑过查询路径。现在统一收紧为返回自身。
+            q.select_from.return_value = q
+            q.filter_by.return_value = q
+            q.join.return_value = q
+            q.limit.return_value = q
+            q.offset.return_value = q
             return q
 
         db.query.side_effect = fake_query

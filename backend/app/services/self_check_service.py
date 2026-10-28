@@ -23,6 +23,7 @@ from app.services.organization_code_service import (
     LEVEL_LABELS,
     OrganizationCodeService,
 )
+from app.utils.time_utils import utcnow
 
 # 判定严重级别
 LEVEL_OK = "ok"
@@ -124,8 +125,14 @@ def _check_pending_users(db: Session) -> Dict[str, Any]:
 
 
 def _check_locked_users(db: Session) -> Dict[str, Any]:
-    """检查被锁定账号（连续登录失败触发，需要管理员解锁）。"""
-    now = datetime.now()
+    """检查被锁定账号（连续登录失败触发，需要管理员解锁）。
+
+    时间基准：``User.locked_until`` 是 ``UtcDateTime`` 列（落库 naive UTC），
+    阈值必须用 ``utcnow()``。此前用 ``datetime.now()``（本地墙钟）比较，
+    UTC+8 下阈值整体后移 8 小时，而默认锁定时长只有 15 分钟 →
+    **明明有账号被锁，体检结论永远报「没有处于锁定状态的账号」**。
+    """
+    now = utcnow()
     locked = (
         db.query(User)
         .filter(User.locked_until.isnot(None), User.locked_until > now)
@@ -156,8 +163,12 @@ def _check_pii_key() -> Dict[str, Any]:
 
 
 def _check_recent_imports(db: Session) -> Dict[str, Any]:
-    """检查最近导入失败与重复包。"""
-    since = datetime.now() - timedelta(days=RECENT_IMPORT_DAYS)
+    """检查最近导入失败与重复包。
+
+    时间基准：``AuditLog.created_at`` 是 ``UtcDateTime`` 列，窗口起点用
+    ``utcnow()`` 推导；用本地墙钟会把窗口整体后移 8 小时，漏掉最初 8 小时的记录。
+    """
+    since = utcnow() - timedelta(days=RECENT_IMPORT_DAYS)
     failures = (
         db.query(AuditLog)
         .filter(

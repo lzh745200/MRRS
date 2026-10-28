@@ -27,8 +27,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
-_EMPTY_STATS = {"pending": 0, "handled": 0, "ignored": 0, "snoozed": 0, "total": 0}
-
 
 class ReminderNoteBody(BaseModel):
     """处理/忽略/重新打开的说明（选填）。"""
@@ -68,10 +66,8 @@ async def list_reminders(
         )
     except Exception as e:
         logger.error("获取提醒失败: %s", e, exc_info=True)
-        return success_response(
-            data={"items": [], "total": 0, "unread": 0, "stats": dict(_EMPTY_STATS)},
-            message="获取提醒失败",
-        )
+        # 不能把查询故障伪装成“当前没有提醒”，否则用户会漏掉超时审批。
+        raise HTTPException(status_code=500, detail="获取提醒失败，请稍后重试")
 
 
 @router.post("/scan", summary="手动触发一次提醒扫描")
@@ -87,7 +83,7 @@ async def trigger_scan(
         return success_response(data={"created": len(created)}, message=f"扫描完成，新增 {len(created)} 条提醒")
     except Exception as e:
         logger.error("手动提醒扫描失败: %s", e, exc_info=True)
-        return success_response(data={"created": 0}, message="扫描失败")
+        raise HTTPException(status_code=500, detail="提醒扫描失败，请稍后重试")
 
 
 def _run_disposition(

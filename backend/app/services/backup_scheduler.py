@@ -17,12 +17,12 @@ import logging
 import os
 import sys
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from app.core.transaction import get_db_context
 from app.services.backup_service import BackupService
 from app.services.system_config_service import get_config, get_int_config
-from app.utils.time_utils import parse_local_wallclock, utcnow
+from app.utils.time_utils import parse_local_wallclock, utcnow, utcnow_naive
 
 logger = logging.getLogger(__name__)
 
@@ -488,13 +488,20 @@ async def weekly_report_job():
 
             today = datetime.now().date()
             week_start = today - timedelta(days=7)
+            # updated_at 是 UtcDateTime（落库 naive UTC）：周报的「上周」按**本地日历**
+            # 解释，必须把本地日界减去时区偏移再与 UTC 列比较；直接把 date 当阈值
+            # 会让 UTC+8 下上周最早 8 小时完成的待办漏计（日期字符串比较取前缀）。
+            local_offset = timedelta(
+                seconds=round((datetime.now() - utcnow_naive()).total_seconds())
+            )
+            week_start_utc = datetime.combine(week_start, time.min) - local_offset
 
             log_count = db.query(sa_func.count(WorkLog.id)).filter(WorkLog.log_date >= week_start).scalar() or 0
             completed_todos = (
                 db.query(sa_func.count(Todo.id))
                 .filter(
                     Todo.completed == True,  # noqa: E712
-                    Todo.updated_at >= week_start,
+                    Todo.updated_at >= week_start_utc,
                 )
                 .scalar()
                 or 0

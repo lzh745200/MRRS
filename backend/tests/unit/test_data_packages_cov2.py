@@ -248,7 +248,7 @@ class TestImportOrgMismatchBlocked:
             return_value=SimpleNamespace(manifest={"org_code": "520100"})
         )
         with (
-            patch.object(dp, "read_upload_with_limit", new=AsyncMock(return_value=b"PK\x03\x04x")),
+            patch.object(dp, "_stream_upload_to_file", new=AsyncMock(return_value=4)),
             patch.object(dp, "assert_not_duplicate", return_value="abc123"),
             patch.object(
                 dp,
@@ -276,7 +276,7 @@ class TestImportOrgMismatchBlocked:
             )
         )
         with (
-            patch.object(dp, "read_upload_with_limit", new=AsyncMock(return_value=b"PK\x03\x04x")),
+            patch.object(dp, "_stream_upload_to_file", new=AsyncMock(return_value=4)),
             patch.object(dp, "assert_not_duplicate", return_value="abc123"),
             patch.object(
                 dp,

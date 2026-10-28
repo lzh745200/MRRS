@@ -171,7 +171,7 @@ class TestDataPackageFriendlyErrors:
         from app.api.v1.data.data import data_packages as mod
         from app.core.exceptions import BusinessError
 
-        monkeypatch.setattr(mod, "read_upload_with_limit", AsyncMock(return_value=b"zip-bytes"))
+        monkeypatch.setattr(mod, "_stream_upload_to_file", AsyncMock(return_value=9))
         service = MagicMock()
         service.import_package = AsyncMock(side_effect=BusinessError("manifest.json missing"))
         permission = MagicMock()
@@ -191,7 +191,7 @@ class TestDataPackageGenericBusinessError:
         from app.api.v1.data.data import data_packages as mod
         from app.core.exceptions import BusinessError
 
-        monkeypatch.setattr(mod, "read_upload_with_limit", AsyncMock(return_value=b"zip-bytes"))
+        monkeypatch.setattr(mod, "_stream_upload_to_file", AsyncMock(return_value=9))
         service = MagicMock()
         service.import_package = AsyncMock(side_effect=BusinessError("导入校验未通过：数量超限"))
         permission = MagicMock()
@@ -223,7 +223,7 @@ class TestEncryptedUploadCleanup:
 
         service = MagicMock()
         monkeypatch.setattr(
-            mod, "read_upload_with_limit",
+            mod, "_stream_upload_to_file",
             AsyncMock(side_effect=HTTPException(status_code=413, detail="too large")),
         )
         with pytest.raises(HTTPException) as ei:
@@ -235,7 +235,7 @@ class TestEncryptedUploadCleanup:
 
         service = MagicMock()
         monkeypatch.setattr(
-            mod, "read_upload_with_limit",
+            mod, "_stream_upload_to_file",
             AsyncMock(side_effect=HTTPException(status_code=413, detail="too large")),
         )
         with pytest.raises(HTTPException) as ei:
@@ -247,7 +247,7 @@ class TestEncryptedUploadCleanup:
 
         service = MagicMock()
         service._create_package_record.side_effect = RuntimeError("boom")
-        monkeypatch.setattr(mod, "read_upload_with_limit", AsyncMock(return_value=b"x"))
+        monkeypatch.setattr(mod, "_stream_upload_to_file", AsyncMock(return_value=1))
         with pytest.raises(HTTPException) as ei:
             self._call(mod, service, monkeypatch, exists=False)
         assert ei.value.status_code == 500

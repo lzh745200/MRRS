@@ -48,7 +48,7 @@ def test_kpi_trends_success():
         app.dependency_overrides.clear()
 
 
-def test_kpi_trends_exception_fallback():
+def test_kpi_trends_exception_returns_500_not_fake_zeroes():
     from app.main import app
 
     mock_db = MagicMock()
@@ -60,9 +60,8 @@ def test_kpi_trends_exception_fallback():
             side_effect=RuntimeError("boom"),
         ):
             resp = client.get("/api/v1/dashboard/kpi-trends")
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert data["villages"] == 0
+        assert resp.status_code == 500
+        assert "data" not in resp.json() or resp.json().get("data") is None
     finally:
         app.dependency_overrides.clear()
 
@@ -159,7 +158,7 @@ def test_avg_per_capita_income_specific_year_missing():
     assert _avg_per_capita_income(mock_db, MagicMock(), year=2025) == 0.0
 
 
-def test_yearly_trends_exception_fallback():
+def test_yearly_trends_exception_returns_500_not_empty_success():
     from app.main import app
 
     mock_db = MagicMock()
@@ -171,8 +170,7 @@ def test_yearly_trends_exception_fallback():
             side_effect=RuntimeError("boom"),
         ):
             resp = client.get("/api/v1/dashboard/yearly-trends?years=2")
-        assert resp.status_code == 200
-        assert resp.json()["data"]["trends"] == []
+        assert resp.status_code == 500
     finally:
         app.dependency_overrides.clear()
 

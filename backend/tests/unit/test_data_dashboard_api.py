@@ -1,5 +1,5 @@
 """Dashboard API unit tests — 100% coverage for app.api.v1.data.data.dashboard"""
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -99,14 +99,20 @@ class TestGetDashboardStats:
             assert client.get("/api/v1/dashboard/stats").json()["data"] == {"v": 1}
 
     def test_refresh(self, client):
-        assert client.get("/api/v1/dashboard/stats?refresh=true").status_code == 200
+        import app.api.v1.data.data.dashboard as d
+        with patch.object(d, "_cache", None), \
+             patch.object(d, "_query_village_stats", return_value={}), \
+             patch.object(d, "_query_fund_stats", return_value={}), \
+             patch.object(d, "_query_project_approval_stats", return_value={}), \
+             patch.object(d, "_compute_trends", return_value={}):
+            assert client.get("/api/v1/dashboard/stats?refresh=true").status_code == 200
 
     def test_exception(self, client):
         # 隔离全局状态: 清除缓存, 强制走查询异常分支
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache", None), \
              patch.object(d, "_query_village_stats", side_effect=Exception("x")):
-            assert client.get("/api/v1/dashboard/stats").json() is None
+            assert client.get("/api/v1/dashboard/stats").status_code == 500
 
 
 # ==================== GET /dashboard/summary ====================
@@ -114,7 +120,11 @@ class TestGetDashboardStats:
 class TestGetDashboardSummary:
     def test_ok(self, client):
         import app.api.v1.data.data.dashboard as d
-        with patch.object(d, "_cache", None):
+        with patch.object(d, "_cache", None), \
+             patch.object(d, "_query_village_stats", return_value={}), \
+             patch.object(d, "_query_fund_stats", return_value={}), \
+             patch.object(d, "_query_project_approval_stats", return_value={}), \
+             patch.object(d, "get_recent_activities", new=AsyncMock(return_value={"items": []})):
             r = client.get("/api/v1/dashboard/summary")
             assert "stats" in r.json()["data"] and "recent_activities" in r.json()["data"]
 
@@ -128,7 +138,7 @@ class TestGetDashboardSummary:
         import app.api.v1.data.data.dashboard as d
         with patch.object(d, "_cache", None), patch.object(d, "_query_village_stats") as mv:
             mv.side_effect = Exception("x")
-            assert client.get("/api/v1/dashboard/summary").json()["data"]["stats"] == {}
+            assert client.get("/api/v1/dashboard/summary").status_code == 500
 
 
 # ==================== GET /dashboard/recent-activities ====================
