@@ -3353,4 +3353,24 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.18",
+        "date": "2026-10-28",
+        "description": "清掉三类真问题：bytes 乱码报错 / 把内建函数当类型注解 / 棘轮基线首次下调",
+        "features": [
+            (
+                "用户可见的乱码报错（services/encrypted_package.py）：加密包版本不匹配时消息直接把 bytes 拼进 f-string，用户看到的是 不支持的版本: b'9.9"
+                "'；更糟的是非法版本字节（如 \\x02）经 decode(\"ascii\") 后是不可见控制符，消息看起来像\"不支持的版本: \"（冒号后空白）—— 比乱码更难排查。"
+            ),
+            (
+                "把内建函数 any 当类型注解（services/business_metrics_service.py）：Optional[any] / value: any 里的 any 是内建函数，"
+                "不是 typing.Any ——注解不产生任何约束（typing 容忍任意对象，故不报错，属\"静默失效\"），mypy 也会按 valid-type / 注解无效处理。现改为 Optio"
+                "nal[Any] / Any 并补 import。"
+            ),
+            (
+                "棘轮基线首次下调（.type-debt-baseline.json）：mypy 1394 → 1391（上述两处共 3 条：2 条无效注解 + 1 条 str-bytes-safe），as"
+                " any 196 与 except Exception 802 持平。这是棘轮第一次真正起作用的方向——只降不升。"
+            ),
+        ],
+    },
 ]

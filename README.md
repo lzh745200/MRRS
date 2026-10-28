@@ -1,14 +1,25 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.17
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.18
 
-![Version](https://img.shields.io/badge/version-1.18.17-blue)
+![Version](https://img.shields.io/badge/version-1.18.18-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-20%2C800%2B-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.17）
+## 本版亮点（v1.18.18）
+
+- **修掉一处用户可见的乱码报错**：加密包版本不匹配时原先把 bytes 直接拼进消息，
+  用户看到 `b'9.9'`；非法版本字节更会变成**不可见控制符**（冒号后一片空白）。
+  现统一渲染为 `不支持的版本: 9.9（本机支持 1.0）`，非法字节转义为 `\xNN`
+- **修掉"把内建函数当类型注解"**：`Optional[any]` / `value: any` 里的 `any` 是内建函数，
+  注解零约束却静默生效 —— 改为 `Optional[Any]` / `Any`
+- **技术债棘轮首次下调**：mypy 1394 → **1391**，`as any` 196 / `except Exception` 802 持平
+- **核查留痕**：逐条核对 mypy 高风险类别与 129 处宽泛 `except`，把"疑似但实为误报"
+  的结论写进 CHANGELOG，避免下次重复排查
+
+## 历史亮点（v1.18.17）
 
 - **技术债棘轮上线**：mypy 错误数 / 前端 `as any` / 后端 `except Exception` 三类此前
   无人看管的指标装上了闸门 —— 基线存**数量 + 精确位置**，超限直接列出新增项；

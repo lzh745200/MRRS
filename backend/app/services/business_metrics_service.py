@@ -6,7 +6,7 @@
 
 import time
 from datetime import timezone, datetime, timedelta
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
@@ -26,7 +26,7 @@ class BusinessMetricsService:
         self._cache: Dict[str, tuple] = {}
         self._cache_ttl = 60  # 缓存60秒
 
-    def _get_cached(self, key: str) -> Optional[any]:
+    def _get_cached(self, key: str) -> Optional[Any]:
         """获取缓存值"""
         entry = self._cache.pop(key, None)
         if entry is not None:
@@ -36,7 +36,7 @@ class BusinessMetricsService:
                 return value
         return None
 
-    def _set_cached(self, key: str, value: any):
+    def _set_cached(self, key: str, value: Any):
         """设置缓存值"""
         self._cache[key] = (value, time.time())
 

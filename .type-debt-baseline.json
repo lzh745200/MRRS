@@ -1,5 +1,5 @@
 {
-  "mypy_errors": 1394,
+  "mypy_errors": 1391,
   "as_any": 196,
   "broad_except": 802,
   "_comment": "技术债棘轮基线。任一指标超过此值即 CI 失败；下调请直接改小。上调需在 PR 说明理由。生成命令：python scripts/check_type_debt.py --update",
@@ -835,7 +835,7 @@
       "backend/app/services/db_maintenance.py:123",
       "backend/app/services/db_maintenance.py:29",
       "backend/app/services/db_maintenance.py:49",
-      "backend/app/services/encrypted_package.py:139",
+      "backend/app/services/encrypted_package.py:161",
       "backend/app/services/encryption_service.py:124",
       "backend/app/services/encryption_service.py:219",
       "backend/app/services/encryption_service.py:91",

@@ -32,6 +32,24 @@ _CHECKSUM_LEN = 32
 MAX_METADATA_BYTES = 16 * 1024 * 1024
 
 
+def _as_text(raw: bytes) -> str:
+    """把文件头里的裸字节转成可读文本，绝不抛错。
+
+    用于错误消息：直接把 bytes 塞进 f-string 会渲染成 ``b'\\x01\\x02'``，
+    用户看不懂，也无法据此判断"是版本不对还是文件坏了"。
+
+    控制字符必须转义成 ``\\xNN``：``b"\\x02".decode("ascii")`` 是合法的 U+0002，
+    直接拼进消息会变成**看不见的空白** —— 那比原来的 ``b'\\x02'`` 更难排查。
+    """
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        text = ""
+    if text and text.isprintable():
+        return text
+    return raw.decode("latin-1").encode("unicode_escape").decode("ascii")
+
+
 def _derive_key(password: str, salt: bytes) -> bytes:
     """PBKDF2-SHA256 密钥派生."""
     kdf = PBKDF2HMAC(
@@ -105,7 +123,11 @@ def extract_encrypted_package(
 
         version = header[4:7]
         if version != VERSION:
-            raise ValueError(f"不支持的版本: {version}")
+            # 2026-10-28：此前直接 f-string 拼 bytes，用户看到的是 `b'\x02'` 这种
+            # 乱码而不是「版本号」。按 ASCII 解码（非法字节用 \xNN 表示）后给出可读提示。
+            raise ValueError(
+                f"不支持的版本: {_as_text(version)}（本机支持 {_as_text(VERSION)}）"
+            )
 
         salt = header[7:23]
         meta_len = struct.unpack(">I", header[23:27])[0]

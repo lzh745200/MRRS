@@ -12,6 +12,7 @@ from app.services.encrypted_package import (
     MAGIC,
     MAX_METADATA_BYTES,
     VERSION,
+    _as_text,
     create_encrypted_package,
     extract_encrypted_package,
 )
@@ -133,3 +134,35 @@ class TestFormatErrors:
         out.write_bytes(bytes(raw))
         with pytest.raises(ValueError, match="解密失败|完整性校验失败"):
             extract_encrypted_package(str(out), PASSWORD)
+
+class TestVersionMessageReadable:
+    """2026-10-28：版本不匹配的错误消息不得渲染成 ``b'\x02'`` 或不可见空白。
+
+    历史实现直接 f-string 拼 bytes，用户看到的是 ``b'9.9'`` / ``b'\x02'``，
+    既不像版本号也无法据此判断"版本不对还是文件坏了"。
+    """
+
+    def test_ascii_version_rendered_as_text(self):
+        assert _as_text(VERSION) == "1.0"
+        assert _as_text(b"9.9") == "9.9"
+
+    def test_control_bytes_escaped_not_blank(self):
+        """``b"\x02".decode("ascii")`` 是合法的不可见控制符 —— 必须转义。"""
+        out = _as_text(b"\x02")
+        assert out == "\\x02", f"控制符必须可见，实际: {out!r}"
+        assert out.isprintable()
+
+    def test_non_ascii_bytes_escaped(self):
+        out = _as_text(bytes([0xFF, 0xFE]))
+        assert out == "\\xff\\xfe", f"非法字节应转义，实际: {out!r}"
+        assert out.isprintable()
+
+    def test_unsupported_version_message_is_readable(self, tmp_path):
+        p = tmp_path / "bad_version.rrs"
+        p.write_bytes(MAGIC + b"9.9" + b"\x00" * 20)
+        with pytest.raises(ValueError) as exc:
+            extract_encrypted_package(str(p), PASSWORD)
+        msg = str(exc.value)
+        assert "不支持的版本" in msg
+        assert "b'" not in msg, f"消息里不应出现 bytes repr: {msg}"
+        assert "9.9" in msg and "1.0" in msg
