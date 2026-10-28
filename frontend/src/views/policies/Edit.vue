@@ -330,7 +330,9 @@ const loadData = async () => {
       formData.document_number = policy.document_number || ''
       formData.keywords = policy.keywords || ''
       formData.attachment_urls = policy.attachment_urls || []
-      formData.status = (policy.status as typeof formData.status) || 'draft'
+      // status 只透传、不臆造默认值：详情响应省略 status 时若填 'draft'，
+      // 用户一保存就会把"已发布"政策静默降级为草稿（且与新增表单默认 'active' 不一致）。
+      formData.status = policy.status as typeof formData.status
 
       // 处理附件列表
       if (policy.attachment_urls && policy.attachment_urls.length > 0) {

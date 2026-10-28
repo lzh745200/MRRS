@@ -224,7 +224,7 @@ describe('views/pairing/List.vue（结对帮扶台账）', () => {
     mocks.updateVisit.mockResolvedValue({ id: 301 })
     mocks.deleteVisit.mockResolvedValue({ id: 301 })
     mocks.getSupportedVillages.mockResolvedValue({
-      items: [{ id: 1, village_name: '幸福村' }],
+      items: [{ id: 1, villageName: '幸福村', village_name: '幸福村' }],
       total: 1,
     })
     mocks.schoolList.mockResolvedValue({ items: [{ id: 2, name: '希望小学' }], total: 1 })

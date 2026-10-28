@@ -115,11 +115,24 @@
   （`Cannot read properties of null (reading 'items')`）。
   改为 `const envelope = items as { items?: ProjectMilestone[] } | null | undefined` +
   `Array.isArray(items) ? items : (envelope?.items ?? [])`：仍是显式形状 + 可选链，
-  没有回退到宽松断言。修复后该文件 **13 例全绿**，前端全量 347 文件 **7,384 例 0 失败**。
+  没有回退到宽松断言。该文件 **13 例全绿**。
+- **政策编辑页不再臆造 `status` 默认值**：`7e44a9d` 把回填写成
+  `formData.status = (policy.status as ...) || 'draft'` —— 详情响应省略 `status` 时，
+  用户一保存就会把**已发布政策静默降级为草稿**（且与新增表单默认 `active` 自相矛盾）。
+  改为只透传（缺失即 `undefined`），恢复"不替用户臆造状态"的语义。
+- **两处过时测试断言按真实契约更新**（实现是有意修正，测试停在旧行为）：
+  ① `policies/Edit.test.ts` 的 `handleCategoryChange` 原断言 `getLevelOptions('military')`，
+  但后端 `/policies/options/levels` 不接收参数（本轮"假传参"修复），改断言无参调用；
+  ② `pairing/List.test.ts` 的帮扶村 mock 只给 `village_name`，而结对页已按规范字段
+  `villageName` 渲染（后端 `SupportedVillage.to_dict` **两种都返回**），mock 补齐双键。
+- **`types/policy.ts` 缺文件尾换行**导致 `npm run lint:check`（`--max-warnings=0`）失败，
+  会让 CI 的 lint 作业变红；`prettier --write` 修正，零逻辑变化。
 - **收口实测（2026-10-28，本机 Python 3.11.16 / Node 25.2.1）**：
   `scripts/run_gates.py` 默认档 **34 道 PASS / 0 FAIL / 0 SKIP**（含 stack_alignment、
   route_auth 849 路由、type_debt 188 持平、dist 9.2MB）；后端分段 12/12 PASS、
-  **14,896 用例**、覆盖率 **100.00%（46,243 行 / 11,560 分支，0 漏）**。
+  **14,896 用例**、覆盖率 **100.00%（46,243 行 / 11,560 分支，0 漏）**；
+  前端受影响文件 **71 例全绿**（milestones 13 + policies 42 + pairing 16），
+  全量复跑结论见交付报告与 CI。
 
 ## [1.18.20] - 2026-10-28 — 构建链路兜底（Windows %TEMP% ACL）+ 门禁自身健壮性
 

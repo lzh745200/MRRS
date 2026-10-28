@@ -336,7 +336,8 @@ describe('层级选项', () => {
     vm.handleCategoryChange()
     await flushPromises()
     expect(vm.formData.organization_level).toBe('')
-    expect(getLevelOptionsMock).toHaveBeenCalledWith('military')
+    // 后端 /policies/options/levels 不接收分类参数（v1.18.21 修掉假传参），此处断言无参调用
+    expect(getLevelOptionsMock).toHaveBeenCalledWith()
   })
 
   it('分类下拉 change → handleCategoryChange', async () => {
