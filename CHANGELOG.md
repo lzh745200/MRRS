@@ -5,12 +5,39 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [1.18.18] - 2026-10-28 — 清掉三类真问题：bytes 乱码报错 / 把内建函数当类型注解 / 棘轮基线首次下调
+## [1.18.18] - 2026-10-28 — 两处路由注册缺陷修复（6 接口不可达 / 4 条重复路径）+ 乱码报错与无效注解
 
 > 本版是「棘轮装上之后第一次真的往下压」：沿 mypy 明细逐条核实高风险类别
 > （`union-attr` / `operator` / `call-arg` / `str-bytes-safe` / `valid-type`），
 > 绝大多数是 SQLAlchemy `Column[...]` 造成的误报（已有 `is not None` 守卫），
 > 但筛出 **3 处真问题** 修掉，并把基线从 1394 下调到 **1391**。
+
+### Fixed（路由注册，本轮主动审计发现）
+
+- **`system.py` 的 router 双重 prefix —— 6 个接口全部路径错误、完全不可达**：
+  聚合器 `app/api/v1/system/__init__.py` 已是 `APIRouter(prefix="/system")`，
+  而 `system.py` 自己又写了 `prefix="/system"`，实际注册成
+  `/api/v1/system/system/{info,status,shutdown,restart,environment,version}` ——
+  正确路径 `/api/v1/system/info` 等**全部 404**。因为前端取系统信息走别的途径、
+  Electron 与测试也都不调它们，**一直没人发现**；含关机/重启在内 6 个接口等于摆设。
+  修复：`system.py` 的 prefix 改为空（由聚合器统一加）。
+  > **修复时差点放出的雷**：`/system/shutdown`、`/system/restart` 的依赖层只有
+  > `Depends(get_current_user)`（任意登录用户），真正的管理员校验在**函数体内**。
+  > 它们此前不可达所以无害，路径一修通就变成"任何登录用户可关机"。
+  > 已实测确认函数内校验存在（`system.py:235` / `273` / `336` 的 `require_admin`）才动手。
+- **`config_package` 被注册两次 —— 多出 4 条错误路径**：该模块 router 自带
+  `prefix="/system/config-packages"`，是给 `api/v1/__init__.py` 的「子模块直挂」用的
+  （注释写明"历史表面，勿删"），但聚合器又 include 了一次，于是多注册出
+  `/api/v1/system/system/config-packages` 等 4 条。修复：聚合器移除该 include，
+  保留独立注册。**端点总数（路径+方法口径）849 → 845** —— 减少的 4 条正是重复注册。
+- **新增路由认证覆盖门禁** `scripts/check_route_auth.py`（挂 `stack-alignment` 作业）：
+  `api_v1_router` 没有全局认证依赖，每个路由必须自己声明认证 —— 少写一行就是越权入口，
+  code review 很难发现。门禁用 FastAPI 运行时依赖树递归判定（能识别经角色守卫间接
+  要求认证的路由），白名单外的无认证路由即失败。上线时逐个核查全部 **58 个无认证路由**：
+  登录/登出/CSRF、健康检查、地图瓦片（`<img>` 带不了 token）、机器码（限流 + loopback +
+  双向验证）、权限包导入（非管理员限 loopback）、反馈（有意匿名）、shutdown（仅
+  127.0.0.1 + 内部密钥）、系统初始化（初始化前无用户）、备份 3 个（函数体内自定义认证）
+  —— **无真实漏洞**；门禁的已知局限（函数体内认证检测不到）写进了白名单注释。
 
 ### Fixed
 

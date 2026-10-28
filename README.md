@@ -10,6 +10,8 @@
 
 ## 本版亮点（v1.18.18）
 
+- **修掉 6 个系统接口全部不可达**：`system.py` 与聚合器重复加了 `/system` 前缀，实际注册成 `/api/v1/system/system/info` —— 正确路径**全部 404**（含关机/重启），因无人调用一直没被发现；顺带清掉 `config_package` 重复注册多出的 4 条错误路径，路由总数 853 → 849
+- **新增路由认证覆盖门禁**：`api_v1_router` 无全局认证依赖，少写一行 `Depends` 就是越权入口；门禁用运行时依赖树递归判定，58 个无认证路由逐个核查并登记理由（**无真实漏洞**）
 - **修掉一处用户可见的乱码报错**：加密包版本不匹配时原先把 bytes 直接拼进消息，
   用户看到 `b'9.9'`；非法版本字节更会变成**不可见控制符**（冒号后一片空白）。
   现统一渲染为 `不支持的版本: 9.9（本机支持 1.0）`，非法字节转义为 `\xNN`
@@ -285,7 +287,7 @@ npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本
 
 ```
 ├── backend/app/              # 后端（FastAPI，376 个 py / 12 万+ 行）
-│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 子包；849 个端点）
+│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 子包；845 个端点）
 │   ├── core/                 # 核心：config, security, database, transaction, cache, maintenance(维护闸门)
 │   ├── models/               # SQLAlchemy 数据模型（64 个文件 / 124 张表，含 W22 新增 household/media/consumption）
 │   ├── services/             # 业务逻辑层（107 个服务文件 / 5 个子包，含 ocr_service / household_service / media_service）

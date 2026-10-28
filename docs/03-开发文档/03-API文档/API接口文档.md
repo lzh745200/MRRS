@@ -9,7 +9,7 @@
 
 ## 1. 快速统计
 
-- **93 个路由模块文件（53 顶层 + 5 子包）/ 849 个端点**(5 个子包为 auth/data/import_export/monitoring/system;按 `@router` 装饰器扫描口径)
+- **93 个路由模块文件（53 顶层 + 5 子包）/ 845 个端点**(5 个子包为 auth/data/import_export/monitoring/system;按 `@router` 装饰器扫描口径)
 - v1.14.0 变更:新增 `households`(`/households`)、`media`(`/media`)、`consumption`(`/consumption`) 三个模块与
   `/funds/ocr-voucher`、`/report-templates/{id}/export|print-data`;删除 `villages`(`/villages`)、`sentiment`(`/sentiment`)、
   `i18n`(`/system/i18n`) 模块(分别因遗留表清理、消费帮扶替换、国际化功能下线)。

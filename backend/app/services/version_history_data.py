@@ -3356,8 +3356,21 @@ VERSION_HISTORY_DATA = [
     {
         "version": "1.18.18",
         "date": "2026-10-28",
-        "description": "清掉三类真问题：bytes 乱码报错 / 把内建函数当类型注解 / 棘轮基线首次下调",
+        "description": "两处路由注册缺陷修复（6 接口不可达 / 4 条重复路径）+ 乱码报错与无效注解",
         "features": [
+            (
+                "system.py 的 router 双重 prefix —— 6 个接口全部路径错误、完全不可达：聚合器 app/api/v1/system/init.py 已是 APIRouter(p"
+                "refix=\"/system\")，而 system.py 自己又写了 prefix=\"/system\"…"
+            ),
+            (
+                "config_package 被注册两次 —— 多出 4 条错误路径：该模块 router 自带prefix=\"/system/config-packages\"，是给 api/v1/i"
+                "nit.py 的「子模块直挂」用的（注释写明\"历史表面，勿删\"），但聚合器又 include 了一次，于是多注册出/api/v1/system/system/config-packag"
+                "es 等 4 条。修复：聚合器移除该 include，保留独立注册。"
+            ),
+            (
+                "新增路由认证覆盖门禁 scripts/check_route_auth.py（挂 stack-alignment 作业）：api_v1_router 没有全局认证依赖，每个路由必须自己声明"
+                "认证 —— 少写一行就是越权入口，code review 很难发现。门禁用 FastAPI 运行时依赖树递归判定（能识别经角色守卫间接要求认证的路由），白名单外的无认证路由即失败。"
+            ),
             (
                 "用户可见的乱码报错（services/encrypted_package.py）：加密包版本不匹配时消息直接把 bytes 拼进 f-string，用户看到的是 不支持的版本: b'9.9"
                 "'；更糟的是非法版本字节（如 \\x02）经 decode(\"ascii\") 后是不可见控制符，消息看起来像\"不支持的版本: \"（冒号后空白）—— 比乱码更难排查。"
