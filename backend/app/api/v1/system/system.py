@@ -22,7 +22,7 @@ from app.core.permission_utils import require_admin
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/system", tags=["系统控制"])
+router = APIRouter(tags=["系统控制"])
 
 
 # ==================== Pydantic 模型 ====================

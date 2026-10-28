@@ -160,13 +160,20 @@ def _frontend_api_dir() -> Path:
 
 
 def collect_frontend_calls() -> list[tuple[str, int, str, str]]:
-    """扫前端 api 层，返回 [(文件名, 行号, 原始文本, 归一化路径)]。"""
+    """扫前端 api 层，返回 [(文件名, 行号, 原始文本, 归一化路径)]。
+
+    2026-10-28：`glob("*.ts")` 只扫 `api/` **一级**，漏掉了子目录里的调用 ——
+    实测 `api/queries/user.ts` 的 `/auth/me`、`/users`、`/users/staff-list`
+    全部未被收录，导致 A 轴对这批路径的漂移检查形同虚设。改 `rglob` 后
+    调用数 481 → 485（+4 条真实调用；同时排除 `.spec.ts`，避免把测试文件里
+    的样例路径当成真实调用）。
+    """
     calls: list[tuple[str, int, str, str]] = []
     api_dir = _frontend_api_dir()
     if not api_dir.exists():
         return calls
-    for path in sorted(api_dir.glob("*.ts")):
-        if path.name.endswith(".test.ts"):
+    for path in sorted(api_dir.rglob("*.ts")):
+        if path.name.endswith((".test.ts", ".spec.ts")):
             continue
         text = _strip_comments(path.read_text(encoding="utf-8", errors="replace"))
         consts = dict(_CONST_RE.findall(text))

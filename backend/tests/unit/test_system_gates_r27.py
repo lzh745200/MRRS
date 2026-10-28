@@ -50,13 +50,19 @@ def _mock_db():
     return db
 
 
-def _mini_client(router, user, mock_db=None):
-    """按模块路由构建独立测试应用，按需覆盖认证/数据库依赖。"""
+def _mini_client(router, user, mock_db=None, prefix=""):
+    """按模块路由构建独立测试应用，按需覆盖认证/数据库依赖。
+
+    `prefix`：模拟聚合器的挂载前缀。`system.py` 的 router **不自带** prefix
+    （由 `app/api/v1/system/__init__.py` 的 `APIRouter(prefix="/system")` 统一加），
+    直接挂载时需手动补，否则路径会少一层 —— 2026-10-28 修正了该 router 原本
+    重复声明的 prefix（导致生产路径变成 `/api/v1/system/system/xxx`）。
+    """
     from app.core.database import get_db
     from app.core.security import get_current_user
 
     app = FastAPI()
-    app.include_router(router)
+    app.include_router(router, prefix=prefix)
     if user is not None:
         app.dependency_overrides[get_current_user] = lambda: user
     if mock_db is not None:
@@ -166,16 +172,16 @@ class TestM5EnvironmentGate:
         return router
 
     def test_environment_requires_admin(self, router):
-        client = _mini_client(router, _plain_user())
+        client = _mini_client(router, _plain_user(), prefix="/system")
         assert client.get("/system/environment").status_code == 403
 
     def test_environment_requires_auth(self, router):
-        client = _mini_client(router, None)
+        client = _mini_client(router, None, prefix="/system")
         assert client.get("/system/environment").status_code == 401
 
     def test_admin_still_reads_environment(self, router):
         """超管不回归：管理员仍可读运行环境详情。"""
-        client = _mini_client(router, _admin_user())
+        client = _mini_client(router, _admin_user(), prefix="/system")
         resp = client.get("/system/environment")
         assert resp.status_code == 200
         data = resp.json()["data"]

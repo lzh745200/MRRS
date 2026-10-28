@@ -74,14 +74,14 @@ router.include_router(cache_router)
 logger.debug("已加载路由: system.cache")
 
 # ---- 配置包管理 ----
-try:
-    from app.api.v1.system.config_package import router as config_package_router
-except Exception as exc:
-    # 深审 #78：子模块导入失败必须 fail-fast —— 原实现只记 warning，端点会
-    # 静默缺失（审计/零信任/备份这类安全路由缺失时无人察觉），且丢掉原始栈。
-    raise RuntimeError(f"加载 system.config_package 路由失败: {exc}") from exc
-router.include_router(config_package_router)
-logger.debug("已加载路由: system.config_package")
+# 2026-10-28：**不再在这里 include**。`config_package.py` 的 router 自带
+# `prefix="/system/config-packages"`（它是为 `app/api/v1/__init__.py` 里的
+# 「system 子模块直挂」设计的，注释写着"历史表面，勿删"）。若这里再 include 一次，
+# 会因聚合器已带 `prefix="/system"` 而注册成 `/api/v1/system/system/config-packages`
+# —— 双重 system 的错误路径（实测确实存在，且没有任何调用方）。
+# 正确路径 `/api/v1/system/config-packages` 由独立注册提供，功能不受影响。
+# 注意：本文件其它子模块（admin/audit/backup 等）的 prefix 不含 `/system`，
+# 必须继续在这里 include，不要照此删除。
 
 # ---- 运行环境检查 ----
 try:

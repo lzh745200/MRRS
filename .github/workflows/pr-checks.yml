@@ -619,6 +619,15 @@ jobs:
       - name: Stack alignment check (frontend/backend/database)
         working-directory: backend
         run: python ../scripts/check_stack_alignment.py
+      # 路由认证覆盖门禁：`api_v1_router` 没有全局认证依赖，每个路由必须自己声明
+      # `Depends(get_current_user)`。少写一行就是越权入口，且 code review 很难发现。
+      # 用 FastAPI 运行时依赖树递归判定（能识别经角色守卫间接要求认证的路由），
+      # 白名单外的无认证路由即失败。2026-10-28 首次上线时逐个核查了 58 个无认证
+      # 路由，全部有合理设计或其它保护（机器码双码 + loopback、备份自定义认证、
+      # 初始化前无用户等），详见 scripts/check_route_auth.py 的白名单注释。
+      - name: Route auth coverage gate
+        working-directory: backend
+        run: python ../scripts/check_route_auth.py
       # 文档数字漂移门禁：CLAUDE.md 里的 API 端点数 / 路由模块数 / 前端测试文件数 /
       # 后端测试用例数必须与实测一致。缘起（2026-10-26 体检）：文档写"14,726 用例"，
       # 实测 14,731→14,757，而这行数字此前**从未接进 CI**，只有人手工跑 --full 才发现，

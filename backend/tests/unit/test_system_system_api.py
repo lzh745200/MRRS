@@ -4,7 +4,7 @@ Tests for system.py — core system API.
 
 from unittest.mock import MagicMock
 
-BASE = "/api/v1/system/system"
+BASE = "/api/v1/system"
 
 
 class TestGetSystemInfo:
