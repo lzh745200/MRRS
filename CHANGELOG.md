@@ -115,6 +115,14 @@
   只能靠断言）。`views/approval/PendingList.vue` 去掉 7 处断言，并把可转交用户解析收敛为
   `pickStaffUsers()`：兼容裸数组/分页信封，且**按 id 是否为数字过滤脏数据**（以前 `as any[]`
   强转会把脏行直接塞进下拉框）。`vue-tsc` 0 错误，审批相关 **72 passed**。
+- **`as any` 乡村工作切片清零（155 → 150）**：`api/ruralWork.ts` 从全 `any` 补成
+  `RuralWorkRecord`（含索引签名兼容后端扩展字段）+ `RuralWorkListPayload`（裸分页/信封双形态）
+  + `RuralWorkCreated`；`views/ruralWorks/Task.vue` 去掉 5 处断言。
+  **两处不是删断言而是修契约**：① `el-upload` 的 `:file-list` 原用 `as any` 强转，但我们的附件
+  `uid` 是字符串、el-upload 要求数字 —— 改为 `progressFileList` 计算属性按真实契约映射
+  （不改提交给后端的数据）；② 后端状态字符串直接赋给 `Task['status']` 联合类型，
+  改为 `normalizeTaskStatus()`，未知值回落 `pending`（避免渲染空状态标签）。
+  `vue-tsc` 0 错误，乡村工作相关 **110 passed**（Task 67 + api 43）。
 
 ### Added（批 3 起：性能基线）
 

@@ -427,7 +427,7 @@
                 <el-form-item label="当前进度">
                   <el-progress
                     :percentage="currentTaskProgress?.progress || 0"
-                    :status="getProgressStatus(currentTaskProgress?.progress || 0) as any"
+                    :status="getProgressStatus(currentTaskProgress?.progress || 0)"
                     :stroke-width="10"
                     :format="(percentage: number) => `${percentage}%`"
                   />
@@ -472,7 +472,7 @@
                 action=""
                 :on-change="handleProgressFileChange"
                 :auto-upload="false"
-                :file-list="(progressUpdateForm.attachments || []) as any"
+                :file-list="progressFileList"
                 list-type="picture-card"
                 multiple
               >
@@ -561,6 +561,7 @@ import { unwrapList } from '@/utils/unwrapList'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { UploadUserFile } from 'element-plus'
 import {
   Search,
   Plus,
@@ -742,6 +743,32 @@ const progressUpdateForm = ref<ProgressUpdateForm>({
   attachments: [],
 })
 
+/**
+ * el-upload 需要 `uid: number` + `name` 必填，而我们的附件是 {name?,url?,status?}。
+ * 以前在模板里直接 `as any` 强转（uid 是字符串，与 el-upload 契约不符）；
+ * 现按真实契约映射一份视图模型，既不撒谎也不改变提交给后端的数据。
+ */
+const progressFileList = computed<UploadUserFile[]>(() =>
+  (progressUpdateForm.value.attachments ?? []).map((file, index) => ({
+    name: file.name ?? `附件${index + 1}`,
+    url: file.url,
+    uid: index,
+  }))
+)
+
+/** 后端状态字符串 → 页面 Task 联合类型（未知值一律回落 pending，避免渲染空状态标签） */
+function normalizeTaskStatus(status?: string): Task['status'] {
+  if (status === 'planned') return 'pending'
+  const allowed: Task['status'][] = [
+    'pending',
+    'in_progress',
+    'completed',
+    'delayed',
+    'cancelled',
+  ]
+  return allowed.includes(status as Task['status']) ? (status as Task['status']) : 'pending'
+}
+
 // 表单验证规则 - 修复FormRules使用
 const taskRules: FormRules = {
   name: [
@@ -833,15 +860,15 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await getRuralWorks({ limit: 100 })
-    if (res && (res as any).items && (res as any).items.length > 0) {
-      tasks.value = (res as any).items.map((item: any, idx: number) => ({
+    if (res?.items && res.items.length > 0) {
+      tasks.value = res.items.map((item, idx: number) => ({
         id: String(item.id) || `T${String(idx + 1).padStart(3, '0')}`,
         name: item.name || '',
         projectId: '',
         projectName: item.village_name || '',
         assigneeId: '',
         assigneeName: item.responsible_person || '',
-        status: item.status === 'planned' ? 'pending' : item.status || 'pending',
+        status: normalizeTaskStatus(item.status),
         priority: 'medium' as const,
         progress: item.progress || 0,
         startDate: item.start_date || '',
@@ -980,7 +1007,7 @@ const saveTask = async () => {
 
     if (isEditMode.value) {
       try {
-        await updateRuralWork(Number(currentTask.value.id), apiPayload as any)
+        await updateRuralWork(Number(currentTask.value.id), apiPayload)
         ElMessage.success('任务更新成功')
       } catch {
         // API不可用，回退到本地
@@ -992,7 +1019,7 @@ const saveTask = async () => {
       }
     } else {
       try {
-        const result = await createRuralWork(apiPayload as any)
+        const result = await createRuralWork(apiPayload)
         currentTask.value.id = String(result?.id || Date.now())
         ElMessage.success('任务创建成功')
       } catch {
