@@ -58,13 +58,17 @@ class TestRemindersApi:
         assert result["data"]["unread"] == 2
 
     @pytest.mark.asyncio
-    async def test_list_reminders_exception_fallback(self):
+    async def test_list_reminders_exception_returns_500(self):
+        """故障必须外显为 500（旧实现返回 200 + 空列表，等于把「服务不可用」
+        显示成「今天没有提醒」）。"""
+        from fastapi import HTTPException
+
         from app.api.v1.reminders import list_reminders
 
         with patch("app.services.reminder_orchestrator.list_reminders", side_effect=RuntimeError("boom")):
-            result = await list_reminders(current_user=MagicMock())
-        assert result["data"]["items"] == []
-        assert result["data"]["unread"] == 0
+            with pytest.raises(HTTPException) as exc:
+                await list_reminders(current_user=MagicMock())
+        assert exc.value.status_code == 500
 
     @pytest.mark.asyncio
     async def test_trigger_scan_success(self):
@@ -75,12 +79,16 @@ class TestRemindersApi:
         assert result["data"]["created"] == 3
 
     @pytest.mark.asyncio
-    async def test_trigger_scan_exception_fallback(self):
+    async def test_trigger_scan_exception_returns_500(self):
+        """扫描失败同样不能返回 200 + created=0（会被读成「本次没有新提醒」）。"""
+        from fastapi import HTTPException
+
         from app.api.v1.reminders import trigger_scan
 
         with patch("app.services.reminder_orchestrator.run_reminder_scans", side_effect=RuntimeError("boom")):
-            result = await trigger_scan(current_user=MagicMock())
-        assert result["data"]["created"] == 0
+            with pytest.raises(HTTPException) as exc:
+                await trigger_scan(current_user=MagicMock())
+        assert exc.value.status_code == 500
 
 
 # ===========================================================================

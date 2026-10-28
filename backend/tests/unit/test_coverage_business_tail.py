@@ -502,6 +502,9 @@ class TestFundsTail:
         row = SimpleNamespace(
             total_count=5, total_amount=1000.0, pending_count=1, approved_count=1,
             allocated_count=1, in_use_count=1, completed_count=1,
+            # planned 是 FundStatus 的合法取值；endpoint 现在会读这一列
+            # （此前口径漏档，前端「规划中」卡片恒 0）
+            planned_count=2,
             used_amount=100.0, allocated_amount=200.0,
         )
         exec_result = MagicMock()
@@ -513,6 +516,7 @@ class TestFundsTail:
             result = fund_statistics_overview(year=2025, current_user=_admin_user(), db=db)
         assert result["code"] == 200
         assert result["data"]["year"] == 2025
+        assert result["data"]["planned_count"] == 2
 
     def test_fund_approval_flow(self):
         from app.api.v1.funds import fund_approval_flow
