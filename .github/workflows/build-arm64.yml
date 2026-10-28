@@ -583,8 +583,17 @@ jobs:
             tail -60 "$ATTEMPT_LOG" || true
             echo "===== attempt ${i} ERROR lines (annotated) ====="
             grep -aiE "error|failed|cannot|denied|no space|invalid|unsupported|not found" "$ATTEMPT_LOG" | tail -8 | cut -c1-400 | sed 's/^/::error::/' || true
-            echo "===== attempt ${i} failed; diagnostics ====="            sleep $((i * 60))
+            echo "===== attempt ${i} failed; diagnostics ====="
+            # 2026-10-28（v1.18.21）：此前这一行把 sleep 写在同一行
+            #   echo "... diagnostics ====="            sleep $((i * 60))
+            # —— sleep 被当成 echo 的**参数**打印，退避从未真正等待；
+            # 且循环结束后没有失败出口，三次全红时该步骤仍报 success，
+            # 直到下一步 Verify 找不到 *.deb 才炸（"构建成功却没有产物"，极难定位）。
+            sleep $((i * 60))
           done
+          # 三次尝试全部失败 → 必须显式失败，并指向已上传的 attempt 日志
+          echo "::error::standalone DEB 构建连续 3 次尝试均失败（详见上方 attempt 日志与构建 artifact）"
+          exit 1
 
       - name: Verify standalone DEB (no CRLF in maintainer scripts)
         run: |

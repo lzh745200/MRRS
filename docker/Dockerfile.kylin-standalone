@@ -27,9 +27,31 @@ COPY frontend/package.json frontend/package-lock.json* ./frontend/
 # （v1.11.5 ARM64 构建实测）。安装期就位脚本文件，补丁自身幂等（找到目标文件
 # 才动，找不到仅告警），不破坏层缓存语义。
 COPY frontend/scripts/patch-vitest-coverage.cjs ./frontend/scripts/
-RUN cd frontend && npm install --legacy-peer-deps --no-fund --no-audit > /tmp/npm-install.log 2>&1; \
-    code=$?; tail -20 /tmp/npm-install.log; \
-    if [ $code -ne 0 ]; then echo "ERROR: npm install 失败 (exit code $code)"; exit 1; fi
+# 2026-10-28（v1.18.21）：容器内 npm install 加**三次退避重试**。
+# 实测 v1.18.21 的 tag 构建 3 次尝试全部红在同一个位置：
+#   `npm error network ... ECONNRESET` → "ERROR: npm install 失败 (exit code 1)"
+# 而 workflow 的重试循环吞掉了失败（见 build-arm64.yml 的同批修复），
+# 表现为「构建步骤 success 却没有产物」，下一步才炸 —— 极难定位。
+# npm 自身 fetch-retries 对付不了连接重建，故外层再加退避。
+RUN cd frontend \
+ && npm config set fetch-retries 5 \
+ && npm config set fetch-retry-mintimeout 20000 \
+ && npm config set fetch-retry-maxtimeout 120000 \
+ && npm config set fetch-timeout 300000 \
+ && installed=0 \
+ && for attempt in 1 2 3; do \
+        echo "npm install attempt ${attempt}"; \
+        if npm install --legacy-peer-deps --no-fund --no-audit --prefer-offline > /tmp/npm-install.log 2>&1; then \
+            installed=1; break; \
+        fi; \
+        echo "npm install attempt ${attempt} failed:"; tail -20 /tmp/npm-install.log || true; \
+        sleep $((attempt * 20)); \
+    done; \
+    if [ "${installed}" != "1" ]; then \
+        echo "ERROR: npm install 连续 3 次失败（多为容器内 registry 网络抖动）"; \
+        tail -30 /tmp/npm-install.log || true; \
+        exit 1; \
+    fi
 
 # 复制前端源码并构建
 COPY frontend/ ./frontend/
