@@ -50,6 +50,11 @@
   切换前先 `npm ping` 探活，日志可直接证明"镜像到底可不可达"。
   三处同改：`pr-checks.yml`（frontend-check / e2e-test）、`build-windows.yml`、
   `docker/Dockerfile.kylin-standalone`。
+- **镜像按列表尝试，且首选境外友好源**：GitHub runner 在境外，访问
+  `registry.npmmirror.com`（中国节点）常被重置。现在先 `https://registry.yarnpkg.com`
+  （npm 同源 CDN、内容一致），再退回 npmmirror；每个镜像切换前 `npm ping` 探活。
+  实测 `--registry` 对 `npm ci` 确实会改道（本地用 lock 指向 npmjs 的样例验证过），
+  之前"镜像没生效"的观感来自缺 `--loglevel=http` 日志。
 
 ### Changed（补：离线缓存优先）
 

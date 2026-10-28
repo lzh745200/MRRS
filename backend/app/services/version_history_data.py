@@ -3559,6 +3559,10 @@ VERSION_HISTORY_DATA = [
                 "以\"默认源失败后切镜像\"那三次尝试仍然全部打到原源，与默认源一起红 —— 这是本轮最后一个隐性缺陷。"
             ),
             (
+                "镜像按列表尝试，且首选境外友好源：GitHub runner 在境外，访问registry.npmmirror.com（中国节点）常被重置。现在先 https://registry.yar"
+                "npkg.com（npm 同源 CDN、内容一致），再退回 npmmirror；每个镜像切换前 npm ping 探活。"
+            ),
+            (
                 "pr-checks.yml 的 frontend-check / e2e-test 加「离线缓存优先」：先给 ~/.npm 叠一层带 restore-keys 的 actions/cach"
                 "e（setup-node 的缓存 key 绑死package-lock.json，lock 一变即 miss，这正是重试全落在同一故障窗口的原因），安装时首试 npm ci --offli"
                 "ne（只吃本地缓存，零网络）…"

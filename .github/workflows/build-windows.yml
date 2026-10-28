@@ -105,11 +105,16 @@ jobs:
           done
           if [ "${installed}" != "1" ]; then
             echo "::warning::默认 registry 连续 3 次失败，改用镜像重试"
-            if npm ci --legacy-peer-deps \
-                 --registry "https://registry.npmmirror.com" --replace-registry-host=always; then
-              installed=1
-              echo "npm ci OK via mirror"
-            fi
+            for MIRROR in "https://registry.yarnpkg.com" "https://registry.npmmirror.com"; do
+              echo "::warning::尝试镜像 ${MIRROR}"
+              npm ping --registry "${MIRROR}" || true
+              if npm ci --legacy-peer-deps \
+                   --registry "${MIRROR}" --replace-registry-host=always; then
+                installed=1
+                echo "npm ci OK via ${MIRROR}"
+                break
+              fi
+            done
           fi
           if [ "${installed}" != "1" ]; then
             echo "::error::npm ci 连续 3 次失败（默认源与镜像均失败）—— 若日志为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑该作业"
@@ -197,11 +202,16 @@ jobs:
           done
           if [ "${installed}" != "1" ]; then
             echo "::warning::默认 registry 连续 3 次失败，改用镜像重试"
-            if npm ci --legacy-peer-deps \
-                 --registry "https://registry.npmmirror.com" --replace-registry-host=always; then
-              installed=1
-              echo "npm ci OK via mirror"
-            fi
+            for MIRROR in "https://registry.yarnpkg.com" "https://registry.npmmirror.com"; do
+              echo "::warning::尝试镜像 ${MIRROR}"
+              npm ping --registry "${MIRROR}" || true
+              if npm ci --legacy-peer-deps \
+                   --registry "${MIRROR}" --replace-registry-host=always; then
+                installed=1
+                echo "npm ci OK via ${MIRROR}"
+                break
+              fi
+            done
           fi
           if [ "${installed}" != "1" ]; then
             echo "::error::npm ci 连续 3 次失败（默认源与镜像均失败）—— 若为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑"
