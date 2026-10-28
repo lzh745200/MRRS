@@ -32,11 +32,14 @@ class TestMypyCleanModules:
         if importlib.util.find_spec("mypy") is None:
             pytest.skip("mypy 未安装（本地可选依赖；CI static-analysis 作业会跑全量）")
 
+        # 必须显式指定 encoding：Windows 默认 GBK 会让 mypy 的中文/符号输出解码崩
+        # （check_subprocess_encoding.py 门禁就卡这一条）。
         proc = subprocess.run(
             [sys.executable, "-m", "mypy", *CLEAN_MODULES, "--ignore-missing-imports"],
             cwd=str(BACKEND),
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=600,
         )
         assert proc.returncode == 0, (
