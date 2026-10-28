@@ -352,6 +352,23 @@ describe('Dashboard.vue (analytics/dashboard)', () => {
     wrapper.unmount()
   })
 
+  // 覆盖率补口（收口 v1.18.24）：handleRegionClick 的 name 空串/非字符串/null 提前返回侧
+  it('钻取：name 为空串 / 非字符串 / null → 直接返回且不发请求', async () => {
+    vi.mocked(drillDown).mockClear()
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    await h.clickHandler!({ name: '' })
+    await h.clickHandler!({ name: 123 })
+    await h.clickHandler!(null)
+    await flushPromises()
+    await nextTick()
+
+    expect(drillDown).not.toHaveBeenCalled()
+    expect(wrapper.find('.drill-down-panel').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('导出报表生成 JSON 文件下载', async () => {
     const clickSpy = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
