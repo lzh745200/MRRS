@@ -215,6 +215,13 @@
   `FORBIDDEN_USERNAME_PARTS` 补 `list[str]` 注解。
   守卫 `test_mypy_clean_modules.py` 的清单扩到 3 个模块，并改用 `--follow-imports=skip`
   （只看模块自身，不追 `transaction`/`pii_crypto` 的存量债）。security 相关 **102 passed**。
+- **修掉 `upload_endpoints` 门禁的一处误报（不是代码问题，是门禁不认合规写法）**：
+  `/data-packages/import` 走的是自写的流式落盘助手 `_stream_upload_to_file(...)`（边读边写、
+  带 `max_bytes` 上限、峰值只多一个分块，比 `read_upload_with_limit` 更省内存），但该助手的
+  `file` 参数**没有 `UploadFile` 注解**，而门禁原先只把「带注解的函数」当作可委托的合规目标
+  → 端点委托给这个合规助手反被判违规。现改为按「同文件内的函数定义 + 自身合规」判定，
+  新增 3 例回归（裸 `await file.read()` 必须被抓、委托无注解流式助手必须放行、
+  `read_upload_with_limit` 必须放行）。`upload_endpoints` 恢复 `total=0 baseline=0 NEW=0`。
 - **环境事件（记录，不掩盖）**：验证中发现 `frontend/node_modules` 被清空（只剩空目录）、
   `backend/.venv` 的 mypy 也消失 —— 属于并发会话为出包做的依赖重建。已用 `npm ci` 恢复前端依赖
   （543 包，约 1 分钟），逐条修完类型再复绿；mypy 待其 venv 重建完成后再验证下一批模块收紧。

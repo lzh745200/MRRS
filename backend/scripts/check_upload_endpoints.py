@@ -61,9 +61,19 @@ def scan_text(rel_path: str, text: str) -> list:
         body = ast.get_source_segment(text, node) or ""
         handlers.append((node, body, upload_args))
 
-    # 一级委托：函数体调用同文件内的合规处理函数（如 _stream_package_to_disk）
-    # 也算合规 —— 被委托者自身同样受本门禁扫描，不会形成豁免黑洞。
-    compliant_names = {node.name for node, body, _ in handlers if _is_compliant(body)}
+    # 一级委托：函数体调用同文件内**自身限长**的函数也算合规 —— 被委托者同样受本门禁扫描，
+    # 不会形成豁免黑洞。
+    #
+    # 2026-10-28 修正（原先只认带 `UploadFile` 注解的 handler）：流式落盘助手常写成
+    # `async def _stream_upload_to_file(file, dest, max_bytes, ...)`（file 无注解），
+    # 于是「端点委托给这个合规助手」被判成违规 —— 实测 data_packages.py:536 的误报
+    # 就是这个原因。改为按「同文件内的函数定义 + 自身合规」判定。
+    compliant_names = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and _is_compliant(ast.get_source_segment(text, node) or "")
+    }
 
     for node, body, upload_args in handlers:
         if _is_compliant(body):
