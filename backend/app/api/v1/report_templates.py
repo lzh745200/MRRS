@@ -751,6 +751,7 @@ def _village_process_rows(
             db.add(record)
             created += 1
         except Exception as e:
+            logger.warning('_village_process_rows 兜底失败（已降级）: %s', e, exc_info=True)
             errors.append(f"第{idx + 3}行: {str(e)}")
 
     return created, skipped, errors
@@ -878,6 +879,7 @@ def _import_school_data(
             db.add(record)
             created += 1
         except Exception as e:
+            logger.warning('_import_school_data 兜底失败（已降级）: %s', e, exc_info=True)
             errors.append(f"第{idx + 3}行: {str(e)}")
 
     safe_commit(db)
@@ -1042,6 +1044,7 @@ def _project_process_rows(
             db.add(record)
             created += 1
         except Exception as e:
+            logger.warning('_project_process_rows 兜底失败（已降级）: %s', e, exc_info=True)
             errors.append(f"第{idx + 3}行: {str(e)}")
 
     return created, skipped, errors
@@ -1199,6 +1202,7 @@ def _rural_work_process_rows(
             db.add(record)
             created += 1
         except Exception as e:
+            logger.warning('_rural_work_process_rows 兜底失败（已降级）: %s', e, exc_info=True)
             errors.append(f"第{idx + 3}行: {str(e)}")
 
     return created, skipped, errors

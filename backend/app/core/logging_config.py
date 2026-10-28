@@ -105,7 +105,7 @@ class SensitiveDataFilter(logging.Filter):
                 # 用脱敏后的内容覆盖 record.args/msg，确保 format() 输出脱敏结果
                 record.msg = redacted
                 record.args = None
-        except Exception:
+        except Exception:  # nosec:swallow - logger 自身不可用，无法再留痕
             # 脱敏失败不应阻断日志输出
             pass
         # M37（R27 排查）：只脱敏 record.msg 会让 PII 随异常堆栈原样落盘——
@@ -118,7 +118,7 @@ class SensitiveDataFilter(logging.Filter):
                 record.exc_text = self._redact(
                     logging.Formatter().formatException(record.exc_info)
                 )
-        except Exception:
+        except Exception:  # nosec:swallow - logger 自身不可用，无法再留痕
             # 渲染失败时保持 exc_text 为空 → Formatter 走原生渲染（不阻断日志）
             pass
         return True

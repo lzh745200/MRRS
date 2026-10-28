@@ -339,6 +339,7 @@ async def import_schools_excel(
                 errors.append(_fmt_row_error(row_idx, e, "数据格式错误（请检查数字/日期字段格式）",
                                              row[1] if row and len(row) > 1 else "?"))
             except Exception as e:
+                logger.warning('import_schools_excel 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[1] if row and len(row) > 1 else "?"))
         safe_commit(db)
@@ -446,6 +447,7 @@ async def import_scholarship_students(
                 errors.append(_fmt_row_error(row_idx, e, "数据格式错误（请检查年份/金额字段是否为数字）",
                                              row[0] if row and len(row) > 0 else "?"))
             except Exception as e:
+                logger.warning('import_scholarship_students 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[0] if row and len(row) > 0 else "?"))
         safe_commit(db)
@@ -1526,6 +1528,7 @@ async def import_school_scholarship_students(
                 errors.append(_fmt_row_error(row_idx, e, "数据格式错误（请检查年份/金额字段是否为数字）",
                                              row[0] if row and len(row) > 0 else "?"))
             except Exception as e:
+                logger.warning('import_school_scholarship_students 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(_fmt_row_error(row_idx, e, str(e),
                                              row[0] if row and len(row) > 0 else "?"))
         safe_commit(db)

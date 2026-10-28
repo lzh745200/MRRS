@@ -276,6 +276,14 @@
   已转存给调用方而非吞掉）、`core/database_indexes.py`（1：单表行数统计失败）。
   统一按「高频轮询端点用 debug、真实故障用 warning」的口径，避免健康检查刷日志；
   基线 123 → 110，门禁 total=110 baseline=110 NEW=0。
+- **静默吞异常门禁补一类合法形态 + 再收口 39 处（110 → 71）**：
+  **门禁语义修正**：诊断类接口的 `except Exception as exc: return {"error_type": ...}` 其实**没有吞掉**
+  故障（错误已外化到响应里），原来被误判为违规 —— 现在把「失败写进输出」也算合规
+  （识别 error/failed/unavailable/degraded 等字面量），`diagnostics.py` 的 10 处因此转正；
+  **真实补日志 19 处**：`excel_importer_service.py`（6）、`analytics_service.py`（5）、`report_templates.py`（4）、
+  `school.py`（3）、`startup/preflight.py`（1），消息统一带**函数名**（如 `get_village_analysis 兜底失败（已降级）`）
+  便于定位；`core/logging_config.py` 的 2 处加 `nosec:swallow` 豁免（logger 自身不可用，无法再留痕）。
+  基线 110 → 71（门禁 total=71 baseline=71 NEW=0）。
 - **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
   bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
   会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；

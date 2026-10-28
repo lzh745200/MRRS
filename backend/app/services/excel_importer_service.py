@@ -374,6 +374,7 @@ class ExcelImporterService:
             return result
 
         except Exception as e:
+            logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
             # 其他错误
             self.db.rollback()
             result.errors.append(
@@ -434,6 +435,7 @@ class ExcelImporterService:
                     existing_names.add(village_name.lower())
 
             except Exception as e:
+                logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
                 result.errors.append(
                     ImportError(
                         row_number=row_idx,
@@ -529,6 +531,7 @@ class ExcelImporterService:
                 result.success_rows += 1
 
             except Exception as e:
+                logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
                 result.errors.append(
                     ImportError(
                         row_number=row_idx,
@@ -671,6 +674,7 @@ class ExcelImporterService:
                 if name:
                     existing_names.add(name.lower())
             except Exception as e:
+                logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
                 result.errors.append(
                     ImportError(
                         row_number=row_idx,
@@ -740,6 +744,7 @@ class ExcelImporterService:
                 if name:
                     existing_names.add(name.lower())
             except Exception as e:
+                logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
                 result.errors.append(
                     ImportError(
                         row_number=row_idx,
@@ -806,6 +811,7 @@ class ExcelImporterService:
                 if name:
                     existing_names.add(name.lower())
             except Exception as e:
+                logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
                 result.errors.append(
                     ImportError(
                         row_number=row_idx,

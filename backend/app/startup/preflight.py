@@ -162,7 +162,8 @@ def _sample_existing_ciphertext() -> Optional[str]:
             return row[0] if row else None
         finally:
             session.close()
-    except Exception:  # noqa: BLE001 - 预检不允许因取样失败而崩溃（新库/表未建）
+    except Exception as exc:  # noqa: BLE001 - 预检不允许因取样失败而崩溃（新库/表未建）
+        logger.debug('_sample_existing_ciphertext 兜底失败（已降级）: %s', exc, exc_info=True)
         return None
 
 

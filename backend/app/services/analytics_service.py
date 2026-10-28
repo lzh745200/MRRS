@@ -239,6 +239,7 @@ class AnalyticsService:
                 "infrastructure": infra_data,
             }
         except Exception as e:
+            app_logger.warning('get_village_analysis 兜底失败（已降级）: %s', e, exc_info=True)
             return self._error_payload("获取帮扶村分析数据", e, {})
 
     def get_funding_trends(self, db: Session, years: int = 5, current_user: Any = None) -> Dict[str, Any]:
@@ -290,6 +291,7 @@ class AnalyticsService:
 
             return {"trends": trends, "start_year": start_year, "end_year": end_year}
         except Exception as e:
+            app_logger.warning('get_funding_trends 兜底失败（已降级）: %s', e, exc_info=True)
             return self._error_payload("获取资金趋势", e, {"trends": [], "start_year": 0, "end_year": 0})
 
     def get_performance_metrics(self, db: Session, current_user: Any = None) -> Dict[str, Any]:
@@ -369,6 +371,7 @@ class AnalyticsService:
                 "investment_categories": categories,
             }
         except Exception as e:
+            app_logger.warning('get_performance_metrics 兜底失败（已降级）: %s', e, exc_info=True)
             return self._error_payload("获取绩效指标", e, {})
 
     def get_comparison_analysis(
@@ -424,6 +427,7 @@ class AnalyticsService:
 
             return {"comparison": comparison, "compare_type": compare_type}
         except Exception as e:
+            app_logger.warning('get_comparison_analysis 兜底失败（已降级）: %s', e, exc_info=True)
             return self._error_payload(
                 "获取对比分析", e, {"comparison": [], "compare_type": compare_type}
             )
@@ -470,6 +474,7 @@ class AnalyticsService:
                     "generated_at": datetime.now().isoformat(),
                 }
         except Exception as e:
+            app_logger.warning('generate_report_data 兜底失败（已降级）: %s', e, exc_info=True)
             return self._error_payload("生成报表数据", e, {})
 
     @staticmethod

@@ -38,7 +38,11 @@ from _gate_common import BACKEND, iter_py_files, rel, run_gate
 
 GATE = "silent_swallow"
 EXEMPT_MARKER = "nosec:swallow"
+# 日志调用标记
 LOG_MARKERS = ("logger", "logging", "_log", "warn(", "warning(", "error(", "exception(", "print(")
+# 失败已"显式外化"到输出里的标记：把 error_type / failed / unavailable 等写进返回值或结果字典，
+# 也算没吞掉（诊断类接口就是这种模式：把错误类型回给调用方，而不是记日志）。
+SURFACED_MARKERS = ("error", "failed", "failure", "unavailable", "degraded", "exception")
 
 
 def _is_logging_call(node: ast.AST) -> bool:
@@ -46,8 +50,18 @@ def _is_logging_call(node: ast.AST) -> bool:
     return any(marker in ast.dump(node) for marker in LOG_MARKERS)
 
 
+def _surfaces_error(node: ast.ExceptHandler) -> bool:
+    """失败是否被"外化"到输出里（返回/写入 error_type、failed、unavailable 等字段）。"""
+    for child in ast.walk(node):
+        if isinstance(child, ast.Constant) and isinstance(child.value, str):
+            low = child.value.lower()
+            if any(marker in low for marker in SURFACED_MARKERS):
+                return True
+    return False
+
+
 def _handler_is_silent(node: ast.ExceptHandler, segment: str) -> bool:
-    """既不打日志也不重新抛出，且未显式豁免 → 视为静默吞异常。"""
+    """既不打日志、也不重新抛出、也不把失败外化到输出，且未显式豁免 → 视为静默吞异常。"""
     if EXEMPT_MARKER in segment.split("\n", 1)[0]:
         return False
     for child in node.body:
@@ -56,6 +70,8 @@ def _handler_is_silent(node: ast.ExceptHandler, segment: str) -> bool:
         if isinstance(child, (ast.Expr, ast.Assign, ast.Return, ast.If, ast.Try)):
             if _is_logging_call(child):
                 return False
+    if _surfaces_error(node):
+        return False
     return True
 
 
