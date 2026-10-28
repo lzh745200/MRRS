@@ -423,7 +423,10 @@ async def two_factor_verify_login(
     # 验证 temp_token
     try:
         payload = token_manager.decode_token(verify_request.temp_token, expected_type="access")
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 任何解码失败都视为无效令牌
+        # 不是静默兜底：解码失败的原因（过期 / 被篡改 / 密钥不匹配）必须留痕，
+        # 否则线上只能看到 401，分不清是用户令牌过期还是服务端密钥配置错。
+        logger.info("二次验证临时令牌解码失败: %s", exc)
         payload = None
 
     if not payload:

@@ -740,8 +740,12 @@ async def generate_report(
                         parsed = _json.loads(sub.village_ids)
                         if isinstance(parsed, list):
                             request.village_ids = [int(x) for x in parsed]
-                    except Exception:
-                        pass
+                    except Exception as exc:  # noqa: BLE001 - 旧数据里 village_ids 千奇百怪
+                        # 历史提交里 village_ids 可能是非法 JSON，退回'不筛村'即可，
+                        # 但要在日志里留下是哪条记录、什么错，便于后续数据修复。
+                        logger.debug(
+                            "解析历史 village_ids 失败，忽略该筛选: %s", exc
+                        )
 
         # 构建报表数据
         report_data = {

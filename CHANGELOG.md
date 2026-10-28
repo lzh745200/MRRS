@@ -255,6 +255,20 @@
   `boolean|void`，直接传 async 函数会被类型拒绝（原写法只能 `as any` 绕过）；
   角色页 4 处模板断言收敛为 `toRoleItem(row)` 单一收窄点（el-table 插槽 row 是宽泛的
   `DefaultRow`，与 `RoleItem` 不兼容）。`vue-tsc` 0 错误，看板/角色相关 **106 passed**。
+- **新增「静默吞异常」棘轮门禁（第 34 道）**：`backend/scripts/check_silent_swallow.py`。
+  AST 扫 `except Exception`（含 `BaseException`），**既不打日志也不重新抛出、且无显式豁免**
+  即判违规 —— 这类不是「兜底」而是「故障被彻底吞掉」：现场只看到功能没反应，日志里一行线索都没有。
+  首次扫描 **126 处**，基线已登记（`gate_baselines/silent_swallow.txt`，只减不增）；
+  豁免写法为行内 `# nosec:swallow - <理由>`。已接入 `run_gates`（33 → 34 道）与 CI
+  static-analysis 作业。新增 5 例判定回归（纯 pass 抓、留痕放行、重抛放行、显式豁免放行、
+  收窄到具体异常不在范围）。
+- **按风险收口前 3 处静默吞异常（126 → 123）**：
+  ① `auth/auth.py` 二次验证临时令牌解码失败：原来 `except Exception: payload = None`，
+  线上只能看到 401，分不清是用户令牌过期还是服务端密钥配置错 → 补 `logger.info` 留痕；
+  ② `effectiveness.py` 复核任务创建失败：本就不阻断评估，但审批任务没建起来会导致后续无人复核，
+  属静默业务缺口 → 补 `logger.warning(..., exc_info=True)`；
+  ③ `data/data/reports.py` 解析历史 `village_ids` 失败：原来直接 `pass` → 补 `logger.debug`
+  带上具体异常，便于后续数据修复。
 - **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
   bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
   会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；

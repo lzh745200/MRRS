@@ -107,6 +107,8 @@ GATES: List[Gate] = [
     _gate("subprocess_encoding", "scripts/check_subprocess_encoding.py", backend=True, why="子进程编码"),
     _gate("dir_replace", "scripts/check_dir_replace.py", backend=True, why="目录替换安全"),
     _gate("scheduler_reg", "scripts/check_scheduler_registration.py", backend=True, why="定时任务注册"),
+    _gate("silent_swallow", "scripts/check_silent_swallow.py", backend=True,
+          why="except Exception 必须留痕或显式豁免（棘轮）"),
     _gate("mojibake", "scripts/scan_mojibake.py", args=["--check"], why="乱码/NUL/非 UTF-8"),
     _gate("pragma_reasons", "scripts/check_pragma_reasons.py",
           args=["--diff-base", "auto", "--allow-missing-base", "--max-bare", "0"],

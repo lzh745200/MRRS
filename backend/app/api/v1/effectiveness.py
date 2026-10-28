@@ -93,8 +93,9 @@ async def evaluate_village(
             )
             if task:
                 review_task_id = task.id
-    except Exception:
-        # 复核任务创建失败不阻断评估
+    except Exception as exc:  # noqa: BLE001 - 复核任务失败不阻断主流程
+        # 不阻断评估，但必须留痕：审批任务没建起来会导致后续无人复核，属静默业务缺口。
+        logger.warning("创建复核任务失败（不影响本次评估结果）: %s", exc, exc_info=True)
         review_task_id = None
 
     if review_task_id:
