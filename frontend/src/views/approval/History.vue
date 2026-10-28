@@ -230,8 +230,8 @@ const diffTableData = computed(() => {
 
   const { original_data, change_data, diff_fields } = taskDiff.value
   // 兼容旧接口返回 changed/original 键名
-  const original = original_data ?? (taskDiff.value as any).original ?? {}
-  const changed = change_data ?? (taskDiff.value as any).changed ?? {}
+  const original = original_data ?? taskDiff.value.original ?? {}
+  const changed = change_data ?? taskDiff.value.changed ?? {}
   const allFields = new Set([...Object.keys(original || {}), ...Object.keys(changed || {})])
 
   return Array.from(allFields).map((field) => ({

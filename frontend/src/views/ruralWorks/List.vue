@@ -494,11 +494,11 @@ async function handleSave() {
 
     if (dialogMode.value === 'create') {
       const { createRuralWork } = await import('@/api/ruralWork')
-      await createRuralWork(payload as any)
+      await createRuralWork(payload)
       ElMessage.success('新增成功')
     } else {
       const { updateRuralWork } = await import('@/api/ruralWork')
-      await updateRuralWork(formData.id, payload as any)
+      await updateRuralWork(formData.id, payload)
       ElMessage.success('保存成功')
     }
     dialogVisible.value = false

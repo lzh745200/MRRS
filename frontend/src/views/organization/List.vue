@@ -205,7 +205,7 @@
                 filterable
                 style="width: 100%"
               >
-                <el-option label="无（顶级组织）" :value="null as any" />
+                <el-option label="无（顶级组织）" :value="null as unknown as number" />
                 <el-option
                   v-for="org in parentOrgOptions"
                   :key="org.id"
@@ -419,7 +419,7 @@ async function fetchData() {
       },
     })
     // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
-    const resData = (response as any)?.data ?? response
+    const resData = response?.data ?? response
     tableData.value = unwrapList(resData).items
     total.value = resData?.total || resData?.data?.total || tableData.value.length
   } catch (e) {
@@ -564,7 +564,7 @@ async function handleDelete(row: any) {
       headers: { 'X-Confirm-Password': confirmPassword },
     })
     // del() 已自动解包（返回 res.data），message 在顶层
-    ElMessage.success((response as any)?.message || '组织已删除')
+    ElMessage.success(response?.message || '组织已删除')
     currentPage.value = 1
     await fetchDataWithSort()
     fetchStats()

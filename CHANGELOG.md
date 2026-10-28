@@ -285,6 +285,13 @@
   便于定位；`core/logging_config.py` 的 2 处加 `nosec:swallow` 豁免（logger 自身不可用，无法再留痕）。
   基线 110 → 71（门禁 total=71 baseline=71 NEW=0）。
 - **静默吞异常清零（71 → 0），门禁转为「零容忍」**：35 个文件、71 处宽泛兜底全部改为
+- **`as any` 再清 10 处（103 → 93）**：`router/index.ts` 用 `declare global` 声明
+  `window.electronAPI`（Electron 预加载桥）替代两处 `(window as any)`；`approval/History.vue`
+  复用 `TaskDiff` 已声明的旧键名；`ruralWorks/List.vue` 去掉 api 参数断言；
+  `dataPackage/ReceivePackage.vue` + `stores/dataPackage.ts` 把「裸数组 / `{data:[...]}`」
+  双形态收敛到 `previewDataPackage` 的返回类型里（新增 `DataPackagePreviewPayload`）；
+  `organization/List.vue` 3 处（`response.data` 解包、message、`el-option` 的空值）。
+  `vue-tsc` 0 错误，dataPackage 相关 **156 passed**，基线 103 → 93。
   **留痕降级**（`logger.warning('<函数名> 兜底失败（已降级）: %s', exc, exc_info=True)`），
   行为不变、可观测性补齐；10 个原本没有 logger 的模块同时补 `import logging` + 模块 logger。
   **门禁语义再校正一处**：原先用前缀匹配，把 `except HTTPException:`、

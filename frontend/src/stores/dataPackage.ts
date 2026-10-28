@@ -121,7 +121,9 @@ export const useDataPackageStore = defineStore('dataPackage', () => {
     loading.value = true
     error.value = null
     try {
-      previewData.value = await dataPackageApi.previewDataPackage(id)
+      // 预览响应两种形态：裸数组 或 { data: [...] }；统一在此解包
+      const payload = await dataPackageApi.previewDataPackage(id)
+      previewData.value = Array.isArray(payload) ? payload : (payload.data ?? [])
       return previewData.value
     } catch (e) {
       error.value = (e as Error).message

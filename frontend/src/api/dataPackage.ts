@@ -84,7 +84,14 @@ export async function validateDataPackage(id: number): Promise<DataPackageValida
 /**
  * 预览数据包内容
  */
-export async function previewDataPackage(id: number): Promise<DataPackagePreviewData[]> {
+/** 预览响应：可能是裸数组，也可能包一层 { data: [...] }（后端两种历史形态都出现过） */
+export interface DataPackagePreviewPayload {
+  data?: DataPackagePreviewData[]
+}
+
+export async function previewDataPackage(
+  id: number
+): Promise<DataPackagePreviewData[] | DataPackagePreviewPayload> {
   const response = await get(`${BASE_URL}/${id}/preview`)
   return response
 }

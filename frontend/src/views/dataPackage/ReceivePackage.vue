@@ -608,7 +608,7 @@ const validationWarnings = ref<string[]>([])
 async function previewReceived(row: any) {
   try {
     const data = await previewDataPackage(row.id)
-    previewData.value = Array.isArray(data) ? data : (data as any)?.data || []
+    previewData.value = Array.isArray(data) ? data : (data?.data ?? [])
     currentReport.value = {
       source_org_name: row.org_name,
       package_code: row.package_code,
@@ -646,7 +646,7 @@ async function handlePreview(report: DataReport) {
   try {
     const data = await reportStore.previewReport(report.id)
     // 兼容不同 API 返回格式
-    previewData.value = Array.isArray(data) ? data : (data as any)?.data || []
+    previewData.value = Array.isArray(data) ? data : (data?.data ?? [])
     showPreviewDialog.value = true
   } catch (error) {
     logger.error('[ReceivePackage] 预览失败:', error)

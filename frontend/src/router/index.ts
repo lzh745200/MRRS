@@ -957,9 +957,18 @@ router.beforeEach((to, _from, next) => {
   next()
 })
 
-// Electron 托盘/快捷键导航：主进程 webContents.send('app-route', path)
-if (typeof window !== 'undefined' && (window as any).electronAPI?.onNavigate) {
-  ;(window as any).electronAPI.onNavigate((route: string) => {
+/**
+ * Electron 预加载脚本注入的桥（主进程 webContents.send('app-route', path)）。
+ * 在全局声明类型，避免每处都 (window as any)。
+ */
+declare global {
+  interface Window {
+    electronAPI?: { onNavigate?: (cb: (route: string) => void) => void }
+  }
+}
+
+if (typeof window !== 'undefined' && window.electronAPI?.onNavigate) {
+  window.electronAPI.onNavigate((route: string) => {
     if (typeof route === 'string' && route.startsWith('/')) {
       router.push(route).catch(() => {})
     }
