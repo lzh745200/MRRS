@@ -27,14 +27,20 @@ logger = logging.getLogger(__name__)
 try:
     import bcrypt as _bcrypt
 
-    # bcrypt 5.x: 注入缺失的 __about__ 让 passlib 正常识别版本并加载 C 扩展
+    # bcrypt 5.x: 注入缺失的 __about__ 让 passlib 正常识别版本并加载 C 扩展。
+    # 用 setattr/getattr 而不是属性赋值：__about__ 是运行时注入的动态属性，
+    # 直接写 `_bcrypt.__about__ = ...` 会让 mypy 报 attr-defined（模块里压根没声明它）。
     if not hasattr(_bcrypt, '__about__'):
         import types as _types
-        _bcrypt.__about__ = _types.ModuleType('__about__')
-        _bcrypt.__about__.__version__ = _bcrypt.__version__
+
+        _about = _types.ModuleType('__about__')
+        setattr(_about, '__version__', getattr(_bcrypt, '__version__', '0.0'))
+        setattr(_bcrypt, '__about__', _about)
 
     # 使用元组比较避免字符串比较的字典序问题（如 '4.10' < '4.2'）
-    _bcrypt_version = tuple(int(x) for x in _bcrypt.__version__.split('.')[:2] if x.isdigit())
+    _bcrypt_version = tuple(
+        int(x) for x in str(getattr(_bcrypt, '__version__', '0.0')).split('.')[:2] if x.isdigit()
+    )
     if _bcrypt_version >= (4, 1):
         import passlib.handlers.bcrypt as _pb
         _orig_finalize = _pb._BcryptCommon._finalize_backend_mixin.__func__
@@ -413,12 +419,13 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    username: str = payload.get("sub")
-    if username is None:
+    raw_username = payload.get("sub")
+    if not isinstance(raw_username, str) or not raw_username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的令牌内容",
         )
+    username: str = raw_username
 
     # 延迟导入避免循环依赖
     from app.models.user import User
@@ -700,7 +707,7 @@ class PasswordPolicy:
     # 弱密码黑名单
     WEAK_PASSWORD_PREFIXES = ("admin", "root", "123", "password", "qwerty")
     # 密码不能包含用户名
-    FORBIDDEN_USERNAME_PARTS = []
+    FORBIDDEN_USERNAME_PARTS: list[str] = []
 
     @staticmethod
     def validate(password: str, username: str = "") -> tuple:

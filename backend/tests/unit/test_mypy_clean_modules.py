@@ -24,7 +24,12 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 BACKEND = REPO / "backend"
-CLEAN_MODULES = ["app/core/logging_config.py", "app/utils/runtime_secrets.py"]
+# 逐模块收紧的清单：每加一个，谁把它改回去就变红
+CLEAN_MODULES = [
+    "app/core/logging_config.py",
+    "app/utils/runtime_secrets.py",
+    "app/core/security.py",
+]
 
 
 class TestMypyCleanModules:
@@ -35,7 +40,16 @@ class TestMypyCleanModules:
         # 必须显式指定 encoding：Windows 默认 GBK 会让 mypy 的中文/符号输出解码崩
         # （check_subprocess_encoding.py 门禁就卡这一条）。
         proc = subprocess.run(
-            [sys.executable, "-m", "mypy", *CLEAN_MODULES, "--ignore-missing-imports"],
+            [
+                sys.executable,
+                "-m",
+                "mypy",
+                *CLEAN_MODULES,
+                "--ignore-missing-imports",
+                # 只看这些模块**自身**是否干净，不追被依赖模块的存量债
+                # （transaction / pii_crypto 仍有历史错误，属后续批次）
+                "--follow-imports=skip",
+            ],
             cwd=str(BACKEND),
             capture_output=True,
             encoding="utf-8",

@@ -207,6 +207,14 @@
   **连带修掉一个真缺陷**：`admin/MachineCodeManagement.vue` 直接赋 `response.pass_code` 给
   `ref<string>`，类型收紧后暴露「信封形态下会是 `undefined`」—— 改为 `pass_code ?? data?.pass_code ?? ''`，
   不再把 `undefined` 塞进展示字段。`vue-tsc` 0 错误，报表/通行码相关 **84 passed**。
+- **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
+  bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
+  会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；
+  `payload['sub']` 取值由 `username: str = payload.get('sub')` 改为先取 `Unknown` 再用
+  `isinstance(raw, str) and raw` 收窄（原来靠 `None` 判断，非字符串的 `sub` 会漏进下游）；
+  `FORBIDDEN_USERNAME_PARTS` 补 `list[str]` 注解。
+  守卫 `test_mypy_clean_modules.py` 的清单扩到 3 个模块，并改用 `--follow-imports=skip`
+  （只看模块自身，不追 `transaction`/`pii_crypto` 的存量债）。security 相关 **102 passed**。
 - **环境事件（记录，不掩盖）**：验证中发现 `frontend/node_modules` 被清空（只剩空目录）、
   `backend/.venv` 的 mypy 也消失 —— 属于并发会话为出包做的依赖重建。已用 `npm ci` 恢复前端依赖
   （543 包，约 1 分钟），逐条修完类型再复绿；mypy 待其 venv 重建完成后再验证下一批模块收紧。
