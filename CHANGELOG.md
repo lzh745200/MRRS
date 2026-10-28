@@ -109,6 +109,12 @@
   后端 `to_dict()` 确实两种都返回，但类型没写全 —— 现补可选别名，并让结对页改用规范
   `villageName`，避免后端哪天只留一种就别处静默渲染空标签。`vue-tsc` 0 错误，
   帮扶村/结对相关 **92 passed**。
+- **`as any` 审批待办切片清零（162 → 155）**：`api/approval.ts` 补全两处**类型没写全**的
+  历史契约 —— `ApprovalTask` 增加旧字段别名 `applicant`/`submit_time`，`TaskDiff` 增加旧键名
+  `original`/`changed` 与事件源 `history`/`status_logs`（视图一直在容错读这些键，类型却没声明，
+  只能靠断言）。`views/approval/PendingList.vue` 去掉 7 处断言，并把可转交用户解析收敛为
+  `pickStaffUsers()`：兼容裸数组/分页信封，且**按 id 是否为数字过滤脏数据**（以前 `as any[]`
+  强转会把脏行直接塞进下拉框）。`vue-tsc` 0 错误，审批相关 **72 passed**。
 
 ### Added（批 3 起：性能基线）
 

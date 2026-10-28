@@ -3493,9 +3493,33 @@ VERSION_HISTORY_DATA = [
                 "ageImportResult）并给 6 个函数加泛型；"
             ),
             (
-                "scripts/bench.py（关键路径性能基线，只报警不阻断）：固定 5,000 行数据测三条热路径 ——xlsx 解析（经统一读取层）、CSV 导出（含 UTF-8 BOM）、帮扶村"
-                "模板生成；输出 JSON 并与scripts/gate_baselines/bench_baseline.json 比较，超基线 50% 只 WARN（CI 机器噪声大，硬阈值只会制造假红"
-                "），--strict 才非 0。"
+                "as any 审批待办切片清零（162 → 155）：api/approval.ts 补全两处类型没写全的历史契约 —— ApprovalTask 增加旧字段别名 applicant/su"
+                "bmit_time，TaskDiff 增加旧键名original/changed 与事件源 history/status_logs（视图一直在容错读这些键，类型却没声明，只能靠断言）。"
+            ),
+        ],
+    },
+    {
+        "version": "1.18.22",
+        "date": "2026-10-28",
+        "description": "发布收口：换 tag 重建 + 修复两处交付前回归",
+        "features": [
+            (
+                "api/milestones.ts 的 milestoneProgress 在 items 为 null/undefined 时抛TypeError（tests/unit/api/mile"
+                "stones.test.ts 2 例红）：信封守卫只容忍\"缺 items 键\"，不容忍响应体本身为 null/undefined（204 空体、接口降级返回）。"
+            ),
+            (
+                "政策编辑页不再臆造 status 默认值：|| 'draft' 会让\"详情省略 status\"的已发布政策在用户保存时被静默降级为草稿（且与新增表单默认 active 矛盾）。改为只透"
+                "传。"
+            ),
+            (
+                "两处过时测试断言按真实契约更新：getLevelOptions 现按真实契约无参调用（后端不接收分类参数）；结对页帮扶村 mock 补齐 villageName（后端 to_dict 两种"
+                "都返回）。"
+            ),
+            "types/policy.ts 缺文件尾换行导致 lint:check（--max-warnings=0）失败，会拦 CI lint 作业。",
+            (
+                "版本号单源同步到 1.18.22（node scripts/sync-version.js --write --version 1.18.22，14 个目标文件；--check 通过）。文"
+                "档（README 本版亮点 / docs/INDEX 索引 /RELEASE_NOTES-v1.18.22）与三份 PPT（介绍 56 页 / 零基础 44 页 / 操作培训 60 页）同"
+                "步到本版版本与实测数字（后端 14,896 用例 / 前端 7,…"
             ),
         ],
     },

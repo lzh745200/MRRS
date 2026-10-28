@@ -328,7 +328,20 @@ const transferDialogVisible = ref(false)
 // 表单
 const rejectForm = ref({ opinion: '' })
 const transferForm = ref({ transferToId: undefined as number | undefined, reason: '' })
-const candidateUsers = ref<Array<{ id: number; username: string; role?: string }>>([])
+/** 可转交用户（后端 /staff 列表项的最小子集） */
+type StaffUser = { id: number; username: string; role?: string }
+const candidateUsers = ref<StaffUser[]>([])
+
+/**
+ * 从 /staff 响应里取用户列表：兼容裸数组与分页信封两种形态，
+ * 并按 id 是否为数字过滤脏数据（以前用 `as any[]` 直接强转，脏数据会溜进下拉框）。
+ */
+function pickStaffUsers(raw: unknown): StaffUser[] {
+  const items = Array.isArray(raw) ? raw : unwrapList<StaffUser>(raw).items
+  return items.filter(
+    (u): u is StaffUser => !!u && typeof (u as StaffUser).id === 'number'
+  )
+}
 
 // 变更对比
 const taskDiff = ref<TaskDiff | null>(null)
@@ -381,8 +394,8 @@ const diffTableData = computed(() => {
 
   const { original_data, change_data, diff_fields } = taskDiff.value
   // 兼容旧接口返回 changed/original 键名
-  const original = original_data ?? (taskDiff.value as any).original ?? {}
-  const changed = change_data ?? (taskDiff.value as any).changed ?? {}
+  const original = original_data ?? taskDiff.value.original ?? {}
+  const changed = change_data ?? taskDiff.value.changed ?? {}
   const allFields = new Set([...Object.keys(original || {}), ...Object.keys(changed || {})])
 
   return Array.from(allFields).map((field) => ({
@@ -401,14 +414,14 @@ const approvalTimeline = computed(() => {
   const history: any[] = []
   if (task) {
     history.push({
-      operator: (task as any).submitter_name || (task as any).applicant || '-',
+      operator: task.submitter_name || task.applicant || '-',
       action: '提交申请',
-      time: (task as any).created_at || (task as any).submit_time || '',
+      time: task.created_at || task.submit_time || '',
       type: 'submit',
     })
   }
-  if (diff && (diff as any).history) history.push(...((diff as any).history as any[]))
-  const statusLogs: any[] = (diff && (diff as any).status_logs) || []
+  if (diff?.history) history.push(...diff.history)
+  const statusLogs: unknown[] = diff?.status_logs ?? []
   return buildApprovalTimeline(history, statusLogs)
 })
 
@@ -555,10 +568,11 @@ async function handleTransfer(task: any) {
   transferDialogVisible.value = true
   transferSearching.value = false
   try {
-    const res: any = await listStaff({ page_size: 200 })
-    const users = unwrapList(res).items
+    const res: unknown = await listStaff({ page_size: 200 })
     // 排除当前审批人自己
-    candidateUsers.value = (users as any[]).filter((u: any) => u.id !== task.current_approver_id)
+    candidateUsers.value = pickStaffUsers(res).filter(
+      (u) => u.id !== task.current_approver_id
+    )
   } catch {
     candidateUsers.value = []
   }
@@ -573,10 +587,9 @@ async function searchTransferUsers(query: string) {
   try {
     const params: Record<string, unknown> = { page_size: 50 }
     if (query && query.trim()) params.keyword = query.trim()
-    const res: any = await listStaff(params)
-    const users = Array.isArray(res) ? res : unwrapList(res).items
-    candidateUsers.value = (users as any[]).filter(
-      (u: any) => u.id !== currentTask.value?.current_approver_id
+    const res: unknown = await listStaff(params)
+    candidateUsers.value = pickStaffUsers(res).filter(
+      (u) => u.id !== currentTask.value?.current_approver_id
     )
   } catch {
     candidateUsers.value = []

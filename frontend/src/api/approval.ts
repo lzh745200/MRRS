@@ -42,6 +42,9 @@ export interface ApprovalTask {
   priority: number
   submitter_id?: number
   submitter_name?: string
+  /** 旧接口字段别名（历史版本用 applicant / submit_time，视图仍做容错读取） */
+  applicant?: string
+  submit_time?: string
   current_approver_id?: number
   reviewer_name?: string
   opinion?: string
@@ -71,6 +74,12 @@ export interface TaskDiff {
   original_data: Record<string, any>
   change_data: Record<string, any>
   diff_fields: string[]
+  /** 旧接口键名：历史版本返回 original / changed，视图容错读取 */
+  original?: Record<string, any>
+  changed?: Record<string, any>
+  /** 审批事件源（视图聚合时间线用） */
+  history?: Array<Record<string, unknown>>
+  status_logs?: Array<Record<string, unknown>>
 }
 
 /** 批量审批结果（逐条批量审批端点 /approval/tasks/batch-approve） */
