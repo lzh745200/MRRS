@@ -48,10 +48,11 @@ export const deleteMilestone = (projectId: number | string, milestoneId: number)
 /** 里程碑进度汇总（completed 比例）——后端在增删改后自动回写项目进度 */
 export const milestoneProgress = async (projectId: number | string): Promise<MilestoneProgress> => {
   const items = await listMilestones(projectId)
-  // 后端可能直接返回数组，也可能返回 {items:[...]} 信封；用显式形状兜底
-  const arr: ProjectMilestone[] = Array.isArray(items)
-    ? items
-    : ((items as unknown as { items?: ProjectMilestone[] }).items ?? [])
+  // 后端可能直接返回数组，也可能返回 {items:[...]} 信封；用显式形状兜底。
+  // ⚠️ 信封分支必须先容忍 items 自身为 null/undefined（接口 204/空体/降级返回）：
+  // 直接 .items 会抛 TypeError（v1.18.21 收口实测 2 个用例红），故用可选链。
+  const envelope = items as { items?: ProjectMilestone[] } | null | undefined
+  const arr: ProjectMilestone[] = Array.isArray(items) ? items : (envelope?.items ?? [])
   const total = arr.length
   const completed = arr.filter((m: ProjectMilestone) => m.status === 'completed').length
   return { total, completed, progress_percent: total ? Math.round((completed / total) * 100) : 0 }

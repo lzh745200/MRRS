@@ -95,6 +95,22 @@
   只有 timeout 文案、缺 code/message、拒绝值为 null）。修前 `src/api` 分支 57.14%
   （`offlineMap.ts` 60-61、63 行）、`src/views` 分支 98.46%（209 行）；修后
   `npm run test:coverage` **EXIT=0**（347 文件 / 7,384 用例，各阈值 100%）。
+### Fixed（交付收口 · 实测复现的回归）
+
+- **`api/milestones.ts` 的 `milestoneProgress` 在 `items` 为 `null`/`undefined` 时抛
+  `TypeError`**：本轮"as any 清零"把守卫写成
+  `(items as unknown as { items?: ProjectMilestone[] }).items ?? []` —— 只容忍"信封里没有
+  `items` 键"，不容忍**响应体本身是 null/undefined**（204/空体/接口降级返回）。
+  收口实测 `tests/unit/api/milestones.test.ts` 2 例红
+  （`Cannot read properties of null (reading 'items')`）。
+  改为 `const envelope = items as { items?: ProjectMilestone[] } | null | undefined` +
+  `Array.isArray(items) ? items : (envelope?.items ?? [])`：仍是显式形状 + 可选链，
+  没有回退到宽松断言。修复后该文件 **13 例全绿**，前端全量 347 文件 **7,384 例 0 失败**。
+- **收口实测（2026-10-28，本机 Python 3.11.16 / Node 25.2.1）**：
+  `scripts/run_gates.py` 默认档 **34 道 PASS / 0 FAIL / 0 SKIP**（含 stack_alignment、
+  route_auth 849 路由、type_debt 188 持平、dist 9.2MB）；后端分段 12/12 PASS、
+  **14,896 用例**、覆盖率 **100.00%（46,243 行 / 11,560 分支，0 漏）**。
+
 ## [1.18.20] - 2026-10-28 — 构建链路兜底（Windows %TEMP% ACL）+ 门禁自身健壮性
 
 > **起因**：本轮全量体检发现 `npm run build` 在本机**直接失败**（不是警告）：
