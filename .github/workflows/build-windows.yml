@@ -109,7 +109,7 @@ jobs:
               echo "::warning::尝试镜像 ${MIRROR}"
               npm ping --registry "${MIRROR}" || true
               if npm ci --legacy-peer-deps \
-                   --registry "${MIRROR}" --replace-registry-host=always; then
+                   --registry "${MIRROR}" --replace-registry-host=npm; then
                 installed=1
                 echo "npm ci OK via ${MIRROR}"
                 break
@@ -206,7 +206,7 @@ jobs:
               echo "::warning::尝试镜像 ${MIRROR}"
               npm ping --registry "${MIRROR}" || true
               if npm ci --legacy-peer-deps \
-                   --registry "${MIRROR}" --replace-registry-host=always; then
+                   --registry "${MIRROR}" --replace-registry-host=npm; then
                 installed=1
                 echo "npm ci OK via ${MIRROR}"
                 break

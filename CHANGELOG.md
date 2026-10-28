@@ -45,8 +45,8 @@
 - **`npm ci` 不认 `--registry`**：它沿用 `package-lock.json` 里写死的 `resolved` URL
   （本仓 506 个包指向 `registry.npmjs.org`），所以"默认源失败后切镜像"那三次尝试
   **仍然全部打到原源**，与默认源一起红 —— 这是本轮最后一个隐性缺陷。
-  修复：镜像尝试统一加 **`--replace-registry-host=always`**（npm 会把 `resolved` 的 host
-  重写成 `--registry` 指定的镜像），并加 `--loglevel=http` 让日志暴露真实请求地址；
+  修复：镜像尝试统一加 **`--replace-registry-host=npm`**（只把**默认源** `registry.npmjs.org` 的 host
+  重写为镜像，保留 `cdn.sheetjs.com` / `mirrors.cloud.tencent.com` 等特殊源），并加 `--loglevel=http` 让日志暴露真实请求地址；
   切换前先 `npm ping` 探活，日志可直接证明"镜像到底可不可达"。
   三处同改：`pr-checks.yml`（frontend-check / e2e-test）、`build-windows.yml`、
   `docker/Dockerfile.kylin-standalone`。
@@ -55,6 +55,9 @@
   （npm 同源 CDN、内容一致），再退回 npmmirror；每个镜像切换前 `npm ping` 探活。
   实测 `--registry` 对 `npm ci` 确实会改道（本地用 lock 指向 npmjs 的样例验证过），
   之前"镜像没生效"的观感来自缺 `--loglevel=http` 日志。
+- **`always` 模式会误伤特殊源**：实测 `--replace-registry-host=always` 把
+  `cdn.sheetjs.com`（`xlsx@0.20.3`，npm 系源没有）与腾讯镜像的包一并改写到 npmmirror，
+  直接 **E404**。改用默认的 `npm` 模式 —— 只重写默认源 host，特殊源原样直连。
 
 ### Changed（补：离线缓存优先）
 

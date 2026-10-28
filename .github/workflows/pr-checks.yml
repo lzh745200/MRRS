@@ -259,7 +259,7 @@ jobs:
           echo "::warning::默认 registry 连续 5 次失败，改用镜像 $MIRROR 重试"
           # 2026-10-28：镜像**按列表顺序**尝试。GitHub runner 在境外，
           # 访问 npmmirror（中国）常被重置，所以先试 registry.yarnpkg.com（npm 同源 CDN，
-          # 境外友好、内容一致），再退回 npmmirror。`--replace-registry-host=always`
+          # 境外友好、内容一致），再退回 npmmirror。`--replace-registry-host=npm`
           # 让 lock 里写死的 resolved host 一并改道（本仓 506 个包指向 registry.npmjs.org）。
           for MIRROR in "https://registry.yarnpkg.com" "https://registry.npmmirror.com"; do
             echo "===== mirror ${MIRROR} ====="
@@ -267,7 +267,7 @@ jobs:
             for i in 1 2 3; do
               echo "===== npm ci attempt $i via ${MIRROR} ====="
               if npm ci --legacy-peer-deps --no-fund --no-audit \
-                   --registry "$MIRROR" --replace-registry-host=always; then
+                   --registry "$MIRROR" --replace-registry-host=npm; then
                 echo "npm ci OK via ${MIRROR} (attempt $i)"
                 exit 0
               fi
@@ -757,7 +757,7 @@ jobs:
                 npm ping --registry "$MIRROR" || echo "::warning::npm ping ${MIRROR} 失败（继续尝试）"
                 for j in 1 2 3; do
                   if npm ci --legacy-peer-deps --no-fund --no-audit \
-                       --registry "$MIRROR" --replace-registry-host=always; then
+                       --registry "$MIRROR" --replace-registry-host=npm; then
                     echo "npm ci OK via ${MIRROR} (attempt $j)"; INSTALLED=1; break 2
                   fi
                   sleep $((j * 20))

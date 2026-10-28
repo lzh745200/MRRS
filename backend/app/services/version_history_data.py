@@ -3563,6 +3563,10 @@ VERSION_HISTORY_DATA = [
                 "npkg.com（npm 同源 CDN、内容一致），再退回 npmmirror；每个镜像切换前 npm ping 探活。"
             ),
             (
+                "always 模式会误伤特殊源：实测 --replace-registry-host=always 把cdn.sheetjs.com（xlsx@0.20.3，npm 系源没有）与腾讯镜像的"
+                "包一并改写到 npmmirror，直接 E404。改用默认的 npm 模式 —— 只重写默认源 host，特殊源原样直连。"
+            ),
+            (
                 "pr-checks.yml 的 frontend-check / e2e-test 加「离线缓存优先」：先给 ~/.npm 叠一层带 restore-keys 的 actions/cach"
                 "e（setup-node 的缓存 key 绑死package-lock.json，lock 一变即 miss，这正是重试全落在同一故障窗口的原因），安装时首试 npm ci --offli"
                 "ne（只吃本地缓存，零网络）…"
