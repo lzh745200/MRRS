@@ -3554,6 +3554,11 @@ VERSION_HISTORY_DATA = [
                 "入超时 30s→15 分钟、Windows %TEMP% ACL 构建兜底、门禁统一入口 + no-print/dist 棘轮、mypy 1394→1385、as any 196→172 "
                 "等），避免 Release 正文落到兜底占位。"
             ),
+            (
+                "pr-checks.yml 的 frontend-check / e2e-test 加「离线缓存优先」：先给 ~/.npm 叠一层带 restore-keys 的 actions/cach"
+                "e（setup-node 的缓存 key 绑死package-lock.json，lock 一变即 miss，这正是重试全落在同一故障窗口的原因），安装时首试 npm ci --offli"
+                "ne（只吃本地缓存，零网络）…"
+            ),
             "npm run test:electron 14 例全过（含 ci-wiring 守护：发布门禁等待预算 /main 不取消 / check_main_ci 接线）；",
             (
                 "两个 build 工作流 YAML 可解析；全仓扫描\"退避失效/失败被吞\"同类模式，仅 pr-checks.yml 的 playwright 重试疑似——细查其循环后第 721 行已有"
