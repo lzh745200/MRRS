@@ -5,6 +5,41 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.20] - 2026-10-28 — 构建链路兜底（Windows %TEMP% ACL）+ 门禁自身健壮性
+
+> **起因**：本轮全量体检发现 `npm run build` 在本机**直接失败**（不是警告）：
+> `[vite:esbuild-transpile] remove C:\\Users\\...\\AppData\\Local\\Temp\\esbuild-...: Access is denied.`
+> —— %TEMP% 目录存在「拒绝删除子项」ACL，esbuild 删除自己的临时文件被拒，vite 判整次构建失败。
+> 把 TEMP/TMP 指到仓库内 `.scratch/tmp` 后**同一条构建 rc=0**，确认是环境缺陷，但必须由仓库兜住。
+
+### Fixed
+
+- **前端构建在 Windows 上开箱即失败**（打包流水线第一步）：新增
+  `frontend/scripts/build-with-workspace-temp.mjs`，把 `TEMP/TMP/TMPDIR` 指到仓库内
+  `.scratch/tmp`（目录创建失败时静默沿用系统值，不在只读介质上制造新故障），并用
+  `node` 直接执行 vite 入口避免 .cmd 包装的引号/退出码差异；`build` / `build:check` /
+  `build:only` 三个脚本一并改走它。验证：不设任何环境变量，`npm run build` **rc=0**。
+- **`check_type_debt.py` 在 Windows GBK 控制台崩溃**：输出含 `✓` 等非 ASCII 字符时
+  抛 `UnicodeEncodeError: 'gbk' codec can't encode character '\u2713'`，本地门禁直接失败。
+  与 `check_doc_numbers` / `check_constants_sync` 同口径强制 UTF-8（不支持 reconfigure
+  的旧解释器静默跳过）。验证：`PYTHONIOENCODING=gbk` 下 rc=0。
+- **门禁基线漂移清理**：文档数字 `14,874 → 14,873`（实测）、技术债棘轮
+  `except Exception 802 → 801`（只紧不松）、软删除基线 29 条重新收敛（STALE 豁免点清零）。
+  `check_soft_delete_usage`、`check_doc_numbers --full`、`check_type_debt` 复跑全绿。
+
+### Tests
+
+- 新增元测试 `electron/tests/build-temp-wiring.test.js`（3 例）：锁住「三个构建脚本必须
+  经包装脚本」「包装脚本必须改 TEMP/TMP/TMPDIR 且有失败兜底」「.scratch/ 必须被忽略」，
+  防止后人把它简化回裸 `vite build` 而无声复发。`npm run test:electron` 14 passed。
+- **`backend/version.json` 的 description / release_date / build 改为自动派生**：这三项与
+  CHANGELOG 最新标题是同一事实，却一直靠手工抄 —— 每版忘改就被 `check_update_log.py`
+  拦下（本轮又踩一次）。`sync_update_log.py` 写完应用内更新日志后顺带同步这三项
+  （`features` 仍人工维护、不覆盖），`--check` 同时校验二者；新增 5 例回归
+  （`test_update_log_sync.py` **10 passed**）。
+- 全量门禁复跑（30 道）仅剩 3 处调用方式问题（需 `--json/--baseline` 或 cwd=backend），
+  修正调用后**全绿**；关键功能定向回归 182 passed。
+
 ## [1.18.19] - 2026-10-28 — 修复大瓦片包导入“请求超时，请重试”（全局 30s → 导入专用 15 分钟）
 
 > 现象：导入 z14 全省包（`guizhou-all_z14.zip` 283.7MB / 64,900 张）时前端报

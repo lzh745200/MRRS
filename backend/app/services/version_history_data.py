@@ -3405,4 +3405,33 @@ VERSION_HISTORY_DATA = [
             "导入中断不会破坏已有瓦片，重新导入会按同名覆盖补齐。",
         ],
     },
+    {
+        "version": "1.18.20",
+        "date": "2026-10-28",
+        "description": "构建链路兜底（Windows %TEMP% ACL）+ 门禁自身健壮性",
+        "features": [
+            (
+                "前端构建在 Windows 上开箱即失败（打包流水线第一步）：新增frontend/scripts/build-with-workspace-temp.mjs，把 TEMP/TMP/TMP"
+                "DIR 指到仓库内.scratch/tmp（目录创建失败时静默沿用系统值，不在只读介质上制造新故障），并用node 直接执行 vite 入口避免 .cmd 包装的引号/退出码差异；"
+            ),
+            (
+                "check_type_debt.py 在 Windows GBK 控制台崩溃：输出含 ✓ 等非 ASCII 字符时抛 UnicodeEncodeError: 'gbk' codec can"
+                "'t encode character '\\u2713'，本地门禁直接失败。与 check_doc_numbers / check_constants_sync 同口径强制 UTF-8（"
+                "不支持 reconfigure的旧解释器静默跳过）。"
+            ),
+            (
+                "门禁基线漂移清理：文档数字 14,874 → 14,873（实测）、技术债棘轮except Exception 802 → 801（只紧不松）、软删除基线 29 条重新收敛（STALE 豁"
+                "免点清零）。check_soft_delete_usage、check_doc_numbers --full、check_type_debt 复跑全绿。"
+            ),
+            (
+                "新增元测试 electron/tests/build-temp-wiring.test.js（3 例）：锁住「三个构建脚本必须经包装脚本」「包装脚本必须改 TEMP/TMP/TMPDIR "
+                "且有失败兜底」「.scratch/ 必须被忽略」，防止后人把它简化回裸 vite build 而无声复发。npm run test:electron 14 passed。"
+            ),
+            (
+                "backend/version.json 的 description / release_date / build 改为自动派生：这三项与CHANGELOG 最新标题是同一事实，却一直靠手"
+                "工抄 —— 每版忘改就被 check_update_log.py拦下（本轮又踩一次）。"
+            ),
+            "全量门禁复跑（30 道）仅剩 3 处调用方式问题（需 --json/--baseline 或 cwd=backend），修正调用后全绿；关键功能定向回归 182 passed。",
+        ],
+    },
 ]

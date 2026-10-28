@@ -1,6 +1,6 @@
 {
   "name": "assistance-management-information-frontend",
-  "version": "1.18.19",
+  "version": "1.18.20",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,9 +9,9 @@
   "description": "帮扶管理信息系统 - 前端 (Assistance Management Information System)",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "build:check": "vue-tsc --noEmit && vite build",
-    "build:only": "vite build",
+    "build": "node scripts/build-with-workspace-temp.mjs",
+    "build:check": "vue-tsc --noEmit && node scripts/build-with-workspace-temp.mjs",
+    "build:only": "node scripts/build-with-workspace-temp.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

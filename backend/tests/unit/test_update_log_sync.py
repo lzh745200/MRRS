@@ -68,3 +68,96 @@ class TestGeneratedFileInSync:
         )
         assert [item["version"] for item in parsed] == ["1.2.3"]
         assert parsed[0]["features"] == ["该出现"]
+
+class TestVersionJsonSync:
+    """description / release_date / build 必须由 CHANGELOG 派生（features 手工维护）。"""
+
+    @staticmethod
+    def _data(description="构建链路兜底（Windows %TEMP% ACL）", date="2026-10-28"):
+        return [
+            {
+                "version": "1.18.20",
+                "date": date,
+                "description": description,
+                "features": ["自动生成的要点"],
+            }
+        ]
+
+    def test_sync_updates_three_fields_and_keeps_manual_features(self, tmp_path):
+        target = tmp_path / "version.json"
+        target.write_text(
+            json.dumps(
+                {
+                    "version": "1.18.20",
+                    "build": "20260101",
+                    "release_date": "2026-01-01",
+                    "description": "旧说明",
+                    "features": ["手工撰写的发布要点"],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        module = _load_sync_module()
+
+        changed = module.sync_version_json(self._data(), target)
+
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        assert payload["description"] == "构建链路兜底（Windows %TEMP% ACL）"
+        assert payload["release_date"] == "2026-10-28"
+        assert payload["build"] == "20261028"
+        assert payload["features"] == ["手工撰写的发布要点"], "features 不得被自动覆盖"
+        assert len(changed) == 3
+
+    def test_sync_is_noop_when_already_consistent(self, tmp_path):
+        target = tmp_path / "version.json"
+        module = _load_sync_module()
+        target.write_text(
+            json.dumps(
+                {
+                    "description": "构建链路兜底（Windows %TEMP% ACL）",
+                    "release_date": "2026-10-28",
+                    "build": "20261028",
+                    "features": ["x"],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        assert module.sync_version_json(self._data(), target) == []
+
+    def test_check_reports_drift(self, tmp_path):
+        target = tmp_path / "version.json"
+        target.write_text(
+            json.dumps({"description": "旧", "release_date": "2020-01-01", "build": "20200101"}),
+            encoding="utf-8",
+        )
+
+        problems = _load_sync_module().check_version_json(self._data(), target)
+
+        assert len(problems) == 3
+        assert any("description" in item for item in problems)
+
+    def test_check_passes_when_consistent(self, tmp_path):
+        target = tmp_path / "version.json"
+        target.write_text(
+            json.dumps(
+                {
+                    "description": "构建链路兜底（Windows %TEMP% ACL）",
+                    "release_date": "2026-10-28",
+                    "build": "20261028",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        assert _load_sync_module().check_version_json(self._data(), target) == []
+
+    def test_missing_file_is_reported_by_check_but_not_by_sync(self, tmp_path):
+        missing = tmp_path / "nope.json"
+        module = _load_sync_module()
+
+        assert module.sync_version_json(self._data(), missing) == []
+        assert module.check_version_json(self._data(), missing) == ["未找到 backend/version.json"]

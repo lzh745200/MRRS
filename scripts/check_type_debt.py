@@ -36,6 +36,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 门禁输出含 ✓/✗ 等非 ASCII 字符：Windows 默认 GBK 控制台会直接
+# UnicodeEncodeError 崩掉（实测 2026-10-28），必须与 check_doc_numbers /
+# check_constants_sync 同口径强制 UTF-8（不支持 reconfigure 的旧解释器静默跳过）。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 BASELINE = ROOT / ".type-debt-baseline.json"

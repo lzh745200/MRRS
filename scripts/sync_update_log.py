@@ -28,6 +28,7 @@ from typing import Dict, List
 ROOT = Path(__file__).resolve().parents[1]
 CHANGELOG = ROOT / "CHANGELOG.md"
 TARGET = ROOT / "backend" / "app" / "services" / "version_history_data.py"
+VERSION_JSON = ROOT / "backend" / "version.json"
 
 HEADING_RE = re.compile(r"^##\s*\[(\d+\.\d+\.\d+)\]\s*-\s*(\d{4}-\d{2}-\d{2})\s*(?:[—–-]\s*(.*))?$")
 BULLET_RE = re.compile(r"^[-*]\s+(.*)$")
@@ -192,6 +193,63 @@ def render(data: List[Dict]) -> str:
     return "\n".join(out) + "\n"
 
 
+def sync_version_json(data: List[Dict], path: Path = VERSION_JSON) -> List[str]:
+    """把最新版本的 description / release_date / build 写进 backend/version.json。
+
+    为什么由本脚本负责：这三项与 CHANGELOG 最新标题是同一事实，却一直靠手工抄 ——
+    每次发版忘改就会被 check_update_log.py 拦下（实测 2026-10-28 又踩一次）。
+    features 是人工撰写的发布要点，**不在此自动覆盖**。
+
+    Returns:
+        发生变更的字段说明列表；文件缺失 / 非法 JSON / 已一致时返回空列表。
+    """
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    latest = data[-1]
+    expected = {
+        "description": latest["description"],
+        "release_date": latest["date"],
+        "build": latest["date"].replace("-", ""),
+    }
+    changed = [key for key, value in expected.items() if payload.get(key) != value]
+    if not changed:
+        return []
+
+    payload.update(expected)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return ["%s -> %r" % (key, expected[key]) for key in changed]
+
+
+def check_version_json(data: List[Dict], path: Path = VERSION_JSON) -> List[str]:
+    """--check 用：version.json 的三项是否仍与 CHANGELOG 最新段一致。"""
+    if not path.exists():
+        return ["未找到 backend/version.json"]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return ["backend/version.json 不是合法 JSON：%s" % exc]
+
+    latest = data[-1]
+    expected = {
+        "description": latest["description"],
+        "release_date": latest["date"],
+        "build": latest["date"].replace("-", ""),
+    }
+    return [
+        "version.json %s=%r，CHANGELOG 最新为 %r" % (key, payload.get(key), value)
+        for key, value in expected.items()
+        if payload.get(key) != value
+    ]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="从 CHANGELOG.md 生成应用内更新日志数据")
     ap.add_argument("--check", action="store_true", help="只校验，不写文件；不一致返回 1")
@@ -210,8 +268,14 @@ def main() -> int:
     actual = TARGET.read_text(encoding="utf-8") if TARGET.exists() else ""
 
     if args.check:
+        problems = []
         if actual != expected:
-            print("[update-log] 应用内更新日志与 CHANGELOG.md 不一致")
+            problems.append("应用内更新日志与 CHANGELOG.md 不一致")
+        problems.extend(check_version_json(data))
+        if problems:
+            print("[update-log] 发现 %d 处不一致" % len(problems))
+            for problem in problems:
+                print("  - " + problem)
             print("  CHANGELOG 版本数: %d，最新: %s" % (len(data), data[-1]["version"]))
             print("  修复：python3 scripts/sync_update_log.py")
             return 1
@@ -222,6 +286,11 @@ def main() -> int:
     TARGET.write_text(expected, encoding="utf-8", newline="\n")
     print("[update-log] 已生成 %s" % TARGET.relative_to(ROOT))
     print("  版本数: %d，范围: %s → %s" % (len(data), data[0]["version"], data[-1]["version"]))
+    synced = sync_version_json(data)
+    if synced:
+        print("[update-log] 已同步 %s：" % VERSION_JSON.relative_to(ROOT))
+        for line in synced:
+            print("  - " + line)
     return 0
 
 

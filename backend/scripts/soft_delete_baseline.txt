@@ -1,42 +1,29 @@
-app/api/v1/data/data/statistics.py:337: db.query(SupportedVillage.village_name, VillagePopulation.total_population)
-app/api/v1/fund_lifecycle.py:1245: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:1309: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:1490: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:1617: funds = db.query(Fund).filter(Fund.project_id == s.project_id).all()
-app/api/v1/fund_lifecycle.py:1646: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:1908: funds = db.query(Fund).filter(Fund.id.in_(list(fund_ids))).all()
-app/api/v1/fund_lifecycle.py:2070: query = db.query(Fund).filter(Fund.project_id == project_id)
-app/api/v1/fund_lifecycle.py:234: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:291: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:348: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:399: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/fund_lifecycle.py:456: query = db.query(Fund)
-app/api/v1/fund_lifecycle.py:601: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/api/v1/import_export/export.py:328: projects = db.query(Project).limit(100).all()
-app/api/v1/import_export/export.py:340: funds = db.query(Fund).limit(100).all()
-app/api/v1/import_export/import_data.py:439: name[0].strip().lower() for name in db.query(SupportedVillage.village_name).all() if name[0]
-app/api/v1/project_milestones.py:379: projects_map = {p.id: p.name for p in db.query(Project.id, Project.name).filter(Project.id.in_(proje
-app/api/v1/project_milestones.py:435: projects_map = {p.id: p.name for p in db.query(Project.id, Project.name).filter(Project.id.in_(proje
-app/api/v1/projects.py:1783: if db.query(Project).filter(Project.code == code).first():
-app/api/v1/projects.py:677: query = db.query(Project)
-app/api/v1/projects.py:804: if db.query(Project).filter(Project.code == code).first():
-app/api/v1/school.py:763: existing = db.query(School).filter(School.code == data.code).first()
-app/api/v1/school.py:858: existing = db.query(School).filter(School.code == update_data["code"], School.id != school_id).first
+app/api/v1/data/data/statistics.py:492: db.query(SupportedVillage.village_name, VillagePopulation.total_population)
+app/api/v1/fund_lifecycle.py:1327: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:1391: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:1577: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:1708: funds = db.query(Fund).filter(Fund.project_id == s.project_id).all()
+app/api/v1/fund_lifecycle.py:1737: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:2003: funds = db.query(Fund).filter(Fund.id.in_(list(fund_ids))).all()
+app/api/v1/fund_lifecycle.py:2166: query = db.query(Fund).filter(Fund.project_id == project_id)
+app/api/v1/fund_lifecycle.py:255: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:313: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:370: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:422: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/fund_lifecycle.py:482: query = db.query(Fund)
+app/api/v1/fund_lifecycle.py:649: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/api/v1/project_milestones.py:395: projects_map = {p.id: p.name for p in db.query(Project.id, Project.name).filter(Project.id.in_(proje
+app/api/v1/project_milestones.py:451: projects_map = {p.id: p.name for p in db.query(Project.id, Project.name).filter(Project.id.in_(proje
+app/api/v1/projects.py:1803: if db.query(Project).filter(Project.code == code).first():
+app/api/v1/projects.py:679: query = db.query(Project)
+app/api/v1/projects.py:812: if db.query(Project).filter(Project.code == code).first():
+app/api/v1/school.py:868: existing = db.query(School).filter(School.code == data.code).first()
+app/api/v1/school.py:972: existing = db.query(School).filter(School.code == update_data["code"], School.id != school_id).first
 app/services/compliance_engine.py:56: db.query(Fund)
-app/services/excel_importer_service.py:466: self.db.query(SupportedVillage), SupportedVillage, self.current_user
-app/services/excel_importer_service.py:469: query = self.db.query(SupportedVillage)
-app/services/excel_importer_service.py:579: existing_names = set(name[0].strip().lower() for name in self.db.query(Project.name).all() if name[0
-app/services/excel_importer_service.py:582: self.db.query(Project), Project, self.current_user
-app/services/excel_importer_service.py:583: ) if self.current_user else self.db.query(Project)
-app/services/excel_importer_service.py:649: for name in self.db.query(Fund.name).all() if name[0]
-app/services/excel_importer_service.py:653: self.db.query(Fund), Fund, self.current_user
-app/services/excel_importer_service.py:654: ) if self.current_user else self.db.query(Fund)
-app/services/excel_importer_service.py:658: project_map = {p.code: p.id for p in self.db.query(Project).all() if p.code}
-app/services/excel_importer_service.py:720: for name in self.db.query(School.name).all() if name[0]
-app/services/excel_importer_service.py:724: scoped_filter(self.db.query(School), School, self.current_user)
-app/services/excel_importer_service.py:726: else self.db.query(School)
-app/services/fund_anomaly_detector.py:39: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/services/fund_event_handler.py:60: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-app/services/fund_health_service.py:148: db.query(Fund)
-app/services/fund_service.py:264: self.db.query(Fund.id, Fund.status)
-app/services/reminder_engine.py:101: funds = db.query(Fund).filter(Fund.amount > 0).all()
+app/services/excel_importer_service.py:629: existing_names = set(name[0].strip().lower() for name in self.db.query(Project.name).all() if name[0
+app/services/excel_importer_service.py:701: for name in self.db.query(Fund.name).all() if name[0]
+app/services/excel_importer_service.py:708: project_map = {p.code: p.id for p in self.db.query(Project).all() if p.code}
+app/services/excel_importer_service.py:770: for name in self.db.query(School.name).all() if name[0]
+app/services/fund_anomaly_detector.py:38: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/services/fund_event_handler.py:62: funds = db.query(Fund).filter(Fund.project_id == project_id).all()
+app/services/fund_service.py:273: self.db.query(Fund.id, Fund.status)
