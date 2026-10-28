@@ -123,6 +123,11 @@ export const fundApi = {
   },
 
   // ========== 统计 ==========
+  /** 经费统计概览（服务端全量聚合，单位万元；分析页汇总卡片的唯一事实源） */
+  async statisticsOverview() {
+    return get(`${FUNDS_BASE}/statistics/overview`)
+  },
+
   async statisticsMultiDimension(params?: Record<string, string | number | boolean>) {
     // 注意：get() 已自动解包（返回 res.data）。此处必须原样返回，
     // 不能再次取 .data —— 否则会得到裸数组，调用方 .success 守卫永远为 false，

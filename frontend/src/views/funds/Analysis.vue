@@ -266,9 +266,14 @@ const loading = reactive({ dimension: false, trend: false })
 const loadError = reactive({ dimension: '', trend: '' })
 const exporting = ref(false)
 
+// 服务端全量概览（万元）。store 的 fundList 只承载**首页 20 条**，
+// 直接 reduce 会把「总经费/已使用」算成抽样值：数据量一过 20 条就不再变化，
+// 且与下方按后端聚合的年度趋势对不上。概览接口不可用时才回退到 store。
+const overview = ref<{ total_amount?: number; used_amount?: number } | null>(null)
+
 const summary = computed(() => {
-  const total = Number(fundsStore.totalFunds) || 0
-  const used = Number(fundsStore.usedFunds) || 0
+  const total = Number(overview.value?.total_amount ?? fundsStore.totalFunds) || 0
+  const used = Number(overview.value?.used_amount ?? fundsStore.usedFunds) || 0
   const remain = Math.max(0, total - used)
   const rate = total > 0 ? parseFloat(((used / total) * 100).toFixed(2)) : 0
   return { total, used, remain, rate }
@@ -433,6 +438,18 @@ const utilizationTrendOption = computed<EChartsOption | null>(() => {
   }
 })
 
+// 加载全量概览（汇总卡片的唯一事实源）。失败不弹全局提示，静默回退 store 汇总。
+const loadOverview = async () => {
+  try {
+    const res: any = await fundApi.statisticsOverview()
+    const d = res?.data ?? res
+    // 只认后端真实字段（total_amount 是万元的 SUM），否则保持 null 走 store 回退
+    if (d && d.total_amount !== undefined) overview.value = d
+  } catch (error) {
+    logger.warn('加载经费概览失败，回退当前页汇总:', error)
+  }
+}
+
 // 加载多维度统计（内联错误态 + 可重试，不再弹全局提示）
 const loadDimensionStats = async () => {
   loading.dimension = true
@@ -517,6 +534,7 @@ function handleExportStats() {
 
 onMounted(() => {
   fundsStore.fetchFunds()
+  loadOverview()
   loadDimensionStats()
   loadYearlyTrend()
 })

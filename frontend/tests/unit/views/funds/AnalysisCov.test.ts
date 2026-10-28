@@ -13,8 +13,10 @@ import { nextTick } from 'vue'
 const {
   ElMessage,
   logError,
+  logWarn,
   fundsState,
   apiMultiDimension,
+  apiOverview,
   apiYearlyComparison,
   exportCsvMock,
   refreshMock,
@@ -22,8 +24,10 @@ const {
   return {
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
     logError: vi.fn(),
+    logWarn: vi.fn(),
     fundsState: { totalFunds: 1000, usedFunds: 600, fetchFunds: vi.fn() },
     apiMultiDimension: vi.fn(),
+    apiOverview: vi.fn(),
     apiYearlyComparison: vi.fn(),
     exportCsvMock: vi.fn(),
     refreshMock: vi.fn(),
@@ -35,7 +39,7 @@ vi.mock('element-plus', () => ({
 }))
 
 vi.mock('@/utils/logger', () => ({
-  logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+  logger: { error: logError, warn: logWarn, info: vi.fn(), debug: vi.fn() },
 }))
 
 vi.mock('@/stores/funds', () => ({
@@ -43,7 +47,7 @@ vi.mock('@/stores/funds', () => ({
 }))
 
 vi.mock('@/api/funds', () => ({
-  fundApi: { statisticsMultiDimension: apiMultiDimension },
+  fundApi: { statisticsMultiDimension: apiMultiDimension, statisticsOverview: apiOverview },
 }))
 
 vi.mock('@/api/fundStatistics', () => ({
@@ -197,6 +201,23 @@ describe('挂载与初始加载', () => {
     const wrapper3 = mountComp()
     await flushPromises()
     expect((wrapper3.vm as any).summary).toEqual({ total: 0, used: 0, remain: 0, rate: 0 })
+  })
+
+  it('summary：优先用服务端全量概览（store 只有首页 20 条，不能当全量）', async () => {
+    apiOverview.mockResolvedValue({ data: { total_amount: 2000, used_amount: 1500 } })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(apiOverview).toHaveBeenCalled()
+    expect((wrapper.vm as any).summary).toEqual({ total: 2000, used: 1500, remain: 500, rate: 75 })
+  })
+
+  it('summary：概览接口失败时静默回退 store 汇总且不弹全局提示', async () => {
+    apiOverview.mockRejectedValue(new Error('overview boom'))
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(logWarn).toHaveBeenCalled()
+    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect((wrapper.vm as any).summary).toEqual({ total: 1000, used: 600, remain: 400, rate: 60 })
   })
 })
 

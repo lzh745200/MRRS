@@ -620,3 +620,32 @@ describe('标签页切换', () => {
     wrapper.unmount()
   })
 })
+
+// ── 覆盖率补口（收口 v1.18.24）：响应缺顶层 pass_code 的兼容分支 ────────────
+describe('handleCreate：pass_code 信封兼容', () => {
+  it('顶层缺 pass_code → 取 data.pass_code', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.createForm.machine_code = 'D'.repeat(32)
+    vm.createDialogVisible = true
+    vm.createFormRef = { validate: vi.fn().mockResolvedValue(true) }
+    apiMock.createMachineCode.mockResolvedValue({ code: 200, data: { pass_code: 'ENV-1' } })
+    await vm.handleCreate()
+    await flushPromises()
+    expect(vm.generatedPassCode).toBe('ENV-1')
+  })
+
+  it('顶层与 data 都缺 pass_code → 空串（不显示 undefined）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.createForm.machine_code = 'E'.repeat(32)
+    vm.createDialogVisible = true
+    vm.createFormRef = { validate: vi.fn().mockResolvedValue(true) }
+    apiMock.createMachineCode.mockResolvedValue({ code: 200 })
+    await vm.handleCreate()
+    await flushPromises()
+    expect(vm.generatedPassCode).toBe('')
+  })
+})

@@ -398,10 +398,12 @@ const serverFundStats = ref<any>(null)
 const stats = computed(() => {
   const s = serverFundStats.value
   if (s) {
+    // 键名对齐 /funds/statistics/overview 真实返回（allocated_amount / pending_count）；
+    // 原 total_allocated、by_status.pending.count 后端均不返回 → 两张卡恒为 0。
     return {
       totalAmount: formatAmount(s.total_amount ?? 0),
-      allocatedAmount: formatAmount(s.total_allocated ?? 0),
-      pendingCount: s.by_status?.pending?.count ?? 0,
+      allocatedAmount: formatAmount(s.allocated_amount ?? 0),
+      pendingCount: s.pending_count ?? 0,
       totalCount: s.total_count ?? total.value,
     }
   }

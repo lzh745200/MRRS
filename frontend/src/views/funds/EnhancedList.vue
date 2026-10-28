@@ -525,12 +525,15 @@ const serverStats = ref<any>(null)
 const stats = computed(() => {
   const s = serverStats.value
   if (s) {
-    const byStatus = s.by_status || {}
+    // 字段名必须与 /funds/statistics/overview 的真实返回一致：
+    // 后端返回 allocated_amount / pending_count / planned_count，
+    // 历史上这里读的是 total_allocated 与 by_status.pending.count（后端不存在），
+    // 导致「已拨付」「待审批」「规划中」三张卡恒为 0。
     return {
       totalAmount: formatAmount(s.total_amount || 0),
-      allocatedAmount: formatAmount(s.total_allocated || 0),
-      pendingCount: byStatus.pending?.count || 0,
-      plannedCount: byStatus.planned?.count || 0,
+      allocatedAmount: formatAmount(s.allocated_amount || 0),
+      pendingCount: s.pending_count || 0,
+      plannedCount: s.planned_count || 0,
       totalCount: s.total_count || total.value,
     }
   }

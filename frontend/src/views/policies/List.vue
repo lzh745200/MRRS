@@ -425,7 +425,8 @@ const handleImport = () => {
           .slice(0, 5)
           .map((err) => `第${err.row ?? '?'}行「${err.title ?? ''}」: ${err.error ?? ''}`)
           .join('\n')
-        const moreText = importErrors.length > 5 ? `\n...还有 ${importErrors.length - 5} 条错误` : ''
+        const moreText =
+          importErrors.length > 5 ? `\n...还有 ${importErrors.length - 5} 条错误` : ''
 
         ElMessage.warning({
           message: `导入完成：成功${result.imported ?? 0}条，${importErrors.length}条有错误`,

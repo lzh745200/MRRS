@@ -69,7 +69,10 @@ const stats = ref({
 const statusDist = ref<Record<string, number>>({})
 const regionDist = ref<Record<string, number>>({})
 
-const budget = computed(() => format.formatMoney4((stats.value.project_total_budget || 0) / 10000))
+// project_total_budget 来自 SUM(SchoolProject.budget)，模型列注释即「预算金额(万元)」，
+// 与 Detail.vue 的「项目预算总额 / 万元」展示同源。此处**不得**再除 10000，
+// 否则预算缩水一万倍（500 万元会显示成 0.05），且与详情页相差四个数量级。
+const budget = computed(() => format.formatMoney4(stats.value.project_total_budget || 0))
 const scholarshipAmount = computed(() =>
   Number(stats.value.scholarship_total_amount || 0).toLocaleString('zh-CN')
 )

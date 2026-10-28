@@ -139,9 +139,12 @@ function defaultGetImpl(url: string) {
   if (url === '/funds/statistics/overview') {
     return Promise.resolve({
       data: {
+        // 真实后端返回形态（/funds/statistics/overview）：只有平铺的 *_count 与
+        // allocated_amount，不存在 by_status / total_allocated。
         total_amount: 500,
-        total_allocated: 300,
-        by_status: { pending: { count: 3 }, planned: { count: 2 } },
+        allocated_amount: 300,
+        pending_count: 3,
+        planned_count: 2,
         total_count: 10,
       },
     })
@@ -841,10 +844,10 @@ describe('补缺：统计卡片 keydown 事件（37/48/59 行）', () => {
 })
 
 describe('补缺：stats computed 分支', () => {
-  it('serverStats 缺 by_status/total_count → 全部 || 兜底', async () => {
+  it('serverStats 缺 pending_count/planned_count/total_count → 全部 || 兜底', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/funds/statistics/overview')
-        return Promise.resolve({ data: { total_amount: 500, total_allocated: 300 } })
+        return Promise.resolve({ data: { total_amount: 500, allocated_amount: 300 } })
       return defaultGetImpl(url)
     })
     const wrapper = mountComp()
@@ -859,7 +862,8 @@ describe('补缺：stats computed 分支', () => {
 
   it('serverStats 全零字段 → 0 兜底', async () => {
     mockGet.mockImplementation((url: string) => {
-      if (url === '/funds/statistics/overview') return Promise.resolve({ data: { total_amount: 0, total_allocated: 0 } })
+      if (url === '/funds/statistics/overview')
+        return Promise.resolve({ data: { total_amount: 0, allocated_amount: 0 } })
       return defaultGetImpl(url)
     })
     const wrapper = mountComp()

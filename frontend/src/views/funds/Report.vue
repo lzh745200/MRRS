@@ -246,7 +246,10 @@ const loadReportData = async () => {
   loading.value = true
   try {
     const params: Record<string, any> = {}
-    if (filterForm.fundType) params.type = filterForm.fundType
+    // 后端 /funds/statistics/multi-dimension 的筛选参数名是 fund_type；
+    // 原先发的是 type（FastAPI 静默忽略未知 query）→ 饼图/趋势图不随类型筛选变化，
+    // 只有表格变了，同一页图形与表格口径不一致。
+    if (filterForm.fundType) params.fund_type = filterForm.fundType
     if (filterForm.dateRange?.length === 2) {
       params.start_date = filterForm.dateRange[0]
       params.end_date = filterForm.dateRange[1]
@@ -255,21 +258,32 @@ const loadReportData = async () => {
     const listRes = await fundApi.list({
       page: 1,
       page_size: 200,
-      fund_type: params.type,
+      fund_type: params.fund_type,
     })
-    reportData.value = (listRes.items || []).map((f: any) => ({
-      date: f.application_date || f.created_at?.slice(0, 10) || '-',
-      projectName: f.name || '-',
-      fundType: f.fund_type || f.type || '-',
-      amount: f.amount || 0,
-      used_amount: f.used_amount || 0,
-      balance: (f.amount || 0) - (f.used_amount || 0),
-      usageRate:
-        f.amount > 0 ? parseFloat((((f.used_amount || 0) / f.amount) * 100).toFixed(2)) : 0,
-      unit: f.source || f.fund_source || '-',
-      manager: f.applicant || f.operator || '-',
-      status: f.status || '-',
-    }))
+    // /funds 列表端点没有日期区间参数，必须在映射后的 YYYY-MM-DD 上自行过滤，
+    // 否则表头打印「报表周期 A 至 B」而表格/合计/导出却含区间外数据。
+    // 无区间时取全开区间（'' 与 '9999-12-31'），比较恒真，不额外引入分支。
+    const from = (params.start_date as string) ?? ''
+    const to = (params.end_date as string) ?? '9999-12-31'
+    reportData.value = (listRes.items || [])
+      .map((f: any) => ({
+        date: f.application_date || f.created_at?.slice(0, 10) || '-',
+        projectName: f.name || '-',
+        fundType: f.fund_type || f.type || '-',
+        amount: f.amount || 0,
+        used_amount: f.used_amount || 0,
+        balance: (f.amount || 0) - (f.used_amount || 0),
+        usageRate:
+          f.amount > 0 ? parseFloat((((f.used_amount || 0) / f.amount) * 100).toFixed(2)) : 0,
+        unit: f.source || f.fund_source || '-',
+        manager: f.applicant || f.operator || '-',
+        status: f.status || '-',
+      }))
+      .filter((row: any) => {
+        // 无日期行归入区间起点，避免"一选区间就整行消失"
+        const key = row.date === '-' ? from : row.date
+        return key >= from && key <= to
+      })
     // 加载类型分布
     const typeRes = await fundApi.statisticsMultiDimension({
       group_by: 'type',

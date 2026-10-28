@@ -141,6 +141,13 @@ describe('api/funds', () => {
   })
 
   describe('统计', () => {
+    it('statisticsOverview 调用 GET /funds/statistics/overview', async () => {
+      mockGet.mockResolvedValue({ total_amount: 100 })
+      const r = await fundApi.statisticsOverview()
+      expect(mockGet).toHaveBeenCalledWith('/funds/statistics/overview')
+      expect(r).toEqual({ total_amount: 100 })
+    })
+
     it('statisticsMultiDimension 带 params', async () => {
       mockGet.mockResolvedValue({ data: {} })
       await fundApi.statisticsMultiDimension({ year: 2024 })

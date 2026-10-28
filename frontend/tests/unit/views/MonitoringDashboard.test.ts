@@ -363,6 +363,23 @@ describe('MonitoringDashboard', () => {
     // Restore original
     globalThis.clearInterval = origClearInterval
   })
+
+  it('卸载早于 refreshAll 返回时不重建轮询定时器（防后台泄漏）', async () => {
+    // 进页面 1~3 秒就切走：refreshAll 仍挂起，onUnmounted 先跑（pollTimer 为 null），
+    // await 归来后不得再建 interval，否则已销毁组件在后台每 30s 发 5 个请求。
+    const setIntervalMock = vi.fn(() => 1 as unknown as ReturnType<typeof setInterval>)
+    const origSetInterval = globalThis.setInterval
+    globalThis.setInterval = setIntervalMock as unknown as typeof globalThis.setInterval
+
+    try {
+      const wrapper = mountComponent()
+      wrapper.unmount()
+      await advanceFakeTimersAndFlush()
+      expect(setIntervalMock).not.toHaveBeenCalled()
+    } finally {
+      globalThis.setInterval = origSetInterval
+    }
+  })
 })
 
 describe('日志回退分支补充', () => {
@@ -702,6 +719,23 @@ describe('图表耗时全缺', () => {
     await advanceFakeTimersAndFlush()
     ;(wrapper.vm as any).buildChart()
     expect(mockSetOption).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+// ── 覆盖率补口（收口 v1.18.24）：unwrapMonitorPayload 内层 data 的 {} 兜底 ──
+describe('unwrapMonitorPayload：内层 data 缺失', () => {
+  it('snapshot 响应为 { data: { data: undefined } } → 内层 data 回落 {}（不炸）', async () => {
+    mockGet.mockReset()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/system/monitor/snapshot') return Promise.resolve({ data: { data: undefined } })
+      return Promise.resolve({ data: {} })
+    })
+    const wrapper = mountComponent()
+    await flushPromises()
+    await flushPromises()
+    expect(mockGet).toHaveBeenCalledWith('/system/monitor/snapshot')
+    expect(wrapper.exists()).toBe(true)
     wrapper.unmount()
   })
 })

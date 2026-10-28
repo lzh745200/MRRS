@@ -91,8 +91,7 @@ export const projectsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  listFiles: (id: number | string) =>
-    get<ProjectFilesPayload>('/projects/' + id + '/files'),
+  listFiles: (id: number | string) => get<ProjectFilesPayload>('/projects/' + id + '/files'),
   getFileDownloadUrl: (projectId: number | string, fileId: number) =>
     `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/projects/${projectId}/files/${fileId}/download`,
   deleteFile: (projectId: number | string, fileId: number) =>

@@ -68,17 +68,8 @@
         </div>
         <div class="indicator-content">
           <div class="indicator-value">{{ totalWorks }}</div>
-          <div
-            class="indicator-change"
-            :class="{
-              positive: totalWorksChange > 0,
-              negative: totalWorksChange < 0,
-            }"
-          >
-            {{ totalWorksChange > 0 ? '+' : '' }}{{ totalWorksChange }}%
-          </div>
         </div>
-        <div class="indicator-description">较上期相比</div>
+        <div class="indicator-description">当前筛选范围内的有效工作</div>
       </div>
       <div class="indicator-card military-card">
         <div class="indicator-header">
@@ -89,17 +80,8 @@
         </div>
         <div class="indicator-content">
           <div class="indicator-value">{{ averageCompletionRate }}%</div>
-          <div
-            class="indicator-change"
-            :class="{
-              positive: completionRateChange > 0,
-              negative: completionRateChange < 0,
-            }"
-          >
-            {{ completionRateChange > 0 ? '+' : '' }}{{ completionRateChange }}%
-          </div>
         </div>
-        <div class="indicator-description">较上期相比</div>
+        <div class="indicator-description">进行中及已完成工作的平均进度</div>
       </div>
       <div class="indicator-card military-card">
         <div class="indicator-header">
@@ -110,38 +92,20 @@
         </div>
         <div class="indicator-content">
           <div class="indicator-value">{{ averageDelayRate }}%</div>
-          <div
-            class="indicator-change"
-            :class="{
-              positive: delayRateChange < 0,
-              negative: delayRateChange > 0,
-            }"
-          >
-            {{ delayRateChange > 0 ? '+' : '' }}{{ delayRateChange }}%
-          </div>
         </div>
-        <div class="indicator-description">较上期相比</div>
+        <div class="indicator-description">延期工作占全部工作的比例</div>
       </div>
       <div class="indicator-card military-card">
         <div class="indicator-header">
-          <span class="indicator-title">总投入资金</span>
+          <span class="indicator-title">覆盖村庄数</span>
           <span class="indicator-icon" style="background-color: var(--color-warning)">
-            <el-icon><Money /></el-icon>
+            <el-icon><Location /></el-icon>
           </span>
         </div>
         <div class="indicator-content">
-          <div class="indicator-value">{{ totalInvestment }}万元</div>
-          <div
-            class="indicator-change"
-            :class="{
-              positive: investmentChange > 0,
-              negative: investmentChange < 0,
-            }"
-          >
-            {{ investmentChange > 0 ? '+' : '' }}{{ investmentChange }}%
-          </div>
+          <div class="indicator-value">{{ coveredVillageCount }}</div>
         </div>
-        <div class="indicator-description">较上期相比</div>
+        <div class="indicator-description">当前筛选范围内涉及的村庄</div>
       </div>
     </div>
 
@@ -201,7 +165,6 @@
           <el-select v-model="trendType" placeholder="选择趋势类型" @change="updateTrendChart">
             <el-option label="按工作数量" value="count" />
             <el-option label="按完成率" value="completion" />
-            <el-option label="按投入资金" value="investment" />
           </el-select>
         </div>
         <div class="chart-content">
@@ -212,20 +175,12 @@
 
     <!-- 图表区域 - 第三行 -->
     <div class="charts-row">
-      <div class="chart-card military-card">
+      <div class="chart-card military-card full-width">
         <div class="chart-header">
           <h3 class="chart-title">村庄工作量排名</h3>
         </div>
         <div class="chart-content">
           <div ref="villageRankingChart" style="height: 100%"></div>
-        </div>
-      </div>
-      <div class="chart-card military-card">
-        <div class="chart-header">
-          <h3 class="chart-title">工作完成质量分析</h3>
-        </div>
-        <div class="chart-content">
-          <div ref="qualityAnalysisChart" style="height: 100%"></div>
         </div>
       </div>
     </div>
@@ -237,7 +192,6 @@
         <el-select v-model="dataTableSort" placeholder="排序方式" @change="updateDataTable">
           <el-option label="按完成率排序" value="completion" />
           <el-option label="按开始日期排序" value="startDate" />
-          <el-option label="按投入资金排序" value="investment" />
         </el-select>
       </div>
       <el-table v-loading="loading" :data="sortedAnalysisData" border style="width: 100%">
@@ -262,16 +216,8 @@
             />
           </template>
         </el-table-column>
-        <el-table-column prop="investment" label="投入资金(万元)" width="120" />
         <el-table-column prop="startDate" label="开始日期" width="120" />
         <el-table-column prop="endDate" label="结束日期" width="120" />
-        <el-table-column prop="qualityScore" label="质量评分" width="100">
-          <template #default="scope">
-            <div class="quality-score" :class="getQualityScoreClass(scope.row.qualityScore)">
-              {{ scope.row.qualityScore }}
-            </div>
-          </template>
-        </el-table-column>
       </el-table>
     </div>
 
@@ -296,7 +242,7 @@ import {
   Document,
   Select,
   Warning,
-  Money,
+  Location,
   ArrowDown,
 } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
@@ -308,7 +254,7 @@ type ChartInstance = echarts.ECharts | null
 
 // 状态管理
 const loading = ref(false)
-const timeRange = ref('90')
+const timeRange = ref('all')
 const selectedVillage = ref('')
 const selectedType = ref('')
 const typeChartView = ref('pie')
@@ -323,7 +269,6 @@ const statusDoughnutChart = ref<HTMLDivElement | null>(null)
 const statusBarChart = ref<HTMLDivElement | null>(null)
 const trendChart = ref<HTMLDivElement | null>(null)
 const villageRankingChart = ref<HTMLDivElement | null>(null)
-const qualityAnalysisChart = ref<HTMLDivElement | null>(null)
 
 // 图表实例 - 使用ChartInstance类型
 let typePieChartInstance: ChartInstance = null
@@ -332,7 +277,6 @@ let statusDoughnutChartInstance: ChartInstance = null
 let statusBarChartInstance: ChartInstance = null
 let trendChartInstance: ChartInstance = null
 let villageRankingChartInstance: ChartInstance = null
-let qualityAnalysisChartInstance: ChartInstance = null
 
 // 村庄列表（从真实数据提取）
 const villages = ref<string[]>([])
@@ -361,8 +305,19 @@ const filteredData = computed(() => {
     data = data.filter((item) => item.type === typeMap[selectedType.value])
   }
 
-  // 时间范围筛选（这里简化处理，实际应该根据timeRange计算日期范围）
-  // 在真实应用中，需要根据timeRange计算日期范围并筛选
+  // 时间范围筛选：此前选项只有 UI、从未参与筛选（切换后数据不变）。
+  // 按开始日期过滤；无日期记录在限定时间窗内无法判定归属，予以排除。
+  const rangeDays = Number(timeRange.value)
+  if (Number.isFinite(rangeDays) && rangeDays > 0) {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - rangeDays)
+    cutoff.setHours(0, 0, 0, 0)
+    data = data.filter((item) => {
+      if (!item.startDate) return false
+      const startedAt = new Date(item.startDate)
+      return !Number.isNaN(startedAt.getTime()) && startedAt >= cutoff
+    })
+  }
 
   return data
 })
@@ -374,9 +329,10 @@ const sortedAnalysisData = computed(() => {
     case 'completion':
       return data.sort((a, b) => b.completionRate - a.completionRate)
     case 'startDate':
-      return data.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
-    case 'investment':
-      return data.sort((a, b) => b.investment - a.investment)
+      // start_date 在模型里可空，映射时被置为 ''；new Date('') 得 Invalid Date、
+      // getTime() 得 NaN，比较器返回 NaN 会被引擎当作 0 → 排序静默错乱
+      //（无日期记录夹在中间）。直接按 YYYY-MM-DD 字典序比较，空值统一排到末尾。
+      return data.sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)))
     default:
       return data
   }
@@ -384,7 +340,6 @@ const sortedAnalysisData = computed(() => {
 
 // 核心指标计算
 const totalWorks = computed(() => filteredData.value.length)
-const totalWorksChange = ref(0)
 
 const averageCompletionRate = computed(() => {
   const completedOrInProgress = filteredData.value.filter(
@@ -395,30 +350,33 @@ const averageCompletionRate = computed(() => {
   const sum = completedOrInProgress.reduce((acc, item) => acc + item.completionRate, 0)
   return Math.round(sum / completedOrInProgress.length)
 })
-const completionRateChange = ref(0)
 
 const averageDelayRate = computed(() => {
   if (filteredData.value.length === 0) return 0
   const delayedCount = filteredData.value.filter((item) => item.status === '已延期').length
   return Math.round((delayedCount / filteredData.value.length) * 100)
 })
-const delayRateChange = ref(0)
 
-const totalInvestment = computed(() => {
-  const sum = filteredData.value.reduce((acc, item) => acc + item.investment, 0)
-  return Math.round(sum)
+const coveredVillageCount = computed(() => {
+  return new Set(filteredData.value.map((item) => item.village).filter(Boolean)).size
 })
-const investmentChange = ref(0)
 
 // 生命周期
+// 首屏加载是异步的，等待期间用户可能已切走：onBeforeUnmount 先执行时图表实例
+// 仍为空，清理成空操作；请求返回后旧实现会继续初始化图表并注册 resize 监听，
+// 造成已销毁页面残留 canvas 与全局事件。用卸载标志收口。
+let unmounted = false
+
 onMounted(async () => {
   await loadData()
+  if (unmounted) return
   await nextTick()
   initCharts()
   window.addEventListener('resize', resizeCharts)
 })
 
 onBeforeUnmount(() => {
+  unmounted = true
   window.removeEventListener('resize', resizeCharts)
   disposeAllCharts()
 })
@@ -454,10 +412,8 @@ const loadData = async () => {
       type: typeMap[item.type] || item.type || '',
       status: statusMap[item.status] || item.status || '',
       completionRate: item.progress || 0,
-      investment: 0,
       startDate: item.start_date || '',
       endDate: item.end_date || '',
-      qualityScore: item.progress === 100 ? 4.5 : item.progress > 50 ? 3.8 : 0,
     }))
     // 提取村庄列表
     const villageSet = new Set(items.map((i: any) => i.village_name).filter(Boolean))
@@ -484,27 +440,15 @@ const exportAnalysis = () => {
     return
   }
 
-  const headers = [
-    '工作名称',
-    '所属村庄',
-    '工作类型',
-    '状态',
-    '完成率(%)',
-    '投入资金(万元)',
-    '开始日期',
-    '结束日期',
-    '质量评分',
-  ]
+  const headers = ['工作名称', '所属村庄', '工作类型', '状态', '完成率(%)', '开始日期', '结束日期']
   const rows = data.map((item: any) => [
     item.workName || '',
     item.village || '',
     item.type || '',
     item.status || '',
     item.completionRate ?? 0,
-    item.investment ?? 0,
     item.startDate || '',
     item.endDate || '',
-    item.qualityScore ?? 0,
   ])
 
   const BOM = '\uFEFF'
@@ -595,10 +539,6 @@ const disposeAllCharts = () => {
     villageRankingChartInstance.dispose()
     villageRankingChartInstance = null
   }
-  if (qualityAnalysisChartInstance) {
-    qualityAnalysisChartInstance.dispose()
-    qualityAnalysisChartInstance = null
-  }
 }
 
 // 窗口尺寸变化时自适应重绘（ECharts 不自动跟随容器 resize）
@@ -609,7 +549,6 @@ const resizeCharts = () => {
   statusBarChartInstance?.resize()
   trendChartInstance?.resize()
   villageRankingChartInstance?.resize()
-  qualityAnalysisChartInstance?.resize()
 }
 
 // 初始化所有图表
@@ -619,7 +558,6 @@ const initCharts = async () => {
   initStatusCharts()
   initTrendChart()
   initVillageRankingChart()
-  initQualityAnalysisChart()
 }
 
 // 更新所有图表
@@ -641,9 +579,6 @@ const updateCharts = async () => {
   }
   if (villageRankingChart.value) {
     initVillageRankingChart()
-  }
-  if (qualityAnalysisChart.value) {
-    initQualityAnalysisChart()
   }
 }
 
@@ -775,12 +710,7 @@ const initTrendChart = () => {
     yAxis: { type: 'value', min: 0 },
     series: [
       {
-        name:
-          trendType.value === 'count'
-            ? '工作数量'
-            : trendType.value === 'completion'
-              ? '平均完成率(%)'
-              : '投入资金(万元)',
+        name: trendType.value === 'count' ? '工作数量' : '平均完成率(%)',
         type: 'line',
         smooth: true,
         symbol: 'circle',
@@ -818,44 +748,6 @@ const initVillageRankingChart = () => {
         data: villageData.values,
         barMaxWidth: 24,
         itemStyle: { color: COLOR_PALETTE[3], borderRadius: [0, 4, 4, 0] },
-      },
-    ],
-  })
-}
-
-// 初始化质量分析图表（雷达图）
-const initQualityAnalysisChart = () => {
-  if (!qualityAnalysisChart.value) return
-
-  const qualityData = getQualityAnalysisData()
-
-  qualityAnalysisChartInstance = echarts.init(qualityAnalysisChart.value)
-  qualityAnalysisChartInstance.setOption({
-    tooltip: { trigger: 'item' },
-    radar: {
-      indicator: qualityData.labels.map((name) => ({ name, max: 5 })),
-      radius: '65%',
-      // 原 Chart.js max:5 + stepSize:1 → 5 等分（0~5 每格 1）
-      splitNumber: 5,
-    },
-    series: [
-      {
-        name: '质量评分',
-        type: 'radar',
-        data: [
-          {
-            value: qualityData.values,
-            name: '质量评分',
-            areaStyle: { color: 'rgba(0, 51, 102, 0.2)' },
-            lineStyle: { color: MILITARY_BLUE, width: 2 },
-            itemStyle: {
-              color: COLOR_PALETTE[3],
-              borderColor: themeColor('--color-bg-card', '#fff'),
-              borderWidth: 2,
-            },
-            symbolSize: 8,
-          },
-        ],
       },
     ],
   })
@@ -924,7 +816,6 @@ const getTrendData = () => {
       count: number
       completionSum: number
       completionCount: number
-      investment: number
     }
   > = {}
 
@@ -936,13 +827,11 @@ const getTrendData = () => {
         count: 0,
         completionSum: 0,
         completionCount: 0,
-        investment: 0,
       }
     }
     monthlyMap[month].count++
     monthlyMap[month].completionSum += item.completionRate || 0
     monthlyMap[month].completionCount++
-    monthlyMap[month].investment += item.investment || 0
   })
 
   // 排序并取最近6个月
@@ -958,19 +847,13 @@ const getTrendData = () => {
       values: sortedMonths.map((m) => monthlyMap[m].count),
       hasData: true,
     }
-  } else if (trendType.value === 'completion') {
+  } else {
+    // completion：按月内工作平均完成率
     return {
       labels: sortedMonths,
       values: sortedMonths.map((m) =>
         Math.round(monthlyMap[m].completionSum / monthlyMap[m].completionCount)
       ),
-      hasData: true,
-    }
-  } else {
-    // investment
-    return {
-      labels: sortedMonths,
-      values: sortedMonths.map((m) => monthlyMap[m].investment),
       hasData: true,
     }
   }
@@ -994,14 +877,6 @@ const getVillageRankingData = () => {
   return {
     labels: sorted.map(([village]) => village),
     values: sorted.map(([, count]) => count),
-  }
-}
-
-const getQualityAnalysisData = () => {
-  // 模拟质量分析数据
-  return {
-    labels: ['基础设施建设', '产业发展', '教育培训', '医疗健康', '生态环境保护'],
-    values: [4.3, 4.5, 4.7, 4.2, 4.1],
   }
 }
 
@@ -1034,14 +909,6 @@ const getProgressStatus = (progress: number): '' | 'success' | 'warning' | 'exce
   if (progress > 70) return ''
   if (progress > 30) return 'warning'
   return 'exception'
-}
-
-const getQualityScoreClass = (score: number) => {
-  if (score >= 4.5) return 'excellent'
-  if (score >= 4.0) return 'good'
-  if (score >= 3.5) return 'average'
-  if (score > 0) return 'poor'
-  return 'not-evaluated'
 }
 </script>
 
@@ -1348,38 +1215,6 @@ const getQualityScoreClass = (score: number) => {
       font-size: 18px;
       font-weight: 600;
       color: var(--color-navy);
-    }
-  }
-
-  .quality-score {
-    text-align: center;
-    font-weight: bold;
-    padding: 4px 8px;
-    border-radius: 4px;
-
-    &.excellent {
-      background-color: #f0f9ff;
-      color: #096dd9;
-    }
-
-    &.good {
-      background-color: #f6ffed;
-      color: #52c41a;
-    }
-
-    &.average {
-      background-color: #fff7e6;
-      color: #fa8c16;
-    }
-
-    &.poor {
-      background-color: #fff1f0;
-      color: #f5222d;
-    }
-
-    &.not-evaluated {
-      background-color: #f5f5f5;
-      color: var(--color-text-secondary);
     }
   }
 }

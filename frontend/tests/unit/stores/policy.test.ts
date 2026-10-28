@@ -275,3 +275,15 @@ describe('fetchPolicies 响应形态补充', () => {
     expect(s.policyList).toEqual([])
   })
 })
+
+// ── 覆盖率补口（v1.18.24）：fetchPolicy 的 `?? null` 右侧 ──────────────────
+describe('fetchPolicy 边界：code=200 但缺 data', () => {
+  it('current 回落 null（不保留上一个政策）', async () => {
+    setActivePinia(createPinia())
+    const store = usePolicyStore()
+    store.current = { id: 99, title: '上一个' } as never
+    mockGet.mockResolvedValueOnce({ code: 200 })
+    await store.fetchPolicy(7)
+    expect(store.current).toBeNull()
+  })
+})

@@ -148,7 +148,9 @@
             {{ resultSummary.processed ?? resultSummary.total ?? '-' }}
           </el-descriptions-item>
           <el-descriptions-item label="成功数量">
-            {{ resultSummary.success_count ?? resultSummary.success ?? '-' }}
+            <!-- success 是布尔标志（用于上方成功/失败标签），不是数量：
+                 原先 `?? resultSummary.success` 会把英文 true 直接渲染成"成功数量" -->
+            {{ resultSummary.success_count ?? '-' }}
           </el-descriptions-item>
           <el-descriptions-item v-if="resultSummary.message" label="消息" :span="2">
             {{ resultSummary.message }}

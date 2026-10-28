@@ -120,7 +120,10 @@ describe('schools/Analysis.vue', () => {
     await flushPromises()
 
     const vm = wrapper.vm as any
-    expect(vm.budget).toBe('10')
+    // 后端 project_total_budget 单位已是万元（SUM(SchoolProject.budget)，列注释
+    // 即「预算金额(万元)」），卡片标题也是「项目预算(万元)」→ 原值直接展示。
+    // 旧实现再除 10000 会得出 '10'（缩水一万倍），与详情页相差四个数量级。
+    expect(vm.budget).toBe('100,000')
     expect(vm.scholarshipAmount).toContain('50,000')
   })
 

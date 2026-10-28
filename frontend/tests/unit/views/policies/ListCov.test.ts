@@ -827,3 +827,44 @@ describe('层级加载失败分支2', () => {
   })
 })
 
+// ── 覆盖率补口（收口 v1.18.24）：导入结果缺字段的 nullish 右侧 ──────────────
+describe('handleImport：结果字段全缺省的兜底侧', () => {
+  /** 同 "导入 / 模板 / 导出" 里的捕获器；该 helper 是那个 describe 的局部函数，此处自带一份 */
+  function captureFileInput() {
+    const box = { input: null as any }
+    const realCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tag: any) => {
+      const el = realCreate(tag)
+      if (tag === 'input') box.input = el
+      return el
+    })
+    return box
+  }
+
+  it('errors 元素全缺字段 + imported 缺省 → 第?行「」+ 成功0条', async () => {
+    const box = captureFileInput()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    policyApi.importPolicies.mockResolvedValue({ errors: [{}] })
+    vm.handleImport()
+    await box.input.onchange({ target: { files: [new File(['x'], 'a.xlsx')] } })
+    await flushPromises()
+    expect(ElMessage.warning).toHaveBeenCalled()
+    const msg = String((alertMock.mock.calls.at(-1) as any)?.[0] ?? '')
+    expect(msg).toContain('成功0条')
+    expect(msg).toContain('第?行')
+  })
+
+  it('result 无 errors 键（undefined）→ 走纯成功分支', async () => {
+    const box = captureFileInput()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    policyApi.importPolicies.mockResolvedValue({ imported: 2 })
+    vm.handleImport()
+    await box.input.onchange({ target: { files: [new File(['x'], 'a.xlsx')] } })
+    await flushPromises()
+    expect(ElMessage.success).toHaveBeenCalledWith('导入成功：2条政策')
+  })
+})

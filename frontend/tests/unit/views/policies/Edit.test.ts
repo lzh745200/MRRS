@@ -715,3 +715,34 @@ describe('③ 草稿与离开拦截', () => {
     wrapper.unmount()
   })
 })
+
+// ── 覆盖率补口（v1.18.24）：loadData 里 `?? ''` 的右侧 ────────────────────
+describe('loadData 可选字段全部缺失 → 空串兜底', () => {
+  it('title/category/organization_level/publish_date/content 回落空串', async () => {
+    routeBox.params = { id: '5' }
+    policyStore.current = {
+      id: 5,
+      title: undefined,
+      category: undefined,
+      organization_level: undefined,
+      publish_date: undefined,
+      effective_date: undefined,
+      department: undefined,
+      issuing_authority: undefined,
+      content: undefined,
+      summary: undefined,
+      document_number: undefined,
+      keywords: undefined,
+      attachment_urls: [],
+      status: undefined,
+    }
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.formData.title).toBe('')
+    expect(vm.formData.category).toBe('')
+    expect(vm.formData.organization_level).toBe('')
+    expect(vm.formData.publish_date).toBe('')
+    expect(vm.formData.content).toBe('')
+  })
+})

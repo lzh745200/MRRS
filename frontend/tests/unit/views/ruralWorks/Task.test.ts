@@ -1517,3 +1517,21 @@ describe('批量分配子组件（BatchAssignDialog）', () => {
     wrapper.unmount()
   })
 })
+
+// ── 覆盖率补口（v1.18.24）：progressFileList 视图模型映射 ─────────────────
+describe('progressFileList：attachments → el-upload 视图模型', () => {
+  it('映射 name/url/uid，缺 name 用序号兜底', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.progressUpdateForm.attachments = [
+      { name: 'a.pdf', url: '/files/a.pdf' },
+      { url: '/files/b.pdf' },
+    ]
+    await nextTick()
+    const list = vm.progressFileList as Array<Record<string, unknown>>
+    expect(list).toHaveLength(2)
+    expect(list[0]).toEqual({ name: 'a.pdf', url: '/files/a.pdf', uid: 0 })
+    expect(list[1]).toEqual({ name: '附件2', url: '/files/b.pdf', uid: 1 })
+  })
+})

@@ -338,9 +338,7 @@ const candidateUsers = ref<StaffUser[]>([])
  */
 function pickStaffUsers(raw: unknown): StaffUser[] {
   const items = Array.isArray(raw) ? raw : unwrapList<StaffUser>(raw).items
-  return items.filter(
-    (u): u is StaffUser => !!u && typeof (u as StaffUser).id === 'number'
-  )
+  return items.filter((u): u is StaffUser => !!u && typeof (u as StaffUser).id === 'number')
 }
 
 // 变更对比
@@ -570,9 +568,7 @@ async function handleTransfer(task: any) {
   try {
     const res: unknown = await listStaff({ page_size: 200 })
     // 排除当前审批人自己
-    candidateUsers.value = pickStaffUsers(res).filter(
-      (u) => u.id !== task.current_approver_id
-    )
+    candidateUsers.value = pickStaffUsers(res).filter((u) => u.id !== task.current_approver_id)
   } catch {
     candidateUsers.value = []
   }

@@ -36,6 +36,7 @@
 import { ref, reactive, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { exportDataPackage } from '@/api/dataPackage'
+import { useDataPackageStore } from '@/stores/dataPackage'
 import { logger } from '@/utils/logger'
 
 const props = defineProps<{
@@ -91,7 +92,6 @@ async function handleExport() {
       ElMessage.success(`数据包已导出（ID: ${packageId}），正在下载文件...`)
       // 导出成功立即触发下载，避免"提示成功却看不到文件"
       try {
-        const { useDataPackageStore } = await import('@/stores/dataPackage')
         await useDataPackageStore().downloadPackage(packageId)
       } catch (err) {
         // 下载失败不阻塞主流程，但必须如实告知（否则用户只看到"成功"却拿不到文件）

@@ -242,10 +242,45 @@ describe('挂载与数据加载', () => {
       expect.objectContaining({
         start_date: '2024-01-01',
         end_date: '2024-02-01',
-        type: 'project',
+        // 后端参数名是 fund_type；发 type 会被静默忽略（图形不随筛选变化）
+        fund_type: 'project',
       })
     )
     expect(vm.reportPeriod).toBe('2024-01-01 至 2024-02-01')
+  })
+
+  it('选了日期区间 → 表格与合计只含区间内记录（表头周期与数据一致）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 2024-03-10 的记录在 [2024-01-01, 2024-02-01] 之外，必须被剔除，
+    // 否则表头印「2024-01-01 至 2024-02-01」而合计含区间外数据。
+    fundApiMock.list.mockResolvedValue({
+      items: [
+        fundRow,
+        { ...fundRow2, created_at: '2024-03-10T08:00:00' },
+      ],
+      total: 2,
+    })
+    vm.filterForm.dateRange = ['2024-01-01', '2024-02-01']
+    await vm.loadReportData()
+    expect(vm.reportData).toHaveLength(1)
+    expect(vm.reportData[0].date).toBe('2024-01-15')
+    expect(vm.summary.total).toBe(100.5)
+  })
+
+  it('无日期的记录不因选了区间而消失', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    fundApiMock.list.mockResolvedValue({
+      items: [{ id: 9, name: '无日期经费', amount: 10, used_amount: 0 }],
+      total: 1,
+    })
+    vm.filterForm.dateRange = ['2024-01-01', '2024-02-01']
+    await vm.loadReportData()
+    expect(vm.reportData).toHaveLength(1)
+    expect(vm.reportData[0].date).toBe('-')
   })
 })
 

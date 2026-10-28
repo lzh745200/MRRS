@@ -1130,3 +1130,15 @@ describe('模板交互（v-model 与内联处理器）', () => {
     revokeSpy.mockRestore()
   })
 })
+
+// ── 覆盖率补口（v1.18.24）：loadProjectFiles 里 `files ?? []` 的右侧 ───────
+describe('loadProjectFiles：grouped 内某分类为 undefined → 空数组兜底', () => {
+  it('photo 值为 undefined 时该分类回落 []', async () => {
+    api.listFiles.mockResolvedValue({ grouped: { photo: undefined } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.loadProjectFiles(7)
+    expect(vm.uploadedFiles.photo).toEqual([])
+  })
+})

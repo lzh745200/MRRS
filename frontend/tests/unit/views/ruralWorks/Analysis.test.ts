@@ -122,9 +122,9 @@ function mountComp() {
             '<div class="el-table-column-stub"><slot :row="rowA" /><slot :row="rowB" /><slot :row="rowC" /></div>',
           data() {
             return {
-              rowA: { workName: '道路建设', village: '村A', type: '基础设施建设', status: '已完成', completionRate: 100, qualityScore: 4.5 },
-              rowB: { workName: '产业帮扶', village: '村A', type: '产业发展', status: '进行中', completionRate: 60, qualityScore: 3.8 },
-              rowC: { workName: '教育资助', village: '村B', type: '教育培训', status: '已延期', completionRate: 20, qualityScore: 0 },
+              rowA: { workName: '道路建设', village: '村A', type: '基础设施建设', status: '已完成', completionRate: 100 },
+              rowB: { workName: '产业帮扶', village: '村A', type: '产业发展', status: '进行中', completionRate: 60 },
+              rowC: { workName: '教育资助', village: '村B', type: '教育培训', status: '已延期', completionRate: 20 },
             }
           },
         },
@@ -154,11 +154,12 @@ describe('挂载与数据加载', () => {
       type: '基础设施建设',
       status: '已完成',
       completionRate: 100,
-      investment: 0,
       startDate: '2024-01-10',
       endDate: '2024-03-01',
-      qualityScore: 4.5,
     })
+    // 后端 RuralWork 无金额/质量评分类字段，页面不得再用常量伪造
+    expect(vm.analysisData[0]).not.toHaveProperty('investment')
+    expect(vm.analysisData[0]).not.toHaveProperty('qualityScore')
     expect(vm.villages).toEqual(['村A', '村B'])
     expect(echartsInit).toHaveBeenCalled()
     expect(vm.loading).toBe(false)
@@ -173,6 +174,22 @@ describe('挂载与数据加载', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('net')
     expect((wrapper.vm as any).analysisData).toEqual([])
     wrapper.unmount()
+  })
+
+  it('首屏加载未完成即卸载 → 不再初始化图表或注册 resize', async () => {
+    let resolveRequest!: (value: unknown) => void
+    getRuralWorksMock.mockReturnValue(new Promise((resolve) => (resolveRequest = resolve)))
+    const addSpy = vi.spyOn(window, 'addEventListener')
+
+    const wrapper = mountComp()
+    await nextTick()
+    wrapper.unmount()
+    resolveRequest({ items })
+    await flushPromises()
+
+    expect(echartsInit).not.toHaveBeenCalled()
+    expect(addSpy).not.toHaveBeenCalledWith('resize', expect.any(Function))
+    addSpy.mockRestore()
   })
 
   it('响应无 items → 空数组', async () => {
@@ -192,7 +209,7 @@ describe('挂载与数据加载', () => {
     expect(row.type).toBe('unknown_type')
     expect(row.status).toBe('计划中')
     expect(row.completionRate).toBe(0)
-    expect(row.qualityScore).toBe(0)
+    expect(row).not.toHaveProperty('qualityScore')
     expect(row.startDate).toBe('')
     wrapper.unmount()
   })
@@ -212,6 +229,40 @@ describe('挂载与数据加载', () => {
 })
 
 describe('筛选与排序', () => {
+  it('时间范围筛选真正生效（无日期/超窗记录被排除）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const today = new Date()
+    const recent = today.toISOString().slice(0, 10)
+    const old = '2000-01-01'
+
+    // timeRange 的 watch 会重新拉取数据，先等它落定再注入边界样本
+    vm.timeRange = '30'
+    await flushPromises()
+    vm.analysisData = [
+      { startDate: recent },
+      { startDate: old },
+      { startDate: '' },
+      { startDate: 'not-a-date' },
+    ]
+    await nextTick()
+    expect(vm.filteredData).toHaveLength(1)
+    expect(vm.filteredData[0].startDate).toBe(recent)
+
+    vm.timeRange = 'all'
+    await flushPromises()
+    vm.analysisData = [
+      { startDate: recent },
+      { startDate: old },
+      { startDate: '' },
+      { startDate: 'not-a-date' },
+    ]
+    await nextTick()
+    expect(vm.filteredData).toHaveLength(4)
+    wrapper.unmount()
+  })
+
   it('村庄/类型筛选', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -242,7 +293,21 @@ describe('筛选与排序', () => {
     wrapper.unmount()
   })
 
-  it('排序三种方式', async () => {
+  it('按开始日期排序：空日期不得占首位（旧实现 new Date("") → NaN 比较器静默失效）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.analysisData = [
+      { startDate: '', completionRate: 0 },
+      { startDate: '2024-01-10', completionRate: 10 },
+    ]
+    vm.dataTableSort = 'startDate'
+    await nextTick()
+    expect(vm.sortedAnalysisData[0].startDate).toBe('2024-01-10')
+    wrapper.unmount()
+  })
+
+  it('排序两种真实字段', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -253,10 +318,6 @@ describe('筛选与排序', () => {
     vm.dataTableSort = 'startDate'
     await nextTick()
     expect(vm.sortedAnalysisData[0].startDate).toBe('2024-02-05')
-
-    vm.dataTableSort = 'investment'
-    await nextTick()
-    expect(vm.sortedAnalysisData).toHaveLength(4)
     wrapper.unmount()
   })
 })
@@ -269,7 +330,8 @@ describe('指标计算', () => {
     expect(vm.totalWorks).toBe(4)
     expect(vm.averageCompletionRate).toBe(60)
     expect(vm.averageDelayRate).toBe(25)
-    expect(vm.totalInvestment).toBe(0)
+    expect(vm.coveredVillageCount).toBe(2)
+    expect(vm).not.toHaveProperty('totalInvestment')
     wrapper.unmount()
 
     getRuralWorksMock.mockResolvedValue({ items: [] })
@@ -399,7 +461,6 @@ describe('视图与图表切换', () => {
     expect(tip.title.text).toBe('暂无数据，请先录入乡村工作数据')
 
     await vm.initVillageRankingChart()
-    await vm.initQualityAnalysisChart()
     wrapper.unmount()
   })
 
@@ -411,8 +472,6 @@ describe('视图与图表切换', () => {
     await vm.initTrendChart()
     vm.villageRankingChart = null
     await vm.initVillageRankingChart()
-    vm.qualityAnalysisChart = null
-    await vm.initQualityAnalysisChart()
     wrapper.unmount()
   })
 
@@ -440,24 +499,11 @@ describe('视图与图表切换', () => {
     wrapper.unmount()
   })
 
-  it('initTrendChart investment 类型 → 投入资金标签', async () => {
-    const wrapper = mountComp()
-    await flushPromises()
-    const vm = wrapper.vm as any
-    vm.trendType = 'investment'
-    await vm.initTrendChart()
-    const trend = lastOptionBySeriesType('line')
-    expect(trend).toBeTruthy()
-    expect(trend.series[0].name).toBe('投入资金(万元)')
-    wrapper.unmount()
-  })
-
-  it('村庄排名（横向 bar）与质量分析（雷达）option 构造', async () => {
+  it('村庄排名（横向 bar）option 构造', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     await vm.initVillageRankingChart()
-    await vm.initQualityAnalysisChart()
 
     // 横向柱状图：yAxis category + xAxis value（indexAxis:'y' 的等价翻译）
     const horizontal = mockInstances
@@ -468,13 +514,7 @@ describe('视图与图表切换', () => {
     expect(horizontal.yAxis.inverse).toBe(true)
     // W11-T45：颜色令牌化 —— #0055aa 收敛为共享调色板亮蓝（COLOR_PALETTE[3]）
     expect(horizontal.series[0].itemStyle.color).toBe('#3b82f6')
-
-    // 雷达图：indicator 5 维，max 5（保留 Chart.js max/stepSize 语义）
-    const radar = mockInstances.map((i) => i.option).find((o) => o?.series?.[0]?.type === 'radar')
-    expect(radar).toBeTruthy()
-    expect(radar.radar.indicator).toHaveLength(5)
-    expect(radar.radar.indicator[0]).toEqual({ name: '基础设施建设', max: 5 })
-    expect(radar.series[0].data[0].value).toEqual([4.3, 4.5, 4.7, 4.2, 4.1])
+    expect(mockInstances.some((i) => i.option?.series?.[0]?.type === 'radar')).toBe(false)
     wrapper.unmount()
   })
 
@@ -587,8 +627,8 @@ describe('图表数据函数', () => {
     expect(t.hasData).toBe(false)
 
     vm.analysisData = [
-      { startDate: '2024-01-10', completionRate: 100, investment: 10 },
-      { startDate: '2024-02-05', completionRate: 60, investment: 20 },
+      { startDate: '2024-01-10', completionRate: 100 },
+      { startDate: '2024-02-05', completionRate: 60 },
     ]
     await nextTick()
     t = vm.getTrendData()
@@ -598,9 +638,6 @@ describe('图表数据函数', () => {
     vm.trendType = 'completion'
     t = vm.getTrendData()
     expect(t.values[0]).toBeGreaterThan(0)
-
-    vm.trendType = 'investment'
-    t = vm.getTrendData()
     expect(t.values).toHaveLength(t.labels.length)
     wrapper.unmount()
   })
@@ -628,14 +665,13 @@ describe('图表数据函数', () => {
     wrapper.unmount()
   })
 
-  it('getVillageRankingData / getQualityAnalysisData', async () => {
+  it('getVillageRankingData 只使用真实村庄工作量', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const v = vm.getVillageRankingData()
     expect(v.labels).toContain('村A')
-    const q = vm.getQualityAnalysisData()
-    expect(q.labels).toHaveLength(5)
+    expect(vm).not.toHaveProperty('getQualityAnalysisData')
     wrapper.unmount()
   })
 })
@@ -659,7 +695,7 @@ describe('字典函数', () => {
     wrapper.unmount()
   })
 
-  it('getProgressStatus / getQualityScoreClass 全分支', async () => {
+  it('getProgressStatus 全分支', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -667,30 +703,19 @@ describe('字典函数', () => {
     expect(vm.getProgressStatus(80)).toBe('')
     expect(vm.getProgressStatus(50)).toBe('warning')
     expect(vm.getProgressStatus(10)).toBe('exception')
-    expect(vm.getQualityScoreClass(4.5)).toBe('excellent')
-    expect(vm.getQualityScoreClass(4.0)).toBe('good')
-    expect(vm.getQualityScoreClass(3.5)).toBe('average')
-    expect(vm.getQualityScoreClass(2)).toBe('poor')
-    expect(vm.getQualityScoreClass(0)).toBe('not-evaluated')
+    expect(vm).not.toHaveProperty('getQualityScoreClass')
     wrapper.unmount()
   })
 
-  it('指标变化正负号渲染（positive/negative 两侧）', async () => {
+  it('指标卡不再渲染无数据来源的环比变化', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.totalWorksChange = 5
-    vm.completionRateChange = 3
-    vm.delayRateChange = 4
-    vm.investmentChange = 7
-    await nextTick()
-    expect(vm.totalWorksChange).toBe(5)
-    expect(vm.completionRateChange).toBe(3)
-    expect(vm.delayRateChange).toBe(4)
-    expect(vm.investmentChange).toBe(7)
-    vm.totalWorksChange = -5
-    await nextTick()
-    expect(vm.totalWorksChange).toBe(-5)
+    expect(vm).not.toHaveProperty('totalWorksChange')
+    expect(vm).not.toHaveProperty('completionRateChange')
+    expect(vm).not.toHaveProperty('delayRateChange')
+    expect(vm).not.toHaveProperty('investmentChange')
+    expect(wrapper.text()).not.toContain('较上期相比')
     wrapper.unmount()
   })
 })

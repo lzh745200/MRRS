@@ -759,13 +759,7 @@ const progressFileList = computed<UploadUserFile[]>(() =>
 /** 后端状态字符串 → 页面 Task 联合类型（未知值一律回落 pending，避免渲染空状态标签） */
 function normalizeTaskStatus(status?: string): Task['status'] {
   if (status === 'planned') return 'pending'
-  const allowed: Task['status'][] = [
-    'pending',
-    'in_progress',
-    'completed',
-    'delayed',
-    'cancelled',
-  ]
+  const allowed: Task['status'][] = ['pending', 'in_progress', 'completed', 'delayed', 'cancelled']
   return allowed.includes(status as Task['status']) ? (status as Task['status']) : 'pending'
 }
 

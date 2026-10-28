@@ -145,9 +145,10 @@ function defaultGetImpl(url: string) {
   if (url === '/funds/statistics/overview') {
     return Promise.resolve({
       data: {
+        // 真实后端返回形态（/funds/statistics/overview）。
         total_amount: 1000,
-        total_allocated: 600,
-        by_status: { pending: { count: 3 } },
+        allocated_amount: 600,
+        pending_count: 3,
         total_count: 9,
       },
     })

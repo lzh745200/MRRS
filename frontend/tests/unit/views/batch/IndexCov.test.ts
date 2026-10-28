@@ -188,6 +188,9 @@ describe('handleValidate', () => {
     const text = wrapper.text()
     expect(text).toContain('全部有效')
     expect(text).toContain('ID 9 不存在') // errors?.length 真侧 + v-for
+    // 验证路径没有 success_count，旧模板 `?? resultSummary.success` 会把布尔 true
+    // 直接渲染成"成功数量: true"，用户看到英文布尔值。
+    expect(text).not.toContain('true')
   })
 
   it('成功：response 为 null → ?? response 与 ?? 默认值全兜底', async () => {
