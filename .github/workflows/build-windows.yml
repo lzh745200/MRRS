@@ -76,11 +76,37 @@ jobs:
             tests/unit/test_verify_package_no_tests_v123.py \
             -q --tb=short 2>&1 | tee "$RUNNER_TEMP/backend-smoke.log"
       # ③ 前端类型检查 + 导航重构关键测试子集（不含全量 vitest，全量在 PR Checks）。
+      #
+      # 2026-10-28（v1.18.21）：`npm ci` 加**三次退避重试**。实测两次 v1.18.21 的 tag 构建
+      # 都因 runner 网络抖动 `npm error code ECONNRESET` 直接失败 —— 而 smoke-test 是
+      # build-windows 的 needs 前置，一抖就让整个发布停摆（安装包根本没开始构建）。
+      # npm 自身的 fetch-retry 对付不了连接被重置（ECONNRESET 发生在 TLS/读阶段），
+      # 所以外层再包一层；`--prefer-offline` 复用缓存可显著降低重试成本。
       - name: Frontend release smoke subset
         shell: bash
         run: |
           cd frontend
-          npm ci --legacy-peer-deps --prefer-offline || npm install --legacy-peer-deps
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          installed=0
+          for attempt in 1 2 3; do
+            echo "::group::npm ci attempt ${attempt}"
+            if npm ci --legacy-peer-deps --prefer-offline; then
+              installed=1
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            if [ "${attempt}" = "3" ]; then break; fi
+            wait_s=$((attempt * 20))
+            echo "::warning::npm ci 第 ${attempt} 次失败（多为 runner 网络抖动），${wait_s}s 后重试"
+            sleep "${wait_s}"
+          done
+          if [ "${installed}" != "1" ]; then
+            echo "::error::npm ci 连续 3 次失败 —— 若日志为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑该作业"
+            exit 1
+          fi
           npx vue-tsc --noEmit 2>&1 | tee "$RUNNER_TEMP/frontend-tsc.log"
           set -o pipefail
           npx vitest run \
@@ -150,7 +176,21 @@ jobs:
         shell: bash
         run: |
           cd frontend
-          npm ci --legacy-peer-deps --prefer-offline || npm install --legacy-peer-deps
+          # 同 smoke 作业：npm ci 三次退避重试（runner 网络抖动 ECONNRESET 实测会直接红）
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          installed=0
+          for attempt in 1 2 3; do
+            if npm ci --legacy-peer-deps --prefer-offline; then installed=1; break; fi
+            if [ "${attempt}" = "3" ]; then break; fi
+            echo "::warning::npm ci 第 ${attempt} 次失败，$((attempt * 20))s 后重试"
+            sleep $((attempt * 20))
+          done
+          if [ "${installed}" != "1" ]; then
+            echo "::error::npm ci 连续 3 次失败 —— 若为 ECONNRESET/ETIMEDOUT 属 CI 网络问题，请重跑"
+            exit 1
+          fi
           # 2>&1 将 stderr 重定向到 stdout，避免 GitHub Actions 在 Windows 上
           # 将 Vite/Rollup 的进度输出误判为错误并产生 false annotation
           npm run build 2>&1
