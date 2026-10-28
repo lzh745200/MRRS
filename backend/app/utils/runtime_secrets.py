@@ -50,7 +50,7 @@ def _strip_weak_env_key(env_name: str) -> str:
     return value
 
 
-def _load_secrets_file(secrets_file: str) -> tuple[dict, bool]:
+def _load_secrets_file(secrets_file: str | Path) -> tuple[dict, bool]:
     """读取运行时密钥文件。
 
     Returns:
@@ -89,7 +89,9 @@ def _load_secrets_file(secrets_file: str) -> tuple[dict, bool]:
     return {}, False
 
 
-def _persist_runtime_secrets(secrets_file: str, loaded: dict, secret_key: str, csrf_secret_key: str) -> None:
+def _persist_runtime_secrets(
+    secrets_file: str | Path, loaded: dict, secret_key: str, csrf_secret_key: str
+) -> None:
     """合并写回运行时密钥文件（以磁盘现有内容为基线，绝不抹掉其它密钥）。"""
     merged = dict(loaded)
     merged["SECRET_KEY"] = secret_key
@@ -245,7 +247,7 @@ def _resolve_secrets_file() -> Path:
     return get_data_path("runtime_secrets.json")
 
 
-def _atomic_write_json(path: Path, data: dict) -> None:
+def _atomic_write_json(path: str | Path, data: dict) -> None:
     """原子写入 JSON 文件，并在 Unix 系统上限制文件权限为 0o600。"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

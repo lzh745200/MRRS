@@ -63,6 +63,14 @@
   参数一直被静默忽略 —— 现在按真实契约调用。表单回填对可选字段统一补默认值
   （`policy.title ?? ''` 等），不再把 `undefined` 塞进必填字段。`vue-tsc` 0 错误，
   policy 相关测试 **68 passed**（store 25 + api 43）。
+- **mypy 按模块收紧（1391 → 1385），先清 `core.config` 传递依赖链**：
+  `core/logging_config.py` 的 `file_handler` 先赋 `SafeTimedRotatingFileHandler`、else 分支
+  赋 `SafeRotatingFileHandler`，mypy 按首赋值推断后判类型冲突 —— 显式标注公共基类
+  `BaseRotatingHandler`；`utils/runtime_secrets.py` 的 `_atomic_write_json(path: Path)` 却被
+  传 `str`、`_load_secrets_file(secrets_file: str)` 却被传 `Path`（契约自相矛盾）——
+  三者统一为 `str | Path`。新增守卫 `tests/unit/test_mypy_clean_modules.py`：
+  mypy 断言两模块 0 错误 + `str`/`Path` 两种入参往返用例（mypy 未安装时 skip）。
+  相关 62 passed。
 
 ### Added（批 3 起：性能基线）
 

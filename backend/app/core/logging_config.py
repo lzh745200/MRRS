@@ -13,7 +13,7 @@ import os
 import re
 import sys
 import time
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from logging.handlers import BaseRotatingHandler, RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
@@ -236,9 +236,12 @@ def configure_logging(
     root_logger.addHandler(console_handler)
 
     # File handler — 根据 log_rotation 选择按时间或按大小轮转
+    # 两种轮转器都继承自 BaseRotatingHandler：显式标注公共基类，避免 mypy 按
+    # 首个赋值推断成 Timed 类型后把 else 分支的 Rotating 判成类型冲突。
     if log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler: BaseRotatingHandler
 
         if log_rotation:
             # 按天轮转（Windows-safe，捕获 WinError 32）
