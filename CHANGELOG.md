@@ -55,6 +55,34 @@
 - 两个 build 工作流 YAML 可解析；全仓扫描"退避失效/失败被吞"同类模式，
   仅 `pr-checks.yml` 的 playwright 重试疑似——细查其循环后第 721 行已有 `exit 1`，非隐患。
 
+### Fixed（缺陷排查批 R20 · 时间基准 / 事件循环 / 故障伪装）
+
+- **时间基准**：`self_check_service` 的「账号锁定」「最近导入」两项用 `datetime.now()`
+  （本地墙钟）与 `UtcDateTime` 列比较，UTC+8 下阈值整体后移 8 小时——锁定时长只有 15 分钟，
+  于是**明明有账号被锁，体检结论恒报「没有处于锁定状态的账号」**；
+  `backup_scheduler.weekly_report_job` 把本地日期直接当 `Todo.updated_at`（UTC）阈值，
+  漏掉上周最早 8 小时完成的待办。统一改为 `utcnow()` / 本地日界减时区偏移。
+- **重活离开事件循环**：`/system/backup/restore`、`/upload-restore` 此前在 async 端点里同步跑
+  `restore_backup`，事件循环被占死 → 维护窗口 `wait_for_idle` 的在途计数（由 async 中间件递减）
+  永远降不下来，固定空转 10s 打 ERROR 且**恢复全程全站无响应**；`.rrs` 导入导出的 PBKDF2 600k
+  与整包读写、数据包校验/预览的「假异步」（async 零 await）同样移入线程池；数据包上传端点改
+  `_stream_upload_to_file` 边读边写，峰值内存不再等于整包体积。
+- **故障不再伪装成业务数据**：`dashboard`（stats / kpi-trends / yearly-trends / summary）与
+  `reminders`（list / scan）异常统一 **500**，不再 `200 + 全 0 / null`；权限包校验异常由
+  「`None` 视为通过」改 **fail-closed**（该返回值的下一步是 `_clear_existing_data()`，
+  损坏包会被当成合法包清库）；加密导出单表失败不再写 `[] + success=True`。
+- **口径补齐**：`funds` overview 补 `planned_count`（`planned` 是 `FundStatus` 合法值，
+  前端「规划中」卡片恒 0 的根因）、multi-dimension 支持 `fund_type`（前端发 `type`，
+  FastAPI 静默忽略 → 图形不随筛选变）；前端 `schools/Analysis` 把本就是万元口径的
+  `project_total_budget` 又除了一次 10000（比详情页缩水一万倍）；`funds/EnhancedList`、
+  `UserFundList` 读的是后端并不存在的 `total_allocated` / `by_status.pending.count`（三卡恒 0）；
+  `funds/Report` 算好日期区间却没传给接口（表头印周期、表格含区间外数据）；
+  `ruralWorks/Analysis` 删掉伪造的「投入资金 / 质量评分 / 环比 0%」（模型无对应字段），
+  KPI 改真实「覆盖村庄数」，时间范围筛选从只有 UI 改为真实生效。
+- **测试**：一并纠正 5 条把旧行为当预期的用例（reminders / dashboard summary / stats /
+  dashboard 缓存），其中缓存用例的链式 mock 靠 `except` 吞掉 `MagicMock > int` 的 `TypeError`
+  才「通过」，从未真正跑过查询路径。相关模块 **1244 passed**、前端六个目录 **1967 passed**。
+
 ## [1.18.23] - 2026-10-28 — 发布收口重建（补齐应用内更新日志同步）
 
 > **为什么还要 1.18.23**：v1.18.22 的 tag 打在 `4dc1db7`，而该提交的

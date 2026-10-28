@@ -3564,6 +3564,28 @@ VERSION_HISTORY_DATA = [
                 "两个 build 工作流 YAML 可解析；全仓扫描\"退避失效/失败被吞\"同类模式，仅 pr-checks.yml 的 playwright 重试疑似——细查其循环后第 721 行已有"
                 " exit 1，非隐患。"
             ),
+            (
+                "时间基准：self_check_service 的「账号锁定」「最近导入」两项用 datetime.now()（本地墙钟）与 UtcDateTime 列比较，UTC+8 下阈值整体后移 8"
+                " 小时——锁定时长只有 15 分钟，于是明明有账号被锁，体检结论恒报「没有处于锁定状态的账号」；"
+            ),
+            (
+                "重活离开事件循环：/system/backup/restore、/upload-restore 此前在 async 端点里同步跑restore_backup，事件循环被占死 → 维护窗口 "
+                "wait_for_idle 的在途计数（由 async 中间件递减）永远降不下来，固定空转 10s 打 ERROR 且恢复全程全站无响应；"
+            ),
+            (
+                "故障不再伪装成业务数据：dashboard（stats / kpi-trends / yearly-trends / summary）与reminders（list / scan）异常统一"
+                " 500，不再 200 + 全 0 / null；权限包校验异常由「None 视为通过」改 fail-closed（该返回值的下一步是 _clear_existing_data()，损坏包"
+                "会被当成合法包清库）；"
+            ),
+            (
+                "口径补齐：funds overview 补 planned_count（planned 是 FundStatus 合法值，前端「规划中」卡片恒 0 的根因）、multi-dimension"
+                " 支持 fund_type（前端发 type，FastAPI 静默忽略 → 图形不随筛选变）；前端 schools/Analysis 把本就是万元口径的project_total_budg"
+                "et 又除了一次 10000（比详情页缩水一万倍）；"
+            ),
+            (
+                "测试：一并纠正 5 条把旧行为当预期的用例（reminders / dashboard summary / stats /dashboard 缓存），其中缓存用例的链式 mock 靠 ex"
+                "cept 吞掉 MagicMock > int 的 TypeError才「通过」，从未真正跑过查询路径。相关模块 1244 passed、前端六个目录 1967 passed。"
+            ),
         ],
     },
 ]
