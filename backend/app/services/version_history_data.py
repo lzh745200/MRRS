@@ -3523,4 +3523,19 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.23",
+        "date": "2026-10-28",
+        "description": "发布收口重建（补齐应用内更新日志同步）",
+        "features": [
+            (
+                "应用内更新日志与 CHANGELOG 重新同步：scripts/sync_update_log.py 写入本版条目，backend/version.json 的 description 与"
+                "本版 CHANGELOG 标题对齐。"
+            ),
+            (
+                "版本单源同步到 1.18.23（node scripts/sync-version.js --write --version 1.18.23）；README 本版亮点 / docs/IND"
+                "EX / RELEASE_NOTES-v1.18.23 与三份 PPT 同步到本版。"
+            ),
+        ],
+    },
 ]

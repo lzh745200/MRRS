@@ -5,6 +5,21 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.23] - 2026-10-28 — 发布收口重建（补齐应用内更新日志同步）
+
+> **为什么还要 1.18.23**：v1.18.22 的 tag 打在 `4dc1db7`，而该提交的
+> `version_history_data.py` 尚未同步 1.18.22 条目、`version.json` 的 `description`
+> 仍是 1.18.21 的标题 —— CI `static-analysis` 的 `check_update_log.py` 会因此判红
+> （收口时在独立 worktree 上按 tag 提交复现：`应用内更新日志已过期` 与
+> `description 与 CHANGELOG 更新标题不一致`）。已发布的 tag 不改写，故补齐同步后重建。
+
+### Fixed
+
+- **应用内更新日志与 CHANGELOG 重新同步**：`scripts/sync_update_log.py` 写入本版条目，
+  `backend/version.json` 的 `description` 与本版 CHANGELOG 标题对齐。
+- 版本单源同步到 **1.18.23**（`node scripts/sync-version.js --write --version 1.18.23`）；
+  README 本版亮点 / docs/INDEX / RELEASE_NOTES-v1.18.23 与三份 PPT 同步到本版。
+
 ## [1.18.22] - 2026-10-28 — 发布收口：换 tag 重建 + 修复两处交付前回归
 
 > **为什么有 1.18.22 而不是直接发 1.18.21**：`v1.18.21` 标签当时打在 `fe5c395` 上，
