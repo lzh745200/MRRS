@@ -46,6 +46,13 @@
   门禁必须在 backend 下运行；no-print 的正/负/误报三例；dist 体积棘轮的增长检测与容差边界。
 - 新增 `backend/tests/unit/test_segmented_runner_lock.py`（5 例，见上一版）。
 - `python scripts/run_gates.py` 一键跑 33 道（默认档）结果：PASS 31 / SKIP 2 / FAIL 0。
+- 补两处 **v1.18.19 漏测的分支**（main 上 `frontend-check` 的最后一个红点）：
+  `importTiles` 上传进度回调的空值/钳位分支（`tests/unit/api/recycleAndOfflineMap.test.ts` +3 例：
+  无回调早退、事件与 total 缺失、loaded 缺失或为负）与 `MapTileManager` 超时判定的
+  单侧命中/空错误分支（`tests/unit/views/system/MapTileManager.test.ts` +3 例：
+  只有 timeout 文案、缺 code/message、拒绝值为 null）。修前 `src/api` 分支 57.14%
+  （`offlineMap.ts` 60-61、63 行）、`src/views` 分支 98.46%（209 行）；修后
+  `npm run test:coverage` **EXIT=0**（347 文件 / 7,384 用例，各阈值 100%）。
 ## [1.18.20] - 2026-10-28 — 构建链路兜底（Windows %TEMP% ACL）+ 门禁自身健壮性
 
 > **起因**：本轮全量体检发现 `npm run build` 在本机**直接失败**（不是警告）：

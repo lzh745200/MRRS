@@ -120,6 +120,39 @@ describe('api/offlineMap', () => {
     expect(seen).toEqual([50, 100])
   })
 
+  /**
+   * 进度回调的空值分支（v1.18.19 引入进度提示时漏测 → src/api 下 TS 的分支
+   * 覆盖率掉到 57.14%（60-61、63 行），CI frontend-check 因此破 100% 门槛）。
+   * 这里逐一钉住三处兜底：没有回调时早退、事件/字段缺失按 0 处理、负进度钳到 0。
+   */
+  it('未传 onProgress → 进度回调安全早退（不能成为新的崩点）', async () => {
+    await importTiles(new File(['x'], 'tiles.zip'))
+    const config = mockPost.mock.calls[0][2] as any
+    expect(() => config.onUploadProgress({ loaded: 50, total: 100 })).not.toThrow()
+    expect(() => config.onUploadProgress(undefined)).not.toThrow()
+  })
+
+  it('事件对象缺失 / total 缺失或为 0 → 不回调（进度未知时不制造假进度）', async () => {
+    const seen: number[] = []
+    await importTiles(new File(['x'], 'tiles.zip'), { onProgress: (p) => seen.push(p) })
+    const config = mockPost.mock.calls[0][2] as any
+    config.onUploadProgress(undefined) // 事件缺失
+    config.onUploadProgress(null) // 事件为 null
+    config.onUploadProgress({}) // total 缺失
+    config.onUploadProgress({ total: 0 }) // total 为 0
+    expect(seen).toEqual([])
+  })
+
+  it('loaded 缺失或为负 → 百分比按 0 兜底（Math.max 的假侧）', async () => {
+    const seen: number[] = []
+    await importTiles(new File(['x'], 'tiles.zip'), { onProgress: (p) => seen.push(p) })
+    const config = mockPost.mock.calls[0][2] as any
+    config.onUploadProgress({ total: 100 }) // loaded 缺失
+    config.onUploadProgress({ loaded: -5, total: 100 }) // 负数钳到 0
+    config.onUploadProgress({ loaded: 33, total: 100 }) // 四舍五入 → 33
+    expect(seen).toEqual([0, 0, 33])
+  })
+
   it('clearTiles 走 DELETE /offline-map/clear', async () => {
     await clearTiles()
     expect(mockDelete).toHaveBeenCalledWith('/offline-map/clear')

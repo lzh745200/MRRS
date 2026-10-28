@@ -3474,6 +3474,11 @@ VERSION_HISTORY_DATA = [
             ),
             "新增 backend/tests/unit/test_segmented_runner_lock.py（5 例，见上一版）。",
             "python scripts/run_gates.py 一键跑 33 道（默认档）结果：PASS 31 / SKIP 2 / FAIL 0。",
+            (
+                "补两处 v1.18.19 漏测的分支（main 上 frontend-check 的最后一个红点）：importTiles 上传进度回调的空值/钳位分支（tests/unit/api/re"
+                "cycleAndOfflineMap.test.ts +3 例：无回调早退、事件与 total 缺失、loaded 缺失或为负）与 MapTileManager 超时判定的单侧命中/空错误"
+                "分支（tests/unit/views/system/MapTi…"
+            ),
         ],
     },
 ]

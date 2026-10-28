@@ -291,6 +291,44 @@ describe('MapTileManager.vue — 导入瓦片包', () => {
     expect((w.vm as any).importing).toBe(false)
   })
 
+  /**
+   * 超时判定的"单侧命中"与空值分支（v1.18.19 只测了 code 与 message 同时命中，
+   * `||` 右侧、以及 error 缺失两态漏测 → src/views 下 Vue 组件分支 98.46%，
+   * 209 行未覆盖，CI frontend-check 因此破 100% 门槛）。
+   */
+  it('只有 timeout 文案、没有 ECONNABORTED code → 仍识别为超时', async () => {
+    mockImportTiles.mockRejectedValue(new Error('request timeout'))
+    const w = await mountComp()
+    uploadStub(w).props('onChange')({ name: 'tiles.zip', raw: new File(['x'], 'tiles.zip') })
+    await (w.vm as any).handleImportTiles()
+
+    const last = (ElMessage.error as any).mock.calls.at(-1)?.[0] as string
+    expect(last).toContain('导入超时')
+  })
+
+  it('抛错对象缺 code/message → 走通用失败文案，不误判为超时', async () => {
+    mockImportTiles.mockRejectedValue({})
+    const w = await mountComp()
+    uploadStub(w).props('onChange')({ name: 'tiles.zip', raw: new File(['x'], 'tiles.zip') })
+    await (w.vm as any).handleImportTiles()
+
+    const last = (ElMessage.error as any).mock.calls.at(-1)?.[0] as string
+    expect(last).not.toContain('导入超时')
+    expect((w.vm as any).importing).toBe(false)
+  })
+
+  it('拒绝值为 null → 不误判超时且不抛异常', async () => {
+    mockImportTiles.mockRejectedValue(null)
+    const w = await mountComp()
+    uploadStub(w).props('onChange')({ name: 'tiles.zip', raw: new File(['x'], 'tiles.zip') })
+    await (w.vm as any).handleImportTiles()
+
+    const last = (ElMessage.error as any).mock.calls.at(-1)?.[0] as string
+    expect(last).not.toContain('导入超时')
+    expect((w.vm as any).importing).toBe(false)
+  })
+
+
   it('非 .zip 文件 → 前端前置拦截并清空选择', async () => {
     const w = await mountComp()
     uploadStub(w).props('onChange')({
