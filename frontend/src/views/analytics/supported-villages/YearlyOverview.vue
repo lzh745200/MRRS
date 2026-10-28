@@ -625,7 +625,7 @@ async function loadAllData() {
     const _v = await getSupportedVillage(villageId.value)
     const village = _v
     villageName.value = village.villageName
-    const _raw = await getYearlyData(villageId.value, selectedYear.value)
+    const _raw = await getYearlyData<typeof yearlyData.value>(villageId.value, selectedYear.value)
     yearlyData.value = _raw
     // 刷新多年收入趋势（不阻塞主流程）
     loadTrendData()

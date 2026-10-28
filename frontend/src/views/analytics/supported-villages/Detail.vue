@@ -314,7 +314,7 @@ async function loadTrendData() {
     availableYears.map(async (year) => {
       try {
         const data = await getYearlyData(current.id, year)
-        const income = (data as any)?.income?.perCapitaIncome
+        const income = data?.income?.perCapitaIncome
         return income != null ? { year, income: Number(income) } : null
       } catch {
         return null // 无数据年份跳过
@@ -403,7 +403,11 @@ const loadYearlyData = async () => {
 
   yearlyLoading.value = true
   try {
-    const _raw = await getYearlyData(village.value.id, selectedYear.value)
+    // 传泛型：本页 yearlyData 的具体形状比默认 YearlyDataPayload 更宽
+    const _raw = await getYearlyData<NonNullable<typeof yearlyData.value>>(
+      village.value.id,
+      selectedYear.value
+    )
     yearlyData.value = _raw
   } catch (error) {
     logger.error('加载年度数据失败:', error)
@@ -449,11 +453,15 @@ const handleFormSubmit = async (data: SupportedVillageCreate) => {
   loading.value = true
   try {
     // 提取创建模式下的过渡期年度经费数据（不传给 create API）
-    const fundingItems = (data as any)._transitionFundingItems
-    delete (data as any)._transitionFundingItems
+    // 私有过渡字段只在 create 路径由表单附带；用显式扩展类型，避免宽松断言。
+    const payload = data as SupportedVillageCreate & {
+      _transitionFundingItems?: { item_name?: string; amount?: number }[]
+    }
+    const fundingItems = payload._transitionFundingItems
+    delete payload._transitionFundingItems
 
     if (pageMode.value === 'create') {
-      const created = (await createSupportedVillage(data)) as any
+      const created = await createSupportedVillage(data)
       const villageId = created?.data?.id || created?.id
       // 创建成功后保存过渡期经费按年度数据
       if (fundingItems?.length && villageId) {

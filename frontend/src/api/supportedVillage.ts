@@ -59,8 +59,10 @@ export const getSupportedVillage = (id: number) => get('/supported-villages/' + 
 // ── CRUD ──
 export const createSupportedVillage = (data: SupportedVillageCreate | Record<string, unknown>) =>
   post<VillageCreated>('/supported-villages', data)
-export const updateSupportedVillage = (id: number, data: SupportedVillageCreate | Record<string, unknown>) =>
-  put('/supported-villages/' + id, data)
+export const updateSupportedVillage = (
+  id: number,
+  data: SupportedVillageCreate | Record<string, unknown>
+) => put('/supported-villages/' + id, data)
 export const deleteSupportedVillage = (id: number) => del('/supported-villages/' + id)
 export const batchDeleteSupportedVillages = (ids: number[], confirmPassword?: string) =>
   post<VillageBatchDeleteResult>('/supported-villages/batch-delete', {
@@ -129,8 +131,18 @@ export function resolveSectionApiKey(sectionKey: string): string {
 }
 
 // ── Yearly data ──
-export const getYearlyData = (villageId: number, year: number) =>
-  get(`/supported-villages/${villageId}/yearly/${year}`)
+/** 年度数据（视图只读 income 两项，其余字段用索引签名放行） */
+export interface YearlyDataPayload {
+  income?: { perCapitaIncome?: number; collectiveIncome?: number }
+  [key: string]: unknown
+}
+
+/**
+ * 年度数据。默认形状为本文件声明的 YearlyDataPayload；调用方若已有更具体的类型
+ * （如 YearlyOverview 的 YearlyDataSummary），传泛型即可，避免再写宽松断言。
+ */
+export const getYearlyData = <T = YearlyDataPayload>(villageId: number, year: number) =>
+  get<T>(`/supported-villages/${villageId}/yearly/${year}`)
 export const copyYearData = (villageId: number, fromYear: number, toYear: number) =>
   post(`/supported-villages/${villageId}/yearly/copy`, { fromYear, toYear })
 export const deleteYearlySection = (villageId: number, year: number, section: string) =>

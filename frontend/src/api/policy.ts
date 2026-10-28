@@ -24,6 +24,8 @@ export type Policy = {
   updated_at?: string
   /** 附件类型（如 pdf/png/docx），用于下载文件名扩展名 */
   fileType?: string
+  /** 后端历史字段名（snake_case），部分接口仍返回它 */
+  file_type?: string
   /** 附件 URL 列表（后端返回） */
   attachment_urls?: string[]
 }
@@ -166,4 +168,8 @@ const STATUS_COLORS: Record<string, string> = {
 export const getCategoryLabel = (cat: string) => CATEGORY_LABELS[cat] || cat
 export const getLevelLabel = (level: string) => LEVEL_LABELS[level] || level
 export const getStatusLabel = (status: string) => STATUS_LABELS[status] || status
-export const getStatusColor = (status: string) => STATUS_COLORS[status] || 'info'
+/** el-tag 的 type 联合（'' 表示默认样式） */
+export type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
+
+export const getStatusColor = (status: string): TagType =>
+  (STATUS_COLORS[status] as TagType | undefined) ?? 'info'

@@ -37,7 +37,7 @@
         }}</el-descriptions-item>
         <el-descriptions-item label="级别">{{ getLevelLabel(policy.level) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getStatusColor(policy.status) as any">{{
+          <el-tag :type="getStatusColor(policy.status)">{{
             getStatusLabel(policy.status)
           }}</el-tag>
         </el-descriptions-item>
@@ -86,7 +86,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusColor(row.status) as any">{{
+            <el-tag :type="getStatusColor(row.status)">{{
               getStatusLabel(row.status)
             }}</el-tag>
           </template>
@@ -180,7 +180,7 @@ async function loadFavoriteState() {
 async function loadRelated() {
   try {
     const res = await getPolicyRelated(policyId)
-    relatedPolicies.value = Array.isArray(res) ? res : ((res as any)?.items ?? [])
+    relatedPolicies.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch {
     relatedPolicies.value = []
   }
@@ -255,7 +255,7 @@ async function handlePreview() {
       previewUrl.value = URL.createObjectURL(blob)
     } else {
       // Office 等其他类型不支持在线预览 → 提示并直接下载
-      const ext = (policy.value?.fileType as string) || (policy.value as any)?.file_type || 'file'
+      const ext = (policy.value?.fileType as string) || policy.value?.file_type || 'file'
       downloadBlob(blob, `${policy.value?.title || '政策文件'}.${ext}`)
       ElMessage.info('该文件类型不支持在线预览，已为您下载')
     }
@@ -269,7 +269,7 @@ async function handlePreview() {
 async function handleDownload() {
   try {
     const blob = (await downloadPolicyFile(policyId)) as Blob
-    const ext = (policy.value?.fileType as string) || (policy.value as any)?.file_type || 'file'
+    const ext = (policy.value?.fileType as string) || policy.value?.file_type || 'file'
     downloadBlob(blob, `${policy.value?.title || '政策文件'}.${ext}`)
   } catch {
     ElMessage.warning('该政策暂无附件')

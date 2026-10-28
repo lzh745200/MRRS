@@ -207,6 +207,12 @@
   **连带修掉一个真缺陷**：`admin/MachineCodeManagement.vue` 直接赋 `response.pass_code` 给
   `ref<string>`，类型收紧后暴露「信封形态下会是 `undefined`」—— 改为 `pass_code ?? data?.pass_code ?? ''`，
   不再把 `undefined` 塞进展示字段。`vue-tsc` 0 错误，报表/通行码相关 **84 passed**。
+- **`as any` 政策详情 / 帮扶村详情清零（123 → 114）**：
+  `api/policy.ts` 的 `getStatusColor` 明确返回 el-tag 联合类型 `TagType`（原先返回 `string`，
+  模板里只能 `as any` 才能绑上 `:type`）；`Policy` 接口补 snake 别名 `file_type`（历史接口仍在返回）；
+  `api/supportedVillage.ts` 的 `getYearlyData` 改为**泛型**（默认 `YearlyDataPayload`，调用方传自己的
+  具体类型），年度数据不再靠宽松断言赋值。两个详情页里的私有过渡字段 `_transitionFundingItems`
+  也改为显式扩展类型后 `delete`。`vue-tsc` 0 错误，政策/帮扶村相关 **260 passed**（11 个文件）。
 - **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
   bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
   会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；
