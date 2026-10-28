@@ -15,6 +15,8 @@ export interface SupportedVillage {
   department: string
   supportUnit: string
   villageName: string
+  /** 后端 to_dict 同时返回的 snake_case 别名（历史前端代码在用；新代码请用 villageName） */
+  village_name?: string
   villageId?: number
 
   // 地域属性 - 贵州省地区选择

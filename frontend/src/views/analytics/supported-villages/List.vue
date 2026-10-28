@@ -297,6 +297,7 @@ import {
   restoreSupportedVillage,
   previewPurgeSupportedVillage,
   purgeSupportedVillage,
+  type VillagePurgePreview,
 } from '@/api/supportedVillage'
 import type { SupportedVillage, SupportedVillageCreate, VillageFilters } from '@/types/analytics'
 import SupportedVillageForm from './components/SupportedVillageForm.vue'
@@ -459,12 +460,11 @@ async function loadData() {
       include_deleted: showDeletedOnly.value ? true : undefined,
       // KPI 全量统计（总数/总投入/覆盖县市/参与部门）由后端聚合返回
       with_summary: true,
-    } as any)
+    })
     // 防御：兼容信封（data.items）与裸分页（items）两种形态
-    tableData.value = unwrapList<SupportedVillage>(response as any).items
-    pagination.total =
-      (response as any)?.data?.total ?? (response as any)?.total ?? tableData.value.length
-    serverSummary.value = (response as any)?.data?.summary ?? (response as any)?.summary ?? null
+    tableData.value = unwrapList<SupportedVillage>(response).items
+    pagination.total = response?.data?.total ?? response?.total ?? tableData.value.length
+    serverSummary.value = response?.data?.summary ?? response?.summary ?? null
   } catch (error) {
     tableData.value = []
     pagination.total = 0
@@ -622,8 +622,8 @@ async function handlePurge(row: SupportedVillage) {
   let cascadeHint = ''
   let totalRefs = 0
   try {
-    const preview = (await previewPurgeSupportedVillage(row.id)) as any
-    const data = preview?.data || preview || {}
+    const preview = await previewPurgeSupportedVillage(row.id)
+    const data: VillagePurgePreview = preview?.data ?? preview ?? {}
     totalRefs = Number(data.total_references || 0)
     const details = data.details || {}
     const top = Object.entries(details as Record<string, number>)
@@ -662,7 +662,7 @@ async function handlePurge(row: SupportedVillage) {
   }
   loading.value = true
   try {
-    const result = (await purgeSupportedVillage(row.id, confirmPassword)) as any
+    const result = await purgeSupportedVillage(row.id, confirmPassword)
     tableData.value = tableData.value.filter((item) => item.id !== row.id)
     pagination.total = Math.max(0, pagination.total - 1)
     const removed = result?.data?.deleted_records ?? 0
@@ -705,7 +705,7 @@ async function handleBatchDelete() {
   batchDeleting.value = true
   try {
     const ids = selectedRows.value.map((row) => row.id)
-    const result = (await batchDeleteSupportedVillages(ids, confirmPassword)) as any
+    const result = await batchDeleteSupportedVillages(ids, confirmPassword)
     // 乐观更新：立即从表格数据中移除已删除行
     const idSet = new Set(ids)
     tableData.value = tableData.value.filter((item) => !idSet.has(item.id))
@@ -732,12 +732,16 @@ async function handleFormSubmit(data: SupportedVillageCreate) {
     // 故统一在入口处摘除后 delete，保证任何分支都不会把内部状态透传给持久化 API。
     // 此前只有 create 分支 delete，edit 分支原样透传给 updateSupportedVillage；
     // 现与 Detail.vue 的 handleFormSubmit 写法一致。
-    const fundingItems = (data as any)._transitionFundingItems
-    delete (data as any)._transitionFundingItems
+    // 私有过渡字段只在 create 路径由表单附带；类型上单独声明，避免宽松断言。
+    const payload = data as SupportedVillageCreate & {
+      _transitionFundingItems?: { item_name?: string; amount?: number }[]
+    }
+    const fundingItems = payload._transitionFundingItems
+    delete payload._transitionFundingItems
 
     if (dialogMode.value === 'create') {
       logger.info('创建帮扶村...')
-      const created = (await createSupportedVillage(data)) as any
+      const created = await createSupportedVillage(data)
       const villageId = created?.data?.id || created?.id
       if (fundingItems?.length && villageId) {
         try {
@@ -796,7 +800,7 @@ function handleImport() {
     if (!file) return
 
     try {
-      const result = (await importSupportedVillages(file)) as any
+      const result = await importSupportedVillages(file)
       ElMessage.success(`导入成功：${result.imported}条，失败：${result.failed}条`)
       if (result.errors && result.errors.length > 0) {
         logger.error('导入错误:', result.errors)

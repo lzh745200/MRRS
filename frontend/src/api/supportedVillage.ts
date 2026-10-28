@@ -1,24 +1,79 @@
 import request, { get, post, put, del, apiRequest } from '@/api/request'
 import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
+import type { SupportedVillage, SupportedVillageCreate } from '@/types/analytics'
+
+/** 列表 KPI 聚合（后端 with_summary=true 时返回） */
+export interface VillageSummary {
+  total?: number
+  total_investment?: number
+  county_count?: number
+  department_count?: number
+}
+
+/**
+ * 列表响应：同时兼容
+ * - 信封 `{ data: { items, total, summary } }`
+ * - 直接分页 `{ items, total }`
+ * 以前这些形态全靠 `as any` 读，字段改名/拼错都不报错。
+ */
+export interface VillageListPayload {
+  items?: SupportedVillage[]
+  total?: number
+  summary?: VillageSummary | null
+  data?: { items?: SupportedVillage[]; total?: number; summary?: VillageSummary | null }
+}
+
+/** 彻底删除前的级联引用统计 */
+export interface VillagePurgePreview {
+  total_references?: number
+  details?: Record<string, number>
+  data?: VillagePurgePreview
+}
+
+export interface VillagePurgeResult {
+  deleted_records?: number
+  data?: { deleted_records?: number }
+}
+
+export interface VillageBatchDeleteResult {
+  message?: string
+  deleted?: number
+}
+
+export interface VillageCreated {
+  id?: number
+  data?: { id?: number }
+}
+
+export interface VillageImportResult {
+  imported?: number
+  failed?: number
+  errors?: string[]
+}
 
 // ── List / detail ──
-export const getSupportedVillages = (params?: any) => get('/supported-villages', params)
+export const getSupportedVillages = (params?: Record<string, unknown>) =>
+  get<VillageListPayload>('/supported-villages', params)
 export const getSupportedVillage = (id: number) => get('/supported-villages/' + id)
 
 // ── CRUD ──
-export const createSupportedVillage = (data: any) => post('/supported-villages', data)
-export const updateSupportedVillage = (id: number, data: any) =>
+export const createSupportedVillage = (data: SupportedVillageCreate | Record<string, unknown>) =>
+  post<VillageCreated>('/supported-villages', data)
+export const updateSupportedVillage = (id: number, data: SupportedVillageCreate | Record<string, unknown>) =>
   put('/supported-villages/' + id, data)
 export const deleteSupportedVillage = (id: number) => del('/supported-villages/' + id)
 export const batchDeleteSupportedVillages = (ids: number[], confirmPassword?: string) =>
-  post('/supported-villages/batch-delete', { ids, confirm_password: confirmPassword || '' })
+  post<VillageBatchDeleteResult>('/supported-villages/batch-delete', {
+    ids,
+    confirm_password: confirmPassword || '',
+  })
 
 // ── 回收站：恢复 / 彻底删除 ──
 export const restoreSupportedVillage = (id: number) => post(`/supported-villages/${id}/restore`, {})
 export const previewPurgeSupportedVillage = (id: number) =>
-  get(`/supported-villages/${id}/purge/preview`)
+  get<VillagePurgePreview>(`/supported-villages/${id}/purge/preview`)
 export const purgeSupportedVillage = (id: number, confirmPassword?: string) =>
-  post(`/supported-villages/${id}/purge`, {
+  post<VillagePurgeResult>(`/supported-villages/${id}/purge`, {
     confirm_password: confirmPassword || '',
   })
 
@@ -26,7 +81,7 @@ export const purgeSupportedVillage = (id: number, confirmPassword?: string) =>
 export const importSupportedVillages = (file: File) => {
   const fd = new FormData()
   fd.append('file', file)
-  return apiRequest({
+  return apiRequest<VillageImportResult>({
     method: 'POST',
     url: '/supported-villages/import',
     data: fd,

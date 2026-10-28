@@ -71,6 +71,16 @@
   三者统一为 `str | Path`。新增守卫 `tests/unit/test_mypy_clean_modules.py`：
   mypy 断言两模块 0 错误 + `str`/`Path` 两种入参往返用例（mypy 未安装时 skip）。
   相关 62 passed。
+- **`as any` 帮扶村列表切片清零（172 → 162），并修出一处真实字段口径不一致**：
+  `api/supportedVillage.ts` 补 6 个响应类型（`VillageListPayload` / `VillagePurgePreview` /
+  `VillagePurgeResult` / `VillageBatchDeleteResult` / `VillageCreated` / `VillageImportResult`）
+  并给 6 个函数加泛型；`views/analytics/supported-villages/List.vue` 去掉 10 处宽松断言
+  （列表载荷、级联统计、彻底删除、批量删除、创建、导入、私有过渡字段）。
+  **连带发现**：`types/analytics.ts` 的 `SupportedVillage` 只声明了 camelCase `villageName`，
+  而 `views/pairing/List.vue` 读的是 snake_case `village_name`（靠宽松断言躲过编译期检查）。
+  后端 `to_dict()` 确实两种都返回，但类型没写全 —— 现补可选别名，并让结对页改用规范
+  `villageName`，避免后端哪天只留一种就别处静默渲染空标签。`vue-tsc` 0 错误，
+  帮扶村/结对相关 **92 passed**。
 
 ### Added（批 3 起：性能基线）
 

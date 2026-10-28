@@ -170,7 +170,7 @@
             placeholder="请选择帮扶村"
             class="form-village"
           >
-            <el-option v-for="v in villages" :key="v.id" :label="v.village_name" :value="v.id" />
+            <el-option v-for="v in villages" :key="v.id" :label="v.villageName" :value="v.id" />
           </el-select>
         </el-form-item>
         <el-form-item v-else-if="form.partner_type === 'school'" label="帮扶学校">
@@ -483,13 +483,13 @@ const editingId = ref<number | null>(null)
 const form = reactive<PairingForm>(emptyForm())
 const dialogTitle = computed(() => (editingId.value ? '编辑结对记录' : '新建结对记录'))
 
-const villages = ref<{ id: number; village_name: string }[]>([])
+const villages = ref<{ id: number; villageName: string }[]>([])
 const schools = ref<{ id: number; name: string }[]>([])
 
 /** 当前对象类型下的可选对象（村/学校）；学生按关键字搜索，不做 id 过滤 */
 const partnerOptions = computed(() => {
   if (query.partner_type === 'village') {
-    return villages.value.map((v) => ({ id: v.id, label: v.village_name }))
+    return villages.value.map((v) => ({ id: v.id, label: v.villageName }))
   }
   if (query.partner_type === 'school') {
     return schools.value.map((s) => ({ id: s.id, label: s.name }))
