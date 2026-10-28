@@ -1,22 +1,22 @@
-# Release Notes — v1.18.22（2026-10-28）
+# Release Notes — v1.18.24（2026-10-28）
 
-> 上一正式发布是 **v1.18.17**，因此本版说明覆盖 **v1.18.18 → v1.18.22** 四轮的全部变更。
+> 上一正式发布是 **v1.18.17**，因此本版说明覆盖 **v1.18.18 → v1.18.24** 四轮的全部变更。
 > 逐项账本见仓库根目录 `CHANGELOG.md` 的对应版本段。
 
 ## 一、下载与校验
 
 | 安装包 | 适用平台 |
 |---|---|
-| `MRRS-Setup-1.18.22-x64.exe` | Windows 10/11 x64（NSIS 安装包，含全部运行时） |
-| `MRRS-Setup-1.18.22-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） |
-| `assistance-management-system_1.18.22_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone，无 Electron） |
+| `MRRS-Setup-1.18.24-x64.exe` | Windows 10/11 x64（NSIS 安装包，含全部运行时） |
+| `MRRS-Setup-1.18.24-arm64.deb` | 麒麟 V10 / 统信 ARM64（Electron） |
+| `assistance-management-system_1.18.24_arm64.deb` | 麒麟 V10 / 统信 ARM64（standalone，无 Electron） |
 
 同一 Release 附带 `SHA256SUMS-*.txt`（三个安装包指纹）与 `latest.yml` /
-`MRRS-Setup-1.18.22-x64.exe.blockmap`（electron-builder 的 NSIS 产物，**本系统不消费**：
+`MRRS-Setup-1.18.24-x64.exe.blockmap`（electron-builder 的 NSIS 产物，**本系统不消费**：
 无自动更新逻辑，升级走覆盖安装）。
 
 ```powershell
-Get-FileHash .\MRRS-Setup-1.18.22-x64.exe -Algorithm SHA256
+Get-FileHash .\MRRS-Setup-1.18.24-x64.exe -Algorithm SHA256
 ```
 
 > **未签名包提示**：证书尚未采购，首次运行会触发 SmartScreen（「更多信息」→「仍要运行」）。
@@ -56,7 +56,7 @@ loopback+内部密钥/备份的函数体内认证，均登记理由）。
 现在前端构建脚本把 `TEMP/TMP` 指向仓库内临时目录，构建不再依赖系统 `%TEMP%` 权限；
 并把该行为纳入 Electron 侧单测守护。
 
-## 五、门禁体系治理（v1.18.22）
+## 五、门禁体系治理（v1.18.24）
 
 - **统一入口 `scripts/run_gates.py`**：29 道门禁的调用方式（cwd、参数、编码）固化成注册表，
   一条命令跑完；交付收口实测 **34 道全 PASS**。背景很实在：一天内三次"门禁自己跑不起来"
@@ -97,7 +97,7 @@ loopback+内部密钥/备份的函数体内认证，均登记理由）。
   与 `check_doc_numbers` 口径一致）；flake8 / vue-tsc / eslint 见 CI 同名作业；
 - 路由 **849** 条（`/api` 前缀 **845**，口径见 `CLAUDE.md`）；
 - CI（tag 提交）：后端 12 段 + 覆盖率门禁、前端、E2E、静态分析、安全、升级演练、
-  Windows 冒烟、三层对齐由 `v1.18.22` 标签触发的构建工作流执行，结论以
+  Windows 冒烟、三层对齐由 `v1.18.24` 标签触发的构建工作流执行，结论以
   GitHub Actions 的该 tag 运行记录为准（本文件不预设结论）。
 
 ## 八、升级注意
