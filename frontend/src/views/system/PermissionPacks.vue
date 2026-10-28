@@ -107,7 +107,7 @@
         ref="bindTableRef"
         :data="bindableUsers"
         border
-        @selection-change="(rows) => (bindSelection = rows)"
+        @selection-change="handleBindSelectionChange"
       >
         <el-table-column type="selection" width="48" />
         <el-table-column label="姓名" min-width="120">
@@ -303,7 +303,12 @@ const bindDialogVisible = ref(false)
 const bindingPack = ref<PermissionPack | null>(null)
 const binding = ref(false)
 const bindableUsers = ref<any[]>([])
-const bindSelection = ref<any[]>([])
+/** 表格多选结果（模板内联箭头会让 tsc 推断为隐式 any，故收敛为具名处理器） */
+type PackSelectionRow = { id: number }
+const bindSelection = ref<PackSelectionRow[]>([])
+function handleBindSelectionChange(rows: PackSelectionRow[]) {
+  bindSelection.value = rows
+}
 const bindTableRef = ref<any>()
 
 async function openBind(row: any) {

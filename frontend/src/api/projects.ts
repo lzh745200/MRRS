@@ -15,6 +15,35 @@ export interface Project {
   updated_at?: string
 }
 
+/** 创建/更新后的回包（兼容裸 {id} 与信封 {data:{id}}） */
+export interface ProjectCreated {
+  id?: number
+  data?: { id?: number }
+}
+
+/**
+ * 项目附件项：字段名以**后端实际返回**为准（filename/file_size/file_path/created_at）。
+ * 起初按 name/size/url 猜了一版，tsc 立刻在模板里报错 —— 正好证明这层类型有用。
+ */
+export interface ProjectFileItem {
+  id?: number | string
+  filename?: string
+  file_path?: string
+  file_size?: number
+  file_type?: string
+  category?: string
+  created_at?: string
+  url?: string
+  [key: string]: unknown
+}
+
+/** 附件列表回包：{grouped:{cat:[...]}} 为主，兼容裸 files 数组 */
+export interface ProjectFilesPayload {
+  grouped?: Record<string, ProjectFileItem[]>
+  items?: ProjectFileItem[]
+  files?: ProjectFileItem[]
+}
+
 export interface CreateProjectRequest {
   name: string
   village_id: number
@@ -30,8 +59,9 @@ export const projectsApi = {
   // ========== 基础 CRUD ==========
   list: (params?: any) => get('/projects', params),
   get: (id: number) => get('/projects/' + id),
-  create: (data: any) => post('/projects', data),
-  update: (id: number | string, data: any) => put('/projects/' + id, data),
+  create: (data: Record<string, unknown>) => post<ProjectCreated>('/projects', data),
+  update: (id: number | string, data: Record<string, unknown>) =>
+    put<ProjectCreated>('/projects/' + id, data),
   delete: (id: number) => del('/projects/' + id),
   // 回收站：恢复 / 彻底删除
   restore: (id: number) => post(`/projects/${id}/restore`, {}),
@@ -61,7 +91,8 @@ export const projectsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
-  listFiles: (id: number | string) => get('/projects/' + id + '/files'),
+  listFiles: (id: number | string) =>
+    get<ProjectFilesPayload>('/projects/' + id + '/files'),
   getFileDownloadUrl: (projectId: number | string, fileId: number) =>
     `${import.meta.env.VITE_API_BASE_URL || '/api/v1'}/projects/${projectId}/files/${fileId}/download`,
   deleteFile: (projectId: number | string, fileId: number) =>

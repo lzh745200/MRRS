@@ -19,7 +19,7 @@
       <el-form
         ref="projectFormRef"
         :model="projectForm"
-        :rules="formRules as any"
+        :rules="formRules"
         label-width="120px"
         class="project-form"
       >
@@ -538,7 +538,7 @@
                     class="file-item uploaded"
                   >
                     <span class="file-name">{{ uf.filename }}</span>
-                    <span class="file-size">{{ formatFileSize(uf.file_size) }}</span>
+                    <span class="file-size">{{ formatFileSize(uf.file_size ?? 0) }}</span>
                     <span class="file-date">{{ uf.created_at?.slice(0, 10) }}</span>
                     <el-button type="primary" link @click="handleDownloadFile(uf)">下载</el-button>
                     <el-button type="danger" link @click="handleDeleteFile(uf)">删除</el-button>
@@ -600,6 +600,7 @@ import { ElMessage, ElMessageBox, ElForm } from 'element-plus'
 import { Upload, ArrowLeft, Check, Wallet } from '@element-plus/icons-vue'
 
 import { projectApi } from '@/api/projects'
+import type { ProjectFileItem } from '@/api/projects'
 import { get } from '@/api/request'
 import { AuthStorage } from '@/utils/authStorage'
 import PageHeader from '@/components/common/PageHeader.vue'
@@ -641,7 +642,7 @@ const pendingFiles = reactive<Record<string, File[]>>({
   acceptance: [],
   photo: [],
 })
-const uploadedFiles = reactive<Record<string, any[]>>({
+const uploadedFiles = reactive<Record<string, ProjectFileItem[]>>({
   research: [],
   approval: [],
   implementation: [],
@@ -1009,7 +1010,7 @@ async function loadProjectFiles(projectId: number | string) {
     }
     if (result?.grouped) {
       for (const [cat, files] of Object.entries(result.grouped)) {
-        uploadedFiles[cat] = files as any[]
+        uploadedFiles[cat] = files ?? []
       }
     }
     // 异步预加载 photo 分类的缩略图
@@ -1165,11 +1166,12 @@ async function saveProjectData(): Promise<number | string | false> {
         // 新建同样提交进度（此前仅编辑提交，且后端创建模型缺该字段 → 进度始终为0）
         progress: projectForm.completionRate,
       })
-      projectId = (result as any)?.id || (result as any)?.data?.id
-      if (!projectId) {
+      const createdId = result?.id ?? result?.data?.id
+      if (!createdId) {
         logger.warn('创建项目后未获取到项目ID，跳过附件上传')
         return false
       }
+      projectId = createdId
     }
 
     // 上传所有待上传附件
@@ -1218,7 +1220,7 @@ async function handleSave(_formName: string) {
 async function handleSaveAndContinue() {
   if (!projectFormRef.value) return
 
-  const formInstance = projectFormRef.value as any
+  const formInstance = projectFormRef.value
 
   await formInstance.validate(async (valid: boolean) => {
     if (!valid) {
@@ -1269,11 +1271,10 @@ function resetForm() {
     } else if (formKey === 'isDelayed') {
       projectForm[formKey] = false
     } else if (typeof projectForm[formKey] === 'number') {
-      // 直接使用any类型断言来避免类型错误
-      ;(projectForm as any)[formKey] = 0
+      // 动态键写入：projectForm 的具体形状由表单定义，此处只能按可写字典处理
+      ;(projectForm as Record<string, unknown>)[formKey] = 0
     } else {
-      // 直接使用any类型断言来避免类型错误
-      ;(projectForm as any)[formKey] = ''
+      ;(projectForm as Record<string, unknown>)[formKey] = ''
     }
   })
 

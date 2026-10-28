@@ -123,6 +123,15 @@
   （不改提交给后端的数据）；② 后端状态字符串直接赋给 `Task['status']` 联合类型，
   改为 `normalizeTaskStatus()`，未知值回落 `pending`（避免渲染空状态标签）。
   `vue-tsc` 0 错误，乡村工作相关 **110 passed**（Task 67 + api 43）。
+- **`as any` 项目模块清零（150 → 144）+ 修掉 main 上一处 tsc 红**：`api/projects.ts` 补
+  `ProjectCreated` / `ProjectFileItem` / `ProjectFilesPayload`，`create`/`update`/`listFiles`
+  加泛型；`views/projects/Edit.vue` 去掉 6 处断言。
+  **类型猜错被 tsc 当场抓住**：`ProjectFileItem` 起初按 `name/size/url` 声明，模板里实际读的是
+  后端字段 `filename/file_size/created_at` → 编译直接报错，说明这层类型确实在替人守字段名。
+  另修 `views/system/PermissionPacks.vue`：表格 `@selection-change="(rows) => (bindSelection =
+  rows)"` 内联箭头参数被推断为隐式 any（main 上 `vue-tsc` 因此变红，来自提交 `3ae18cd`），
+  收敛为具名处理器 `handleBindSelectionChange(rows: PackSelectionRow[])`，并把 id 收紧为
+  `number`（`bindPackUsers` 要的就是 number[]）。`vue-tsc` 0 错误，项目相关 **91 passed**。
 
 ### Added（批 3 起：性能基线）
 
