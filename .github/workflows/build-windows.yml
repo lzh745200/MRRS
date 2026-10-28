@@ -105,7 +105,8 @@ jobs:
           done
           if [ "${installed}" != "1" ]; then
             echo "::warning::默认 registry 连续 3 次失败，改用镜像重试"
-            if npm ci --legacy-peer-deps --registry "https://registry.npmmirror.com"; then
+            if npm ci --legacy-peer-deps \
+                 --registry "https://registry.npmmirror.com" --replace-registry-host=always; then
               installed=1
               echo "npm ci OK via mirror"
             fi
@@ -196,7 +197,8 @@ jobs:
           done
           if [ "${installed}" != "1" ]; then
             echo "::warning::默认 registry 连续 3 次失败，改用镜像重试"
-            if npm ci --legacy-peer-deps --registry "https://registry.npmmirror.com"; then
+            if npm ci --legacy-peer-deps \
+                 --registry "https://registry.npmmirror.com" --replace-registry-host=always; then
               installed=1
               echo "npm ci OK via mirror"
             fi

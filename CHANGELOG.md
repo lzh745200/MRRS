@@ -40,6 +40,17 @@
   Windows %TEMP% ACL 构建兜底、门禁统一入口 + no-print/dist 棘轮、mypy 1394→1385、
   as any 196→172 等），避免 Release 正文落到兜底占位。
 
+### Fixed（再补：镜像兜底此前形同虚设）
+
+- **`npm ci` 不认 `--registry`**：它沿用 `package-lock.json` 里写死的 `resolved` URL
+  （本仓 506 个包指向 `registry.npmjs.org`），所以"默认源失败后切镜像"那三次尝试
+  **仍然全部打到原源**，与默认源一起红 —— 这是本轮最后一个隐性缺陷。
+  修复：镜像尝试统一加 **`--replace-registry-host=always`**（npm 会把 `resolved` 的 host
+  重写成 `--registry` 指定的镜像），并加 `--loglevel=http` 让日志暴露真实请求地址；
+  切换前先 `npm ping` 探活，日志可直接证明"镜像到底可不可达"。
+  三处同改：`pr-checks.yml`（frontend-check / e2e-test）、`build-windows.yml`、
+  `docker/Dockerfile.kylin-standalone`。
+
 ### Changed（补：离线缓存优先）
 
 - **`pr-checks.yml` 的 `frontend-check` / `e2e-test` 加「离线缓存优先」**：

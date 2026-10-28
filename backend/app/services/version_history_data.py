@@ -3555,6 +3555,10 @@ VERSION_HISTORY_DATA = [
                 "等），避免 Release 正文落到兜底占位。"
             ),
             (
+                "npm ci 不认 --registry：它沿用 package-lock.json 里写死的 resolved URL（本仓 506 个包指向 registry.npmjs.org），所"
+                "以\"默认源失败后切镜像\"那三次尝试仍然全部打到原源，与默认源一起红 —— 这是本轮最后一个隐性缺陷。"
+            ),
+            (
                 "pr-checks.yml 的 frontend-check / e2e-test 加「离线缓存优先」：先给 ~/.npm 叠一层带 restore-keys 的 actions/cach"
                 "e（setup-node 的缓存 key 绑死package-lock.json，lock 一变即 miss，这正是重试全落在同一故障窗口的原因），安装时首试 npm ci --offli"
                 "ne（只吃本地缓存，零网络）…"

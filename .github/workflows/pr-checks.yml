@@ -258,9 +258,15 @@ jobs:
             sleep $((i * 20))
           done
           echo "::warning::默认 registry 连续 5 次失败，改用镜像 $MIRROR 重试"
+          # 2026-10-28：镜像前先探活，日志能直接证明"镜像是否可达"，不必再猜。
+          npm ping --registry "$MIRROR" || echo "::warning::npm ping 镜像失败（继续尝试）"
+          # 关键：`npm ci` 默认沿用 package-lock.json 里写死的 resolved URL
+          # （本仓 506 个包指向 registry.npmjs.org），只设 --registry **不会**真的改道；
+          # 必须加 --replace-registry-host=always 才会把 resolved 的 host 重写成镜像。
           for i in 1 2 3; do
             echo "===== npm ci attempt $i (mirror) ====="
-            if npm ci --legacy-peer-deps --no-fund --no-audit --registry "$MIRROR"; then
+            if npm ci --legacy-peer-deps --no-fund --no-audit \
+                 --registry "$MIRROR" --replace-registry-host=always --loglevel=http; then
               echo "npm ci OK via mirror (attempt $i)"
               exit 0
             fi
@@ -745,9 +751,11 @@ jobs:
             fi
             if [ "$i" = "5" ]; then
               echo "::warning::默认 registry 连续 5 次失败，改用镜像 $MIRROR"
+              npm ping --registry "$MIRROR" || echo "::warning::npm ping 镜像失败（继续尝试）"
               INSTALLED=0
               for j in 1 2 3; do
-                if npm ci --legacy-peer-deps --no-fund --no-audit --registry "$MIRROR"; then
+                if npm ci --legacy-peer-deps --no-fund --no-audit \
+                     --registry "$MIRROR" --replace-registry-host=always --loglevel=http; then
                   echo "npm ci OK via mirror (attempt $j)"; INSTALLED=1; break
                 fi
                 sleep $((j * 20))
