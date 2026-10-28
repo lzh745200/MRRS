@@ -21,6 +21,15 @@ SUBMODULES = [
     "update_logs", "zero_trust",
 ]
 
+# 2026-10-28（v1.18.18 路由注册修复）：`config_package` **不再由本聚合器 include**。
+# 它的 router 自带 `prefix="/system/config-packages"`，是给 `app/api/v1/__init__.py`
+# 的「system 子模块直挂」设计的；本聚合器已带 `prefix="/system"`，再 include 会注册成
+# `/api/v1/system/system/config-packages` 这类**双重 system** 的错误路径（实测多出 4 条）。
+# 因此"逐个子模块注入 None 必须 fail-fast"的参数化要排除它 —— 它不走这条导入路径，
+# 注入 None 自然不会有 RuntimeError。改动本身由下面的
+# `test_config_package_not_registered_by_aggregator` 锁住。
+AGGREGATOR_SUBMODULES = [n for n in SUBMODULES if n != "config_package"]
+
 
 def test_submodule_import_failure_is_fatal():
     """深审 #78：任一子路由导入失败都必须让包加载失败（不再静默降级）。"""
@@ -37,7 +46,7 @@ def test_submodule_import_failure_is_fatal():
     assert len(system_pkg.router.routes) > 0
 
 
-@pytest.mark.parametrize("name", [n for n in SUBMODULES if n != "admin"])
+@pytest.mark.parametrize("name", [n for n in AGGREGATOR_SUBMODULES if n != "admin"])
 def test_each_submodule_failure_is_fatal(name):
     """逐个把子路由替换为不可导入，确认其 except 分支 fail-fast 且报出模块名。
 
