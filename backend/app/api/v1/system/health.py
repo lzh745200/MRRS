@@ -169,7 +169,8 @@ def health_full(current_user=Depends(get_current_user)):
             result["total_backups"] = len(backups)
             total_size = sum(os.path.getsize(os.path.join(backup_dir, f)) for f in backups)
             result["backup_total_size_mb"] = round(total_size / 1024 / 1024, 1)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.debug('健康检查：备份目录统计失败（降级为 0）: %s', exc, exc_info=True)
             result["total_backups"] = 0
 
     # ── System resources ──
@@ -179,7 +180,8 @@ def health_full(current_user=Depends(get_current_user)):
         # （曾硬编码回退 "C:\\"，在 Linux/麒麟上抛错使 disk_free_gb 恒为 None）
         disk = shutil.disk_usage(os.environ.get("SystemDrive") or os.path.abspath(os.sep))
         result["disk_free_gb"] = round(disk.free / 1024**3, 1)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.debug('健康检查：磁盘可用空间获取失败（降级为 None）: %s', exc, exc_info=True)
         result["disk_free_gb"] = None
 
     # ── Slow queries ──
@@ -187,7 +189,8 @@ def health_full(current_user=Depends(get_current_user)):
         from app.core.query_optimizer import get_slow_queries
         slow = get_slow_queries(100)
         result["slow_queries_24h"] = len([q for q in slow if q.get("slow")])
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.debug('健康检查：慢查询统计失败（降级为 0）: %s', exc, exc_info=True)
         result["slow_queries_24h"] = 0
 
     return {"code": 200, "data": result}

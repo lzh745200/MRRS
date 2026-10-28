@@ -99,7 +99,8 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
             "uptime_seconds": int(uptime.total_seconds()),
             "uptime_display": str(uptime).split(".")[0],
         }
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.debug('指标采集：运行时长获取失败（降级为空）: %s', exc, exc_info=True)
         metrics["uptime"] = {}
 
     # Python进程信息
@@ -115,7 +116,8 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
                 "create_time": datetime.fromtimestamp(process.create_time(), tz=timezone.utc).isoformat(),
             }
         metrics["process"] = process_info
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.debug('指标采集：进程信息获取失败（降级为空）: %s', exc, exc_info=True)
         metrics["process"] = {}
 
     # 应用信息
@@ -139,7 +141,8 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
                 if hasattr(pool, 'size') and hasattr(pool, 'checkedin') else 0
             ),
         }
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.debug('指标采集：数据库连接不可用（降级标记 unavailable）: %s', exc, exc_info=True)
         metrics["database"] = {"status": "unavailable", "message": "数据库监控不可用"}
 
     return {
@@ -275,7 +278,7 @@ async def get_database_metrics(
         # 只读指标端点打成 500（回归见 test_cov_final_system_metrics 的外层兜底用例）
         try:
             logger.debug("统计关键表行数失败: %s", e, exc_info=True)
-        except Exception:  # pragma: no cover - 日志设施自身故障
+        except Exception:  # pragma: no cover - 日志设施自身故障  # nosec:swallow - 日志设施自身故障兜底，此时已无法再记日志
             pass
         metrics["row_count_error"] = "无法统计关键表行数"
 

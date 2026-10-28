@@ -244,7 +244,8 @@ def _on_connection_close(dbapi_connection: Any, connection_record: Any) -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA optimize")
         cursor.close()
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.debug('关闭连接前 PRAGMA optimize 失败（忽略）: %s', exc, exc_info=True)
         # 连接关闭时的优化失败不应影响正常流程
         pass
 
@@ -347,7 +348,7 @@ class SQLiteWriteCoordinator:
                 # 在队列消费时，也加上独占锁，确保绝对串行
                 with self.exclusive_write(timeout=60.0):
                     holder["result"] = fn()
-            except Exception as e:
+            except Exception as e:  # nosec:swallow - 异常转存给调用方（holder[error]），不是吞掉
                 holder["error"] = e
             finally:
                 holder["done"].set()

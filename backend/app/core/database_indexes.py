@@ -152,7 +152,8 @@ def analyze_table_stats(engine=None):
                     )
                     row_count = count_result.scalar()
                     stats[table_name] = {"row_count": row_count}
-                except Exception:
+                except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+                    logger.debug('行数统计失败（降级为 0）: %s', exc, exc_info=True)
                     stats[table_name] = {"row_count": 0}
             logger.info("表统计信息分析完成")
         except Exception as e:

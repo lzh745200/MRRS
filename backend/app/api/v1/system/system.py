@@ -145,6 +145,7 @@ async def get_system_status(current_user=Depends(get_current_user)):
         engine.connect().close()
         status_info["services"].append({"name": "database", "status": "connected"})
     except Exception as e:
+        logger.debug('系统状态：数据库连通性检查失败: %s', e, exc_info=True)
         status_info["services"].append({"name": "database", "status": "disconnected", "error": str(e)})
 
     # 检查缓存
@@ -154,7 +155,8 @@ async def get_system_status(current_user=Depends(get_current_user)):
         # 缓存健康检查永远是假阳性（且产生 "coroutine never awaited" 警告）。
         await cache_manager.get("system_status_check")
         status_info["services"].append({"name": "cache", "status": "connected"})
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+        logger.debug('系统状态：缓存不可用: %s', exc, exc_info=True)
         status_info["services"].append({"name": "cache", "status": "unavailable"})
 
     return {"success": True, "data": status_info}
@@ -345,7 +347,8 @@ async def get_environment_info(current_user=Depends(get_current_user)):
     for pkg_name in key_packages:
         try:
             packages[pkg_name] = importlib.metadata.version(pkg_name)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
+            logger.debug('系统信息：读取依赖版本失败（%s）: %s', pkg_name, exc, exc_info=True)
             packages[pkg_name] = "未安装"
 
     return {

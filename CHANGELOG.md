@@ -269,6 +269,13 @@
   属静默业务缺口 → 补 `logger.warning(..., exc_info=True)`；
   ③ `data/data/reports.py` 解析历史 `village_ids` 失败：原来直接 `pass` → 补 `logger.debug`
   带上具体异常，便于后续数据修复。
+- **静默吞异常再收口 13 处（123 → 110）**：`system/health.py`（3：备份目录/磁盘空间/慢查询）、
+  `system/metrics.py`（4：运行时长/进程/数据库不可用 + 1 处改为显式 `nosec:swallow` 豁免，
+  因为它是「日志设施自身故障」的兜底）、`system/system.py`（3：数据库连通性/缓存/依赖版本）、
+  `core/database.py`（2：关闭连接前 `PRAGMA optimize` 失败留痕 + 1 处豁免，理由是其异常
+  已转存给调用方而非吞掉）、`core/database_indexes.py`（1：单表行数统计失败）。
+  统一按「高频轮询端点用 debug、真实故障用 warning」的口径，避免健康检查刷日志；
+  基线 123 → 110，门禁 total=110 baseline=110 NEW=0。
 - **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
   bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
   会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；
