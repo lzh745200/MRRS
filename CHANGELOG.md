@@ -7,6 +7,29 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十二批：迁移基线自证 —— Critical 收口）
+
+**问题**：`001_baseline` 在核心表缺失时 `Base.metadata.create_all()` —— 新库在第一个迁移
+就落成"今天的模型"，后面 60+ 个迁移靠存在性守卫几乎全部跳过。后果：
+
+1. 迁移脚本**从不在新库上被真正执行**；
+2. `check_stack_alignment` 的 B 轴（模型 ↔ 空库 `upgrade head`）**恒 0 漂移**，因为参照库就是模型建的（自证）；
+3. 真实漂移靠人工撞见。本轮 PII 迁移跑空库时输出 `widened 0 column(s)` 就是直接证据 ——
+   列宽一开始已是 256（模型建的），迁移逻辑根本没被执行。
+
+**收口方式**（不试图自动判定"迁移是否执行过"——不可判定）：
+
+- 新增门禁 `scripts/check_migration_self_evidence.py`：扫描 `alembic/versions/*.py`，
+  凡含 `alter/add/drop column`、`create/drop index`、`create/drop table` 的迁移，
+  **必须自带一个以 revision 命名的测试文件**（能手工构造「旧库状态」再驱动迁移函数）；
+  历史 45 个无证据迁移登记 `gate_baselines/migration_evidence.json` 不追溯（棘轮式，新增从严）。
+- 单测 `test_migration_self_evidence_gate.py`（6 例）**验证它真的会失败**：
+  无证据的改列迁移 → 门禁 return 1；有证据 → 0；纯数据迁移 → 忽略；豁免 → 0；
+  `--json` 可解析；并锁定 **`pii_col_width_001` 必须靠证据通过、不得依赖豁免**。
+- CI 接线：`pr-checks.yml` 的 static-analysis 增加 `Migration self-evidence ratchet (C1)` 步骤。
+- `001_baseline` 文件头加醒目说明：记录 create_all 掩盖了什么、B 轴为何自证、
+  以及"任何改 schema 的迁移必须自带旧库证据"的约定与彻底根治方向（静态 DDL 快照，另立项）。
+
 ### Security（全库审计第十一批：PII 密文超列长 —— Critical 收口）
 
 **实测证据**（`encrypt_pii` 实测，AES-SIV + base64 + `enc.v1:` 标记）：

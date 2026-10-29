@@ -1,5 +1,23 @@
 """baseline: 标记当前数据库 schema 为初始基线
 
+⚠️ 本迁移会**掩盖后续迁移的验证**（2026-10-29 全库审计 C1，已按"要求迁移自带旧库证据"收口）。
+
+本文件在核心表缺失时调用 Base.metadata.create_all()，于是**新库在第一个迁移就落成
+"今天的模型"**，后面 60+ 个迁移靠存在性守卫几乎全部跳过 —— 迁移脚本本身从不在新库上被执行，
+check_stack_alignment 的 B 轴（模型 ↔ 空库 upgrade head）也因此恒 0 漂移，属**自证**。
+
+含义：**"空库 upgrade head 成功"不能证明任何一条迁移是对的**。
+真实反例：v1.18.26 前 PII 列在库里是 VARCHAR(20)、模型已是 EncryptedText(256)，
+而 B 轴只比列存在性、参照库又由 create_all 生成，完全看不出来（密文实测最长 115 字符）。
+
+自本版起的约定：**任何会改 schema 形状的迁移（alter/add/drop column、create/drop index、
+create/drop table）必须自带一个能手工构造「旧库状态」的测试**，例如
+tests/unit/test_pii_col_width_001.py（手工建 VARCHAR(20) 再驱动迁移函数，断言改到 256）。
+门禁：scripts/check_migration_self_evidence.py（CI static-analysis 的 C1 步骤）；
+历史无证据的迁移登记在 backend/scripts/gate_baselines/migration_evidence.json，不追溯。
+
+彻底根治（未做，另立项）：把 create_all 换成**静态 DDL 快照**，让迁移链在新库上真正回放。
+
 Revision ID: 001
 Revises: None
 Create Date: 2026-02-14

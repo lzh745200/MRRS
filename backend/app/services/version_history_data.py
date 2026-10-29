@@ -3650,6 +3650,19 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            (
+                "新增门禁 scripts/check_migration_self_evidence.py：扫描 alembic/versions/*.py，凡含 alter/add/drop colum"
+                "n、create/drop index、create/drop table 的迁移，必须自带一个以 revision 命名的测试文件（能手工构造「旧库状态」再驱动迁移函数）；"
+            ),
+            (
+                "单测 test_migration_self_evidence_gate.py（6 例）验证它真的会失败：无证据的改列迁移 → 门禁 return 1；有证据 → 0；纯数据迁移 → 忽略"
+                "；豁免 → 0；--json 可解析；并锁定 pii_col_width_001 必须靠证据通过、不得依赖豁免。"
+            ),
+            "CI 接线：pr-checks.yml 的 static-analysis 增加 Migration self-evidence ratchet (C1) 步骤。",
+            (
+                "001_baseline 文件头加醒目说明：记录 create_all 掩盖了什么、B 轴为何自证、以及\"任何改 schema 的迁移必须自带旧库证据\"的约定与彻底根治方向（静态 DD"
+                "L 快照，另立项）。"
+            ),
             "模型侧 8 处 EncryptedText(64) → EncryptedText(256)（与 EncryptedText 默认值一致）。",
             (
                 "新增迁移 pii_col_width_001：把 8 个 PII 列统一到 VARCHAR(256)，逐列判存在性、已够宽则跳过（可重入），SQLite 走 batch_alter_tab"
@@ -3681,23 +3694,6 @@ VERSION_HISTORY_DATA = [
             (
                 "system/audit.py 14 处内联角色比较漏掉 is_superuser 标记：normalize_role(role) not in (\"admin\", \"super_a"
                 "dmin\") 不看 is_superuser=True，于是「打了超管标记、role 仍是 user」的账号访问审计页被误拒 403（军审场景下\"超管进不去审计页\"）。"
-            ),
-            (
-                "fund_lifecycle 无项目归属记录跨组织可读/可写：12 处 if xxx.project_id:只在有项目时才校验数据权限，project_id 为空时完全不校验 —— 而 F"
-                "undContract /FundTransferVoucher / 结算单 / 订单都没有 organization_id 列，无法用组织过滤，于是任意登录用户可读写其它单位的合同金额、"
-                "供应商、付款明细（跨组织财务数据泄漏）。"
-            ),
-            (
-                "审计备注端点无入参模型：PATCH /system/audit/logs/{id}/remark 原为 body: dict，remark 无长度上限、直写 JSON 列。新增 Audit"
-                "RemarkUpdate(remark: str = Field(max_length=500))，超长由 FastAPI 返回 422 而不是静默写库。"
-            ),
-            (
-                "v-permission=\"[]\" fail-open：指令自称 fail-closed，但末尾「无效用法」分支只 warn不隐藏元素 —— 传空数组（或运行时角色配置被清空）时元素照"
-                "样可见，拼错即等于放行。改为默认 _hideElement(el)（DEV 仍 warn 便于定位），并给现有的两条「无效用法」用例补上「必须隐藏」断言（原来只断言 warn）。"
-            ),
-            (
-                "契约收敛 3 处：auth/users.py 的改密响应手写 {\"code\":200,...} → success_response()；work_logs.py 的 @router."
-                "get(\"\", response_model=dict) 形同零校验（实际返回 ok_list() 信封），已删除该 response_model；"
             ),
         ],
     },
