@@ -7,6 +7,19 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Security（全库审计第八批：2 项）
+
+- **`/health/database-health` 把 DB 绝对路径出站**：`database_health_service.check_integrity`
+  在库文件缺失时把 `f"数据库文件不存在: {self.db_path}"` 写进 `message` 与 `issues`，
+  而该端点**匿名可访问**（运维探针，已有测试锁定其无需登录）—— 等于对外泄露部署目录结构。
+  改为对外只给分类码 `DB_FILE_MISSING`，路径只进 `logger.error`。
+  （曾尝试加认证，但会打断 4 个按"探针免登录"断言的既有测试，故保留匿名 + 脱敏。）
+- **`UserCreate` 的 `phone_number` / `role_id` 是死字段**：`users` 表列名是 `phone`，
+  而 `create_user` 只取 username/email/full_name/role —— 注册链路传的电话被**静默丢弃**
+  （前端也不传，所以长期没被发现）。schema 改名 `phone`，`create_user` 补齐落库
+  （兼容旧 `phone_number` 键名；phone 是 ADR-0005 的 PII 加密列，必须经模型写入）；
+  `role_id` 直接删除并注明原因（users 无该列，保留只会让人以为"按角色 ID 授权"生效）。
+
 ### Security（全库审计第七批：2 项）
 
 - **`system/audit.py` 14 处内联角色比较漏掉 `is_superuser` 标记**：

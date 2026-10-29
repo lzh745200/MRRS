@@ -86,6 +86,10 @@ class UserService:
             email=data.get("email"),
             hashed_password=get_password_hash(data["password"]),
             full_name=data.get("full_name"),
+            # 2026-10-29 审计：原先不落 phone（schema 还叫 phone_number），
+            # 注册链路传的电话被静默丢弃。phone 是 PII 加密列（ADR-0005），
+            # 必须经模型写入而非裸 SQL。兼容旧的 phone_number 键名。
+            phone=data.get("phone") or data.get("phone_number"),
             role=normalize_role(data.get("role", "user")),
             is_active=True,
         )

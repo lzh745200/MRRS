@@ -3651,6 +3651,15 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "/health/database-health 把 DB 绝对路径出站：database_health_service.check_integrity在库文件缺失时把 f\"数据库文件不存"
+                "在: {self.db_path}\" 写进 message 与 issues，而该端点匿名可访问（运维探针，已有测试锁定其无需登录）—— 等于对外泄露部署目录结构。改为对外只给分类码 D"
+                "B_FILE_MISSING，路径只进 logger.error。"
+            ),
+            (
+                "UserCreate 的 phone_number / role_id 是死字段：users 表列名是 phone，而 create_user 只取 username/email/full"
+                "_name/role —— 注册链路传的电话被静默丢弃（前端也不传，所以长期没被发现）。"
+            ),
+            (
                 "system/audit.py 14 处内联角色比较漏掉 is_superuser 标记：normalize_role(role) not in (\"admin\", \"super_a"
                 "dmin\") 不看 is_superuser=True，于是「打了超管标记、role 仍是 user」的账号访问审计页被误拒 403（军审场景下\"超管进不去审计页\"）。"
             ),
@@ -3690,14 +3699,6 @@ VERSION_HISTORY_DATA = [
             (
                 "全局搜索的 LIKE 通配符未转义（13 处）：ilike(f\"%{q}%\") 里 q=\"%%\" 可枚举本域全表，q=\"a_b\" 会把下划线当任意字符 —— 属信息放大（数据域"
                 "仍由 scoped_filter 兜住）。新增 _escape_like()（先转义反斜杠再转义 % 与 _），全部 ilike 显式带 escape=\"\\\"。"
-            ),
-            (
-                "审计日志的删除 / 备注改写自身不留审计（军审口径）：/system/audit 的批量删除、单条删除、备注 PATCH 三个会破坏审计链的写操作，此前只写 app.log，物理 dele"
-                "te 后「谁删了哪条审计」完全不可追溯。"
-            ),
-            (
-                "学校 schema 与模型漂移可见化：SchoolBase 有 10 个 schools 表不存在的字段（其中 school_level 是必填），create 时被 model_cols"
-                " 白名单静默剥掉；更误导的是代码里还有一步 school_level → level 的改名，而 schools 根本没有 level 列 —— 读代码时会以为它落库了。"
             ),
         ],
     },
