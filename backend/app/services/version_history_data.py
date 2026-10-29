@@ -3555,6 +3555,15 @@ VERSION_HISTORY_DATA = [
                 "等），避免 Release 正文落到兜底占位。"
             ),
             (
+                "上一版把 fetch-timeout 降到 60s、外层轮数压到 7 次，仍没算到 npm 内部重试：fetch-retries 5 × fetch-timeout 60s 让单次外层尝试"
+                "就吃掉约 5 分钟，7 次外层尝试≈35 分钟，实测 a7e5de9 的安装步骤跑了 30+ 分钟仍未结束。"
+            ),
+            (
+                "frontend-check 的安装步骤跑了 45 分 09 秒，正好撞上该作业 timeout-minutes: 45，于是整条 job 结论成了 cancelled —— 日志看起来像"
+                "\"被外部取消\"，实际是超时，既掩盖真因又空耗 45 分钟。算术很清楚：5 轮 × fetch-timeout 300s + 双镜像 × 3 轮= 最坏 11 次 × 5 分钟，本就超过"
+                "任何合理的 job 预算。"
+            ),
+            (
                 "npm ci 不认 --registry：它沿用 package-lock.json 里写死的 resolved URL（本仓 506 个包指向 registry.npmjs.org），所"
                 "以\"默认源失败后切镜像\"那三次尝试仍然全部打到原源，与默认源一起红 —— 这是本轮最后一个隐性缺陷。"
             ),

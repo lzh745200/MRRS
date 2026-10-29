@@ -64,6 +64,26 @@
   Windows %TEMP% ACL 构建兜底、门禁统一入口 + no-print/dist 棘轮、mypy 1394→1385、
   as any 196→172 等），避免 Release 正文落到兜底占位。
 
+### Fixed（四补：fetch-retries 是隐藏的时间放大器）
+
+- 上一版把 `fetch-timeout` 降到 60s、外层轮数压到 7 次，仍**没算到 npm 内部重试**：
+  `fetch-retries 5 × fetch-timeout 60s` 让**单次外层尝试**就吃掉约 5 分钟，
+  7 次外层尝试≈35 分钟，实测 a7e5de9 的安装步骤跑了 30+ 分钟仍未结束。
+  现收紧为：`fetch-retries 2`、`retry-mintimeout 10s`、`retry-maxtimeout 30s`、
+  外层 **2（默认源）+1（yarnpkg）+1（npmmirror）= 4 次**，
+  单次≈2–2.5 分钟，合计 **≈10 分钟**；并在注释里写明"别再调高"的原因，
+  避免下次又用轮数换取"抗抖动"而把作业拖成超时。
+
+### Fixed（三补：安装步骤"慢性超时被判 cancelled"）
+
+- **`frontend-check` 的安装步骤跑了 45 分 09 秒，正好撞上该作业 `timeout-minutes: 45`**，
+  于是整条 job 结论成了 **cancelled** —— 日志看起来像"被外部取消"，实际是超时，
+  既掩盖真因又空耗 45 分钟。算术很清楚：5 轮 × `fetch-timeout 300s` + 双镜像 × 3 轮
+  = 最坏 11 次 × 5 分钟，本就超过任何合理的 job 预算。
+  现收紧为**有界阶梯**：`fetch-timeout 60s`、默认源 3 轮、每镜像 2 轮
+  （3+2+2 = 7 次 × ≈60–90s ≈ 10 分钟），并把 `frontend-check` 的 job 超时
+  45 → **60 分钟**留出真实用例（约 10 分钟）的余量。
+
 ### Fixed（再补：镜像兜底此前形同虚设）
 
 - **`npm ci` 不认 `--registry`**：它沿用 `package-lock.json` 里写死的 `resolved` URL
