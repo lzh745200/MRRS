@@ -41,6 +41,16 @@
 - **前端三处**：dashboard 的 saveLayout 缺 try（deep watcher 抛异常却仍提示已保存）、
   SystemConsole / dataVerify 的 router.replace 未 catch、Role.vue 删除失败吞掉后端原因。
 
+### Security（全库审计第二批：3 项）
+
+- **审计写入回滚调用方业务事务（会丢业务数据却返回 200）**：AuditLogService.log 原先在
+  调用方 Session 上 add + safe_commit，失败时 db.rollback() 会把**尚未提交的业务写入
+  一并回滚**，而异常被吞掉、端点照样返回 200 —— 调用方完全不知道数据没落库。
+  改为独立 SessionLocal 写入（旁路审计），并补 username（原实现从 kwargs 丢弃，审计行
+  username 恒 NULL）。新增 3 条用例：回滚自己 session / 关闭 session / **不碰调用方 session**。
+- **/system/env 任意登录用户可读依赖与运行环境** → 收紧为 require_admin()（与 system/diagnostics 一致）。
+- **备份恢复把 FileNotFoundError / ValueError 原文回传**（含本地绝对路径）→ 改固定文案 + 日志留原文。
+
 ### 根因（进基线）
 
 - backend/tests/ 从未纳入 flake8 门禁，实测 1461 条违规长期不可见；其中 8 个 F811 同名定义

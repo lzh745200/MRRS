@@ -37,7 +37,7 @@ from app.core.required_packages import (
     missing_runtime,
 )
 from app.core.response import success_response
-from app.core.security import get_current_user
+from app.core.security import require_admin
 
 router = APIRouter(prefix="/env", tags=["运行环境"])
 
@@ -74,7 +74,7 @@ def _collect_system_info() -> Dict[str, Dict[str, str] | str]:
 @router.get("/check", summary="检查运行环境")
 def check_env(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin()),
 ):
     """检查系统运行环境
 

@@ -889,9 +889,20 @@ class AuditLogService:
         ip_address: str = "",
         **kwargs,
     ):
-        """记录审计日志"""
-        if db is None:
-            return
+        """记录审计日志。
+
+        **必须用独立 Session 写入**（2026-10-29 审计修复，Important）。
+
+        原实现直接在当前 Session 上 db.add + safe_commit，失败时 db.rollback() ——
+        那会把调用方**尚未提交的业务写入一并回滚**；而异常又被这里吞掉，端点照样
+        返回 200，调用方完全不知道自己的数据没落库。审计是旁路，绝不能决定业务成败。
+
+        入参 db 仅为向后兼容保留，不再使用；username 从 kwargs 取出写入（原实现丢弃，
+        导致审计行 username 恒 NULL，无法按人检索）。
+        """
+        from app.core.database import SessionLocal
+
+        own = None
         try:
             from app.models.audit import AuditLog
 
@@ -899,22 +910,31 @@ class AuditLogService:
             # - resource → resource_type（模型列名）
             # - ip_address → user_ip（模型列名）
             # - details → metadata_（JSON 字段，存储额外详情；模型无 details 列）
+            own = SessionLocal()
             log_entry = AuditLog(
                 user_id=user_id,
+                username=kwargs.get("username"),
                 action=action,
                 resource_type=resource,
                 resource_id=str(resource_id) if resource_id else None,
                 metadata_={"details": details} if details else None,
                 user_ip=ip_address or None,
             )
-            db.add(log_entry)
-            safe_commit(db)
+            own.add(log_entry)
+            safe_commit(own)
         except Exception as e:
             logger.warning(f"审计日志写入失败: {e}")
             try:
-                db.rollback()
+                if own is not None:
+                    own.rollback()
             except Exception as rb_err:
                 logger.warning(f"审计日志回滚失败: {rb_err}")
+        finally:
+            try:
+                if own is not None:
+                    own.close()
+            except Exception as close_err:  # pragma: no cover - 关闭失败不影响业务
+                logger.warning(f"审计日志会话关闭失败: {close_err}")
 
 
 # ══════════════════════════════════════════════════════════════

@@ -825,9 +825,13 @@ async def restore_backup(
         # 服务层已写审计（system_restore_key_mismatch），这里只负责 409 语义。
         raise HTTPException(status_code=409, detail=e.message)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # 原文可能带本地绝对路径 / 内部结构（2026-10-29 审计，Minor）：只进日志，
+        # 响应给固定文案；需要定位时按 traceback 查 app.log。
+        logger.warning("恢复备份参数无效: %s", e)
+        raise HTTPException(status_code=400, detail="备份包或参数无效，请重新选择备份文件")
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.warning("恢复备份时文件缺失: %s", e)
+        raise HTTPException(status_code=404, detail="备份文件不存在或已被移动，请重新选择")
     except HTTPException:
         raise
     except Exception as e:

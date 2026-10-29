@@ -299,14 +299,35 @@ class TestAuditLogService:
         assert await sec.AuditLogService.log(db=None, action="x") is None
 
     async def test_write_failure_rolls_back(self):
-        db = MagicMock()
-        db.add.side_effect = RuntimeError("db down")  # 触发 681-684
-        await sec.AuditLogService.log(db=db, user_id=1, action="login")
-        db.rollback.assert_called_once()
+        """写入失败必须回滚**自己的** Session，而不是调用方 Session。
+
+        2026-10-29 审计修复后，AuditLogService.log 使用独立 Session（旁路审计），
+        不再对调用方 session 做 add/safe_commit —— 原实现失败时 rollback 调用方 session，
+        会把尚未提交的业务写入一并回滚，而端点仍返回 200。
+        """
+        own = MagicMock()
+        own.add.side_effect = RuntimeError("db down")
+        with patch("app.core.database.SessionLocal", return_value=own):
+            await sec.AuditLogService.log(db=MagicMock(), user_id=1, action="login")
+        own.rollback.assert_called_once()
+        own.close.assert_called_once()
 
     async def test_rollback_failure_swallowed(self):
-        db = MagicMock()
-        db.add.side_effect = RuntimeError("db down")
-        db.rollback.side_effect = RuntimeError("rollback failed")  # 触发 685-686
-        # 不应抛出——内层 except 吞掉回滚异常
-        await sec.AuditLogService.log(db=db, user_id=1, action="login")
+        """回滚本身失败也必须被吞掉（审计不得影响业务），但会话仍要关闭。"""
+        own = MagicMock()
+        own.add.side_effect = RuntimeError("db down")
+        own.rollback.side_effect = RuntimeError("rollback failed")
+        with patch("app.core.database.SessionLocal", return_value=own):
+            await sec.AuditLogService.log(db=MagicMock(), user_id=1, action="login")
+        own.close.assert_called_once()
+
+    async def test_does_not_touch_caller_session(self):
+        """关键回归：审计失败不得 add/commit/rollback 调用方的业务 Session。"""
+        caller = MagicMock()
+        own = MagicMock()
+        own.add.side_effect = RuntimeError("db down")
+        with patch("app.core.database.SessionLocal", return_value=own):
+            await sec.AuditLogService.log(db=caller, user_id=1, action="login")
+        caller.add.assert_not_called()
+        caller.rollback.assert_not_called()
+        caller.commit.assert_not_called()

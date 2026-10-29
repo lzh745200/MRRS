@@ -3631,13 +3631,13 @@ VERSION_HISTORY_DATA = [
                 ".replace 未 catch、Role.vue 删除失败吞掉后端原因。"
             ),
             (
-                "backend/tests/ 从未纳入 flake8 门禁，实测 1461 条违规长期不可见；其中 8 个 F811 同名定义让测试静默失效（已修 3 处：r16 双重失效、report_"
-                "templates 覆盖版本缺 finally、recommendation 整类复制两遍）。"
+                "审计写入回滚调用方业务事务（会丢业务数据却返回 200）：AuditLogService.log 原先在调用方 Session 上 add + safe_commit，失败时 db.rol"
+                "lback() 会把尚未提交的业务写入一并回滚，而异常被吞掉、端点照样返回 200 —— 调用方完全不知道数据没落库。"
             ),
-            "mypy 未启用（基线 1379，缺 SQLAlchemy 插件时全为 Column[str] 类噪声）。",
+            "/system/env 任意登录用户可读依赖与运行环境 → 收紧为 require_admin()（与 system/diagnostics 一致）。",
             (
-                "core.autocrlf=true 与 .gitattributes eol=lf 冲突，导致前端 26,265 条 prettier CRLF 警告。修复后 success = not"
-                " errors，敏感表硬禁止必须让整包失败；原用例同时断言success is True 与 errors 含「禁止导入敏感表」，自相矛盾。已改为断言 False。"
+                "备份恢复把 FileNotFoundError / ValueError 原文回传（含本地绝对路径）→ 改固定文案 + 日志留原文。让测试静默失效（已修 3 处：r16 双重失效、repo"
+                "rt_templates 覆盖版本缺 finally、recommendation 整类复制两遍）。"
             ),
         ],
     },
