@@ -18,6 +18,7 @@
  */
 import { ElMessage } from 'element-plus'
 import { SYSTEM_VERSION } from '@/config/constants'
+import { safeGetItem } from '@/utils/safeStorage'
 
 /** localStorage 键名：上次确认一致的服务端版本 */
 const VERSION_KEY = 'app_version'
@@ -78,7 +79,8 @@ export async function checkVersion(): Promise<void> {
       return
     }
 
-    const cachedVersion = localStorage.getItem(VERSION_KEY)
+    // 2026-10-29 审计：读取走 safeGetItem（受限存储下 getItem 抛 SecurityError 会让启动检查中断）
+    const cachedVersion = safeGetItem(VERSION_KEY, 'local')
 
     if (!cachedVersion) {
       // 首次访问 → 记录版本号，不刷新
@@ -87,7 +89,7 @@ export async function checkVersion(): Promise<void> {
     }
 
     if (cachedVersion !== serverVersion) {
-      if (sessionStorage.getItem(RELOAD_GUARD_KEY) === serverVersion) {
+      if (safeGetItem(RELOAD_GUARD_KEY, 'session') === serverVersion) {
         // 本会话已为该版本刷新过一次仍不一致（刷新被拦/缓存未破/服务端未换包）
         // → 不再自动刷新，避免死循环，改为提示人工刷新
         ElMessage.warning({

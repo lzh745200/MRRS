@@ -549,7 +549,18 @@ from app.startup.seed import (  # noqa: F401
 
 
 def _init_database_tables():
-    """确保所有数据库表已创建，并补全已有表中缺失的列"""
+    """确保所有数据库表已创建，并补全已有表中缺失的列。
+
+    ⚠️ 执行顺序与审计结论（2026-10-29）：
+    本函数是 create_all → **alembic upgrade** → _migrate_missing_columns（受
+    ENABLE_AUTO_MIGRATION 开关控制）。顺序是对的，补列不会「先跑并让 upgrade 整段跳过」。
+
+    但第 571 行的 create_all() 会**在 alembic 之前**用当前模型补齐缺失表 ——
+    新库的所有表因此由模型建出，迁移脚本的真实效果不受空库演练验证。
+    这与 001_baseline 的 create_all() 是同一类问题（审计项 C1），已由
+    scripts/check_migration_self_evidence.py 收口：**任何改 schema 的迁移必须自带
+    能手工构造旧库状态的测试**，否则 CI 拦。彻底根治（静态 DDL 快照）另立项。
+    """
     # 导入所有模型确保表定义已注册。
     # import app.models 只加载 __init__.py（懒加载入口），不会注册具体模型表；
     # 必须通过 __getattr__ 触发所有模型类的实际导入，否则 _migrate_missing_columns

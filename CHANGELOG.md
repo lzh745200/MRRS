@@ -7,6 +7,24 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第二十批：storage 读取共享保护 + 启动迁移说明）
+
+- **新增 `utils/safeStorage.ts`（共享安全存储）**：`safeGetItem` / `safeSetItem` / `safeRemoveItem` /
+  `isStorageAvailable`，读取异常返回 `null`（fail-closed）、写入异常静默丢弃。
+  接上三处在**关键路径**上的裸读取：
+  - `composables/useAutoLock` 在 setup 期间读 `auto-lock-minutes`；
+  - `composables/useVersionCheck` 读版本缓存与一次性刷新护栏裸读取；
+  - 这些点在隐私模式/禁用存储/受限 webview 下会抛 `SecurityError`，直接中断启动流程。
+  写入点保持原样（`setItem` 仅配额满时抛，失败后内存态仍可用）。
+
+- **`main.py::_init_database_tables` 补审计结论注释**：该函数顺序是 `create_all` →
+  **alembic upgrade** → `_migrate_missing_columns`（受 `ENABLE_AUTO_MIGRATION` 控制），
+  补列**不会**“先跑并让 upgrade 整段跳过”（原审计建议成立的前提不准确）；
+  但 `create_all()` 在 alembic 之前仍会用当前模型建表，属审计项 C1 同源问题 ——
+  已由 `scripts/check_migration_self_evidence.py` 收口（改 schema 的迁移必须自带旧库证据）。
+
+**验证**：`eslint` **0** · `vue-tsc --noEmit` **0 错误** · `vitest run tests/unit/{composables,utils}` **58 文件 / 1141 用例通过**。
+
 - **把 `migration_evidence` 门禁接进统一入口（修 `test_gate_entrypoints` 唯一红点）**：
   `scripts/check_migration_self_evidence.py` 已存在且自跑为绿（47 个改 schema 的迁移全部有自证测试、
   未登记 0 个），`pr-checks.yml` 也在跑它，但漏了在 `scripts/run_gates.py` 注册 ——

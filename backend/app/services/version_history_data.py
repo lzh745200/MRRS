@@ -3651,6 +3651,14 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "新增 utils/safeStorage.ts（共享安全存储）：safeGetItem / safeSetItem / safeRemoveItem /isStorageAvailable"
+                "，读取异常返回 null（fail-closed）、写入异常静默丢弃。接上三处在关键路径上的裸读取"
+            ),
+            (
+                "main.py::_init_database_tables 补审计结论注释：该函数顺序是 create_all →alembic upgrade → _migrate_missing_c"
+                "olumns（受 ENABLE_AUTO_MIGRATION 控制），补列不会“先跑并让 upgrade 整段跳过”（原审计建议成立的前提不准确）；"
+            ),
+            (
                 "把 migration_evidence 门禁接进统一入口（修 test_gate_entrypoints 唯一红点）：scripts/check_migration_self_evide"
                 "nce.py 已存在且自跑为绿（47 个改 schema 的迁移全部有自证测试、未登记 0 个），pr-checks.yml 也在跑它…"
             ),
@@ -3687,12 +3695,9 @@ VERSION_HISTORY_DATA = [
                 "自证单测 4 例：识别「有外键无 ondelete」/ 表缺失返回 None / 已有 ondelete 幂等 /真跑 upgrade 后 PRAGMA foreign_key_list "
                 "读出 SET NULL，并在 PRAGMA foreign_keys=ON下验证删用户后 created_by 被置 NULL。"
             ),
-            "表不存在 → skipped（幂等）；",
-            "0 行 → DROP；",
             (
-                "有数据 → 改名 legacy_<表名> 归档（归档表已存在时保留原表、记 warning 等人工确认）。models/base.py 的 Base.to_dict 是类创建后动态赋值（B"
-                "ase.to_dict = _base_to_dict），mypy 看不见 → 没有显式定义 to_dict 的模型（FundAllocationOrder/FundAssetVerifi"
-                "cation …）在调用处被判 attr-defined。"
+                "表不存在 → skipped（幂等）；models/base.py 的 Base.to_dict 是类创建后动态赋值（Base.to_dict = _base_to_dict），mypy "
+                "看不见 → 没有显式定义 to_dict 的模型（FundAllocationOrder/FundAssetVerification …）在调用处被判 attr-defined。"
             ),
         ],
     },

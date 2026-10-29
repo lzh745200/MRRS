@@ -5,6 +5,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { AuthStorage } from '@/utils/authStorage'
 import { markLockNow } from '@/utils/lockDigest'
 import { logger } from '@/utils/logger'
+import { safeGetItem } from '@/utils/safeStorage'
 
 const STORAGE_KEY = 'auto-lock-minutes'
 const DEFAULT_MINUTES = 15
@@ -24,7 +25,8 @@ export function useAutoLock(opts: AutoLockOptions = {}) {
   const getMinutes =
     opts.getMinutes ??
     (() => {
-      const raw = Number(window.localStorage.getItem(STORAGE_KEY))
+      // 2026-10-29 审计：受限存储下 getItem 会抛 SecurityError，而这段在 setup 期间执行
+      const raw = Number(safeGetItem(STORAGE_KEY, 'local'))
       return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MINUTES
     })
 
