@@ -161,7 +161,9 @@ class TestGetAuditLogDetail:
         session.commit()
         resp = client.get(f"{self.URL}/1")
         assert resp.status_code == 200
-        assert resp.json()["id"] == 1
+        # 2026-10-29 审计：原端点裸返回 ORM（全列外泄、无 response_model），
+        # 改为 success_response 信封 + 白名单字段，故断言 data.id。
+        assert resp.json()["data"]["id"] == 1
 
     def test_404_when_not_found(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(f"{self.URL}/999")
@@ -277,7 +279,16 @@ class TestBatchDeleteAuditLogs:
         resp = _delete_json(client, self.URL, {"ids": "12"})
         assert resp.status_code == 200
         assert resp.json()["data"]["deleted_count"] == 1
-        assert session.query(AuditLog).filter(AuditLog.id == 12).first() is None
+        # 断言"被删的那条 create 记录不在了"，而不是"id 12 为空"。
+        # 2026-10-29 起批量删除会自留痕（audit_log_batch_delete），而 SQLite 的
+        # INTEGER PRIMARY KEY 在 max(id) 被删后会复用 id —— 留痕记录可能正好拿到 12。
+        # 依赖"id 空缺"会让测试随留痕行为变化而假红。
+        assert (
+            session.query(AuditLog)
+            .filter(AuditLog.id == 12, AuditLog.action == "create")
+            .first()
+            is None
+        )
         assert session.query(AuditLog).filter(AuditLog.id == 1).first() is not None
         assert session.query(AuditLog).filter(AuditLog.id == 2).first() is not None
 
@@ -754,3 +765,31 @@ class TestGetUserActivity:
         assert data["action_breakdown"]["update"] == 1
         assert data["action_breakdown"]["delete"] == 1
         assert len(data["recent_activity"]) == 3
+
+
+def test_superuser_flag_grants_audit_access():
+    """is_superuser=True 但 role="user" 的账号必须能访问审计端点。
+
+    2026-10-29 审计：audit.py 原来有 14 处内联
+    `normalize_role(role) not in ("admin", "super_admin")`，漏掉 is_superuser 标记
+    → 超管标记账号被误拒 403（军审场景下「超管却进不了审计页」）。
+    统一改用 is_admin() 后该分支被覆盖；此用例锁定行为。
+    """
+    from app.main import app
+    from app.core.security import get_current_user
+    from fastapi.testclient import TestClient
+
+    original = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: mock.MagicMock(
+        id=9, username="flag_admin", role="user", is_superuser=True,
+    )
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get(f"{BASE}/stats")
+        # 关键是被鉴权放行（不再是 403）；后续可能因空库等原因非 200
+        assert resp.status_code != 403, resp.text
+    finally:
+        if original is not None:
+            app.dependency_overrides[get_current_user] = original
+        else:
+            app.dependency_overrides.pop(get_current_user, None)

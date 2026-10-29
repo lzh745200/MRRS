@@ -9,7 +9,7 @@
 """
 
 from datetime import datetime
-from typing import List
+from typing import Any, List
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -267,7 +267,7 @@ def _check_contract_split(db: Session, project_id: int) -> List[dict]:
     # 按乙方分组统计
     contracts = db.query(FundContract).filter(FundContract.project_id == project_id).all()
 
-    party_b_map = {}
+    party_b_map: dict[Any, Any] = {}
     for c in contracts:
         if c.party_b:
             party_b_map.setdefault(c.party_b, []).append(c)

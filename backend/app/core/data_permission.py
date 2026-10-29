@@ -181,9 +181,14 @@ def apply_scope_to_query(
             return query.filter(sa_false())
         return query.filter(owner_col == getattr(user, "id", None))
 
-    # 防御性兜底：DataScope 未来扩展新枚举值时按最严格语义原样返回，
-    # 由 TestUnknownScopeFallback 回归测试锁定（fail-safe: 不过滤不加权）
-    return query
+    # 防御性兜底（ADR-0002 fail-closed，2026-10-29 审计）：
+    # DataScope 未来扩展新枚举值、而此处尚未适配时，必须「什么都看不到」而不是
+    # 「看到全部」。原实现 return query 等于放行全量 —— 与注释自称的「最严格语义」
+    # 相反，也与本模块 check_record_access 对未知 scope 返回 False 的口径不一致
+    # （同一数据面两条相反口径，最容易在扩展枚举值时静默泄漏全量）。
+    # 由 TestUnknownScopeFallback 回归测试锁定。
+    logger.warning("Unknown DataScope %r; data scope fail-closed to empty set", scope)
+    return query.filter(sa_false())
 
 
 def check_record_access(

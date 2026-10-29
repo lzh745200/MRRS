@@ -14,6 +14,7 @@
  * - 损坏 JSON / 非法值一律回退默认，绝不抛错（模块在应用启动路径上）。
  */
 import { computed, ref } from 'vue'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 export const UI_PREFS_STORAGE_KEY = 'ui:prefs'
 
@@ -92,11 +93,7 @@ export function pickDensityForViewport(height: number): DensityPref {
 
 /** 存储里是否已有用户偏好（用于判断能否安全套用视口推荐值）。 */
 export function hasStoredUiPrefs(): boolean {
-  try {
-    return localStorage.getItem(UI_PREFS_STORAGE_KEY) !== null
-  } catch {
-    return false
-  }
+  return safeGetItem(UI_PREFS_STORAGE_KEY, 'local') !== null
 }
 
 function pick<T extends string>(allowed: readonly T[], value: unknown, fallback: T): T {
@@ -117,7 +114,7 @@ export function normalizeUiPrefs(raw: unknown): UiPrefs {
 /** 读取偏好（localStorage 异常/损坏 JSON 均回退默认，绝不抛错）。 */
 export function readUiPrefs(): UiPrefs {
   try {
-    const raw = localStorage.getItem(UI_PREFS_STORAGE_KEY)
+    const raw = safeGetItem(UI_PREFS_STORAGE_KEY, 'local')
     if (!raw) return { ...DEFAULT_UI_PREFS }
     return normalizeUiPrefs(JSON.parse(raw))
   } catch {
@@ -127,11 +124,7 @@ export function readUiPrefs(): UiPrefs {
 
 /** 写入偏好（存储不可用静默忽略，内存态仍生效）。 */
 export function writeUiPrefs(prefs: UiPrefs): void {
-  try {
-    localStorage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs))
-  } catch {
-    // 隐私模式/配额：静默降级
-  }
+  safeSetItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs), 'local')
 }
 
 /** 将偏好应用到 <html data-*>（tokens.scss 显示偏好块据此生效）。 */

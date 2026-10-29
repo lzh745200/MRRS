@@ -17,7 +17,21 @@ from sqlalchemy.sql import func
 from sqlalchemy.types import TypeDecorator
 
 # ── 声明式基类 ──
-Base = declarative_base()
+
+
+class _ToDictMixin:
+    """为所有模型提供 to_dict 的类型可见声明。
+
+    运行时实现见文件末尾 `Base.to_dict = _base_to_dict`（历史写法，动态挂载）；
+    动态赋值 mypy 不可见，导致「没有显式定义 to_dict 的模型」调用处被判 attr-defined。
+    以 mixin 形式声明后，子类在类型层面也有该方法，运行时仍用同一实现。
+    """
+
+    def to_dict(self, camel_case: bool = True) -> dict:
+        return _base_to_dict(self)
+
+
+Base = declarative_base(cls=_ToDictMixin)
 
 
 class EncryptedText(TypeDecorator):

@@ -226,6 +226,7 @@ import { piiKeyApi } from '@/api/piiKey'
 import type { PiiKeyStatus, PiiKeyExportResult } from '@/api/piiKey'
 import { downloadBlob } from '@/api/request'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const checking = ref(false)
 const checkError = ref('')
@@ -346,7 +347,7 @@ async function handleExportKey() {
     writeKeyFile(result)
     ElMessage.success('密钥已导出，请通过安全渠道传递')
   } catch (err: any) {
-    ElMessage.error(err?.message || '导出密钥失败')
+    ElMessage.error(getErrorMessage(err, '导出密钥失败'))
   } finally {
     piiKeyLoading.value = false
   }
@@ -369,7 +370,7 @@ async function handleImportKey() {
     piiKeyStatus.value = await piiKeyApi.importKey(secret)
     ElMessage.success('密钥已导入并立即生效')
   } catch (err: any) {
-    ElMessage.error(err?.message || '导入密钥失败')
+    ElMessage.error(getErrorMessage(err, '导入密钥失败'))
   } finally {
     piiKeyLoading.value = false
   }

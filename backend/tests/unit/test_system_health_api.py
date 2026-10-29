@@ -58,7 +58,8 @@ class TestHealthDatabase:
             mock_db.execute.side_effect = Exception("DB down")
             mock_sl.return_value = mock_db
             resp = client.get("/api/v1/health/database")
-            assert resp.status_code == 200
+            # 2026-10-29 审计：失败必须以 503 出站（探针只看状态码）；body 仍保留 code:500
+            assert resp.status_code == 503
             data = resp.json()
             assert data["code"] == 500
             # R18：不再回显异常原文（可能含数据库路径），只回类型名
@@ -104,7 +105,8 @@ class TestHealthDatabaseDetail:
                 "secret: C:/app/data/mrrs.db locked"
             )
             resp = client.get("/api/v1/health/database-health")
-            assert resp.status_code == 200
+            # 2026-10-29 审计：失败必须以 503 出站（探针只看状态码）
+            assert resp.status_code == 503
             data = resp.json()
             assert data["code"] == 500
             assert data["message"] == "health check failed: Exception"

@@ -393,6 +393,7 @@ import { downloadDataPackage, previewDataPackage } from '@/api/dataPackage'
 
 import { format } from '@/utils'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 const reportStore = useDataReportStore()
 const orgStore = useOrganizationStore()
 const authStore = useAuthStore()
@@ -666,7 +667,7 @@ async function handleReceive(report: DataReport) {
     loadReports()
   } catch (error: any) {
     if (error !== 'cancel' && error?.toString?.() !== 'cancel') {
-      ElMessage.error(error?.message || '接收失败')
+      ElMessage.error(getErrorMessage(error, '接收失败'))
     }
   }
 }

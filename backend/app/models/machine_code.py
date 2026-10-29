@@ -59,7 +59,14 @@ class MachineCode(Base):
         comment="是否允许下级组织生成通行码",
     )
     description = Column(Text, comment="备注说明")
-    created_by = Column(Integer, ForeignKey("users.id"), comment="创建人ID（管理员）")
+    # 2026-10-29 审计：全库唯一一处漏了 ondelete 的 users 外键。其余同类列都是
+    # SET NULL / CASCADE，唯独这里裸 ForeignKey —— 删除用户会被 FK 拦（或留悬挂引用）。
+    # 与"删用户即 SET NULL"的统一口径对齐。
+    created_by = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        comment="创建人ID（管理员）",
+    )
     created_at = Column(UtcDateTime(), server_default=func.now(), comment="创建时间")
     activated_at = Column(UtcDateTime(), nullable=True, comment="激活时间")
     revoked_at = Column(UtcDateTime(), nullable=True, comment="撤销时间")

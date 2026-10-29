@@ -92,7 +92,7 @@ class School(Base):
 
     # 联系信息
     principal = Column(String(50), comment="校长姓名")
-    contact_phone = Column(EncryptedText(64), comment="联系电话(透明加密, ADR-0005)")
+    contact_phone = Column(EncryptedText(256), comment="联系电话(透明加密, ADR-0005)")
     email = Column(String(100), comment="邮箱")
 
     # 其他

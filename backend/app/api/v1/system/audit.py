@@ -1,17 +1,19 @@
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.constants import normalize_role
+from app.core.permission_utils import is_admin
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.audit import AuditAction, AuditLevel, AuditStatus
 from app.services.audit_service import AuditService, SecurityEventService
+from app.utils.audit_logger import AuditLevel as AuditLoggerLevel
+from app.utils.audit_logger import AuditLogger
 from app.core.transaction import safe_commit
 from app.utils.time_utils import utcnow
 
@@ -21,6 +23,12 @@ router = APIRouter(prefix="/audit", tags=["Audit Logs"])
 
 
 # ─── 请求体 Schema ───────────────────────────────────────────────────────────
+
+
+class AuditRemarkUpdate(BaseModel):
+    """审计备注更新体（2026-10-29 审计：原为裸 body: dict，remark 无长度上限）。"""
+
+    remark: str = Field(default="", max_length=500, description="备注内容，最多 500 字")
 
 
 class BatchDeleteRequest(BaseModel):
@@ -125,7 +133,7 @@ async def batch_delete_audit_logs(
     - actions / action: 按操作类型（列表或单个）删除
     - before_date: 按日期范围删除（可与 actions 组合）
     """
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -174,6 +182,20 @@ async def batch_delete_audit_logs(
 
     deleted = query.delete(synchronize_session=False)
     safe_commit(db)
+    # 批量删除是杀伤面最大的一次审计链改动，必须留痕（含条件与条数）
+    AuditLogger.log(
+        action="audit_log_batch_delete",
+        username=getattr(current_user, "username", None),
+        resource_type="audit",
+        details={
+            "deleted_count": deleted,
+            "ids": list(body.ids) if body.ids else None,
+            "actions": list(body.actions) if getattr(body, "actions", None) else None,
+            "action": getattr(body, "action", None),
+            "before_date": str(body.before_date) if getattr(body, "before_date", None) else None,
+        },
+        level=AuditLoggerLevel.WARNING,
+    )
     logger.info("批量删除审计日志完成: 删除 %d 条", deleted)
     return success_response(data={"deleted_count": deleted}, message=f"已删除 {deleted} 条日志记录")
 
@@ -188,7 +210,7 @@ async def delete_audit_log(
     db: Session = Depends(get_db),
 ):
     """删除单条审计日志"""
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -199,8 +221,25 @@ async def delete_audit_log(
         logger.warning("删除审计日志失败: id=%d 不存在", log_id)
         raise HTTPException(status_code=404, detail="Audit log not found")
 
+    # 删除前快照：删完就查不到了，审计里必须能回答"删了哪一条"
+    _snapshot = {
+        "log_id": log.id,
+        "log_action": getattr(log, "action", None),
+        "log_username": getattr(log, "username", None),
+        "log_resource_type": getattr(log, "resource_type", None),
+        "log_created_at": str(getattr(log, "created_at", "") or ""),
+    }
     db.delete(log)
     safe_commit(db)
+    # 自身留痕（2026-10-29 审计，Important）：删除审计日志是最会破坏审计链的操作，
+    # 而它此前只写 app.log。AuditLogger 走独立 Session，不受本事务影响。
+    AuditLogger.log(
+        action="audit_log_delete",
+        username=getattr(current_user, "username", None),
+        resource_type="audit",
+        details=_snapshot,
+        level=AuditLoggerLevel.WARNING,
+    )
     logger.info("删除审计日志成功 id=%d", log_id)
     return success_response(message="删除成功")
 
@@ -208,12 +247,12 @@ async def delete_audit_log(
 @router.patch("/logs/{log_id}/remark")
 async def update_audit_log_remark(
     log_id: int,
-    body: dict,
+    body: AuditRemarkUpdate,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """更新审计日志备注"""
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    """更新审计日志备注（remark 最长 500 字，超长 422 而非静默写库）"""
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -222,7 +261,7 @@ async def update_audit_log_remark(
     if not log:
         raise HTTPException(status_code=404, detail="Audit log not found")
 
-    remark = body.get("remark", "")
+    remark = body.remark
     # Store remark in metadata JSON field
     import json
 
@@ -233,9 +272,22 @@ async def update_audit_log_remark(
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"解析审计日志元数据失败 (id={log_id}): {e}")
             meta = {}
+    _prev_remark = (meta.get("remark") or "") if isinstance(meta, dict) else ""
     meta["remark"] = remark
     log.metadata_ = meta
     safe_commit(db)
+    # 改写审计备注同样会动审计链，必须留痕（含改动前后值）
+    AuditLogger.log(
+        action="audit_log_remark_update",
+        username=getattr(current_user, "username", None),
+        resource_type="audit",
+        details={
+            "log_id": log_id,
+            "prev_remark": _prev_remark,
+            "new_remark": remark,
+        },
+        level=AuditLoggerLevel.WARNING,
+    )
     return success_response(data={"id": log_id, "remark": remark}, message="备注更新成功")
 
 
@@ -256,7 +308,7 @@ async def export_audit_logs(  # noqa: C901
     - csv: 返回 .csv 文件下载
     需要管理员权限。
     """
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -387,7 +439,7 @@ async def get_audit_logs(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     audit = AuditService(db)
@@ -416,7 +468,7 @@ async def get_audit_logs(
 
 @router.get("/logs/{log_id}")
 async def get_audit_log_detail(log_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import AuditLog as AuditLogModel
@@ -426,7 +478,23 @@ async def get_audit_log_detail(log_id: int, current_user=Depends(get_current_use
     if not log:
         raise HTTPException(status_code=404, detail="Audit log not found")
 
-    return log
+    # 原实现直接 return log —— 裸 ORM 会按列全量外泄（含 metadata_ 等内部字段），
+    # 且没有 response_model 兜底（2026-10-29 审计）。改为显式白名单字段。
+    return success_response(
+        data={
+            "id": log.id,
+            "user_id": getattr(log, "user_id", None),
+            "username": getattr(log, "username", None),
+            "action": getattr(log, "action", None),
+            "resource_type": getattr(log, "resource_type", None),
+            "resource_id": getattr(log, "resource_id", None),
+            "status": getattr(log, "status", None),
+            "level": getattr(log, "level", None),
+            "user_ip": getattr(log, "user_ip", None),
+            "created_at": str(getattr(log, "created_at", "") or ""),
+            "metadata": getattr(log, "metadata_", None),
+        }
+    )
 
 
 @router.get("/stats")
@@ -436,7 +504,7 @@ async def get_audit_stats(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     audit = AuditService(db)
@@ -465,7 +533,7 @@ async def get_security_events(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = SecurityEventService(db)
@@ -482,7 +550,7 @@ async def get_security_events(
 
 @router.get("/security/stats")
 async def get_security_stats(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = SecurityEventService(db)
@@ -496,7 +564,7 @@ async def resolve_security_event(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = SecurityEventService(db)
@@ -523,7 +591,7 @@ async def get_login_attempts(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import LoginAttempt
@@ -556,7 +624,7 @@ async def get_api_access_logs(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import APIAccessLog
@@ -589,7 +657,7 @@ async def get_export_logs(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
+    if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from app.models.audit import DataExportLog
@@ -619,7 +687,7 @@ async def get_user_activity(
     db: Session = Depends(get_db),
 ):
     if (
-        normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin")
+        not is_admin(current_user)
         and getattr(current_user, "id", None) != user_id
     ):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -638,7 +706,7 @@ async def get_user_activity(
         .all()
     )
 
-    action_counts = {}
+    action_counts: dict[Any, Any] = {}
     for log in logs:
         action = log.action
         action_counts[action] = action_counts.get(action, 0) + 1

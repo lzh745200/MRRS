@@ -5,7 +5,7 @@ Organization Service
 
 import logging
 from datetime import timezone, datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
@@ -567,7 +567,7 @@ class OrganizationService:
         inactive = total - active
 
         # 按层级统计
-        by_level = {}
+        by_level: dict[Any, Any] = {}
         max_level = 0
         for org in organizations:
             level_key = str(org.level)

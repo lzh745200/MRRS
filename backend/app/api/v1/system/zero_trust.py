@@ -6,7 +6,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -537,8 +537,8 @@ async def get_security_event_stats(
 
     events = db.query(SecurityEvent).all()
 
-    by_severity = {}
-    by_type = {}
+    by_severity: dict[Any, Any] = {}
+    by_type: dict[Any, Any] = {}
     for e in events:
         by_severity[e.severity] = by_severity.get(e.severity, 0) + 1
         by_type[e.event_type] = by_type.get(e.event_type, 0) + 1

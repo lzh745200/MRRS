@@ -1371,7 +1371,7 @@ class BackupService:
 
     def _get_file_manifest(self, directory: str) -> Dict[str, Dict]:
         """获取目录下所有文件的清单（路径 -> {size, mtime, hash}）"""
-        manifest = {}
+        manifest: dict[Any, Any] = {}
         try:
             if not os.path.exists(directory):
                 return manifest

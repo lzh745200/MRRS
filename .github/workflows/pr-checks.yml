@@ -639,6 +639,12 @@ jobs:
         run: |
           pip install alembic
           python scripts/check_migrations.py
+      # 迁移自证门禁（2026-10-29 全库审计 C1）：`001_baseline` 用 create_all() 建库，
+      # 导致后续 62 个迁移在新库上从不被真正执行 —— 空库 upgrade 恒"无漂移"属自证。
+      # 该门禁要求"会改 schema 的迁移"必须自带一个能手工构造**旧库状态**的测试
+      # （参考 tests/unit/test_pii_col_width_001.py），历史 45 个迁移登记豁免不追溯。
+      - name: Migration self-evidence ratchet (C1)
+        run: python scripts/check_migration_self_evidence.py
       # F2 覆盖率豁免 ratchet：新增/修改行的 `# pragma: no cover` 必须同行注明理由
       # （配套约定 F2 条）。存量裸 pragma 不阻断，但设上限防"边清理边新增"抵消；
       # 基线自动解析（origin/main → HEAD~1）；--deepen 让浅克隆也拿到父提交，

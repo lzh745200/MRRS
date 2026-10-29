@@ -64,7 +64,8 @@ def test_database_health_api_error():
         side_effect=RuntimeError("boom"),
     ):
         resp = client.get("/api/v1/system/health/database-health")
-        assert resp.status_code == 200
+        # 2026-10-29 审计：失败必须以 503 出站（探针只看状态码）；body 仍保留 code:500
+        assert resp.status_code == 503
         assert resp.json()["code"] == 500
         assert resp.json()["data"]["status"] == "error"
 

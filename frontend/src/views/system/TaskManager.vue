@@ -277,6 +277,7 @@ import { tasksApi, type TaskInfo, type TaskStats, type RunningTaskCount } from '
 
 import { format } from '@/utils'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 // ==================== 响应式状态 ====================
 
 const loading = ref(false)
@@ -455,7 +456,7 @@ async function handleCancel(row: TaskInfo) {
     }
   } catch (err: any) {
     if (err !== 'cancel' && err?.message !== 'cancel') {
-      ElMessage.error(err?.message || '取消操作失败')
+      ElMessage.error(getErrorMessage(err, '取消操作失败'))
     }
   }
 }
@@ -481,7 +482,7 @@ async function handleDelete(row: TaskInfo) {
     }
   } catch (err: any) {
     if (err !== 'cancel' && err?.message !== 'cancel') {
-      ElMessage.error(err?.message || '删除操作失败')
+      ElMessage.error(getErrorMessage(err, '删除操作失败'))
     }
   }
 }

@@ -118,6 +118,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { twoFactorApi } from '@/api/twoFactor'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const loading = ref(true)
 const isEnabled = ref(false)
@@ -152,7 +153,7 @@ async function startEnable() {
     backupCodes.value = result.backup_codes || []
     setupStep.value = 1
   } catch (e: any) {
-    ElMessage.error(e?.message || '启用双因素认证失败')
+    ElMessage.error(getErrorMessage(e, '启用双因素认证失败'))
   } finally {
     enabling.value = false
   }
@@ -171,7 +172,7 @@ async function verifyToken() {
     setupStep.value = 0
     verifyForm.value.token = ''
   } catch (e: any) {
-    ElMessage.error(e?.message || '验证码错误，请重试')
+    ElMessage.error(getErrorMessage(e, '验证码错误，请重试'))
   } finally {
     verifying.value = false
   }
@@ -202,7 +203,7 @@ async function handleDisable() {
     isEnabled.value = false
   } catch (e: any) {
     if (e !== 'cancel') {
-      ElMessage.error(e?.message || '禁用失败')
+      ElMessage.error(getErrorMessage(e, '禁用失败'))
     }
   } finally {
     disabling.value = false

@@ -378,6 +378,7 @@ import { useDangerConfirm } from '@/composables/useDangerConfirm'
 import { AuthStorage } from '@/utils/authStorage'
 
 import { format } from '@/utils'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 // 危险操作二次确认（全站统一语义：确认 true / 取消 false，绝不抛错）
 const { confirmDanger } = useDangerConfirm()
@@ -514,7 +515,7 @@ interface AutoBackupConfig {
 
 function loadAutoBackupConfig(): AutoBackupConfig {
   try {
-    const raw = localStorage.getItem(AUTO_BACKUP_STORAGE_KEY)
+    const raw = safeGetItem(AUTO_BACKUP_STORAGE_KEY, 'local')
     if (raw) {
       const parsed = JSON.parse(raw)
       return {
@@ -541,11 +542,7 @@ const autoBackupConfig = reactive<AutoBackupConfig>(loadAutoBackupConfig())
 watch(
   () => ({ ...autoBackupConfig }),
   (val) => {
-    try {
-      localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify(val))
-    } catch {
-      // Storage full or unavailable
-    }
+    safeSetItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify(val), 'local')
   },
   { deep: true }
 )
@@ -596,11 +593,7 @@ async function saveAutoBackupConfig() {
   await saveSchedule()
   // saveSchedule 内部已回读后端配置；此处据其校正面板显示
   syncPanelFromBackend()
-  try {
-    localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify({ ...autoBackupConfig }))
-  } catch {
-    // Storage full or unavailable
-  }
+  safeSetItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify({ ...autoBackupConfig }), 'local')
 }
 
 async function fetchBackupList() {

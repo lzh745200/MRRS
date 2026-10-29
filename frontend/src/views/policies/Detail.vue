@@ -66,7 +66,10 @@
         <el-button type="primary" @click="handleDownload">下载文件</el-button>
       </el-space>
       <div v-if="previewUrl" class="preview-area">
-        <iframe :src="previewUrl" class="preview-frame" />
+        <!-- 2026-10-29 审计：previewUrl 是 URL.createObjectURL(blob)，blob: 与主文档**同源**，
+             iframe 无 sandbox 时其中脚本可访问 window.parent。同仓 components/FilePreview.vue
+             早已加 sandbox=""，此处补齐（纵深防御；当前后端限 pdf/doc/docx/pptx）。 -->
+        <iframe :src="previewUrl" class="preview-frame" sandbox="" />
       </div>
     </el-card>
 

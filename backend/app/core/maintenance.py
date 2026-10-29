@@ -20,6 +20,7 @@
 """
 
 import logging
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -31,8 +32,21 @@ logger = logging.getLogger(__name__)
 # 写方法集合：维护模式只拦写，读一律放行
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-# 豁免路径（后缀匹配）：恢复入口自身必须能执行；内部关闭端点用于收尾
-EXEMPT_PATH_SUFFIXES = ("/system/backup/restore", "/shutdown")
+# 豁免路径（**精确匹配**，2026-10-29 审计修复）：恢复入口自身必须能执行；
+# 内部关闭端点用于收尾。
+#
+# 原实现用 str.endswith 判后缀 —— 任意以 /shutdown 结尾的**新写路由**都会
+# 自动继承豁免，静默绕过维护闸门（fail-open：豁免是安全例外，必须显式登记，
+# 不能靠"路径长啥样"自动生效）。
+# 同时补上 upload-restore：它同样是恢复入口，此前不在豁免里，维护期无法使用。
+# 用**锚定正则**而不是精确字符串：路由前缀在不同挂载方式下可能是
+# /api/v1/shutdown 或 /api/v1/system/shutdown（system router 的 prefix 由
+# 注册处决定），两者都是合法入口；而 /api/v1/anything/shutdown 这类
+# 「碰巧以 /shutdown 结尾」的新写路由**不会**被豁免。
+EXEMPT_PATH_PATTERNS = (
+    re.compile(r"^/api/v1/(system/)?backup/(upload-)?restore/?$"),
+    re.compile(r"^/(api/v1/)?(system/)?shutdown/?$"),
+)
 
 DEFAULT_IDLE_TIMEOUT_SECONDS = 10.0
 _POLL_INTERVAL_SECONDS = 0.05
@@ -92,7 +106,8 @@ def should_reject(method: str, path: str) -> bool:
         return False
     if (method or "").upper() not in WRITE_METHODS:
         return False
-    return not any((path or "").endswith(suffix) for suffix in EXEMPT_PATH_SUFFIXES)
+    _normalized = (path or "").rstrip("/") or "/"
+    return not any(p.match(_normalized) for p in EXEMPT_PATH_PATTERNS)
 
 
 def _active_request_count() -> int:

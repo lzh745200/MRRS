@@ -157,6 +157,7 @@ import { logger } from '@/utils/logger'
 import { CopyDocument, ArrowLeft, Key } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
 import { copyToClipboard } from '@/utils/clipboard'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const { pushSafe } = useRouterSafe()
 
@@ -188,7 +189,7 @@ const getMachineCode = async () => {
       machineData.value = payload as MachineData
       ElMessage.success('机器码获取成功')
     } else {
-      ElMessage.error(resData?.message || '获取机器码失败，请重试')
+      ElMessage.error(getErrorMessage(resData, '获取机器码失败，请重试'))
     }
   } catch (error: any) {
     logger.error('[GetMachineCode] 获取机器码失败', error)

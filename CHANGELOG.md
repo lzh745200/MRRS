@@ -5,6 +5,439 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
+
+### Fixed（全库审计第二十三批：前端剩余 39 处裸存储调用清零）
+
+按 `authStorage` 同一口径，把其余 20 个文件的 **39 处**裸 `localStorage./sessionStorage.` 调用
+全部收敛到 `utils/safeStorage`（含 `router/guards.ts`、`stores/auth.ts`、`stores/config.ts`、
+`useUiPrefs` / `useRecentMenus` / `useMenuFavorites` / `usePageSize` / `useVersionCheck`、
+`layouts/DefaultLayoutSafe.vue`、`dashboard/index.vue`、`dataEntry/ComprehensiveEntry.vue`、
+`system/{BackupManagement,HealthCheck,MonitoringDashboard}.vue`、`work-calendar/Index.vue`、
+`utils/lockDigest.ts` 等）。导入按实际使用裁剪，避免 unused。
+
+**过程中发现并修掉 3 处“我引入的语义回归”**（都由既有单测抓到，未流出一行）：
+
+1. `dashboard/index.vue::saveLayout` —— 原来靠 `try/catch` 判断写入成功，换成 `safeSetItem` 后
+   不再抛异常 → **写入失败被谎报为成功**。改为用返回值判断。
+2. `lockDigest.consumeLockDigest` —— 原语义是「删除打点失败 ⇒ 本次消费失败」（删不掉下次会重复弹），
+   `safeRemoveItem` 吞异常后语义反转。给 `safeRemoveItem` 加 `boolean` 返回值并让调用点据此提前返回。
+3. `router/guards.ts::readLockFlag` —— 这是一处**安全判定**，要求异常时 fail-closed（按已锁定处理）；
+   `safeGetItem` 把异常统一变成 `null` → 判定为「未锁定」→ **fail-open**。该处回滚为原生 try/catch，
+   并在注释里写明"这里必须用原生调用，不能换 safeGetItem"。
+
+另：`safeStorage.pick()` 改为优先取**全局** `localStorage/sessionStorage`（回退 `window`）——
+jsdom 里二者不一定是同一个对象，走 `window.*` 会绕过测试的 `vi.stubGlobal` 桩，
+导致「写入失败降级」类用例失效。
+
+**验证**：`eslint src` **0** · `vue-tsc --noEmit` **0 错误** ·
+`vitest tests/unit/{utils,composables,router,stores,views/dashboard,views/system,layouts}`
+**114 文件 / 2439 用例全部通过**。
+
+- **mypy 869 → 851：13 个文件 18 处空容器补显式注解**（`var-annotated` 清零一半）：
+  `by_type`/`action_counts`/`by_severity`/`counts`/`warnings`/`errors`/`name_map`/`row_map`/`ancestors` …
+  这些是 `x = {}` / `x = []` 的空字面量，mypy 无法推断元素类型。统一补 `dict[Any, Any]` / `list[Any]`
+  （**纯注解，运行期零变化**；局部变量注解不产生字节码，也不影响覆盖率）。
+  涉及 `api/v1/{organization,system/audit,system/zero_trust,data/data/bigscreen}`、
+  `services/{backup_service,data_package_service,data_report_service,fund_anomaly_detector,
+  organization_service,permission_package_service,smart_conflict_resolver,supported_village_export_service}`、
+  `core/database_indexes`。`,
+  验证：13 个文件 flake8 0、语法检查通过；相关 **74 个测试文件 1480 passed**；基线 869 → 851。
+### Fixed（全库审计第二十二批：`authStorage` 全部 28 处裸存储调用收口）
+
+**问题**：上一批只把 `authStorage` 的 `_readSlot` 改成安全读取，其余 **28 处** 仍是裸
+`localStorage./sessionStorage.` 调用（写入、删除、以及 `_readLegacy` / 迁移逻辑里的读取）。
+该模块是路由守卫（`router/guards.ts` 每次导航调 `getToken`）与登录/登出链路的底座，
+受限存储下任何一处抛 `SecurityError` 都会中断导航或登录流程。
+
+**修复**：全部改为共享的 `utils/safeStorage`（上一批新建）：
+
+- `setItem` × 10 → `safeSetItem(key, value, kind)`（失败返回 false，不阻断）
+- `removeItem` × 12 → `safeRemoveItem(key, kind)`
+- `getItem` × 6（含 `safeGet(() => sessionStorage, ...)` 形式）→ `safeGetItem(key, kind)`
+- 删除模块内本地 `safeGet` 定义，统一用共享实现（避免两套语义）
+
+**验证**：`vue-tsc --noEmit` **0 错误** · `eslint` **0** ·
+`vitest tests/unit/{utils,composables,router}` **60 文件 / 1185 用例通过** ·
+`authStorage.ts` 裸调用计数 **0**。
+
+### Fixed（全库审计第二十一批：`/sync` 上传无端点级上限）
+
+**问题**：`data_sync._save_upload_file` 只做**分块读取**（`while chunk := await file.read(CHUNK_SIZE)`），
+省了内存但**不限总量** —— 客户端可持续灌数据把磁盘写满。全局 `BodySizeLimitMiddleware` 是分级兜底，
+端点自身不该依赖它（与权限包/备份包的写法不一致，那两处都有显式累计上限）。
+
+**修复**：加 `MAX_UPLOAD_BYTES = 512MB`（与权限包/备份包同口径）+ 累计计数，超限即 **413**；
+异常路径复用既有 `_cleanup_file()` 清理半成品。
+
+**回归 `test_data_sync_upload_limit_r52.py`（2 例）**：monkeypatch 把小上限与 chunk 调小后，
+**超限 → 413 且目录不留半成品**；未超限 → 内容完整落盘、文件名保留原名。
+
+**验证**：flake8 0 · sync 相关域 **1844 passed** · 新增 **2 passed**。
+
+### Fixed（全库审计第二十批：storage 读取共享保护 + 启动迁移说明）
+
+- **新增 `utils/safeStorage.ts`（共享安全存储）**：`safeGetItem` / `safeSetItem` / `safeRemoveItem` /
+  `isStorageAvailable`，读取异常返回 `null`（fail-closed）、写入异常静默丢弃。
+  接上三处在**关键路径**上的裸读取：
+  - `composables/useAutoLock` 在 setup 期间读 `auto-lock-minutes`；
+  - `composables/useVersionCheck` 读版本缓存与一次性刷新护栏裸读取；
+  - 这些点在隐私模式/禁用存储/受限 webview 下会抛 `SecurityError`，直接中断启动流程。
+  写入点保持原样（`setItem` 仅配额满时抛，失败后内存态仍可用）。
+
+- **`main.py::_init_database_tables` 补审计结论注释**：该函数顺序是 `create_all` →
+  **alembic upgrade** → `_migrate_missing_columns`（受 `ENABLE_AUTO_MIGRATION` 控制），
+  补列**不会**“先跑并让 upgrade 整段跳过”（原审计建议成立的前提不准确）；
+  但 `create_all()` 在 alembic 之前仍会用当前模型建表，属审计项 C1 同源问题 ——
+  已由 `scripts/check_migration_self_evidence.py` 收口（改 schema 的迁移必须自带旧库证据）。
+
+**验证**：`eslint` **0** · `vue-tsc --noEmit` **0 错误** · `vitest run tests/unit/{composables,utils}` **58 文件 / 1141 用例通过**。
+
+- **把 `migration_evidence` 门禁接进统一入口（修 `test_gate_entrypoints` 唯一红点）**：
+  `scripts/check_migration_self_evidence.py` 已存在且自跑为绿（47 个改 schema 的迁移全部有自证测试、
+  未登记 0 个），`pr-checks.yml` 也在跑它，但漏了在 `scripts/run_gates.py` 注册 ——
+  `test_ci_check_scripts_are_all_registered` 因此变红（seg09 全段唯一失败）。
+  注册后 `run_gates` 由 34 道增至 **35 道**，该回归测试 10 passed。
+### Fixed（全库审计第十九批：报表订阅 `send_time` 无格式校验）
+
+**问题**：`supported_village.send_time` 是 `Column(String(10))`，而 `ReportSubscriptionCreate` /
+`ReportSubscriptionUpdate` 只写了 `max_length=10` —— **不校验格式**，`"abc"` / `"25:99"` /
+`"08:30:00"` 都能入库，调度端只能在运行时崩。
+
+**修复**：两个 schema 都加 `pattern=r"^([01]?\d|2[0-3]):[0-5]\d$"`（HH:MM，允许 1 位小时以兼容
+存量 `"8:00"` 写法）。
+
+**回归 `test_report_send_time_r51.py`（12 例）**：合法值 `08:30` / `8:30` / `00:00` / `23:59` 通过；
+非法值 `abc` / `25:00` / `12:60` / `8-30` / `""` / `08:30:00` **全部拒绝**；`None` 仍允许；
+Update schema 同口径校验。
+
+**验证**：flake8 0 · report/subscription 相关域 **898 passed** · 新增 **12 passed**。
+
+### Fixed（全库审计第十八批：storage 访问缺保护 2 项）
+
+- **`utils/authStorage.ts` 的 storage 读取无 try**：`_readSlot` 直接 `sessionStorage.getItem` /
+  `localStorage.getItem`，而本模块被 `router/guards.ts` 在**每次导航**调用（`getToken`）——
+  浏览器在隐私模式 / 禁用存储 / 受限 webview 下会抛 `SecurityError`，整次跳转就炸。
+  同目录 `guards.ts` 的 `readLockFlag` 早已写了 fail-closed 注释，说明团队知道这个风险。
+  新增 `safeGet()` 包装：读取异常返回 `null`（视作未登录，fail-closed）。
+  写入点保持原样并在注释里说明理由（`setItem` 只在配额满时抛，失败后内存态仍可用，
+  优先级低于读；同时避免引入未使用 helper）。
+- **`MonitoringDashboard.vue` 在 setup 顶层读 `sessionStorage`**：`ref(sessionStorage.getItem(...))`
+  位于 setup 同步路径，抛错即**整页白屏**；其余 215 个文件的 storage 调用都有 try，唯独这里没有。
+  改为 `readHealthExpanded()` 带 fallback（读不到按默认展开），`watch` 里的 `setItem` 也补 try。
+
+**验证**：`eslint` **0** · `vue-tsc --noEmit` **0 错误** · `vitest run tests/unit/{utils,views/system}` **65 文件 / 1588 用例通过**。
+
+### Fixed（全库审计第十七批：前端 3 项）
+
+- **`policies/Detail.vue` 预览 iframe 缺 `sandbox`**：`previewUrl` 是 `URL.createObjectURL(blob)`，
+  blob: 与主文档**同源**，iframe 无 sandbox 时其中脚本可访问 `window.parent`。
+  同仓 `components/FilePreview.vue` 早已加 `sandbox=""`，此处补齐（纵深防御；当前后端限
+  pdf/doc/docx/pptx，故非直接可利用）。
+- **`ruralWorks/Task.vue` 加载失败静默**：catch 体只有一句「API不可用，使用本地模拟数据」的
+  注释，但文件里**没有任何模拟数据**，`tasks` 初值是空数组 —— 后端挂掉/500 时页面显示
+  「暂无数据」，用户会以为数据丢了（台账系统里这是最糟的误导）。改为 `getErrorMessage` 明确报错。
+- **`projects/Edit.vue` 的 `isDirty` 永不复位**：原实现只把标记置 true，全文再无复位 ——
+  打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍提示。
+  照抄同族三页（schools / organization / policies 的 Edit）做法：加 `suppressDirty` 在
+  回填 / 重置期间抑制，回填后 `nextTick` 复位，保存成功与 resetForm 后各复位一次。
+
+**验证**：`eslint` **0** · `vue-tsc --noEmit` **0 错误** · `vitest run tests/unit/views/{projects,policies,ruralWorks}` **17 文件 / 610 用例通过**。
+
+### Fixed（全库审计第十六批：前端 axios 英文原文直出 → getErrorMessage）
+
+**问题**：`ElMessage.error(e?.message || '默认文案')` 这类写法在 4xx/5xx 时会把 axios 的
+`Request failed with status code 422` 直出给用户 —— 项目自己的 `utils/getErrorMessage`
+已明确把它列为反模式（其余 60+ 处早已用该 helper），这 **25 处**是漏网。
+
+**修复**：统一替换为 `ElMessage.error(getErrorMessage(e, '默认文案'))`，覆盖 13 个视图；
+并给 9 个文件补上 `import { getErrorMessage } from '@/utils/getErrorMessage'`。
+
+> 过程记录：首轮替换脚本用「替换后文本是否含 `getErrorMessage`」判断是否需要补导入 ——
+> 被自己插入的调用误导，导致 9 个文件缺导入（`vue-tsc` 报 8 处 TS2304）。改为检查
+> **import 语句本身**后一次修好。
+
+**验证**：`vue-tsc --noEmit` **0 错误** · `eslint src/views` **0** ·
+`vitest run tests/unit/views` **148 文件 / 3929 用例全部通过**。
+
+### Fixed（全库审计第十五批：`machine_codes.created_by` 补 ondelete）
+
+**问题**：`machine_codes.created_by` 是全库**唯一**一处没写 `ondelete` 的 `users` 外键
+（其余同类列都是 `SET NULL` / `CASCADE`）。删除用户时该外键会阻断删除，或留下指向已删用户的
+悬挂引用，与「删用户即 SET NULL」的统一口径不一致。
+
+**修复**：
+- 模型 `machine_codes.py` 补 `ondelete="SET NULL"`；
+- 迁移 `fk_machine_codes_created_by_001`：SQLite 不支持 `ALTER CONSTRAINT`，改为
+  「读 `sqlite_master` 的 DDL → 正则替换外键子句 → 建临时表-拷数据-drop-rename」，
+  逐项守卫（表/列/外键缺失、已有 ondelete 都跳过，可重入）。
+  放弃 `batch_alter_table` 的原因：它走反射重建会把旧 FK 一起带上，且 `drop_constraint`
+  在 `with` 块退出时才执行，`try/except` 抓不到 `No such constraint`（实测踩到）。
+- 自证单测 4 例：识别「有外键无 ondelete」/ 表缺失返回 None / 已有 ondelete 幂等 /
+  **真跑 upgrade 后 `PRAGMA foreign_key_list` 读出 `SET NULL`**，并在 `PRAGMA foreign_keys=ON`
+  下验证删用户后 `created_by` 被置 NULL。
+
+### Fixed（全库审计第十四批：`dead_models_001` 改走 r35 三分支 —— 迁移类收尾）
+
+**问题**：`dead_models_001` 只判断「表存在」就 `op.drop_table`，**没有任何行数护栏** ——
+违反 r35 契约（`r35_drop_legacy_tables_001` 定下的三分支）。开发库上那 8 张表确实都是 0 行，
+但生产/其它机器的库一旦有数据，升级会**静默丢数据**。
+
+**修复**：改为与 r35 一致的三分支，逻辑抽成 `apply_dead_models_cleanup(bind)` 纯函数：
+
+- 表不存在 → skipped（幂等）；
+- **0 行 → DROP**；
+- **有数据 → 改名 `legacy_<表名>` 归档**（归档表已存在时保留原表、记 warning 等人工确认）。
+
+通过 `PRAGMA foreign_keys = OFF` 避免改名/删表被外键引用阻断（失败也不阻断主流程）。
+
+**自证单测 `test_dead_models_001.py`（4 例）**（新门禁要求，覆盖三分支 + 归档已存在）：
+表缺失→skipped；0 行→DROP；**有 3 行→改名 legacy_ 且行数仍为 3**（核心）；
+归档表已存在→保留原表不覆盖既有归档。
+
+**空库演练**：`dropped=[effectiveness_indicators, user_sessions, fee_standards, inspection_rules]`、
+`archived=[]`、`skipped=[version_history, package_edit_logs, data_versions, army_units]`，`EXIT=0`。
+
+注：本迁移位于链中段，已升级的库因 alembic_version 已记录而不重跑；新库与未升级的旧库走新逻辑（只会更安全）。
+
+**至此迁移批次 4 项全部收口**：PII 密文超列长 · 迁移基线自证 · 冗余索引去重 · `dead_models_001` 三分支。
+
+- **mypy 880 → 869：修掉「动态挂载方法」这一类属性不可见的债**：
+  `models/base.py` 的 `Base.to_dict` 是**类创建后动态赋值**（`Base.to_dict = _base_to_dict`），
+  mypy 看不见 → 没有显式定义 `to_dict` 的模型（`FundAllocationOrder`/`FundAssetVerification` …）
+  在调用处被判 `attr-defined`。改为 `declarative_base(cls=_ToDictMixin)`，由 mixin 显式声明
+  `to_dict(self, camel_case: bool = True) -> dict`（运行时仍走同一实现，行为零变化）；
+  验证：`import app.main` 105 个 mapper 正常、涉及 `to_dict` 的 **60 个测试文件 2392 passed**、集成 **200 passed**。
+- **`api/v1/fund_lifecycle.py` 60 → 55**：`group_col` 显式标注 `ColumnElement[Any]`（各分支分别返回
+  str/int/year，原来被钉成 `ColumnElement[str]` 导致 int 分支全判错）；5 个批量预加载索引映射补
+  `dict[Optional[int], list[X]]`（`fund_id` 可空，键就应是 Optional）；`_get_username` 恒返回 `str`
+  （缺失时空串兜底）。该文件定向 **260 passed**、flake8 0。
+### Fixed（全库审计第十三批：冗余索引去重，迁移类最后一项）
+
+**实测**（空库 `alembic upgrade head` 后按「表 + 列有序集合 + 唯一性」判重）：11 组重复，
+其中 4 组是 `sqlite_autoindex_*`（表级 UNIQUE 自动生成，不可删）→ **7 组真冗余**，
+合计应删 8 个索引（`audit_logs.created_at` 一组就有 3 份）：
+
+    audit_logs.created_at             ix_audit_timestamp / ix_audit_logs_created_at / idx_audit_created
+    audit_logs.(user_id, action)      ix_audit_user_action / idx_audit_user_action
+    households.supported_village_id   ix_households_village_id / ix_households_village
+    household_members.household_id    ix_household_members_household_id / ..._household
+    household_risk_records.household_id
+    consumption_records.supported_village_id
+    token_blacklist.expires_at
+
+- 新增迁移 `idx_dedup_002`：按列集合分组判重（区别于历史 `index_dedup_001` 的按**名字**清孤儿），
+  每组保留**模型显式声明**的那个（`KEEP_INDEX_NAMES` 硬编码自 `models/*.py` 的 `Index(...)`，
+  附来源行号），`sqlite_autoindex_*` 永不删。实测删除 8 个、`UPGRADE_EXIT=0`。
+- 新增 `tests/unit/test_idx_dedup_002.py`（5 例）作为**自证证据**（新门禁要求）：
+  手工建「三索引同列」断言只保留模型声明的那个；断言 `sqlite_autoindex` 不被删；
+  无重复表不动；**同列但唯一性不同不算重复**（不误删）；并锁定 `KEEP_INDEX_NAMES` 与模型声明一致。
+- 为什么不动态读 `Base.metadata`：`app.models` 是 `__getattr__` 惰性导出，`import app.models`
+  后 `metadata.tables` 仍为空（实测），会让迁移静默退回“字典序第一个”——本次恰好与模型一致，
+  但不能靠运气，故改为显式清单 + 单测对账。
+
+### Fixed（全库审计第十二批：迁移基线自证 —— Critical 收口）
+
+**问题**：`001_baseline` 在核心表缺失时 `Base.metadata.create_all()` —— 新库在第一个迁移
+就落成"今天的模型"，后面 60+ 个迁移靠存在性守卫几乎全部跳过。后果：
+
+1. 迁移脚本**从不在新库上被真正执行**；
+2. `check_stack_alignment` 的 B 轴（模型 ↔ 空库 `upgrade head`）**恒 0 漂移**，因为参照库就是模型建的（自证）；
+3. 真实漂移靠人工撞见。本轮 PII 迁移跑空库时输出 `widened 0 column(s)` 就是直接证据 ——
+   列宽一开始已是 256（模型建的），迁移逻辑根本没被执行。
+
+**收口方式**（不试图自动判定"迁移是否执行过"——不可判定）：
+
+- 新增门禁 `scripts/check_migration_self_evidence.py`：扫描 `alembic/versions/*.py`，
+  凡含 `alter/add/drop column`、`create/drop index`、`create/drop table` 的迁移，
+  **必须自带一个以 revision 命名的测试文件**（能手工构造「旧库状态」再驱动迁移函数）；
+  历史 45 个无证据迁移登记 `gate_baselines/migration_evidence.json` 不追溯（棘轮式，新增从严）。
+- 单测 `test_migration_self_evidence_gate.py`（6 例）**验证它真的会失败**：
+  无证据的改列迁移 → 门禁 return 1；有证据 → 0；纯数据迁移 → 忽略；豁免 → 0；
+  `--json` 可解析；并锁定 **`pii_col_width_001` 必须靠证据通过、不得依赖豁免**。
+- CI 接线：`pr-checks.yml` 的 static-analysis 增加 `Migration self-evidence ratchet (C1)` 步骤。
+- `001_baseline` 文件头加醒目说明：记录 create_all 掩盖了什么、B 轴为何自证、
+  以及"任何改 schema 的迁移必须自带旧库证据"的约定与彻底根治方向（静态 DDL 快照，另立项）。
+
+### Security（全库审计第十一批：PII 密文超列长 —— Critical 收口）
+
+**实测证据**（`encrypt_pii` 实测，AES-SIV + base64 + `enc.v1:` 标记）：
+
+| 明文 | 密文长度 |
+|---|---|
+| id_card(18) | 55 |
+| id_card(64) | **115** |
+| phone(11) | 43 |
+| phone(20) | 55 |
+| phone(50) | 95 |
+
+而**库里的实际列宽是 VARCHAR(20)**（`users.phone` / `schools.contact_phone` /
+`organizations.contact_phone` / `projects.contact_phone` / `village_committee_members.phone`），
+比模型侧声明的 `EncryptedText(64)` 还窄。SQLite 不强制 VARCHAR 长度所以现在"能存"；
+换 MySQL / PostgreSQL 会直接 `Data too long for column` 写入失败。
+
+- 模型侧 8 处 `EncryptedText(64)` → `EncryptedText(256)`（与 `EncryptedText` 默认值一致）。
+- 新增迁移 `pii_col_width_001`：把 8 个 PII 列统一到 VARCHAR(256)，逐列判存在性、
+  已够宽则跳过（可重入），SQLite 走 `batch_alter_table` 重建表；`downgrade` 回 64 并注明有损。
+- 新增 `tests/unit/test_pii_col_width_r50.py`（4 例）作为**可验证收口**：
+  构造「旧库 VARCHAR(20)」直接驱动 `_widen` 断言改到 256 且数据不丢；
+  验证已够宽时不重复改（幂等）；验证缺表/缺列跳过；断言**实测最长密文 115 ≤ 目标列宽 256**。
+
+**同时暴露 C1（迁移基线自证）**：空库 `alembic upgrade head` 时该迁移报
+`widened 0 column(s)` —— 因为库是 `001_baseline` 的 `create_all()` 用**当前模型**建的，
+列宽一开始就是 256，**迁移逻辑在标准演练里根本不会被执行**。这也是上面必须手搓旧库状态的原因。
+
+### Fixed（全库审计第十批：1 项）
+
+- **`/health/database` 与 `/health/database-health` 失败时返回 HTTP 200**：body 里写 `code:500`，
+  但探针/监控只看**状态码** —— "数据库挂了"在外部看来和"一切正常"没区别，告警永远不会触发。
+  改为 `JSONResponse(status_code=503)`（body 保留 `code: 500` 以兼容仍读 body 的调用方）。
+  前端 `HealthCheck.vue` 的 `/health` 调用本就在 try/catch 里（503 会走 `markFailed` → 正确显示失败），
+  三处锁定"200 + code:500"的断言已同步更新为 503。
+
+### Docs（全库审计第九批：1 项）
+
+- **4 个「生产零引用」的 schema 模块加 DEPRECATED 标记**：`schemas/policy.py`、
+  `schemas/project.py`、`schemas/school.py`、`schemas/village.py` 只被测试的模块清单导入，
+  生产代码从不引用；而同名类在 `app/api/v1/*.py` 里另有**真正在用且与模型对齐**的定义
+  （如 `SchoolCreate`）—— 这正是"按类名配对会产生假阳性"的第二事实源。
+  其中 `schemas/project.py` 还声明了 `projects` 表不存在的 `category` / `location` /
+  `responsible_person_id` 必填字段。本轮加文件头注释标注"非契约、勿新增字段、勿据以推断接口"，
+  不做删除（删除需同步改 3 个测试的模块清单 + 1 个专门覆盖测试，收益低于风险）。
+
+### Security（全库审计第八批：2 项）
+
+- **`/health/database-health` 把 DB 绝对路径出站**：`database_health_service.check_integrity`
+  在库文件缺失时把 `f"数据库文件不存在: {self.db_path}"` 写进 `message` 与 `issues`，
+  而该端点**匿名可访问**（运维探针，已有测试锁定其无需登录）—— 等于对外泄露部署目录结构。
+  改为对外只给分类码 `DB_FILE_MISSING`，路径只进 `logger.error`。
+  （曾尝试加认证，但会打断 4 个按"探针免登录"断言的既有测试，故保留匿名 + 脱敏。）
+- **`UserCreate` 的 `phone_number` / `role_id` 是死字段**：`users` 表列名是 `phone`，
+  而 `create_user` 只取 username/email/full_name/role —— 注册链路传的电话被**静默丢弃**
+  （前端也不传，所以长期没被发现）。schema 改名 `phone`，`create_user` 补齐落库
+  （兼容旧 `phone_number` 键名；phone 是 ADR-0005 的 PII 加密列，必须经模型写入）；
+  `role_id` 直接删除并注明原因（users 无该列，保留只会让人以为"按角色 ID 授权"生效）。
+
+### Security（全库审计第七批：2 项）
+
+- **`system/audit.py` 14 处内联角色比较漏掉 `is_superuser` 标记**：
+  `normalize_role(role) not in ("admin", "super_admin")` 不看 `is_superuser=True`，
+  于是「打了超管标记、role 仍是 user」的账号访问审计页被**误拒 403**
+  （军审场景下"超管进不去审计页"）。全部改用 `is_admin(current_user)`（单一入口，
+  内部分支即含 is_superuser）；新增用例锁定 `role=user + is_superuser=True` 可放行。
+- **`fund_lifecycle` 无项目归属记录跨组织可读/可写**：12 处 `if xxx.project_id:`
+  只在有项目时才校验数据权限，**project_id 为空时完全不校验** —— 而 FundContract /
+  FundTransferVoucher / 结算单 / 订单都没有 organization_id 列，无法用组织过滤，
+  于是任意登录用户可读写其它单位的合同金额、供应商、付款明细（跨组织财务数据泄漏）。
+  新增 `_assert_standalone_record_access()`：project_id 为空时按「创建人本人 或 管理员」
+  兜底，其余 403；12 处守卫点统一接入，并补 4 条用例（管理员 / 创建人 / 非创建人 403 / 超管标记）。
+
+### Fixed（全库审计第六批：2 项）
+
+- **审计备注端点无入参模型**：`PATCH /system/audit/logs/{id}/remark` 原为 `body: dict`，
+  `remark` 无长度上限、直写 JSON 列。新增 `AuditRemarkUpdate(remark: str = Field(max_length=500))`，
+  超长由 FastAPI 返回 422 而不是静默写库。
+- **`v-permission="[]"` fail-open**：指令自称 fail-closed，但末尾「无效用法」分支只 warn
+  **不隐藏元素** —— 传空数组（或运行时角色配置被清空）时元素照样可见，拼错即等于放行。
+  改为默认 `_hideElement(el)`（DEV 仍 warn 便于定位），并给现有的两条「无效用法」用例补上
+  「必须隐藏」断言（原来只断言 warn）。
+
+### Fixed（全库审计第五批：3 项）
+
+- **契约收敛 3 处**：`auth/users.py` 的改密响应手写 `{"code":200,...}` → `success_response()`；
+  `work_logs.py` 的 `@router.get("", response_model=dict)` 形同零校验（实际返回 `ok_list()` 信封），
+  已删除该 `response_model`；`system/audit.py` 的详情端点**裸返回 ORM**（全列外泄且无 response_model）
+  → `success_response(data={...})` 显式白名单 11 个字段。该项改了响应结构（顶层 → 信封），
+  已确认前端不调用 `/system/audit/logs/{id}`（只用 `/logs/export`），并同步更新断言。
+- **政策附件下载计数降级为 best-effort**：该计数写在 GET 里（有意的业务统计），真正危险的是
+  **计数写库失败会让下载本身 500** —— 用户点下载却报错，只为一条统计。改为 try/except + rollback，
+  失败只记日志，照常下发文件。
+- **学校导入的冗余临时文件（3 处）**：上传内容被写一份 15MB 级临时文件，但解析走的是内存
+  `content`（`load_workbook_any(content, ...)`），临时文件从未被读取 —— 纯冗余落盘。
+  已删除写入与配套 unlink（`finally` 保留 `pass` 作为统一收口位置）。
+
+### Security（全库审计第四批：3 项）
+
+- **未知 DataScope 的列表过滤 fail-open**：`apply_scope_to_query` 的兜底分支 `return query`
+  等于放行全量，与同模块 `check_record_access` 对未知 scope 返回 `False` **口径相反**
+  （注释还自称"最严语义"）。同一数据面两条相反口径，扩展枚举值时最易静默泄漏全量。
+  已改为 `query.filter(sa_false())` 并记 warning，两处测试同步改写，
+  另加一条"两条路径必须同口径"的回归用例。
+- **`api_access_logs.user_id` 恒为 NULL**：中间件用 `int(sub)` 解析用户 id，而本项目 JWT 的
+  `sub` 就是**用户名**（`create_token_pair(subject=username)`），`int()` 必然失败 → 静默返回
+  `None, username`，访问日志无法按用户归因/检索。已改为按用户名反查 `users.id`，
+  并加有界进程内缓存（中间件每请求都跑，不能每次都查库）；查库异常返回 None，不影响请求。
+- **全局搜索的 LIKE 通配符未转义**（13 处）：`ilike(f"%{q}%")` 里 `q="%%"` 可枚举本域全表，
+  `q="a_b"` 会把下划线当任意字符 —— 属信息放大（数据域仍由 scoped_filter 兜住）。
+  新增 `_escape_like()`（先转义反斜杠再转义 % 与 _），全部 ilike 显式带 `escape="\"`。
+
+### Security（全库审计第三批：2 项）
+
+- **审计日志的删除 / 备注改写自身不留审计**（军审口径）：`/system/audit` 的批量删除、
+  单条删除、备注 PATCH 三个会破坏审计链的写操作，此前只写 app.log，物理 delete 后
+  「谁删了哪条审计」完全不可追溯。现三处都写 `AuditLogger`（动作名 `audit_log_delete` /
+  `audit_log_batch_delete` / `audit_log_remark_update`），删除前先快照被删记录的关键字段
+  （id/action/username/resource_type/created_at），备注改写记录前后值。
+  `AuditLogger` 走独立 Session，不受删除事务影响。
+  连带修正一个测试假设：SQLite 的 INTEGER PRIMARY KEY 在 max(id) 被删后会复用 id，
+  留痕记录可能正好拿到被删 id，因此断言改为「被删的那条 create 记录不在了」而非「该 id 为空」。
+- **学校 schema 与模型漂移可见化**：`SchoolBase` 有 10 个 `schools` 表不存在的字段
+  （其中 `school_level` 是必填），create 时被 `model_cols` 白名单静默剥掉；更误导的是
+  代码里还有一步 `school_level → level` 的改名，而 `schools` 根本没有 level 列 —— 读代码时
+  会以为它落库了。已删除该无效映射，并把「未落库字段」改为记 warning（列出字段名），
+  让 schema/模型漂移在日志里可见。
+
+> 范围：v1.18.25 发布后 main 上的 44 个提交。方法：40 个门禁脚本对 549,806 行机器逐行检查，
+> 再按 API / core+security / models+migrations / frontend 四个域并行深审、交叉复现后确认。
+
+### Security（审计第一批：11 项，含 4 个 Critical）
+
+- **Critical｜refresh 完全绕过 `token_version` 吊销**：`validate_token` 只验签名/jti/type，
+  不比对版本，而 access 链路有校验 —— 登出或强退后，未随登出提交的 refresh（其他设备/被窃）
+  仍能换发带新版本号的合法 access。补版本比对并在命中旧版本时吊销该 refresh，
+  新增负向回归 `test_refresh_rejects_stale_token_version`。
+- **Critical｜权限包可选认证绕过全部校验**：手写解码跳过黑名单 / token_version / is_active /
+  首登改密四项，却被「重写全库 RBAC」的 `/permission-package/import`、`/confirm` 使用，
+  已吊销令牌可远程改写整库权限。改为复用 `get_current_user` 完整链路。
+- **Critical｜学校分析页图表恒空**：前端请求 `page_size=1000` 而后端上限 200，每次进入都 422，
+  被同一 `try` 吞掉只弹「加载学校分析数据失败」。改为按 200 分页拉全量 + 页数上限防御。
+- **Critical｜权限/角色变更零审计**：`rbac.py` 8 个写路由 `AuditLogger` 出现 0 次。
+  新增 `_audit_permission_change()`，覆盖 assign/revoke role 与 grant/revoke/save permissions。
+- **禁用账号立即失效**：`is_active` 原先只在 `get_current_active_user` 校验，而绝大多数端点
+  依赖 `get_current_user`。新增 `_reject_inactive_user()`，禁用后未过期 access 立即 403。
+- **审计 details 含 datetime 时整条静默丢失**：`new_value` 直写 JSON 列，驱动抛 TypeError
+  被吞。新增 `_json_safe_value()` 入库前 round-trip（`default=str`）。
+- **批量改删组织过滤 fail-open**：操作者未绑定组织时原条件整体短路，可跨组织改删；
+  改三分支 fail-closed，新增 2 条负向用例。
+- **软删除记录永久占用唯一编码**：查重区分活跃/已软删，后者给出可行动指引。
+
+### Fixed
+
+- **维护窗口豁免 `endswith` fail-open**：`("/system/backup/restore", "/shutdown")` 的后缀匹配
+  会让任意以 `/shutdown` 结尾的**新写路由**自动继承豁免，静默绕过维护闸门。改为锚定正则
+  `^/api/v1/(system/)?backup/(upload-)?restore/?$` / `^/(api/v1/)?(system/)?shutdown/?$`，
+  并补上此前漏登记的 `upload-restore`。
+- **审计写入会回滚调用方业务事务**：`AuditLogService.log` 在调用方 Session 上 `add + commit`，
+  失败时 `rollback()` 连同未提交业务写入一起回滚且异常被吞。改为独立 `SessionLocal` 旁路审计，
+  补 `username`（原实现恒 NULL）；新增 `test_does_not_touch_caller_session`。
+- **`/system/env` 任意登录用户可读依赖清单与运行环境** → `require_admin()`。
+- **备份恢复回传异常原文**（含本地绝对路径）→ 固定文案 + 日志留原文。
+- **前端错误提示失真**：dashboard `saveLayout` 缺 `try`（写盘失败仍提示已保存）；
+  SystemConsole / dataVerify 的 `router.replace` 未 catch；Role 删除失败吞掉后端原因。
+- **3 处同名测试 F811 静默失效**：r16 双重失效、report_templates 覆盖版本缺 `finally`、
+  recommendation 整类复制两遍 —— 已重命名并恢复有效断言。
+
+### Changed
+
+- **类型债**：启用 SQLAlchemy mypy 插件，mypy **1310 → 880**（消 420 个误报）；
+  `rbac_service._log_access` 形参放宽为 `Optional[str]`；`as any` 保持 **0**。
+- **门禁基线按实测同步**：`broad_except` 801→802、后端用例 **14,994**、locations 清单刷新。
+
+### Tests
+
+- 后端 **14,994 用例**、前端 **348 个测试文件 / 7,428 用例**；统一门禁 **34/34 PASS**；
+  flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；覆盖率以 tag 的 `PR Checks` 为准。
+
 ## [1.18.25] - 2026-10-29 — 收口重建：合并双写者分支 + 修掉最后一处过时断言
 
 ### Fixed
@@ -468,6 +901,11 @@ esult["success"] = not result["errors"]，
 - **mypy 1310 → 890（启用 SQLAlchemy 官方 mypy 插件，一次性消 420 个误报）**：
 - **mypy 890 → 880**：`services/rbac_service.py` 的 `_log_access(resource_type, resource_id)`
 - **修回上一提交引入的回归（分段全量测试抓到的，记录在此而不是悄悄改）**：
+- **门禁基线按实测同步（两项，均非本批引入）**：`broad_except` 801 → **802** ——
+  并发提交在 `api/v1/auth/rbac.py` 新增 1 处带日志的宽泛捕获；`mypy` 仍 **880**、`as any` 仍 **0**。
+  后端用例数 14,921 → **14,922**（同上，来自并发批次的新增用例）。
+  说明：基线由 `check_type_debt.py --update` 重算，`_locations` 清单一并刷新（此前只改了数字、
+  清单停留在旧行号，导致「52 条新增位置」这类误读）。
   `excel_template_service._ensure_styles` 的幂等守卫改成 `if _title_font is not None` 后，
   `test_startup_lazy_imports_p2_4::test_styles_built_on_first_use` 失败 —— 该用例用
   `monkeypatch.delitem(mod.__dict__, "_title_font")` 模拟冷启动，删掉后直接读名字会 `NameError`。

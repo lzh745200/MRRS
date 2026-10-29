@@ -3645,4 +3645,51 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.26",
+        "date": "2026-10-29",
+        "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
+        "features": [
+            (
+                "mypy 869 → 851：13 个文件 18 处空容器补显式注解（var-annotated 清零一半）：by_type/action_counts/by_severity/count"
+                "s/warnings/errors/name_map/row_map/ancestors …这些是 x = {} / x = [] 的空字面量，mypy 无法推断元素类型。"
+            ),
+            "setItem × 10 → safeSetItem(key, value, kind)（失败返回 false，不阻断）",
+            "removeItem × 12 → safeRemoveItem(key, kind)",
+            "getItem × 6（含 safeGet(() => sessionStorage, ...) 形式）→ safeGetItem(key, kind)",
+            "删除模块内本地 safeGet 定义，统一用共享实现（避免两套语义）",
+            (
+                "新增 utils/safeStorage.ts（共享安全存储）：safeGetItem / safeSetItem / safeRemoveItem /isStorageAvailable"
+                "，读取异常返回 null（fail-closed）、写入异常静默丢弃。接上三处在关键路径上的裸读取"
+            ),
+            (
+                "main.py::_init_database_tables 补审计结论注释：该函数顺序是 create_all →alembic upgrade → _migrate_missing_c"
+                "olumns（受 ENABLE_AUTO_MIGRATION 控制），补列不会“先跑并让 upgrade 整段跳过”（原审计建议成立的前提不准确）；"
+            ),
+            (
+                "把 migration_evidence 门禁接进统一入口（修 test_gate_entrypoints 唯一红点）：scripts/check_migration_self_evide"
+                "nce.py 已存在且自跑为绿（47 个改 schema 的迁移全部有自证测试、未登记 0 个），pr-checks.yml 也在跑它…"
+            ),
+            (
+                "utils/authStorage.ts 的 storage 读取无 try：_readSlot 直接 sessionStorage.getItem /localStorage.getIt"
+                "em，而本模块被 router/guards.ts 在每次导航调用（getToken）——浏览器在隐私模式 / 禁用存储 / 受限 webview 下会抛 SecurityError，整次"
+                "跳转就炸。"
+            ),
+            (
+                "MonitoringDashboard.vue 在 setup 顶层读 sessionStorage：ref(sessionStorage.getItem(...))位于 setup 同步"
+                "路径，抛错即整页白屏；其余 215 个文件的 storage 调用都有 try，唯独这里没有。改为 readHealthExpanded() 带 fallback（读不到按默认展开），wa"
+                "tch 里的 setItem 也补 try。"
+            ),
+            (
+                "policies/Detail.vue 预览 iframe 缺 sandbox：previewUrl 是 URL.createObjectURL(blob)，blob: 与主文档同源，if"
+                "rame 无 sandbox 时其中脚本可访问 window.parent。同仓 components/FilePreview.vue 早已加 sandbox=\"\"，此处补齐（纵深防御"
+                "；当前后端限pdf/doc/docx/pptx，故非直接可利用）。"
+            ),
+            (
+                "ruralWorks/Task.vue 加载失败静默：catch 体只有一句「API不可用，使用本地模拟数据」的注释，但文件里没有任何模拟数据，tasks 初值是空数组 —— 后端挂掉/5"
+                "00 时页面显示「暂无数据」，用户会以为数据丢了（台账系统里这是最糟的误导）。改为 getErrorMessage 明确报错。打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍"
+                "提示。"
+            ),
+        ],
+    },
 ]

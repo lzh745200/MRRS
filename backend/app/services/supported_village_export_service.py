@@ -260,7 +260,7 @@ class SupportedVillageExportService:
             query = query.filter(model_cls.year == year)
         rows = query.all()
         # 一个村同一年可能有多条记录时，取第一条（键去重）
-        row_map = {}
+        row_map: dict[Any, Any] = {}
         for r in rows:
             row_map.setdefault(getattr(r, "supported_village_id", None), r)
 

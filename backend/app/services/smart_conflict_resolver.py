@@ -342,7 +342,7 @@ class SmartConflictResolver:
         Returns:
             ID映射表 {data_type: {old_id: new_id}}
         """
-        id_mapping = {}
+        id_mapping: dict[Any, Any] = {}
 
         for conflict in conflicts:
             data_type = conflict.data_type
@@ -512,7 +512,7 @@ class SmartConflictResolver:
         Returns:
             ID映射表 {data_type: {old_id: new_id}}
         """
-        id_mapping = {}
+        id_mapping: dict[Any, Any] = {}
 
         # 按依赖顺序处理
         import_order = ["villages", "schools", "projects", "funds"]

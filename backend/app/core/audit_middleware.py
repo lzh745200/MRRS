@@ -41,6 +41,38 @@ _flusher_thread: "threading.Thread | None" = None
 _flusher_lock = threading.Lock()
 
 
+# api_access_logs.user_id 的 username→id 缓存（2026-10-29 审计修复）。
+# 中间件在每个请求上跑，不能每次都查库；用户名→id 在会话期内基本不变，
+# 用有界字典缓存即可（未命中才查一次库）。
+_USER_ID_CACHE: dict = {}
+_USER_ID_CACHE_MAX = 512
+
+
+def _lookup_user_id(username):
+    """按用户名反查 users.id，带进程内缓存；任何异常返回 None（审计不得影响请求）。"""
+    if not username:
+        return None
+    if username in _USER_ID_CACHE:
+        return _USER_ID_CACHE[username]
+    uid = None
+    try:
+        from app.core.database import SessionLocal
+        from app.models.user import User
+
+        db = SessionLocal()
+        try:
+            row = db.query(User.id).filter(User.username == username).first()
+            uid = row[0] if row else None
+        finally:
+            db.close()
+    except Exception as exc:  # noqa: BLE001 - 归因失败不得影响请求
+        logger.debug("访问日志 user_id 反查失败 username=%s: %s", username, exc)
+        return None
+    if len(_USER_ID_CACHE) < _USER_ID_CACHE_MAX:
+        _USER_ID_CACHE[username] = uid
+    return uid
+
+
 class AuditMiddleware(BaseHTTPMiddleware):
     """Logs request method, path, status code, duration, and authenticated user.
 
@@ -131,7 +163,12 @@ class AuditMiddleware(BaseHTTPMiddleware):
             try:
                 return int(sub), username
             except (TypeError, ValueError):
-                return None, username
+                pass
+            # 本项目 JWT 的 sub 就是 username（create_token_pair(subject=username)），
+            # 所以 int(sub) 恒失败 —— 原实现在这里直接 return None，导致
+            # api_access_logs.user_id **恒为 NULL**，访问日志无法按用户归因/检索
+            # （2026-10-29 审计）。改为按用户名反查 id（带缓存）。
+            return _lookup_user_id(username), username
         except Exception as e:
             logger.debug("审计中间件: token 解析失败（可能是未认证请求）: %s", e, exc_info=True)
             return None, None

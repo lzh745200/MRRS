@@ -98,7 +98,7 @@ class WorkLogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-@router.get("", response_model=dict)
+@router.get("")
 async def get_work_logs(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,

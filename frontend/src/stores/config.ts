@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { refreshMilitaryTheme } from '@/utils/echarts-theme'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 /** 主题持久化 localStorage 键 */
 export const THEME_STORAGE_KEY = 'theme'
@@ -55,11 +56,7 @@ export function normalizeTheme(value: unknown): string {
  * 此处吞掉异常并回退默认主题（视觉降级，不影响可用性）。
  */
 export function readStoredTheme(): string {
-  try {
-    return normalizeTheme(localStorage.getItem(THEME_STORAGE_KEY))
-  } catch {
-    return DEFAULT_THEME
-  }
+  return normalizeTheme(safeGetItem(THEME_STORAGE_KEY, 'local'))
 }
 
 /**
@@ -88,11 +85,7 @@ export const useConfigStore = defineStore('config', () => {
     // 写路径同样过白名单：非法值不再落盘、不再写进 data-theme
     const next = normalizeTheme(t)
     theme.value = next
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, next)
-    } catch {
-      // 存储不可用（隐私模式/配额）不阻断主题切换：本次会话内仍然生效
-    }
+    safeSetItem(THEME_STORAGE_KEY, next, 'local')
     applyThemeToDom(next)
   }
 

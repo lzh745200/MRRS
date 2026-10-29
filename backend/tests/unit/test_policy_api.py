@@ -557,6 +557,27 @@ class TestPolicyAPI:
             if os.path.exists(sample_policy.file_path):
                 os.remove(sample_policy.file_path)
 
+    def test_download_policy_file_count_failure_still_serves(
+        self, client, mock_db, admin_user, sample_policy, upload_root
+    ):
+        """下载计数是 best-effort：写库失败只告警 + rollback，文件仍必须下发。"""
+        _setup_client(client, mock_db, admin_user)
+        sample_policy.file_path = os.path.join(upload_root, "test_download_count_fail.pdf")
+        with open(sample_policy.file_path, "w") as f:
+            f.write("test")
+        try:
+            mock_db.query.return_value.filter.return_value.first.return_value = sample_policy
+            with patch("app.api.v1.policy.safe_commit", side_effect=RuntimeError("db down")) as commit, \
+                    patch("app.api.v1.policy.logger.warning") as warn:
+                resp = client.get("/api/v1/policies/1/download")
+            assert resp.status_code == 200
+            assert commit.called
+            assert warn.called
+            mock_db.rollback.assert_called()
+        finally:
+            if os.path.exists(sample_policy.file_path):
+                os.remove(sample_policy.file_path)
+
     def test_download_policy_file_not_found(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
         mock_db.query.return_value.filter.return_value.first.return_value = None

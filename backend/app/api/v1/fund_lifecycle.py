@@ -8,12 +8,13 @@
 
 from datetime import date, datetime
 import json as _json
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from ...core.database import get_db
 from ...core.response import ok_list, success_response
@@ -47,7 +48,9 @@ router = APIRouter(prefix="/fund-lifecycle", tags=["经费生命周期"])
 
 
 def _get_username(current_user) -> str:
-    return getattr(current_user, "full_name", None) or getattr(current_user, "username", "")
+    # full_name/username 都可能缺失或为 None；审计/操作人字段一律落字符串（空串兜底）
+    name = getattr(current_user, "full_name", None) or getattr(current_user, "username", "")
+    return str(name) if name else ""
 
 
 def _require_related_exists(db: Session, related_id, model, message: str) -> None:
@@ -77,6 +80,28 @@ def _get_project_or_403(project_id: int, current_user, db: Session) -> Project:
     if not check_record_access(project, current_user):
         raise HTTPException(status_code=403, detail="无权访问该组织数据")
     return project
+
+
+def _assert_standalone_record_access(record, current_user, kind: str = "记录") -> None:
+    """project_id 为空时的兜底授权（2026-10-29 审计）。
+
+    ``project_id`` 有值时由 :func:`_get_project_or_403` 走项目级数据权限；
+    **为空时原实现完全不校验** —— 而这些表（FundContract / FundTransferVoucher /
+    结算单 / 订单）都没有 organization_id 列，无法用组织过滤，于是任意登录用户
+    都能读写其它单位的合同金额、供应商、付款明细（跨组织财务数据泄漏）。
+
+    兜底口径：创建人本人 或 管理员可访问，其余 403。
+    ``created_by`` 在写入侧存的是用户名（见 :func:`_get_username`）。
+    """
+    from app.core.permission_utils import is_admin
+
+    if is_admin(current_user):
+        return
+    owner = getattr(record, "created_by", None)
+    me = getattr(current_user, "username", None)
+    if owner and me and str(owner) == str(me):
+        return
+    raise HTTPException(status_code=403, detail=f"无权访问该{kind}（非创建人且非管理员）")
 
 
 def _get_accessible_project_or_404(db: Session, project_id: int, current_user) -> Project:
@@ -501,6 +526,9 @@ async def budget_aggregation(
                 bar_chart_data=[],
             )
 
+    # 各分支返回的 SQL 表达式类型不同（str / int / year），显式声明为通用列表达式，
+    # 否则 mypy 按第一个分支把变量钉成 ColumnElement[str]，后续 int 分支全被判错。
+    group_col: ColumnElement[Any]
     if group_by == "type":
         group_col = sa_func.coalesce(Fund.type, "other")
     elif group_by == "village":
@@ -829,6 +857,9 @@ async def get_transfer_voucher(
     # 项目级授权对象，不再恒 400 —— 否则"能创建不能读"，与更新/删除口径矛盾。
     if v.project_id:
         _get_project_or_403(v.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(v, current_user)
     return success_response(data=_voucher_to_dict(v))
 
 
@@ -847,6 +878,9 @@ async def update_transfer_voucher(
         raise HTTPException(status_code=404, detail="凭证不存在")
     if v.project_id:
         _get_project_or_403(v.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(v, current_user)
     if v.status == VoucherStatus.CONFIRMED.value:
         raise HTTPException(status_code=400, detail="已确认凭证不可修改")
 
@@ -882,6 +916,9 @@ async def delete_transfer_voucher(
         raise HTTPException(status_code=404, detail="凭证不存在")
     if v.project_id:
         _get_project_or_403(v.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(v, current_user)
     if v.status != VoucherStatus.DRAFT.value:
         raise HTTPException(status_code=400, detail="仅草稿状态凭证可删除")
 
@@ -904,6 +941,9 @@ async def confirm_transfer_voucher(
         raise HTTPException(status_code=404, detail="凭证不存在")
     if v.project_id:
         _get_project_or_403(v.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(v, current_user)
     if v.status not in (VoucherStatus.DRAFT.value, VoucherStatus.SUBMITTED.value):
         raise HTTPException(status_code=400, detail=f"当前状态 {v.status} 不允许确认")
 
@@ -940,6 +980,9 @@ async def upload_voucher_attachment(
         raise HTTPException(status_code=404, detail="凭证不存在")
     if v.project_id:
         _get_project_or_403(v.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(v, current_user)
 
     from ...models.fund import FundAttachment
     from ...utils.upload_helper import save_upload_file
@@ -1123,6 +1166,9 @@ async def get_contract(
         raise HTTPException(status_code=404, detail="合同不存在")
     if c.project_id:
         _get_project_or_403(c.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(c, current_user)
     # 合同允许不挂项目（ContractCreate.project_id 可选，前端从菜单进入合同管理时
     # 无 project_id 上下文）。历史缺陷：详情端无条件调 _get_project_or_403，导致
     # 这类合同"创建成功但详情恒 400"，而同一资源的更新/删除/附件却放行 —— 同一资源
@@ -1157,6 +1203,9 @@ async def update_contract(
         raise HTTPException(status_code=404, detail="合同不存在")
     if c.project_id:
         _get_project_or_403(c.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(c, current_user)
 
     for key, val in data.model_dump(exclude_unset=True).items():
         setattr(c, key, val)
@@ -1179,6 +1228,9 @@ async def delete_contract(
         raise HTTPException(status_code=404, detail="合同不存在")
     if c.project_id:
         _get_project_or_403(c.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(c, current_user)
     if c.status != ContractStatus.DRAFT.value:
         raise HTTPException(status_code=400, detail="仅草稿状态合同可删除")
 
@@ -1219,6 +1271,9 @@ async def create_contract_payment(
         raise HTTPException(status_code=404, detail="合同不存在")
     if c.project_id:
         _get_project_or_403(c.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(c, current_user)
 
     # 生成付款编号
     count = (
@@ -1406,10 +1461,10 @@ async def fund_flow(
     ) if fund_ids else []
 
     # 构建索引映射
-    tx_by_fund = {}
+    tx_by_fund: dict[Optional[int], list[FundTransferVoucher]] = {}
     for t in all_transactions:
         tx_by_fund.setdefault(t.fund_id, []).append(t)
-    vc_by_fund = {}
+    vc_by_fund: dict[Optional[int], list[FundTransferVoucher]] = {}
     for v in all_vouchers:
         vc_by_fund.setdefault(v.fund_id, []).append(v)
 
@@ -1638,6 +1693,9 @@ async def update_settlement(
         raise HTTPException(status_code=404, detail="决算记录不存在")
     if s.project_id:
         _get_project_or_403(s.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(s, current_user)
     if s.status == SettlementStatus.APPROVED.value:
         raise HTTPException(status_code=400, detail="已审批决算不可修改")
 
@@ -1672,6 +1730,9 @@ async def approve_settlement(
         raise HTTPException(status_code=404, detail="决算记录不存在")
     if s.project_id:
         _get_project_or_403(s.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(s, current_user)
     # 幂等守卫：仅 SUBMITTED（或 DRAFT 直接提交）可审批，重复审批拒绝，
     # 避免覆盖 auditor/audit_opinion/performance_* 审计字段并重复写工作日志
     if s.status not in (
@@ -1886,6 +1947,9 @@ async def issue_allocation_order(
         raise HTTPException(status_code=404, detail="拨款指令不存在")
     if order.project_id:
         _get_project_or_403(order.project_id, current_user, db)
+    else:
+        # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
+        _assert_standalone_record_access(order, current_user)
     if order.status != "draft":
         raise HTTPException(status_code=400, detail="仅草稿状态可下达")
 
@@ -2194,15 +2258,15 @@ async def fund_flow_tree(
     )
 
     # 构建索引映射
-    orders_by_fund = {}
+    orders_by_fund: dict[Optional[int], list[FundAllocationOrder]] = {}
     for o in all_orders:
         orders_by_fund.setdefault(o.fund_id, []).append(o)
 
-    items_by_order = {}
+    items_by_order: dict[Optional[int], list[AllocationOrderItem]] = {}
     for it in all_items:
         items_by_order.setdefault(it.order_id, []).append(it)
 
-    transactions_by_fund = {}
+    transactions_by_fund: dict[Optional[int], list[FundTransaction]] = {}
     for t in all_transactions:
         transactions_by_fund.setdefault(t.fund_id, []).append(t)
 

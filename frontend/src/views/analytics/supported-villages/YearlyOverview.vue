@@ -215,6 +215,7 @@ const YearlyRollforwardDialog = defineAsyncComponent(
 import echarts from '@/utils/echarts'
 import { getYearOptions } from '@/utils/yearOptions'
 import { format } from '@/utils'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
@@ -630,7 +631,7 @@ async function loadAllData() {
     // 刷新多年收入趋势（不阻塞主流程）
     loadTrendData()
   } catch (e: any) {
-    ElMessage.error(e?.message || '加载数据失败')
+    ElMessage.error(getErrorMessage(e, '加载数据失败'))
   } finally {
     loading.value = false
   }
@@ -689,7 +690,7 @@ async function handleDownloadAllTemplates() {
     await downloadAllTemplates(selectedYear.value)
     ElMessage.success('全部板块模板下载成功')
   } catch (e: any) {
-    ElMessage.error(e?.message || '模板下载失败')
+    ElMessage.error(getErrorMessage(e, '模板下载失败'))
   } finally {
     downloadingAll.value = false
   }
@@ -709,7 +710,7 @@ async function handleImportAll(file: any) {
     }
     loadAllData()
   } catch (e: any) {
-    ElMessage.error(e?.message || '全部导入失败')
+    ElMessage.error(getErrorMessage(e, '全部导入失败'))
   } finally {
     importingAll.value = false
   }

@@ -20,7 +20,24 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
+
+def _escape_like(value) -> str:
+    """转义 LIKE 通配符（% / _ / 转义符本身）。
+
+    未转义时 q="%%" 可以枚举本域全表，q="a_b" 会把下划线当任意字符 ——
+    属信息放大（数据域仍由 scoped_filter 兜住，但转义才是正确做法）。
+    配套在每个 ilike 上显式 escape="\\"（SQLAlchemy 的 escape 参数）。
+    """
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
 router = APIRouter(prefix="/search", tags=["全局搜索"])
+
 
 # 搜索关键词最大允许长度，防止超长字符串导致数据库压力
 _MAX_Q_LEN = 100
@@ -38,8 +55,8 @@ def _append_village_results(items: List, q: str, each: int, db: Session, current
             org_field="organization_id", ).filter(
             SupportedVillage.is_active.is_(True),
             or_(
-                SupportedVillage.village_name.ilike(f"%{q}%"),
-                SupportedVillage.county.ilike(f"%{q}%"),
+                SupportedVillage.village_name.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                SupportedVillage.county.ilike(f"%{_escape_like(q)}%", escape="\\"),
             ),
         )
         for r in village_q.limit(each).all():
@@ -66,8 +83,8 @@ def _append_project_results(items: List, q: str, each: int, db: Session, current
             org_field="organization_id", ).filter(
             Project.is_active == True,  # noqa: E712
             or_(
-                Project.name.ilike(f"%{q}%"),
-                Project.code.ilike(f"%{q}%"),
+                Project.name.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                Project.code.ilike(f"%{_escape_like(q)}%", escape="\\"),
             ),
         )
         for r in project_q.limit(each).all():
@@ -91,9 +108,9 @@ def _append_policy_results(items: List, q: str, each: int, db: Session) -> None:
             db.query(Policy)
             .filter(
                 or_(
-                    Policy.title.ilike(f"%{q}%"),
-                    Policy.keywords.ilike(f"%{q}%"),
-                    Policy.issuing_authority.ilike(f"%{q}%"),
+                    Policy.title.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                    Policy.keywords.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                    Policy.issuing_authority.ilike(f"%{_escape_like(q)}%", escape="\\"),
                 )
             )
             .limit(each)
@@ -120,7 +137,11 @@ def _append_school_results(items: List, q: str, each: int, db: Session, current_
             db.query(School),
             School,
             current_user,
-            org_field="organization_id", ).filter(School.is_active == True, School.name.ilike(f"%{q}%"))  # noqa: E712
+            org_field="organization_id",
+        ).filter(
+            School.is_active == True,  # noqa: E712
+            School.name.ilike(f"%{_escape_like(q)}%", escape="\\"),
+        )
         for r in school_q.limit(each).all():
             items.append(
                 SearchItem(
@@ -145,9 +166,9 @@ def _append_fund_results(items: List, q: str, each: int, db: Session, current_us
             org_field="organization_id", ).filter(
             Fund.is_active == True,  # noqa: E712
             or_(
-                Fund.name.ilike(f"%{q}%"),
-                Fund.code.ilike(f"%{q}%"),
-                Fund.project_name.ilike(f"%{q}%"),
+                Fund.name.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                Fund.code.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                Fund.project_name.ilike(f"%{_escape_like(q)}%", escape="\\"),
             ),
         )
         for r in fund_q.limit(each).all():
@@ -174,8 +195,8 @@ def _append_user_results(items: List, q: str, each: int, db: Session, is_superus
             .filter(
                 User.is_active == True,  # noqa: E712
                 or_(
-                    User.username.ilike(f"%{q}%"),
-                    User.full_name.ilike(f"%{q}%"),
+                    User.username.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                    User.full_name.ilike(f"%{_escape_like(q)}%", escape="\\"),
                 ),
             )
             .limit(each)

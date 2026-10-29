@@ -55,7 +55,7 @@ class RuralWork(Base):
         comment="关联帮扶村ID（W22 起替代遗留 villages.village_id）",
     )
     responsible_person = Column(String(50), nullable=True)
-    contact_phone = Column(EncryptedText(64), nullable=True, comment="联系电话(透明加密, ADR-0005)")
+    contact_phone = Column(EncryptedText(256), nullable=True, comment="联系电话(透明加密, ADR-0005)")
     start_date = Column(UtcDateTime(), nullable=True)
     end_date = Column(UtcDateTime(), nullable=True)
     description = Column(Text, nullable=True)

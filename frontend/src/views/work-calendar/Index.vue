@@ -86,6 +86,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import PageHeader from '@/components/common/PageHeader.vue'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 interface WorkEvent {
   id: number
   date: string
@@ -125,7 +126,7 @@ const form = ref({
  */
 function readStoredEvents(): WorkEvent[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    const parsed = JSON.parse(safeGetItem(STORAGE_KEY, 'local') || '[]')
     return Array.isArray(parsed) ? parsed : []
   } catch {
     // 数据损坏：回退空列表，不阻断页面
@@ -137,7 +138,7 @@ function readStoredEvents(): WorkEvent[] {
 const events = ref<WorkEvent[]>(readStoredEvents())
 
 function saveEvents() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(events.value))
+  safeSetItem(STORAGE_KEY, JSON.stringify(events.value), 'local')
 }
 
 /** 单元格日号：'2026-10-06' → '6'（去前导零）。

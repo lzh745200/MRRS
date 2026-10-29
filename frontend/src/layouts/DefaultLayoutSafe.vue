@@ -476,7 +476,7 @@ const EXPANDED_SECTIONS_KEY = 'nav:expanded-sections'
 
 function readExpandedSections(): Set<string> {
   try {
-    const raw = localStorage.getItem(EXPANDED_SECTIONS_KEY)
+    const raw = safeGetItem(EXPANDED_SECTIONS_KEY, 'local')
     if (!raw) return new Set()
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return new Set()
@@ -494,11 +494,7 @@ function isSectionExpanded(key: string): boolean {
 }
 
 function persistExpandedSections(): void {
-  try {
-    localStorage.setItem(EXPANDED_SECTIONS_KEY, JSON.stringify([...expandedSections.value]))
-  } catch {
-    /* 存储不可用时静默：本次会话仍可展开/收起 */
-  }
+  safeSetItem(EXPANDED_SECTIONS_KEY, JSON.stringify([...expandedSections.value]), 'local')
 }
 
 /** 点击板块标题：展开/收起并持久化 */
@@ -670,6 +666,7 @@ onUnmounted(() => {
 // ── 自动锁屏（单机共用电脑，无操作 N 分钟回登录页）──
 // markLockNow：锁屏打点（供解锁后的摘要判定）；consumeLockDigest：摘要消费
 import { consumeLockDigest, markLockNow } from '@/utils/lockDigest'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 // 锁屏只结束当前会话；不调用 logout()（否则会清除"记住登录"持久凭据，
 // 导致下次开机免登录失效 —— 修复 2026-08-15）
 useAutoLockModule({

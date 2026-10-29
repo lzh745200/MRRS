@@ -72,10 +72,14 @@ export const permission: ObjectDirective = {
       return
     }
 
-    // 无效用法提示
+    // 无效用法：**fail-closed**（2026-10-29 审计）。
+    // 原实现只 warn 不隐藏，于是 v-permission="[]" 或拼错的用法会落到这里，
+    // 元素**照样可见** —— 与本指令「fail-closed」的自我声明相反，拼错即等于放行。
+    // 现在默认隐藏，DEV 下仍给出可定位的告警。
     if (import.meta.env.DEV) {
       logger.warn(`v-permission: 需要传入角色数组、权限码字符串或菜单配置对象，当前值:`, value)
     }
+    _hideElement(el)
   },
 
   updated(el, binding) {

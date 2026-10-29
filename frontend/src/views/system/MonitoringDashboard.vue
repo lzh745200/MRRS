@@ -244,6 +244,7 @@ import { useConfigStore } from '@/stores/config'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { logger } from '@/utils/logger'
 import { chartColor, chartColorPrimary } from '@/utils/chartColors'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 // ── Types ──
 interface SnapshotData {
@@ -297,7 +298,15 @@ interface CheckItem {
 const loading = ref(false)
 const lastUpdated = ref('')
 const healthScore = ref(0)
-const healthExpanded = ref(sessionStorage.getItem('monitor-health-expanded') !== 'false')
+// 2026-10-29 审计：原实现在 setup 顶层直接读 sessionStorage —— 受限存储（隐私模式/
+// 禁用存储/webview）下会抛 SecurityError，**整页白屏**；其余 215 个文件的 storage 调用
+// 都有 try，唯独这里没有。改为带 fallback 的读取（读不到按默认展开）。
+function readHealthExpanded(): boolean {
+  // safeGetItem 内部已兜底（任何异常返回 null），这里不得再套 try/catch：
+  // 外层 catch 永远不可达，只会制造 100% 覆盖率下的死分支。
+  return safeGetItem('monitor-health-expanded', 'session') !== 'false'
+}
+const healthExpanded = ref(readHealthExpanded())
 const activePopover = ref<string | null>(null)
 const logLevelFilter = ref<'all' | 'warn' | 'error'>('all')
 
@@ -911,7 +920,8 @@ onUnmounted(() => {
 })
 
 watch(healthExpanded, (val) => {
-  sessionStorage.setItem('monitor-health-expanded', String(val))
+  // safeSetItem 内部已吞掉存储异常并返回 false，不会把异常抛到 watcher。
+  safeSetItem('monitor-health-expanded', String(val), 'session')
 })
 </script>
 

@@ -112,6 +112,7 @@ import { useAuthStore } from '@/stores/auth'
 
 import { format } from '@/utils'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 const authStore = useAuthStore()
 const isAdmin = computed(() => authStore.isAdmin)
 
@@ -176,7 +177,7 @@ async function submitLog() {
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     await refreshData()
   } catch (e: any) {
-    ElMessage.error(e?.message || '添加失败')
+    ElMessage.error(getErrorMessage(e, '添加失败'))
   } finally {
     saving.value = false
   }
@@ -193,7 +194,7 @@ async function handleDelete(log: UpdateLog) {
     await refreshData()
   } catch (e: any) {
     if (e !== 'cancel') {
-      ElMessage.error(e?.message || '删除失败')
+      ElMessage.error(getErrorMessage(e, '删除失败'))
     }
   }
 }

@@ -95,13 +95,18 @@ class TestApplyScopeToQuery:
         q.filter.assert_called_once_with(model.created_by == 42)
         assert result == q.filter.return_value
 
-    def test_unknown_scope_returns_query_unmodified(self, monkeypatch):
+    def test_unknown_scope_fails_closed(self, monkeypatch):
+        """未知 scope 必须收敛为空集（ADR-0002 fail-closed）。
+
+        2026-10-29 审计修复：原实现 return query（放行全量），与 check_record_access
+        对未知 scope 返回 False 的口径相反，扩展 enum 时最易静默泄漏全量。
+        """
         import app.core.data_permission as uds
         monkeypatch.setattr(uds, "get_data_scope", lambda u: "not-a-scope")
         q = MagicMock()
         result = uds.apply_scope_to_query(q, MagicMock(), MagicMock())
-        assert result is q
-        q.filter.assert_not_called()
+        q.filter.assert_called_once()   # 施加了「空集」过滤
+        assert result is not q
 
 
 # ── check_record_access ──────────────────────────────────────────────

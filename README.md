@@ -1,26 +1,42 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.25
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.26
 
-![Version](https://img.shields.io/badge/version-1.18.25-blue)
+![Version](https://img.shields.io/badge/version-1.18.26-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-22%2C280-brightgreen)
+![Tests](https://img.shields.io/badge/tests-22%2C422-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.25）
+## 本版亮点（v1.18.26）
+
+- **全库审计十八批（含 4 个 Critical）（含 4 个 Critical）**：refresh 此前完全绕过 `token_version`
+  吊销（登出/强退后旧 refresh 仍可换 access）；权限包可选认证手写解码绕过黑名单/版本/
+  禁用/首登改密四项校验，却用于「重写全库 RBAC」；RBAC 8 个写路由零审计；禁用账号的
+  未过期 access 仍全权限。均已修复并补负向回归。
+- **学校分析页图表恒空**：前端请求 `page_size=1000` 越过后端 200 上限，每次进入 422 被
+  同一 `try` 吞掉。改为按 200 分页拉全量，并加上限防御。
+- **维护窗口 fail-open**：豁免原用 `path.endswith("/shutdown")`，任意新路由只要以该后缀
+  结尾就自动绕过维护闸门；改为锚定正则并补上 `upload-restore`。
+- **审计旁路化**：审计写入改用独立 Session，不再因审计失败回滚调用方业务事务；审计
+  `details` 含 `datetime` 时不再整条静默丢失；权限/角色变更全部留痕。
+- **数据隔离与错误口径**：批量改删在操作者未绑定组织时 fail-closed；备份恢复不再回传
+  含绝对路径的异常原文；`/system/env` 收紧为管理员。
+- **质量**：mypy **1310 → 880**（启用 SQLAlchemy 插件，消除 420 个误报）、`as any` 保持
+  **0**、静默吞异常 **0**；统一门禁 **34/34 PASS**；后端 **14,994** / 前端 **7,428** 用例。
+
+## 历史亮点（v1.18.25）
 
 - **合并两条并行分支**：main 曾分成「本工作树」与「另一 worktree 的 CI 修复线」两路推进，
   本版把两者合并（58f38aac，**零冲突**），并在合并态上重新跑门禁与测试
-- **修掉最后一处过时断言**：	est_coverage_tail_gaps.py 的敏感表导入用例仍断言「有错误也报成功」,
-  与 R20「故障伪装成功」修复后的新契约矛盾 —— 改为断言 success is False
+- **修掉最后一处过时断言**：`test_coverage_tail_gaps.py` 的敏感表导入用例仍断言「有错误也报成功」，
+  与 R20「故障伪装成功」修复后的新契约矛盾 —— 改为断言 `success is False`
 - **应用内更新日志在合并后重建**：两侧各自生成的条目叠加会与 CHANGELOG 不一致
-  （check_update_log 红），用 scripts/sync_update_log.py 重新生成
-- **覆盖率缺口补齐**：前端 nalytics/dashboard 钻取提前返回、policies/List 导入兜底、
-  MachineCodeManagement 的 pass_code 信封、MonitoringDashboard 内层 data、
-  
-uralWorks/Task 的 progressFileList 等
-- **门禁全绿**：35 道门禁 PASS；s any **归零**、静默吞异常 **归零**、
+  （check_update_log 红），用 `scripts/sync_update_log.py` 重新生成
+- **覆盖率缺口补齐**：前端 `analytics/dashboard` 钻取提前返回、`policies/List` 导入兜底、
+  `MachineCodeManagement` 的 pass_code 信封、`MonitoringDashboard` 内层 data、
+  `ruralWorks/Task` 的 progressFileList 等
+- **门禁全绿**：35 道门禁 PASS；`as any` **归零**、静默吞异常 **归零**、
   硬编码色值 137（基线 146，继续只紧不松）
 
 ## 历史亮点（v1.18.24）
@@ -160,13 +176,13 @@ uralWorks/Task 的 progressFileList 等
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-28（v1.18.23）— 后端 14,896 用例（0 skipped）+ 行/分支覆盖率 **100.00%**
+> **上次全量验证**: 2026-10-29（v1.18.26 发布前）— 后端 **14,994** 用例、
+> 前端 **348 个 `.test.ts` / 7,428 用例**；统一门禁 **34/34 PASS**。
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
-> 46,243 语句 / 11,560 分支，Miss 0 / BrPart 0）；
-> 前端 **347 个 `.test.ts` / 7,384 用例、12 组 glob 100%**；E2E 199（含 44 页视觉回归基线）；
-> flake8 app+scripts 0 / vue-tsc 0 / eslint 0 / 硬编码色 146（棘轮 146/146）/ 版本单一来源一致 /
-> Alembic 单 head（63 版本，r43）/ 门禁脚本全绿（含三层对齐、零断言棘轮、同步覆盖率、菜单对齐、单 head 迁移）
+> 前端 12 组 glob 阈值 100%；覆盖率结论以本次 tag 的 `PR Checks` 运行记录为准。）
+> flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；Alembic 单 head（63 版本，r43）；
+> 三层对齐、菜单对齐、同步覆盖率、零断言棘轮等门禁全绿。
 
 ## 快速开始
 
@@ -386,6 +402,18 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 >   （与 `SHA256SUMS-windows-x64.txt` 一致）。
 
 ## 近期修复记录
+
+### 2026-10-29（v1.18.26）全库审计收口 + 认证/权限 Critical 修复
+
+- 🔒 **refresh 令牌绕过吊销**：`validate_token` 漏比对 `token_version`，登出/强退后旧
+  refresh 仍可换发 access；已补版本校验并吊销该 refresh。
+- 🔒 **权限包可选认证绕过四项校验**：黑名单 / token_version / is_active / 首登改密全部跳过，
+  却用于重写全库 RBAC；改为复用 `get_current_user` 完整链路。
+- 🔒 **维护窗口 fail-open**：豁免从 `endswith` 改锚定正则，避免新路由因后缀自动继承豁免。
+- 🔒 **审计完整性**：审计写入独立 Session（不再回滚业务事务）、`datetime` 序列化安全、
+  RBAC 权限/角色变更全量留痕。
+- 🐞 **学校分析页恒空**：`page_size=1000` 越 200 上限导致每次 422；改分页拉全量。
+- ⚙️ **质量**：mypy 1310→880、`as any` 0、34 道门禁全绿。
 
 ### 2026-10-24（v1.18.1）登录门面重构 + 三层对齐门禁 + 门禁真绿复验
 
