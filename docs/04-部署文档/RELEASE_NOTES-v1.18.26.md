@@ -1,6 +1,6 @@
 # Release Notes — v1.18.26（2026-10-29）
 
-> 上一正式发布是 **v1.18.25**；本版覆盖 v1.18.25 之后 main 上的 36 个提交，
+> 上一正式发布是 **v1.18.25**；本版覆盖 v1.18.25 之后 main 上的 44 个提交，
 > 以全库审计的认证/权限 Critical 修复为主。逐项账本见仓库根目录 `CHANGELOG.md`。
 
 ## 一、下载与校验
@@ -94,13 +94,13 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 - 启用 SQLAlchemy mypy 插件，mypy **1310 → 880**（消除 420 个误报）；
   `rbac_service._log_access` 形参放宽为 `Optional[str]`。
 - `as any` 保持 **0**；静默吞异常 **0**；统一门禁 **34/34 PASS**。
-- 门禁基线按实测同步：`broad_except` 801→802、后端用例 **14,976**、locations 清单刷新。
+- 门禁基线按实测同步：`broad_except` 801→802、后端用例 **14,994**、locations 清单刷新。
 
 ## 六、验证（发布前本地实测）
 
 - 统一门禁入口 `backend/.venv/Scripts/python.exe scripts/run_gates.py`：**34 道 PASS**；
-- 后端全量：**14,976 用例**（分段/CI 口径以 `backend-test` 为准）；
-- 前端：**347 个测试文件 / 7,420 用例**，生产构建成功；
+- 后端全量：**14,994 用例**（分段/CI 口径以 `backend-test` 为准）；
+- 前端：**347 个测试文件 / 7,428 用例**，生产构建成功；
 - Electron：`npm run test:electron` **14/14**（含 AES-GCM 往返/篡改/短文件守护）；
 - 安装冒烟：安装包 payload 解包后启动内置后端，`/health` 返回 1.18.26 /
   `migration.at_head=true` / WAL、时钟正常；**NSIS 静默安装未能在本执行环境落盘**（见第八节）。
@@ -115,7 +115,7 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 
 ## 八、本机构建与冒烟记录
 
-- **源码候选冻结点**：`d841ec0a`（含全库审计第 1~18 批，36 个提交；后续并行改动不再纳入）。
+- **源码候选冻结点**：`be8dee31`（含全库审计第 1~18 批，44 个提交；后续并行改动不再纳入）。
 - **Windows x64 安装包**：本地早先构建的
   `dist/electron/MRRS-Setup-1.18.26-x64.exe`（223 MB，SHA256 `dcbed2…`）对应 `34bf9d9f`，
   **仅作构建链验证，不是本候选的最终产物**；最终安装包以 `v1.18.26` tag 触发 CI 产出的
