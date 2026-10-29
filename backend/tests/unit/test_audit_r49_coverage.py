@@ -20,7 +20,7 @@ class TestRejectInactiveUser:
     """security._reject_inactive_user：禁用账号必须 403。"""
 
     def test_active_user_passes(self):
-        sec._reject_inactive_user(MagicMock(is_active=True))
+        assert sec._reject_inactive_user(MagicMock(is_active=True)) is None
 
     def test_inactive_user_raises_403(self):
         from fastapi import HTTPException
@@ -35,7 +35,7 @@ class TestRejectInactiveUser:
         class _Bare:
             pass
 
-        sec._reject_inactive_user(_Bare())
+        assert sec._reject_inactive_user(_Bare()) is None
 
 
 class TestJsonSafeValue:
@@ -126,9 +126,13 @@ class TestRbacAuditFailureSwallowed:
     def test_audit_exception_logged_not_raised(self):
         from app.api.v1.auth import rbac
 
-        with patch("app.api.v1.auth.rbac.AuditLogger.log", side_effect=RuntimeError("boom")):
-            # 不抛：审计是旁路，权限变更必须照常完成
-            rbac._audit_permission_change("rbac_assign_role", MagicMock(username="u"), {"a": 1})
+        with patch("app.api.v1.auth.rbac.AuditLogger.log", side_effect=RuntimeError("boom")), \
+                patch("app.api.v1.auth.rbac.logger.exception") as mock_log:
+            # 不抛：审计是旁路，权限变更必须照常完成；但必须留 error 日志
+            assert rbac._audit_permission_change(
+                "rbac_assign_role", MagicMock(username="u"), {"a": 1}
+            ) is None
+            assert mock_log.called
 
 
 class TestSchoolCodeConflictMessage:
