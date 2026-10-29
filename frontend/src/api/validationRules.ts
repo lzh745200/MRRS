@@ -15,6 +15,10 @@ export interface ValidationRuleOut {
   rule_type: string
   is_active?: boolean
   error_message?: string
+  /** 规则参数（后端以 JSON 字符串存储） */
+  params?: string
+  description?: string
+  priority?: number
   [key: string]: unknown
 }
 
