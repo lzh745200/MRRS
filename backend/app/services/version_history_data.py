@@ -3650,6 +3650,19 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            "表不存在 → skipped（幂等）；",
+            "0 行 → DROP；",
+            "有数据 → 改名 legacy_<表名> 归档（归档表已存在时保留原表、记 warning 等人工确认）。",
+            (
+                "mypy 880 → 869：修掉「动态挂载方法」这一类属性不可见的债：models/base.py 的 Base.to_dict 是类创建后动态赋值（Base.to_dict = _ba"
+                "se_to_dict），mypy 看不见 → 没有显式定义 to_dict 的模型（FundAllocationOrder/FundAssetVerification …）在调用处被判 a"
+                "ttr-defined。"
+            ),
+            (
+                "api/v1/fund_lifecycle.py 60 → 55：group_col 显式标注 ColumnElement[Any]（各分支分别返回str/int/year，原来被钉成 C"
+                "olumnElement[str] 导致 int 分支全判错）；5 个批量预加载索引映射补dict[Optional[int], list[X]]（fund_id 可空，键就应是 Opti"
+                "onal）；"
+            ),
             (
                 "新增迁移 idx_dedup_002：按列集合分组判重（区别于历史 index_dedup_001 的按名字清孤儿），每组保留模型显式声明的那个（KEEP_INDEX_NAMES 硬编码自"
                 " models/*.py 的 Index(...)，附来源行号），sqlite_autoindex_* 永不删。实测删除 8 个、UPGRADE_EXIT=0。"
@@ -3673,26 +3686,7 @@ VERSION_HISTORY_DATA = [
             "CI 接线：pr-checks.yml 的 static-analysis 增加 Migration self-evidence ratchet (C1) 步骤。",
             (
                 "001_baseline 文件头加醒目说明：记录 create_all 掩盖了什么、B 轴为何自证、以及\"任何改 schema 的迁移必须自带旧库证据\"的约定与彻底根治方向（静态 DD"
-                "L 快照，另立项）。"
-            ),
-            "模型侧 8 处 EncryptedText(64) → EncryptedText(256)（与 EncryptedText 默认值一致）。",
-            (
-                "新增迁移 pii_col_width_001：把 8 个 PII 列统一到 VARCHAR(256)，逐列判存在性、已够宽则跳过（可重入），SQLite 走 batch_alter_tab"
-                "le 重建表；downgrade 回 64 并注明有损。"
-            ),
-            (
-                "新增 tests/unit/test_pii_col_width_r50.py（4 例）作为可验证收口：构造「旧库 VARCHAR(20)」直接驱动 _widen 断言改到 256 且数据"
-                "不丢；验证已够宽时不重复改（幂等）；验证缺表/缺列跳过；断言实测最长密文 115 ≤ 目标列宽 256。"
-            ),
-            (
-                "/health/database 与 /health/database-health 失败时返回 HTTP 200：body 里写 code:500，但探针/监控只看状态码 —— \"数据"
-                "库挂了\"在外部看来和\"一切正常\"没区别，告警永远不会触发。改为 JSONResponse(status_code=503)（body 保留 code: 500 以兼容仍读 body "
-                "的调用方）。"
-            ),
-            (
-                "4 个「生产零引用」的 schema 模块加 DEPRECATED 标记：schemas/policy.py、schemas/project.py、schemas/school.py、sc"
-                "hemas/village.py 只被测试的模块清单导入，生产代码从不引用；而同名类在 app/api/v1/*.py 里另有真正在用且与模型对齐的定义（如 SchoolCreate）——"
-                " 这正是\"按类名配对会产生假阳性\"的第二事实源。"
+                "L 快照，另立项）。已够宽则跳过（可重入），SQLite 走 batch_alter_table 重建表；downgrade 回 64 并注明有损。"
             ),
         ],
     },

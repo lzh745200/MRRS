@@ -7,6 +7,41 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十四批：`dead_models_001` 改走 r35 三分支 —— 迁移类收尾）
+
+**问题**：`dead_models_001` 只判断「表存在」就 `op.drop_table`，**没有任何行数护栏** ——
+违反 r35 契约（`r35_drop_legacy_tables_001` 定下的三分支）。开发库上那 8 张表确实都是 0 行，
+但生产/其它机器的库一旦有数据，升级会**静默丢数据**。
+
+**修复**：改为与 r35 一致的三分支，逻辑抽成 `apply_dead_models_cleanup(bind)` 纯函数：
+
+- 表不存在 → skipped（幂等）；
+- **0 行 → DROP**；
+- **有数据 → 改名 `legacy_<表名>` 归档**（归档表已存在时保留原表、记 warning 等人工确认）。
+
+通过 `PRAGMA foreign_keys = OFF` 避免改名/删表被外键引用阻断（失败也不阻断主流程）。
+
+**自证单测 `test_dead_models_001.py`（4 例）**（新门禁要求，覆盖三分支 + 归档已存在）：
+表缺失→skipped；0 行→DROP；**有 3 行→改名 legacy_ 且行数仍为 3**（核心）；
+归档表已存在→保留原表不覆盖既有归档。
+
+**空库演练**：`dropped=[effectiveness_indicators, user_sessions, fee_standards, inspection_rules]`、
+`archived=[]`、`skipped=[version_history, package_edit_logs, data_versions, army_units]`，`EXIT=0`。
+
+注：本迁移位于链中段，已升级的库因 alembic_version 已记录而不重跑；新库与未升级的旧库走新逻辑（只会更安全）。
+
+**至此迁移批次 4 项全部收口**：PII 密文超列长 · 迁移基线自证 · 冗余索引去重 · `dead_models_001` 三分支。
+
+- **mypy 880 → 869：修掉「动态挂载方法」这一类属性不可见的债**：
+  `models/base.py` 的 `Base.to_dict` 是**类创建后动态赋值**（`Base.to_dict = _base_to_dict`），
+  mypy 看不见 → 没有显式定义 `to_dict` 的模型（`FundAllocationOrder`/`FundAssetVerification` …）
+  在调用处被判 `attr-defined`。改为 `declarative_base(cls=_ToDictMixin)`，由 mixin 显式声明
+  `to_dict(self, camel_case: bool = True) -> dict`（运行时仍走同一实现，行为零变化）；
+  验证：`import app.main` 105 个 mapper 正常、涉及 `to_dict` 的 **60 个测试文件 2392 passed**、集成 **200 passed**。
+- **`api/v1/fund_lifecycle.py` 60 → 55**：`group_col` 显式标注 `ColumnElement[Any]`（各分支分别返回
+  str/int/year，原来被钉成 `ColumnElement[str]` 导致 int 分支全判错）；5 个批量预加载索引映射补
+  `dict[Optional[int], list[X]]`（`fund_id` 可空，键就应是 Optional）；`_get_username` 恒返回 `str`
+  （缺失时空串兜底）。该文件定向 **260 passed**、flake8 0。
 ### Fixed（全库审计第十三批：冗余索引去重，迁移类最后一项）
 
 **实测**（空库 `alembic upgrade head` 后按「表 + 列有序集合 + 唯一性」判重）：11 组重复，
