@@ -1,6 +1,6 @@
 # Release Notes — v1.18.26（2026-10-29）
 
-> 上一正式发布是 **v1.18.25**；本版覆盖 v1.18.25 之后 main 上的 21 个提交，
+> 上一正式发布是 **v1.18.25**；本版覆盖 v1.18.25 之后 main 上的 36 个提交，
 > 以全库审计的认证/权限 Critical 修复为主。逐项账本见仓库根目录 `CHANGELOG.md`。
 
 ## 一、下载与校验
@@ -21,7 +21,7 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 
 > **未签名包提示**：证书尚未采购，首次运行会触发 SmartScreen（「更多信息」→「仍要运行」）。
 
-## 二、认证与权限（4 个 Critical，审计八批 28 项）
+## 二、认证与权限（4 个 Critical，审计十八批）
 
 - **refresh 完全绕过 `token_version` 吊销**：`validate_token` 只验签名/jti/type，不比对版本，
   而 access 链路有校验。登出或强退后，未随登出提交的 refresh（其他设备/被窃）仍能换发
@@ -94,12 +94,12 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 - 启用 SQLAlchemy mypy 插件，mypy **1310 → 880**（消除 420 个误报）；
   `rbac_service._log_access` 形参放宽为 `Optional[str]`。
 - `as any` 保持 **0**；静默吞异常 **0**；统一门禁 **34/34 PASS**。
-- 门禁基线按实测同步：`broad_except` 801→802、后端用例 **14,953**、locations 清单刷新。
+- 门禁基线按实测同步：`broad_except` 801→802、后端用例 **14,976**、locations 清单刷新。
 
 ## 六、验证（发布前本地实测）
 
 - 统一门禁入口 `backend/.venv/Scripts/python.exe scripts/run_gates.py`：**34 道 PASS**；
-- 后端全量：**14,953 用例**（分段/CI 口径以 `backend-test` 为准）；
+- 后端全量：**14,976 用例**（分段/CI 口径以 `backend-test` 为准）；
 - 前端：**347 个测试文件 / 7,420 用例**，生产构建成功；
 - Electron：`npm run test:electron` **14/14**（含 AES-GCM 往返/篡改/短文件守护）；
 - 安装冒烟：安装包 payload 解包后启动内置后端，`/health` 返回 1.18.26 /
@@ -115,22 +115,17 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 
 ## 八、本机构建与冒烟记录
 
-- **源码冻结点**：`34bf9d9f`（含全库审计第 1~8 批；第 9 批 schema 在途改动已备份到
-  `backup/parallel-batch9-2026-10-29`，不进入本版）。
-- **Windows x64 安装包**：`dist/electron/MRRS-Setup-1.18.26-x64.exe`（223 MB，
-  FileVersion/ProductVersion = 1.18.26）。
-  SHA256：`dcbed210a0ad2b569c97757fb7932f8a6763eb286950022e9207a18f6546cbff`。
-- **构建命令**：
-  `cd frontend && npm run build` → `npm run build`（PyInstaller onedir + electron-builder）
-  → 前端最终重建后 `./node_modules/.bin/electron-builder --win --x64` 重打包。
-- **打包内容核对**：`resources/frontend/version.json` = 1.18.26（buildTime
-  `2026-10-29T08:57:53Z`）；`app.asar` package version = 1.18.26；
-  未打包 `tests/`、`conftest.py`、`pytest.ini`。
-- **运行时冒烟**：安装包 payload 解包 3,093 项 → 启动
-  `resources/backend/assistance-backend/assistance-backend.exe`（隔离 APPDATA、端口 18026）
-  → `/health` 200：`version=1.18.26`、`git_hash=34bf9d9f`、
-  `migration.at_head=true`、`journal_mode=wal`、`clock.status=ok`。
-  证据：`deliverables/smoke-health-1.18.26.json`。
+- **源码候选冻结点**：`d841ec0a`（含全库审计第 1~18 批，36 个提交；后续并行改动不再纳入）。
+- **Windows x64 安装包**：本地早先构建的
+  `dist/electron/MRRS-Setup-1.18.26-x64.exe`（223 MB，SHA256 `dcbed2…`）对应 `34bf9d9f`，
+  **仅作构建链验证，不是本候选的最终产物**；最终安装包以 `v1.18.26` tag 触发 CI 产出的
+  `MRRS-Setup-1.18.26-x64.exe` 与 `SHA256SUMS-windows-x64.txt` 为准。
+- **构建链验证**：`cd frontend && npm run build` → `npm run build`
+  （PyInstaller onedir + electron-builder 24.13.3）成功；前端 version.json = 1.18.26；
+  `app.asar` package version = 1.18.26；未打包 `tests/`、`conftest.py`、`pytest.ini`。
+- **运行时冒烟（34bf 包）**：payload 解包 3,093 项 → 内置后端（隔离 APPDATA、端口 18026）
+  `/health` 200：`version=1.18.26`、`git_hash=34bf9d9f`、`migration.at_head=true`、
+  `journal_mode=wal`、`clock.status=ok`。证据：`deliverables/smoke-health-1.18.26.json`。
 - **NSIS 安装器限制（未完成）**：本执行环境禁止跨目录写文件（工作区内/外均 0 files；
   7-Zip 解包到 `C:\` 直接 `Cannot create folder`），安装器静默执行返回 0/2 且未落盘；
   验证期间检测到旧 v1.18.17 安装已被升级逻辑移除（用户数据未删）。

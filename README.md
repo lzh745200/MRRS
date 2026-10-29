@@ -5,12 +5,12 @@
 ![Version](https://img.shields.io/badge/version-1.18.26-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-22%2C373-brightgreen)
+![Tests](https://img.shields.io/badge/tests-22%2C396-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 本版亮点（v1.18.26）
 
-- **全库审计八批 28 项（含 4 个 Critical）**：refresh 此前完全绕过 `token_version`
+- **全库审计十八批（含 4 个 Critical）（含 4 个 Critical）**：refresh 此前完全绕过 `token_version`
   吊销（登出/强退后旧 refresh 仍可换 access）；权限包可选认证手写解码绕过黑名单/版本/
   禁用/首登改密四项校验，却用于「重写全库 RBAC」；RBAC 8 个写路由零审计；禁用账号的
   未过期 access 仍全权限。均已修复并补负向回归。
@@ -23,7 +23,7 @@
 - **数据隔离与错误口径**：批量改删在操作者未绑定组织时 fail-closed；备份恢复不再回传
   含绝对路径的异常原文；`/system/env` 收紧为管理员。
 - **质量**：mypy **1310 → 880**（启用 SQLAlchemy 插件，消除 420 个误报）、`as any` 保持
-  **0**、静默吞异常 **0**；统一门禁 **34/34 PASS**；后端 **14,953** / 前端 **7,420** 用例。
+  **0**、静默吞异常 **0**；统一门禁 **34/34 PASS**；后端 **14,976** / 前端 **7,420** 用例。
 
 ## 历史亮点（v1.18.25）
 
@@ -176,7 +176,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-29（v1.18.26 发布前）— 后端 **14,953** 用例、
+> **上次全量验证**: 2026-10-29（v1.18.26 发布前）— 后端 **14,976** 用例、
 > 前端 **347 个 `.test.ts` / 7,420 用例**；统一门禁 **34/34 PASS**。
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
