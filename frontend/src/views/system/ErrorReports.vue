@@ -380,9 +380,7 @@ async function showDetail(reportId: number) {
       // 初始化更新表单（后端 to_dict 为 camelCase 键名；兼容旧 snake_case 响应）
       updateForm.status = res.data.status
       updateForm.resolution_note =
-        res.data.resolutionNote ||
-        (res.data as { resolution_note?: string }).resolution_note ||
-        ''
+        res.data.resolutionNote || (res.data as { resolution_note?: string }).resolution_note || ''
     }
   } catch (e: any) {
     ElMessage.error('加载错误详情失败')

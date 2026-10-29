@@ -220,10 +220,7 @@ export const getTransitionFunding = (villageId: number) =>
   get<TransitionFundingRow[] | TransitionFundingPayload>(
     `/supported-villages/${villageId}/transition-funding`
   )
-export const saveTransitionFunding = (
-  villageId: number,
-  data: Record<string, unknown>
-) =>
+export const saveTransitionFunding = (villageId: number, data: Record<string, unknown>) =>
   post(`/supported-villages/${villageId}/transition-funding`, data)
 
 // ── Import (yearly overview) ──

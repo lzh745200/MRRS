@@ -3597,6 +3597,11 @@ VERSION_HISTORY_DATA = [
         "description": "收口重建：合并双写者分支 + 修掉最后一处过时断言",
         "features": [
             (
+                "前端 lint:check 门禁 29 处 prettier 警告清零：frontend-check 在npm run lint:check（--max-warnings=0）红，✖ 29"
+                " problems (0 errors, 29 warnings)，全部是格式问题（模板换行、空行、文件尾缺换行）。npm run lint 自动修复后lint:check 与 type-"
+                "check 均退出 0。"
+            ),
+            (
                 "Critical｜refresh 完全绕过 token_version 吊销：validate_token 只验签名 / jti 黑名单 / type，不比对版本，而 access 链路有"
                 "该校验。登出或强退后，未随登出提交的 refresh（其他设备 / 被窃）仍能换发带「新版本号」的合法 access。"
             ),
@@ -3634,10 +3639,9 @@ VERSION_HISTORY_DATA = [
                 "审计写入回滚调用方业务事务（会丢业务数据却返回 200）：AuditLogService.log 原先在调用方 Session 上 add + safe_commit，失败时 db.rol"
                 "lback() 会把尚未提交的业务写入一并回滚，而异常被吞掉、端点照样返回 200 —— 调用方完全不知道数据没落库。"
             ),
-            "/system/env 任意登录用户可读依赖与运行环境 → 收紧为 require_admin()（与 system/diagnostics 一致）。",
             (
-                "备份恢复把 FileNotFoundError / ValueError 原文回传（含本地绝对路径）→ 改固定文案 + 日志留原文。让测试静默失效（已修 3 处：r16 双重失效、repo"
-                "rt_templates 覆盖版本缺 finally、recommendation 整类复制两遍）。"
+                "/system/env 任意登录用户可读依赖与运行环境 → 收紧为 require_admin()（与 system/diagnostics 一致）。让测试静默失效（已修 3 处：r16 "
+                "双重失效、report_templates 覆盖版本缺 finally、recommendation 整类复制两遍）。"
             ),
         ],
     },

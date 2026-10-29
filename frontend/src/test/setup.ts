@@ -124,7 +124,9 @@ Object.defineProperty(globalThis, 'ResizeObserver', {
 
 // Mock requestAnimationFrame / cancelAnimationFrame
 if (typeof globalThis.requestAnimationFrame === 'undefined') {
-  Object.assign(globalThis, { requestAnimationFrame: (cb: FrameRequestCallback) => setTimeout(cb, 0) })
+  Object.assign(globalThis, {
+    requestAnimationFrame: (cb: FrameRequestCallback) => setTimeout(cb, 0),
+  })
 }
 if (typeof globalThis.cancelAnimationFrame === 'undefined') {
   Object.assign(globalThis, { cancelAnimationFrame: (id: number) => clearTimeout(id) })

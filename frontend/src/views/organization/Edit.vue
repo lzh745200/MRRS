@@ -202,9 +202,7 @@ const loadParentOptions = async () => {
   try {
     const res = await getOrganizations({ page_size: 200, is_active: true })
     const currentId = safeRouteParam(route.params.id)
-    parentOptions.value = (res?.items ?? []).filter(
-      (item: Organization) => item.id !== currentId
-    )
+    parentOptions.value = (res?.items ?? []).filter((item: Organization) => item.id !== currentId)
   } catch (error) {
     logger.error('加载上级组织失败:', error)
     ElMessage.error(getErrorMessage(error, '加载上级组织失败，请稍后重试'))

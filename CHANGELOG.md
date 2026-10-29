@@ -7,6 +7,15 @@
 
 ## [1.18.25] - 2026-10-29 — 收口重建：合并双写者分支 + 修掉最后一处过时断言
 
+### Fixed
+
+- **前端 `lint:check` 门禁 29 处 prettier 警告清零**：`frontend-check` 在
+  `npm run lint:check`（`--max-warnings=0`）红，`✖ 29 problems (0 errors, 29 warnings)`，
+  全部是格式问题（模板换行、空行、文件尾缺换行）。`npm run lint` 自动修复后
+  `lint:check` 与 `type-check` 均退出 0。因为 lint 卡在 vitest 之前，
+  它一红整条前端验证链（含覆盖率门禁）都不会执行，所以必须清零。
+
+
 > 背景：v1.18.24 的 tag 打在 `b0aacfe`（其 Windows/ARM64 构建均被 cancelled），
 > 之后 main 分成两条线并行推进（本工作树 vs 另一 worktree 的 CI 修复线）。
 > 本版把两条线合并（合并提交 `58f38aac`，零冲突），并在合并态上重新验证。
