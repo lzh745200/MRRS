@@ -7,6 +7,23 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十五批：`machine_codes.created_by` 补 ondelete）
+
+**问题**：`machine_codes.created_by` 是全库**唯一**一处没写 `ondelete` 的 `users` 外键
+（其余同类列都是 `SET NULL` / `CASCADE`）。删除用户时该外键会阻断删除，或留下指向已删用户的
+悬挂引用，与「删用户即 SET NULL」的统一口径不一致。
+
+**修复**：
+- 模型 `machine_codes.py` 补 `ondelete="SET NULL"`；
+- 迁移 `fk_machine_codes_created_by_001`：SQLite 不支持 `ALTER CONSTRAINT`，改为
+  「读 `sqlite_master` 的 DDL → 正则替换外键子句 → 建临时表-拷数据-drop-rename」，
+  逐项守卫（表/列/外键缺失、已有 ondelete 都跳过，可重入）。
+  放弃 `batch_alter_table` 的原因：它走反射重建会把旧 FK 一起带上，且 `drop_constraint`
+  在 `with` 块退出时才执行，`try/except` 抓不到 `No such constraint`（实测踩到）。
+- 自证单测 4 例：识别「有外键无 ondelete」/ 表缺失返回 None / 已有 ondelete 幂等 /
+  **真跑 upgrade 后 `PRAGMA foreign_key_list` 读出 `SET NULL`**，并在 `PRAGMA foreign_keys=ON`
+  下验证删用户后 `created_by` 被置 NULL。
+
 ### Fixed（全库审计第十四批：`dead_models_001` 改走 r35 三分支 —— 迁移类收尾）
 
 **问题**：`dead_models_001` 只判断「表存在」就 `op.drop_table`，**没有任何行数护栏** ——

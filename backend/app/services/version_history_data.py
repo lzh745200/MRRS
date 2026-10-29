@@ -3650,6 +3650,15 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            "模型 machine_codes.py 补 ondelete=\"SET NULL\"；",
+            (
+                "迁移 fk_machine_codes_created_by_001：SQLite 不支持 ALTER CONSTRAINT，改为「读 sqlite_master 的 DDL → 正则替换"
+                "外键子句 → 建临时表-拷数据-drop-rename」，逐项守卫（表/列/外键缺失、已有 ondelete 都跳过，可重入）。"
+            ),
+            (
+                "自证单测 4 例：识别「有外键无 ondelete」/ 表缺失返回 None / 已有 ondelete 幂等 /真跑 upgrade 后 PRAGMA foreign_key_list "
+                "读出 SET NULL，并在 PRAGMA foreign_keys=ON下验证删用户后 created_by 被置 NULL。"
+            ),
             "表不存在 → skipped（幂等）；",
             "0 行 → DROP；",
             "有数据 → 改名 legacy_<表名> 归档（归档表已存在时保留原表、记 warning 等人工确认）。",
@@ -3678,15 +3687,6 @@ VERSION_HISTORY_DATA = [
             (
                 "新增门禁 scripts/check_migration_self_evidence.py：扫描 alembic/versions/*.py，凡含 alter/add/drop colum"
                 "n、create/drop index、create/drop table 的迁移，必须自带一个以 revision 命名的测试文件（能手工构造「旧库状态」再驱动迁移函数）；"
-            ),
-            (
-                "单测 test_migration_self_evidence_gate.py（6 例）验证它真的会失败：无证据的改列迁移 → 门禁 return 1；有证据 → 0；纯数据迁移 → 忽略"
-                "；豁免 → 0；--json 可解析；并锁定 pii_col_width_001 必须靠证据通过、不得依赖豁免。"
-            ),
-            "CI 接线：pr-checks.yml 的 static-analysis 增加 Migration self-evidence ratchet (C1) 步骤。",
-            (
-                "001_baseline 文件头加醒目说明：记录 create_all 掩盖了什么、B 轴为何自证、以及\"任何改 schema 的迁移必须自带旧库证据\"的约定与彻底根治方向（静态 DD"
-                "L 快照，另立项）。已够宽则跳过（可重入），SQLite 走 batch_alter_table 重建表；downgrade 回 64 并注明有损。"
             ),
         ],
     },
