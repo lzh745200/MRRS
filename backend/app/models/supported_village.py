@@ -747,7 +747,7 @@ class VillageCommitteeMember(Base, TimestampMixin):
     )
     name = Column(String(100), nullable=False, comment="姓名")
     position = Column(String(50), nullable=True, comment="职务")
-    phone = Column(EncryptedText(64), nullable=True, comment="电话(透明加密, ADR-0005)")
+    phone = Column(EncryptedText(256), nullable=True, comment="电话(透明加密, ADR-0005)")
     is_veteran = Column(Boolean, default=False, comment="是否退役人员")
     remark = Column(String(500), nullable=True, comment="备注")
 

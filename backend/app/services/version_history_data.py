@@ -3650,6 +3650,15 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            "模型侧 8 处 EncryptedText(64) → EncryptedText(256)（与 EncryptedText 默认值一致）。",
+            (
+                "新增迁移 pii_col_width_001：把 8 个 PII 列统一到 VARCHAR(256)，逐列判存在性、已够宽则跳过（可重入），SQLite 走 batch_alter_tab"
+                "le 重建表；downgrade 回 64 并注明有损。"
+            ),
+            (
+                "新增 tests/unit/test_pii_col_width_r50.py（4 例）作为可验证收口：构造「旧库 VARCHAR(20)」直接驱动 _widen 断言改到 256 且数据"
+                "不丢；验证已够宽时不重复改（幂等）；验证缺表/缺列跳过；断言实测最长密文 115 ≤ 目标列宽 256。"
+            ),
             (
                 "/health/database 与 /health/database-health 失败时返回 HTTP 200：body 里写 code:500，但探针/监控只看状态码 —— \"数据"
                 "库挂了\"在外部看来和\"一切正常\"没区别，告警永远不会触发。改为 JSONResponse(status_code=503)（body 保留 code: 500 以兼容仍读 body "
@@ -3689,18 +3698,6 @@ VERSION_HISTORY_DATA = [
             (
                 "契约收敛 3 处：auth/users.py 的改密响应手写 {\"code\":200,...} → success_response()；work_logs.py 的 @router."
                 "get(\"\", response_model=dict) 形同零校验（实际返回 ok_list() 信封），已删除该 response_model；"
-            ),
-            (
-                "政策附件下载计数降级为 best-effort：该计数写在 GET 里（有意的业务统计），真正危险的是计数写库失败会让下载本身 500 —— 用户点下载却报错，只为一条统计。改为 try/"
-                "except + rollback，失败只记日志，照常下发文件。"
-            ),
-            (
-                "学校导入的冗余临时文件（3 处）：上传内容被写一份 15MB 级临时文件，但解析走的是内存content（load_workbook_any(content, ...)），临时文件从未被读"
-                "取 —— 纯冗余落盘。已删除写入与配套 unlink（finally 保留 pass 作为统一收口位置）。"
-            ),
-            (
-                "未知 DataScope 的列表过滤 fail-open：apply_scope_to_query 的兜底分支 return query等于放行全量，与同模块 check_record_a"
-                "ccess 对未知 scope 返回 False 口径相反（注释还自称\"最严语义\"）。同一数据面两条相反口径，扩展枚举值时最易静默泄漏全量。"
             ),
         ],
     },

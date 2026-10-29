@@ -85,7 +85,7 @@ class Household(Base):
     )
     helper_name = Column(String(64), nullable=True, comment="帮扶责任人")
     helper_phone = Column(
-        EncryptedText(64), nullable=True, comment="帮扶责任人电话（PII 透明加密，ADR-0005）"
+        EncryptedText(256), nullable=True, comment="帮扶责任人电话（PII 透明加密，ADR-0005）"
     )
     annual_income = Column(Numeric(14, 2), nullable=True, comment="户年收入(元)")
     migrant_workers = Column(Integer, nullable=True, default=0, comment="务工人数")
@@ -171,7 +171,7 @@ class HouseholdMember(Base):
     name = Column(String(64), nullable=False, comment="成员姓名")
     relation = Column(String(32), nullable=True, comment="与户主关系")
     id_card = Column(
-        EncryptedText(64), nullable=True, comment="身份证号（PII 透明加密，ADR-0005）"
+        EncryptedText(256), nullable=True, comment="身份证号（PII 透明加密，ADR-0005）"
     )
     gender = Column(String(10), nullable=True, comment="性别")
     birth_year = Column(Integer, nullable=True, comment="出生年份")

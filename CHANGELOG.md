@@ -7,6 +7,34 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Security（全库审计第十一批：PII 密文超列长 —— Critical 收口）
+
+**实测证据**（`encrypt_pii` 实测，AES-SIV + base64 + `enc.v1:` 标记）：
+
+| 明文 | 密文长度 |
+|---|---|
+| id_card(18) | 55 |
+| id_card(64) | **115** |
+| phone(11) | 43 |
+| phone(20) | 55 |
+| phone(50) | 95 |
+
+而**库里的实际列宽是 VARCHAR(20)**（`users.phone` / `schools.contact_phone` /
+`organizations.contact_phone` / `projects.contact_phone` / `village_committee_members.phone`），
+比模型侧声明的 `EncryptedText(64)` 还窄。SQLite 不强制 VARCHAR 长度所以现在"能存"；
+换 MySQL / PostgreSQL 会直接 `Data too long for column` 写入失败。
+
+- 模型侧 8 处 `EncryptedText(64)` → `EncryptedText(256)`（与 `EncryptedText` 默认值一致）。
+- 新增迁移 `pii_col_width_001`：把 8 个 PII 列统一到 VARCHAR(256)，逐列判存在性、
+  已够宽则跳过（可重入），SQLite 走 `batch_alter_table` 重建表；`downgrade` 回 64 并注明有损。
+- 新增 `tests/unit/test_pii_col_width_r50.py`（4 例）作为**可验证收口**：
+  构造「旧库 VARCHAR(20)」直接驱动 `_widen` 断言改到 256 且数据不丢；
+  验证已够宽时不重复改（幂等）；验证缺表/缺列跳过；断言**实测最长密文 115 ≤ 目标列宽 256**。
+
+**同时暴露 C1（迁移基线自证）**：空库 `alembic upgrade head` 时该迁移报
+`widened 0 column(s)` —— 因为库是 `001_baseline` 的 `create_all()` 用**当前模型**建的，
+列宽一开始就是 256，**迁移逻辑在标准演练里根本不会被执行**。这也是上面必须手搓旧库状态的原因。
+
 ### Fixed（全库审计第十批：1 项）
 
 - **`/health/database` 与 `/health/database-health` 失败时返回 HTTP 200**：body 里写 `code:500`，
