@@ -91,8 +91,9 @@ def _ensure_styles() -> None:
     global _thin_side, _thin_border, _bottom_gold, _header_border
     global _center_align, _left_align
 
-    # 名称在模块级已声明（初值 None），因此不能用 globals() 判断是否已构造
-    if _title_font is not None:
+    # 名称在模块级已声明（初值 None）：用 globals().get 判定既能识别「未构造」，
+    # 也容忍测试 delitem 模拟冷启动（删掉后直接读名字会 NameError）。
+    if globals().get("_title_font") is not None:
         return
 
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side

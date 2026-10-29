@@ -44,10 +44,13 @@ class TestBatchService:
         ids = [p.id for p in sample_projects[:3]]
         updates = {"status": "completed"}
 
+        # 2026-10-29 审计（fail-open 修复）后，非超管且未绑组织必须 fail-closed
+        # （返回 success=False）。本用例只验证批量更新本身，故以超管身份调用。
         result = await service.batch_update(
             table_name="projects",
             ids=ids,
-            updates=updates
+            updates=updates,
+            is_superuser=True,
         )
 
         assert result["success"] is True
@@ -77,7 +80,8 @@ class TestBatchService:
         result = await service.batch_delete(
             table_name="projects",
             ids=ids,
-            soft_delete=False
+            soft_delete=False,
+            is_superuser=True,
         )
 
         assert result["success"] is True

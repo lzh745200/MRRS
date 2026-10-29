@@ -448,6 +448,16 @@ esult["success"] = not result["errors"]，
   验证：`vue-tsc` 0 错误；技术债 `as any` 基线 **0**（新增一处即红）；受影响区域 1699 passed。
 - **mypy 1310 → 890（启用 SQLAlchemy 官方 mypy 插件，一次性消 420 个误报）**：
 - **mypy 890 → 880**：`services/rbac_service.py` 的 `_log_access(resource_type, resource_id)`
+- **修回上一提交引入的回归（分段全量测试抓到的，记录在此而不是悄悄改）**：
+  `excel_template_service._ensure_styles` 的幂等守卫改成 `if _title_font is not None` 后，
+  `test_startup_lazy_imports_p2_4::test_styles_built_on_first_use` 失败 —— 该用例用
+  `monkeypatch.delitem(mod.__dict__, "_title_font")` 模拟冷启动，删掉后直接读名字会 `NameError`。
+  改为 `if globals().get("_title_font") is not None`：既识别「未构造」，也容忍全局被删。
+  教训：把「名字是否存在」换成「值是否为空」时，要同时检查所有依赖前者语义的用例。
+- **根级批量用例按新契约更新（2 例）**：`tests/test_batch_operations.py` 的
+  `batch_update` / `batch_delete` 未传 `is_superuser`，而 2026-10-29 的 fail-open 审计修复已把
+  「非超管且未绑组织」改为 **fail-closed**（返回 `success=False` 而非跨组织全量操作）。
+  用例本意是验证批量更新/删除本身，故显式以 `is_superuser=True` 调用，并加注释说明契约。
   在 10 处调用点传入 `Optional[str]`（列表/详情接口里 resource_id 可能缺省），而函数体本来就写了
   `resource_type or ""` / `resource_id or ""` 兜底 —— 把形参注解放宽为 `Optional[str]`
   （**纯注解修正，行为不变**），消除 10 个 `arg-type`。
