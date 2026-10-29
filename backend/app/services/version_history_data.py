@@ -3589,15 +3589,6 @@ VERSION_HISTORY_DATA = [
                 "时间基准：self_check_service 的「账号锁定」「最近导入」两项用 datetime.now()（本地墙钟）与 UtcDateTime 列比较，UTC+8 下阈值整体后移 8"
                 " 小时——锁定时长只有 15 分钟，于是明明有账号被锁，体检结论恒报「没有处于锁定状态的账号」；"
             ),
-            (
-                "重活离开事件循环：/system/backup/restore、/upload-restore 此前在 async 端点里同步跑restore_backup，事件循环被占死 → 维护窗口 "
-                "wait_for_idle 的在途计数（由 async 中间件递减）永远降不下来，固定空转 10s 打 ERROR 且恢复全程全站无响应；"
-            ),
-            (
-                "故障不再伪装成业务数据：dashboard（stats / kpi-trends / yearly-trends / summary）与reminders（list / scan）异常统一"
-                " 500，不再 200 + 全 0 / null；权限包校验异常由「None 视为通过」改 fail-closed（该返回值的下一步是 _clear_existing_data()，损坏包"
-                "会被当成合法包清库）；"
-            ),
         ],
     },
     {
