@@ -854,6 +854,24 @@ async def get_school(
     return success_response(data=data, message="成功")
 
 
+def _raise_if_code_taken(existing, code: str) -> None:
+    """编码被占用时抛 409；区分「活跃占用」与「已软删除占用」。
+
+    软删除（is_active=False）的记录仍占着唯一编码 —— 直接说"编码已存在"会让用户在
+    列表里找不到那条记录，以为是系统错乱（2026-10-29 审计）。抽成纯函数便于单测，
+    并让 create / update 两条路径共用同一套文案。
+    """
+    if existing is None:
+        return
+    if not getattr(existing, "is_active", True):
+        raise AppError.conflict(
+            f"编码 {code} 仍被已删除的学校「{existing.name}」占用。"
+            "编码在数据库中保持唯一（含已删除记录），请改用其他编码；"
+            "确需复用请由管理员彻底清理该历史记录后重试。"
+        )
+    raise AppError.conflict("学校编码已存在")
+
+
 @router.post("")
 async def create_school(
     data: SchoolCreate,
@@ -865,19 +883,10 @@ async def create_school(
     if data.code == "":
         data.code = None
 
-    # 检查编码唯一性
+    # 检查编码唯一性（软删除占用给出可行动指引，见 _raise_if_code_taken）
     if data.code:
         existing = db.query(School).filter(School.code == data.code).first()
-        if existing:
-            # 软删除（is_active=False）的记录仍占着唯一编码 —— 直接说"编码已存在"会让用户
-            # 在列表里找不到那条记录，以为是系统错乱。这里把真实原因讲清楚（2026-10-29 审计）。
-            if not existing.is_active:
-                raise AppError.conflict(
-                    f"编码 {data.code} 仍被已删除的学校「{existing.name}」占用。"
-                    "编码在数据库中保持唯一（含已删除记录），请改用其他编码；"
-                    "确需复用请由管理员彻底清理该历史记录后重试。"
-                )
-            raise AppError.conflict("学校编码已存在")
+        _raise_if_code_taken(existing, data.code)
 
     school_data = data.model_dump()
     school_data.setdefault("organization_id", getattr(current_user, "organization_id", None))
@@ -977,18 +986,10 @@ async def update_school(
             message="变更已提交审批，审批通过后生效",
         )
 
-    # 检查编码唯一性（如果要更新编码）
+    # 检查编码唯一性（如果要更新编码）—— 与 create 共用同一判定
     if "code" in update_data and update_data["code"]:
         existing = db.query(School).filter(School.code == update_data["code"], School.id != school_id).first()
-        if existing:
-            # 同 create：区分"活跃记录占用"与"已软删除记录占用"，后者给出可行动指引
-            if not existing.is_active:
-                raise AppError.conflict(
-                    f"编码 {update_data['code']} 仍被已删除的学校「{existing.name}」占用。"
-                    "编码在数据库中保持唯一（含已删除记录），请改用其他编码；"
-                    "确需复用请由管理员彻底清理该历史记录后重试。"
-                )
-            raise AppError.conflict("学校编码已存在")
+        _raise_if_code_taken(existing, update_data["code"])
 
     # 转换枚举
     if "type" in update_data and update_data["type"]:
