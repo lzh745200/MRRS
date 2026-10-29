@@ -40,6 +40,16 @@
   Windows %TEMP% ACL 构建兜底、门禁统一入口 + no-print/dist 棘轮、mypy 1394→1385、
   as any 196→172 等），避免 Release 正文落到兜底占位。
 
+### Fixed（三补：安装步骤"慢性超时被判 cancelled"）
+
+- **`frontend-check` 的安装步骤跑了 45 分 09 秒，正好撞上该作业 `timeout-minutes: 45`**，
+  于是整条 job 结论成了 **cancelled** —— 日志看起来像"被外部取消"，实际是超时，
+  既掩盖真因又空耗 45 分钟。算术很清楚：5 轮 × `fetch-timeout 300s` + 双镜像 × 3 轮
+  = 最坏 11 次 × 5 分钟，本就超过任何合理的 job 预算。
+  现收紧为**有界阶梯**：`fetch-timeout 60s`、默认源 3 轮、每镜像 2 轮
+  （3+2+2 = 7 次 × ≈60–90s ≈ 10 分钟），并把 `frontend-check` 的 job 超时
+  45 → **60 分钟**留出真实用例（约 10 分钟）的余量。
+
 ### Fixed（再补：镜像兜底此前形同虚设）
 
 - **`npm ci` 不认 `--registry`**：它沿用 `package-lock.json` 里写死的 `resolved` URL
