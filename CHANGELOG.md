@@ -7,6 +7,21 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十八批：storage 访问缺保护 2 项）
+
+- **`utils/authStorage.ts` 的 storage 读取无 try**：`_readSlot` 直接 `sessionStorage.getItem` /
+  `localStorage.getItem`，而本模块被 `router/guards.ts` 在**每次导航**调用（`getToken`）——
+  浏览器在隐私模式 / 禁用存储 / 受限 webview 下会抛 `SecurityError`，整次跳转就炸。
+  同目录 `guards.ts` 的 `readLockFlag` 早已写了 fail-closed 注释，说明团队知道这个风险。
+  新增 `safeGet()` 包装：读取异常返回 `null`（视作未登录，fail-closed）。
+  写入点保持原样并在注释里说明理由（`setItem` 只在配额满时抛，失败后内存态仍可用，
+  优先级低于读；同时避免引入未使用 helper）。
+- **`MonitoringDashboard.vue` 在 setup 顶层读 `sessionStorage`**：`ref(sessionStorage.getItem(...))`
+  位于 setup 同步路径，抛错即**整页白屏**；其余 215 个文件的 storage 调用都有 try，唯独这里没有。
+  改为 `readHealthExpanded()` 带 fallback（读不到按默认展开），`watch` 里的 `setItem` 也补 try。
+
+**验证**：`eslint` **0** · `vue-tsc --noEmit` **0 错误** · `vitest run tests/unit/{utils,views/system}` **65 文件 / 1588 用例通过**。
+
 ### Fixed（全库审计第十七批：前端 3 项）
 
 - **`policies/Detail.vue` 预览 iframe 缺 `sandbox`**：`previewUrl` 是 `URL.createObjectURL(blob)`，

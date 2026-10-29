@@ -48,6 +48,21 @@ const LEGACY_KEYS = {
   REFRESH_TOKEN: ['refresh_token'],
 } as const
 
+// ── 安全存储包装（2026-10-29 审计）────────────────────────────────────────
+// 浏览器在隐私模式 / 禁用 Cookie / 受限 webview 下，访问 localStorage /
+// sessionStorage 会抛 SecurityError；而本模块被 router/guards.ts 在**每次导航**调用
+// （getToken），一抛就会在守卫里炸掉整次跳转。同目录 guards.ts 的 readLockFlag 早已
+// 写了 fail-closed 注释，说明团队知道这个风险 —— 这里补齐同款保护：
+// 读取异常返回 null（视作未登录，fail-closed）。写入点保持原样：
+// setItem 只在配额满时抛，且失败不影响本次会话（内存态仍可用），优先级低于读。
+function safeGet(storage: () => Storage, key: string): string | null {
+  try {
+    return storage().getItem(key)
+  } catch {
+    return null
+  }
+}
+
 /** 单一来源的整份凭据（token / user / refresh 必须同源，绝不跨来源拼接） */
 interface CredentialSlot {
   token: string | null
@@ -86,16 +101,16 @@ export class AuthStorage {
   private static _readSlot(source: CredentialSource): CredentialSlot {
     if (source === 'session') {
       return {
-        token: sessionStorage.getItem(STORAGE_KEYS.TOKEN),
-        user: AuthStorage._parseUser(sessionStorage.getItem(STORAGE_KEYS.USER)),
-        refresh: sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN),
+        token: safeGet(() => sessionStorage, STORAGE_KEYS.TOKEN),
+        user: AuthStorage._parseUser(safeGet(() => sessionStorage, STORAGE_KEYS.USER)),
+        refresh: safeGet(() => sessionStorage, STORAGE_KEYS.REFRESH_TOKEN),
       }
     }
     if (source === 'persist') {
       return {
-        token: localStorage.getItem(STORAGE_KEYS.PERSIST_TOKEN),
-        user: AuthStorage._parseUser(localStorage.getItem(STORAGE_KEYS.PERSIST_USER)),
-        refresh: localStorage.getItem(STORAGE_KEYS.PERSIST_REFRESH),
+        token: safeGet(() => localStorage, STORAGE_KEYS.PERSIST_TOKEN),
+        user: AuthStorage._parseUser(safeGet(() => localStorage, STORAGE_KEYS.PERSIST_USER)),
+        refresh: safeGet(() => localStorage, STORAGE_KEYS.PERSIST_REFRESH),
       }
     }
     return {

@@ -297,7 +297,17 @@ interface CheckItem {
 const loading = ref(false)
 const lastUpdated = ref('')
 const healthScore = ref(0)
-const healthExpanded = ref(sessionStorage.getItem('monitor-health-expanded') !== 'false')
+// 2026-10-29 审计：原实现在 setup 顶层直接读 sessionStorage —— 受限存储（隐私模式/
+// 禁用存储/webview）下会抛 SecurityError，**整页白屏**；其余 215 个文件的 storage 调用
+// 都有 try，唯独这里没有。改为带 fallback 的读取（读不到按默认展开）。
+function readHealthExpanded(): boolean {
+  try {
+    return sessionStorage.getItem('monitor-health-expanded') !== 'false'
+  } catch {
+    return true
+  }
+}
+const healthExpanded = ref(readHealthExpanded())
 const activePopover = ref<string | null>(null)
 const logLevelFilter = ref<'all' | 'warn' | 'error'>('all')
 
@@ -911,7 +921,12 @@ onUnmounted(() => {
 })
 
 watch(healthExpanded, (val) => {
-  sessionStorage.setItem('monitor-health-expanded', String(val))
+  // 写入同样不得把异常抛到 watcher 里（存储禁用时静默降级为内存态）
+  try {
+    sessionStorage.setItem('monitor-health-expanded', String(val))
+  } catch {
+    /* 存储不可用：仅本次会话生效 */
+  }
 })
 </script>
 

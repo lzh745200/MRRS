@@ -3651,6 +3651,16 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "utils/authStorage.ts 的 storage 读取无 try：_readSlot 直接 sessionStorage.getItem /localStorage.getIt"
+                "em，而本模块被 router/guards.ts 在每次导航调用（getToken）——浏览器在隐私模式 / 禁用存储 / 受限 webview 下会抛 SecurityError，整次"
+                "跳转就炸。"
+            ),
+            (
+                "MonitoringDashboard.vue 在 setup 顶层读 sessionStorage：ref(sessionStorage.getItem(...))位于 setup 同步"
+                "路径，抛错即整页白屏；其余 215 个文件的 storage 调用都有 try，唯独这里没有。改为 readHealthExpanded() 带 fallback（读不到按默认展开），wa"
+                "tch 里的 setItem 也补 try。"
+            ),
+            (
                 "policies/Detail.vue 预览 iframe 缺 sandbox：previewUrl 是 URL.createObjectURL(blob)，blob: 与主文档同源，if"
                 "rame 无 sandbox 时其中脚本可访问 window.parent。同仓 components/FilePreview.vue 早已加 sandbox=\"\"，此处补齐（纵深防御"
                 "；当前后端限pdf/doc/docx/pptx，故非直接可利用）。"
@@ -3680,15 +3690,6 @@ VERSION_HISTORY_DATA = [
                 "mypy 880 → 869：修掉「动态挂载方法」这一类属性不可见的债：models/base.py 的 Base.to_dict 是类创建后动态赋值（Base.to_dict = _ba"
                 "se_to_dict），mypy 看不见 → 没有显式定义 to_dict 的模型（FundAllocationOrder/FundAssetVerification …）在调用处被判 a"
                 "ttr-defined。"
-            ),
-            (
-                "api/v1/fund_lifecycle.py 60 → 55：group_col 显式标注 ColumnElement[Any]（各分支分别返回str/int/year，原来被钉成 C"
-                "olumnElement[str] 导致 int 分支全判错）；5 个批量预加载索引映射补dict[Optional[int], list[X]]（fund_id 可空，键就应是 Opti"
-                "onal）；"
-            ),
-            (
-                "新增迁移 idx_dedup_002：按列集合分组判重（区别于历史 index_dedup_001 的按名字清孤儿），每组保留模型显式声明的那个（KEEP_INDEX_NAMES 硬编码自"
-                " models/*.py 的 Index(...)，附来源行号），sqlite_autoindex_* 永不删。实测删除 8 个、UPGRADE_EXIT=0。"
             ),
         ],
     },
