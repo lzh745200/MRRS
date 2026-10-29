@@ -164,7 +164,14 @@ class ReportSubscriptionCreate(BaseModel):
     include_sections: Optional[List[str]] = None
     frequency: str = Field("weekly", min_length=1, max_length=20, description="发送频率")
     send_day: Optional[int] = Field(None, ge=0, le=31, description="发送日期")
-    send_time: Optional[str] = Field(None, max_length=10, description="发送时间")
+    # 2026-10-29 审计：原 max_length=10 不校验格式，"abc"/"25:99" 都能入库，调度端只能运行时崩。
+    # 改为 HH:MM（允许 1 位小时以兼容存量 "8:00"）。
+    send_time: Optional[str] = Field(
+        None,
+        max_length=10,
+        pattern=r"^([01]?\d|2[0-3]):[0-5]\d$",
+        description="发送时间（HH:MM，如 08:30 或 8:30）",
+    )
     email: Optional[str] = Field(None, max_length=100, description="接收邮箱（单机版保留兼容）")
     output_dir: Optional[str] = Field(None, max_length=500, description="本地输出目录（单机版）")
     output_format: str = Field("pdf", description="输出格式: pdf/excel")
@@ -177,7 +184,13 @@ class ReportSubscriptionUpdate(BaseModel):
     is_active: Optional[bool] = None
     frequency: Optional[str] = Field(None, min_length=1, max_length=20, description="发送频率")
     send_day: Optional[int] = Field(None, ge=0, le=31, description="发送日期")
-    send_time: Optional[str] = Field(None, max_length=10, description="发送时间")
+    # 同 Create：HH:MM 格式校验（允许 1 位小时兼容存量）
+    send_time: Optional[str] = Field(
+        None,
+        max_length=10,
+        pattern=r"^([01]?\d|2[0-3]):[0-5]\d$",
+        description="发送时间（HH:MM，如 08:30 或 8:30）",
+    )
     email: Optional[str] = Field(None, max_length=100, description="接收邮箱")
     output_dir: Optional[str] = Field(None, max_length=500, description="本地输出目录")
     output_format: Optional[str] = Field(None, description="输出格式: pdf/excel")

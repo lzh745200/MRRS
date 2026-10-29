@@ -7,6 +7,21 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十九批：报表订阅 `send_time` 无格式校验）
+
+**问题**：`supported_village.send_time` 是 `Column(String(10))`，而 `ReportSubscriptionCreate` /
+`ReportSubscriptionUpdate` 只写了 `max_length=10` —— **不校验格式**，`"abc"` / `"25:99"` /
+`"08:30:00"` 都能入库，调度端只能在运行时崩。
+
+**修复**：两个 schema 都加 `pattern=r"^([01]?\d|2[0-3]):[0-5]\d$"`（HH:MM，允许 1 位小时以兼容
+存量 `"8:00"` 写法）。
+
+**回归 `test_report_send_time_r51.py`（12 例）**：合法值 `08:30` / `8:30` / `00:00` / `23:59` 通过；
+非法值 `abc` / `25:00` / `12:60` / `8-30` / `""` / `08:30:00` **全部拒绝**；`None` 仍允许；
+Update schema 同口径校验。
+
+**验证**：flake8 0 · report/subscription 相关域 **898 passed** · 新增 **12 passed**。
+
 ### Fixed（全库审计第十八批：storage 访问缺保护 2 项）
 
 - **`utils/authStorage.ts` 的 storage 读取无 try**：`_readSlot` 直接 `sessionStorage.getItem` /
