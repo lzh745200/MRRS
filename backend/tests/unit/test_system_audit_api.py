@@ -161,7 +161,9 @@ class TestGetAuditLogDetail:
         session.commit()
         resp = client.get(f"{self.URL}/1")
         assert resp.status_code == 200
-        assert resp.json()["id"] == 1
+        # 2026-10-29 审计：原端点裸返回 ORM（全列外泄、无 response_model），
+        # 改为 success_response 信封 + 白名单字段，故断言 data.id。
+        assert resp.json()["data"]["id"] == 1
 
     def test_404_when_not_found(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(f"{self.URL}/999")

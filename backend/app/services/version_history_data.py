@@ -3651,6 +3651,18 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "契约收敛 3 处：auth/users.py 的改密响应手写 {\"code\":200,...} → success_response()；work_logs.py 的 @router."
+                "get(\"\", response_model=dict) 形同零校验（实际返回 ok_list() 信封），已删除该 response_model；"
+            ),
+            (
+                "政策附件下载计数降级为 best-effort：该计数写在 GET 里（有意的业务统计），真正危险的是计数写库失败会让下载本身 500 —— 用户点下载却报错，只为一条统计。改为 try/"
+                "except + rollback，失败只记日志，照常下发文件。"
+            ),
+            (
+                "学校导入的冗余临时文件（3 处）：上传内容被写一份 15MB 级临时文件，但解析走的是内存content（load_workbook_any(content, ...)），临时文件从未被读"
+                "取 —— 纯冗余落盘。已删除写入与配套 unlink（finally 保留 pass 作为统一收口位置）。"
+            ),
+            (
                 "未知 DataScope 的列表过滤 fail-open：apply_scope_to_query 的兜底分支 return query等于放行全量，与同模块 check_record_a"
                 "ccess 对未知 scope 返回 False 口径相反（注释还自称\"最严语义\"）。同一数据面两条相反口径，扩展枚举值时最易静默泄漏全量。"
             ),
@@ -3685,20 +3697,8 @@ VERSION_HISTORY_DATA = [
             ),
             (
                 "Critical｜权限/角色变更零审计：rbac.py 8 个写路由 AuditLogger 出现 0 次。新增 _audit_permission_change()，覆盖 assign/"
-                "revoke role 与 grant/revoke/save permissions。"
-            ),
-            (
-                "禁用账号立即失效：is_active 原先只在 get_current_active_user 校验，而绝大多数端点依赖 get_current_user。新增 _reject_inact"
-                "ive_user()，禁用后未过期 access 立即 403。"
-            ),
-            (
-                "审计 details 含 datetime 时整条静默丢失：new_value 直写 JSON 列，驱动抛 TypeError被吞。新增 _json_safe_value() 入库前 ro"
-                "und-trip（default=str）。"
-            ),
-            (
-                "批量改删组织过滤 fail-open：操作者未绑定组织时原条件整体短路，可跨组织改删；改三分支 fail-closed，新增 2 条负向用例。会让任意以 /shutdown 结尾的新写路由"
-                "自动继承豁免，静默绕过维护闸门。改为锚定正则^/api/v1/(system/)?backup/(upload-)?restore/?$ / ^/(api/v1/)?(system/)?s"
-                "hutdown/?$…"
+                "revoke role 与 grant/revoke/save permissions。依赖 get_current_user。新增 _reject_inactive_user()，禁用后"
+                "未过期 access 立即 403。被吞。"
             ),
         ],
     },

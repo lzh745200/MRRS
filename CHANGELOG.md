@@ -7,6 +7,20 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第五批：3 项）
+
+- **契约收敛 3 处**：`auth/users.py` 的改密响应手写 `{"code":200,...}` → `success_response()`；
+  `work_logs.py` 的 `@router.get("", response_model=dict)` 形同零校验（实际返回 `ok_list()` 信封），
+  已删除该 `response_model`；`system/audit.py` 的详情端点**裸返回 ORM**（全列外泄且无 response_model）
+  → `success_response(data={...})` 显式白名单 11 个字段。该项改了响应结构（顶层 → 信封），
+  已确认前端不调用 `/system/audit/logs/{id}`（只用 `/logs/export`），并同步更新断言。
+- **政策附件下载计数降级为 best-effort**：该计数写在 GET 里（有意的业务统计），真正危险的是
+  **计数写库失败会让下载本身 500** —— 用户点下载却报错，只为一条统计。改为 try/except + rollback，
+  失败只记日志，照常下发文件。
+- **学校导入的冗余临时文件（3 处）**：上传内容被写一份 15MB 级临时文件，但解析走的是内存
+  `content`（`load_workbook_any(content, ...)`），临时文件从未被读取 —— 纯冗余落盘。
+  已删除写入与配套 unlink（`finally` 保留 `pass` 作为统一收口位置）。
+
 ### Security（全库审计第四批：3 项）
 
 - **未知 DataScope 的列表过滤 fail-open**：`apply_scope_to_query` 的兜底分支 `return query`

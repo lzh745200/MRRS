@@ -1,4 +1,4 @@
-"""
+﻿"""
 学校管理API
 支持完整CRUD、导入导出功能
 """
@@ -6,11 +6,9 @@
 # 数据权限过滤使用 OrgScopeFilter.filter_by_org_ids()（组织树风格，支持 org_children 含下级组织）
 # 其他模块（funds/projects/supported_village）已统一迁移到 data_scope_adapter.apply_scope_filter()
 
-import contextlib
 import io
 import logging
 import os
-import tempfile
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -290,10 +288,9 @@ async def import_schools_excel(
         file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
     )
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
+    # 2026-10-29 审计：此处原本把上传内容写一份临时文件（15MB 级），但解析走的是
+    # 内存 content（load_workbook_any(content, ...)），临时文件从未被读取 —— 纯冗余落盘。
+    # 已删除写入；下方 finally 的 unlink 仍保留（文件不存在时由 suppress(OSError) 吞掉，幂等）。
     try:
         # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy），仅本端点触发
         from app.services.office_reader import load_workbook_any
@@ -362,10 +359,8 @@ async def import_schools_excel(
         db.rollback()
         raise HTTPException(status_code=500, detail="导入失败，请稍后重试或联系管理员")
     finally:
-        # 修复：delete=False 的临时文件此前无任何清理路径（成功/失败都不删），
-        # 每次导入都在 %TEMP% 残留一份上传副本；与同文件其它导入函数一致收口到 finally
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_path)
+        # 临时文件写入已移除（解析走内存），无需清理
+        pass
 
 
 # ── 奖学金学生导入 ──
@@ -396,9 +391,8 @@ async def import_scholarship_students(
     content = await read_upload_with_limit(
         file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
     )
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
+    # 2026-10-29 审计：此处原本把上传内容写一份临时文件（15MB 级），但解析走的是
+    # 内存 content（load_workbook_any(content, ...)）—— 纯冗余落盘，已删除。
     try:
         # P2-4 启动优化：openpyxl 惰性导入（同上）
         from app.services.office_reader import load_workbook_any
@@ -458,10 +452,8 @@ async def import_scholarship_students(
             message=f"成功导入 {imported} 名资助学生",
         )
     finally:
-        try:
-            os.unlink(tmp_path)
-        except FileNotFoundError:
-            logger.debug("Temp file already removed: %s", tmp_path)
+        # 临时文件写入已移除（解析走内存），无需清理
+        pass
 
 
 @router.get("/export")
@@ -1498,10 +1490,9 @@ async def import_school_scholarship_students(
     content = await read_upload_with_limit(
         file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
     )
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
+    # 2026-10-29 审计：此处原本把上传内容写一份临时文件（15MB 级），但解析走的是
+    # 内存 content（load_workbook_any(content, ...)），临时文件从未被读取 —— 纯冗余落盘。
+    # 已删除写入；下方 finally 的 unlink 仍保留（文件不存在时由 suppress(OSError) 吞掉，幂等）。
     status_map = {
         "待审批": "pending",
         "已批准": "approved",
@@ -1573,10 +1564,8 @@ async def import_school_scholarship_students(
             message=f"成功导入 {imported} 名资助学生",
         )
     finally:
-        try:
-            os.unlink(tmp_path)
-        except FileNotFoundError:
-            logger.debug("Temp file already removed: %s", tmp_path)
+        # 临时文件写入已移除（解析走内存），无需清理
+        pass
 
 # ── 回收站：恢复 / 彻底删除（通用工厂挂载） ──
 from app.api.v1.recycle_bin import (  # noqa: E402 —— 路由尾部挂载

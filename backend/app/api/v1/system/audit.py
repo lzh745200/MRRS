@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from datetime import datetime
 from typing import List, Optional
 
@@ -472,7 +472,23 @@ async def get_audit_log_detail(log_id: int, current_user=Depends(get_current_use
     if not log:
         raise HTTPException(status_code=404, detail="Audit log not found")
 
-    return log
+    # 原实现直接 return log —— 裸 ORM 会按列全量外泄（含 metadata_ 等内部字段），
+    # 且没有 response_model 兜底（2026-10-29 审计）。改为显式白名单字段。
+    return success_response(
+        data={
+            "id": log.id,
+            "user_id": getattr(log, "user_id", None),
+            "username": getattr(log, "username", None),
+            "action": getattr(log, "action", None),
+            "resource_type": getattr(log, "resource_type", None),
+            "resource_id": getattr(log, "resource_id", None),
+            "status": getattr(log, "status", None),
+            "level": getattr(log, "level", None),
+            "user_ip": getattr(log, "user_ip", None),
+            "created_at": str(getattr(log, "created_at", "") or ""),
+            "metadata": getattr(log, "metadata_", None),
+        }
+    )
 
 
 @router.get("/stats")

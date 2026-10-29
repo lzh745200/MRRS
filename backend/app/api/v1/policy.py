@@ -1137,13 +1137,23 @@ async def download_policy_file(
     if not os.path.exists(safe_file_path):
         raise HTTPException(status_code=404, detail="附件文件不存在")
 
-    # W2-T6：原子递增（UPDATE x=x+1），消除并发读-改-写丢更新
-    from sqlalchemy import func
+    # W2-T6：原子递增（UPDATE x=x+1），消除并发读-改-写丢更新。
+    # 2026-10-29 审计：这是一次 GET 内的写库（破坏幂等/缓存语义，属业务上的下载计数）。
+    # 真正危险的不是"有副作用"，而是**计数写库失败会让下载本身 500** —— 用户点下载
+    # 却报错，只为一条统计。这里把计数降级为 best-effort：失败只记日志，照常下发文件。
+    try:
+        from sqlalchemy import func
 
-    db.query(Policy).filter(Policy.id == policy_id).update(
-        {Policy.download_count: func.coalesce(Policy.download_count, 0) + 1}
-    )
-    safe_commit(db)
+        db.query(Policy).filter(Policy.id == policy_id).update(
+            {Policy.download_count: func.coalesce(Policy.download_count, 0) + 1}
+        )
+        safe_commit(db)
+    except Exception as exc:  # noqa: BLE001 - 计数失败不得阻断下载
+        logger.warning("政策附件下载计数失败 policy_id=%s: %s", policy_id, exc)
+        try:
+            db.rollback()
+        except Exception as rb:  # pragma: no cover - 回滚失败不影响后续
+            logger.debug("下载计数回滚失败: %s", rb)
 
     return FileResponse(
         path=safe_file_path,
