@@ -3591,4 +3591,25 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.25",
+        "date": "2026-10-29",
+        "description": "收口重建：合并双写者分支 + 修掉最后一处过时断言",
+        "features": [
+            (
+                "test_coverage_tail_gaps.py 敏感表导入用例按旧语义断言整包成功：R20「故障伪装成功」修复后 success = not errors，敏感表硬禁止必须让整包失败"
+                "；原用例同时断言success is True 与 errors 含「禁止导入敏感表」，自相矛盾。已改为断言 False。"
+            ),
+            (
+                "应用内更新日志在合并后重新生成：两侧各自生成的 version_history_data.py 条目叠加后与 CHANGELOG 不再一致（check_update_log 红），用 sc"
+                "ripts/sync_update_log.py 重建。"
+            ),
+            (
+                "补齐覆盖率缺口测试：analytics/dashboard 钻取提前返回、policies/List 导入结果兜底、MachineCodeManagement 的 pass_code 信封"
+                "兼容、MonitoringDashboard 内层 data 兜底、policy/policies/projects 的 ?? 右侧、ruralWorks/Task 的 progressF"
+                "ileList。"
+            ),
+            "版本同步到 1.18.25；README/INDEX/RELEASE_NOTES/三份 PPT 同步。",
+        ],
+    },
 ]

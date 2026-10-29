@@ -5,6 +5,30 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.25] - 2026-10-29 — 收口重建：合并双写者分支 + 修掉最后一处过时断言
+
+> 背景：v1.18.24 的 tag 打在 `b0aacfe`（其 Windows/ARM64 构建均被 cancelled），
+> 之后 main 分成两条线并行推进（本工作树 vs 另一 worktree 的 CI 修复线）。
+> 本版把两条线合并（合并提交 `58f38aac`，零冲突），并在合并态上重新验证。
+
+### Fixed
+
+- **`test_coverage_tail_gaps.py` 敏感表导入用例按旧语义断言整包成功**：R20「故障伪装成功」
+  修复后 `success = not errors`，敏感表硬禁止必须让整包失败；原用例同时断言
+  `success is True` 与 errors 含「禁止导入敏感表」，自相矛盾。已改为断言 `False`。
+- **应用内更新日志在合并后重新生成**：两侧各自生成的 `version_history_data.py` 条目叠加后
+  与 CHANGELOG 不再一致（`check_update_log` 红），用 `scripts/sync_update_log.py` 重建。
+
+### Added（覆盖率收口，前端）
+
+- 补齐覆盖率缺口测试：`analytics/dashboard` 钻取提前返回、`policies/List` 导入结果兜底、
+  `MachineCodeManagement` 的 `pass_code` 信封兼容、`MonitoringDashboard` 内层 data 兜底、
+  `policy`/`policies`/`projects` 的 `?? ` 右侧、`ruralWorks/Task` 的 `progressFileList`。
+
+### Changed
+
+- 版本同步到 **1.18.25**；README/INDEX/RELEASE_NOTES/三份 PPT 同步。
+
 ## [1.18.24] - 2026-10-28 — 出包链路收口：v1.18.21~23 三个 tag 构建失败的根因修复
 
 > v1.18.21、v1.18.22、v1.18.23 三次 tag 构建**全部失败**，因此自 v1.18.17 之后再没

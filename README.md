@@ -1,14 +1,30 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.24
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.25
 
-![Version](https://img.shields.io/badge/version-1.18.24-blue)
+![Version](https://img.shields.io/badge/version-1.18.25-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-22%2C280-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.24）
+## 本版亮点（v1.18.25）
+
+- **合并两条并行分支**：main 曾分成「本工作树」与「另一 worktree 的 CI 修复线」两路推进，
+  本版把两者合并（58f38aac，**零冲突**），并在合并态上重新跑门禁与测试
+- **修掉最后一处过时断言**：	est_coverage_tail_gaps.py 的敏感表导入用例仍断言「有错误也报成功」,
+  与 R20「故障伪装成功」修复后的新契约矛盾 —— 改为断言 success is False
+- **应用内更新日志在合并后重建**：两侧各自生成的条目叠加会与 CHANGELOG 不一致
+  （check_update_log 红），用 scripts/sync_update_log.py 重新生成
+- **覆盖率缺口补齐**：前端 nalytics/dashboard 钻取提前返回、policies/List 导入兜底、
+  MachineCodeManagement 的 pass_code 信封、MonitoringDashboard 内层 data、
+  
+uralWorks/Task 的 progressFileList 等
+- **门禁全绿**：35 道门禁 PASS；s any **归零**、静默吞异常 **归零**、
+  硬编码色值 137（基线 146，继续只紧不松）
+
+## 历史亮点（v1.18.24）
+
 
 - **出包链路修复**：v1.18.21~23 三个 tag 构建**全部失败**（自 v1.18.17 后再无安装包），
   根因是两处发布流水线缺陷 —— Windows 侧 `npm ci` 网络抖动直接堵死构建、

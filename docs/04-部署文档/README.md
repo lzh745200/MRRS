@@ -1,4 +1,4 @@
-# 部署文档 v1.18.24
+# 部署文档 v1.18.25
 
 ## 快速链接
 
@@ -10,7 +10,7 @@
 | **Docker** | 任意 | 镜像 | [Docker 快速开始](03-Docker部署/DOCKER_QUICK_START.md) |
 | **Docker E2E** | 任意 | compose | `make test-e2e-docker` (E2E 测试专用配置) |
 | **升级/回滚（全平台）** | — | — | [离线升级与回滚指南](OFFLINE_UPGRADE.md) |
-| **本版发布说明** | — | — | [RELEASE_NOTES-v1.18.24](RELEASE_NOTES-v1.18.24.md)（安装包清单 + SHA256 / 升级必读 / 发布门禁） |
+| **本版发布说明** | — | — | [RELEASE_NOTES-v1.18.25](RELEASE_NOTES-v1.18.25.md)（安装包清单 + SHA256 / 升级必读 / 发布门禁） |
 
 ## 部署前置检查（安全红线，v1.15.12 起，v1.15.15 复核）
 
