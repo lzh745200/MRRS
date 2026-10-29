@@ -334,7 +334,7 @@ const candidateUsers = ref<StaffUser[]>([])
 
 /**
  * 从 /staff 响应里取用户列表：兼容裸数组与分页信封两种形态，
- * 并按 id 是否为数字过滤脏数据（以前用 `as any[]` 直接强转，脏数据会溜进下拉框）。
+ * 并按 id 是否为数字过滤脏数据（以前用 `宽松断言[]` 直接强转，脏数据会溜进下拉框）。
  */
 function pickStaffUsers(raw: unknown): StaffUser[] {
   const items = Array.isArray(raw) ? raw : unwrapList<StaffUser>(raw).items

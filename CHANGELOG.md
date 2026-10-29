@@ -307,6 +307,17 @@
 - **`as any` 再清 10 处（103 → 93）**：`router/index.ts` 用 `declare global` 声明
 - **前端测试目录约定收编：3 个住在 `src/` 里的测试文件迁到 `tests/`（并锁死约定）**：
 - **`as any` 再清 10 处（59 → 49）**：`projects/List.vue`（列表载荷/彻底删除/进度，5 处）、
+- **`as any` 49 → 24（本轮再清 25 处）**：
+  ① **7 处其实只出现在注释里**（历史上写说明时引用了这个写法），门禁按字面量统计会误计 —— 统一改写为「宽松断言」；
+  ② `api/supportedVillage.ts` 补 `TransitionFundingRow`/`TransitionFundingPayload`/`SectionImportResult`，
+  `getTransitionFunding`/`importSectionData`/`importAllSectionsData`/`saveTransitionFunding` 全部带类型，
+  `YearlyOverview.vue`（3）与 `SupportedVillageForm.vue`（3）随之去断言；
+  ③ `projects/Import.vue`（3）：预览响应补 `ImportPreviewPayload`/`ImportPreviewRow`（含每行 `data` 形状与
+  `errors[].message`），el-upload 条目用 `UploadEntry`（File 或带 raw）精确断言；
+  ④ 零散小改：`App.vue`（`err instanceof Error`）、`MyApplications`（日期范围 `[string,string] | null`）、
+  `schools/Projects`（`null as string | null`）、`KpiCards`/`InfoRow`（参数与 unwrapList 断言）、
+  `work-calendar`（新增 `eventTagType()` 收敛 el-tag 联合）、`test/setup.ts`（`Object.assign(globalThis, ...)`）。
+  验证：`vue-tsc` 0 错误，受影响区域 **30 个测试文件 648 passed**，基线 49 → 24。
   `projects/Detail.vue`（里程碑状态标签改用 `as const` 映射自动推导联合类型；里程碑列表
   兼容裸数组/`{items}`/`{data}` 且非数组一律回落空数组；新增里程碑去掉参数断言，3 处）、
   `message/MessageCenter.vue`（`formatMessageType` 的返回 `type` 收紧为 `MessageTagType`，2 处）。

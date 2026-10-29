@@ -210,7 +210,7 @@ async function loadStats() {
   loading.value = true
   error.value = false
   try {
-    const res = await get('/dashboard/stats', { refresh: true } as any)
+    const res = await get('/dashboard/stats', { refresh: true })
     const d = (res || {}) as Record<string, number>
     if (d) {
       stats.value = {

@@ -111,7 +111,11 @@ import { Refresh, Search } from '@element-plus/icons-vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 const loading = ref(false)
 const applications = ref<ApprovalTask[]>([])
-const filters = reactive({ status: '', dateRange: null as any })
+/** el-date-picker 的范围值：未选时为 null（Element Plus 的语义，不是 void） */
+const filters = reactive<{ status: string; dateRange: [string, string] | null }>({
+  status: '',
+  dateRange: null,
+})
 
 const stats = computed(() => {
   const list = applications.value

@@ -14,7 +14,7 @@ export interface VillageSummary {
  * 列表响应：同时兼容
  * - 信封 `{ data: { items, total, summary } }`
  * - 直接分页 `{ items, total }`
- * 以前这些形态全靠 `as any` 读，字段改名/拼错都不报错。
+ * 以前这些形态全靠 `宽松断言` 读，字段改名/拼错都不报错。
  */
 export interface VillageListPayload {
   items?: SupportedVillage[]
@@ -203,12 +203,38 @@ export const deleteSectionAttachment = (villageId: number, section: string, atta
   del(`/supported-villages/${villageId}/sections/${section}/attachments/${attachmentId}`)
 
 // ── Transition funding ──
+/** 过渡期年度经费行（按年登记） */
+export interface TransitionFundingRow {
+  year: number
+  militaryInvestment?: number
+  localInvestment?: number
+  id?: number
+}
+
+/** 响应双形态：裸数组 或 { data: [...] } */
+export interface TransitionFundingPayload {
+  data?: TransitionFundingRow[]
+}
+
 export const getTransitionFunding = (villageId: number) =>
-  get(`/supported-villages/${villageId}/transition-funding`)
-export const saveTransitionFunding = (villageId: number, data: any) =>
+  get<TransitionFundingRow[] | TransitionFundingPayload>(
+    `/supported-villages/${villageId}/transition-funding`
+  )
+export const saveTransitionFunding = (
+  villageId: number,
+  data: Record<string, unknown>
+) =>
   post(`/supported-villages/${villageId}/transition-funding`, data)
 
 // ── Import (yearly overview) ──
+/** 板块/整包导入结果（后端两种字段名都出现过：imported/rows、sections/sheets） */
+export interface SectionImportResult {
+  imported?: number
+  rows?: number
+  failed?: number
+  sections?: unknown[]
+  sheets?: number
+}
 export const importSectionData = (
   villageId: number,
   year: number,
@@ -217,7 +243,7 @@ export const importSectionData = (
 ) => {
   const fd = new FormData()
   fd.append('file', file)
-  return apiRequest({
+  return apiRequest<SectionImportResult>({
     method: 'POST',
     url: `/supported-villages/${villageId}/sections/import`,
     params: { year, section_key: resolveSectionApiKey(sectionKey) },
@@ -234,7 +260,7 @@ export const downloadAllTemplates = (year?: number) =>
 export const importAllSectionsData = (villageId: number, year: number, file: File) => {
   const fd = new FormData()
   fd.append('file', file)
-  return apiRequest({
+  return apiRequest<SectionImportResult>({
     method: 'POST',
     url: `/supported-villages/${villageId}/sections/import-all`,
     params: { year },

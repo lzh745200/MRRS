@@ -108,7 +108,7 @@ async function loadActivities() {
       url: '/dashboard/recent-activities',
       params: { limit: 10 },
     })
-    const data = unwrapList(res as any).items
+    const data = unwrapList(res).items
     activities.value = (Array.isArray(data) ? data : []).slice(0, 10)
   } catch (e) {
     logger.error('近期动态加载失败', e)

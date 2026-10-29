@@ -43,7 +43,7 @@ const errorMessage = ref('请重试或返回首页')
 onErrorCaptured((err, _instance, info) => {
   console.error('[App] 组件错误:', info, err)
   appError.value = true
-  const msg = (err as any)?.message || String(err)
+  const msg = err instanceof Error ? err.message : String(err)
   errorMessage.value = msg.length > 80 ? msg.slice(0, 80) + '…' : msg
   return false // 阻止错误继续传播导致白屏
 })

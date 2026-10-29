@@ -601,7 +601,7 @@ function pushHistory(cpu: number, mem: number, disk: number) {
 
 /**
  * 监控类接口的响应形状有三种：裸载荷、信封 `{data}`、再包一层 `{data:{data}}`。
- * 统一在这里解包，调用方拿到内层对象即可 —— 以前每处都写 `(res as any)?.data?.data ?? ...`。
+ * 统一在这里解包，调用方拿到内层对象即可 —— 以前每处都写 `(res 宽松断言)?.data?.data ?? ...`。
  */
 function unwrapMonitorPayload<T extends Record<string, unknown>>(raw: unknown): T {
   const body = raw as { data?: unknown } | null | undefined

@@ -184,8 +184,8 @@ const form = ref({
   phase: 'research',
   budget: 0,
   actual_cost: 0,
-  start_date: null as any,
-  end_date: null as any,
+  start_date: null as string | null,
+  end_date: null as string | null,
   description: '',
 })
 

@@ -326,6 +326,37 @@ const { pushSafe } = useRouterSafe()
 const { ds } = useDesensitize()
 
 const currentStep = ref(0)
+/** 导入预览：后端 /import/preview 返回 { rows, invalid_rows } */
+interface ProjectImportRowData {
+  name?: string
+  project_name?: string
+  type?: string
+  project_type?: string
+  responsible_person?: string
+  contact_phone?: string
+  start_date?: string
+  end_date?: string
+  budget?: number
+  total_budget?: number
+  status?: string
+  village_name?: string
+  description?: string
+}
+interface ImportRowError {
+  message?: string
+}
+interface ImportPreviewRow {
+  row_number?: number
+  data?: ProjectImportRowData
+  has_error?: boolean
+  errors?: ImportRowError[]
+}
+interface ImportPreviewPayload {
+  rows?: ImportPreviewRow[]
+  invalid_rows?: number
+}
+/** el-upload 的条目既可能是 File，也可能是带 raw 的 UploadUserFile */
+type UploadEntry = File & { raw?: File }
 const fileList = ref<File[]>([])
 const loading = ref(false)
 const importLoading = ref(false)
@@ -402,17 +433,16 @@ const handleUpload = async () => {
   }
   loading.value = true
   try {
-    const file = fileList.value[0] as any
+    const file = fileList.value[0] as UploadEntry
     const formData = new FormData()
-    formData.append('file', file.raw || file)
+    formData.append('file', file.raw ?? file)
 
-    const resp: any = await post('/import/preview?entity_type=project', formData, {
+    const response = await post<ImportPreviewPayload>('/import/preview?entity_type=project', formData, {
       timeout: 120000,
     })
-    const response = resp
 
     if (response?.rows) {
-      previewData.value = (response.rows as any[]).map((item: any, idx: number) => ({
+      previewData.value = response.rows.map((item, idx) => ({
         rowIndex: item.row_number || idx + 1,
         projectName: item.data?.name || item.data?.project_name || '',
         projectType: item.data?.type || item.data?.project_type || '',
@@ -427,12 +457,12 @@ const handleUpload = async () => {
       }))
       totalRows.value = previewData.value.length
       /* c8 ignore next 2 */ // v8 计数伪影：invalid_rows 为 0/1/2 的用例均执行过，但该比较分支计数器恒为 0（分支映射到下一行）
-      validationFailed.value = response.invalid_rows > 0
+      validationFailed.value = (response.invalid_rows ?? 0) > 0
       validationErrors.value = (response.rows || [])
-        .filter((r: any) => r.has_error)
-        .map((r: any) => ({
-          index: r.row_number,
-          message: (r.errors || []).map((e: any) => e.message).join('; '),
+        .filter((r) => r.has_error)
+        .map((r) => ({
+          index: r.row_number ?? 0,
+          message: (r.errors ?? []).map((e) => e.message).join('; '),
         }))
       if (!validationFailed.value || previewData.value.length > 0) {
         currentStep.value = 3
@@ -451,11 +481,11 @@ const handleUpload = async () => {
 const confirmImport = async () => {
   importLoading.value = true
   try {
-    const file = fileList.value[0] as any
+    const file = fileList.value[0] as UploadEntry
     // S3 修复：后端 /import/entities 的 entity_type/mode 是 Query 参数，绝不塞进 FormData。
     // 复用 api/import.ts 的 importEntities 确保 entity_type='project' 走 params，
     // 避免项目导入文件被帮扶村解析器误解析（字段错位、写错表 → 数据损坏）。
-    const response: any = await importEntities(file.raw || file, 'project', 'incremental')
+    const response: any = await importEntities(file.raw ?? file, 'project', 'incremental')
 
     importResult.value = {
       // M5 修复：success 取后端真实返回值，避免全部行失败时仍进入“成功”分支误导用户。

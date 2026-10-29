@@ -266,7 +266,7 @@ async function loadLevelOptions() {
   }
   levelOptionsLoading.value = true
   try {
-    // 后端 /policies/options/levels 不接收分类参数（曾用 (fn as any)(category) 假传，
+    // 后端 /policies/options/levels 不接收分类参数（曾用 (fn 宽松断言)(category) 假传，
     // 参数被静默忽略）；这里按真实契约调用，去掉无效入参。
     const res = await getLevelOptions()
     const data = res?.data?.data ?? res?.data ?? res

@@ -959,7 +959,7 @@ router.beforeEach((to, _from, next) => {
 
 /**
  * Electron 预加载脚本注入的桥（主进程 webContents.send('app-route', path)）。
- * 在全局声明类型，避免每处都 (window as any)。
+ * 在全局声明类型，避免每处都 (window 宽松断言)。
  */
 declare global {
   interface Window {

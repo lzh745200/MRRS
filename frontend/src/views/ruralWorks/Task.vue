@@ -745,7 +745,7 @@ const progressUpdateForm = ref<ProgressUpdateForm>({
 
 /**
  * el-upload 需要 `uid: number` + `name` 必填，而我们的附件是 {name?,url?,status?}。
- * 以前在模板里直接 `as any` 强转（uid 是字符串，与 el-upload 契约不符）；
+ * 以前在模板里直接 `宽松断言` 强转（uid 是字符串，与 el-upload 契约不符）；
  * 现按真实契约映射一份视图模型，既不撒谎也不改变提交给后端的数据。
  */
 const progressFileList = computed<UploadUserFile[]>(() =>

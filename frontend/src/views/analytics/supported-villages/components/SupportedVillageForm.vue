@@ -499,9 +499,9 @@ async function loadTransitionFunding() {
   fundingLoadFailed.value = false
   try {
     const resp = await getTransitionFunding(props.village.id)
-    const items = (resp as any)?.data || resp || []
+    const items = Array.isArray(resp) ? resp : (resp?.data ?? [])
     transitionFundingRows.value = items
-      .map((item: any) => ({
+      .map((item) => ({
         year: item.year,
         militaryInvestment: Number(item.militaryInvestment || 0),
         localInvestment: Number(item.localInvestment || 0),
@@ -560,8 +560,8 @@ watch(
         isCrossUnitCooperation: Boolean(village.isCrossUnitCooperation),
         isInOverallPlan: Boolean(village.isInOverallPlan),
         honors: village.honors || '',
-        transitionFundMilitaryTotal: (village as any).transitionFundMilitaryTotal || 0,
-        transitionFundLocalTotal: (village as any).transitionFundLocalTotal || 0,
+        transitionFundMilitaryTotal: village.transitionFundMilitaryTotal || 0,
+        transitionFundLocalTotal: village.transitionFundLocalTotal || 0,
         latitude: village.latitude ?? null,
         longitude: village.longitude ?? null,
       })

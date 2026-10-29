@@ -371,7 +371,7 @@ const filterOptions = ref<{
 // 分页
 // pagination 恒为 { page, pageSize, total } 三键的 reactive 对象：本文件只写这三个键，
 // 也从不整体替换该对象，因此不存在 .data 信封层。此前模板与 kpiStats 里的
-// `(pagination as any)?.data?.total || ...` 左侧永为 undefined、`?.` 的 nullish 侧
+// `(pagination 宽松断言)?.data?.total || ...` 左侧永为 undefined、`?.` 的 nullish 侧
 // 亦永不可达（pagination 是 const 且恒真），属死防御，任务#28 已删除。
 const pagination = reactive({
   page: 1,

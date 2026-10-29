@@ -21,7 +21,7 @@
                 <el-tag
                   v-for="evt in getEvents(data.date)"
                   :key="evt.id"
-                  :type="(evt.type || 'primary') as any"
+                  :type="eventTagType(evt.type)"
                   class="event-tag"
                   @click="editEvent(evt)"
                 >
@@ -96,6 +96,13 @@ interface WorkEvent {
 }
 
 const STORAGE_KEY = 'work_calendar_events'
+/** 事件类型 → el-tag type（后端可能给空值，回落 primary） */
+type CalendarTagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
+function eventTagType(t?: string): CalendarTagType {
+  const allowed: CalendarTagType[] = ['primary', 'success', 'info', 'warning', 'danger']
+  return allowed.includes(t as CalendarTagType) ? (t as CalendarTagType) : 'primary'
+}
+
 const currentDate = ref(new Date())
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
