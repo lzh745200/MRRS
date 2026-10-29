@@ -21,7 +21,7 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 
 > **未签名包提示**：证书尚未采购，首次运行会触发 SmartScreen（「更多信息」→「仍要运行」）。
 
-## 二、认证与权限（4 个 Critical，审计七批 26 项）
+## 二、认证与权限（4 个 Critical，审计八批 28 项）
 
 - **refresh 完全绕过 `token_version` 吊销**：`validate_token` 只验签名/jti/type，不比对版本，
   而 access 链路有校验。登出或强退后，未随登出提交的 refresh（其他设备/被窃）仍能换发
@@ -57,6 +57,9 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 - **政策附件下载计数 best-effort**：计数失败不再让下载 500。
 - **学校导入冗余临时文件**：删除从未读取的 15MB 级临时落盘；schema 与模型漂移改为 warning 可见。
 - **`v-permission="[]"` fail-open**：无效用法分支只 warn 不隐藏；改为默认隐藏并补断言。
+
+- **`/health/database-health` 泄露 DB 绝对路径**：库文件缺失时把部署路径写进匿名可访问的 message/issues；改为对外分类码 `DB_FILE_MISSING`，路径只进日志。
+- **`UserCreate.phone_number/role_id` 是死字段**：users 表列名是 `phone`，注册链路传的电话被静默丢弃；schema 改名 `phone` 并补齐落库（兼容旧键名），`role_id` 删除并注明原因。
 
 ## 三、维护窗口与审计正确性
 
@@ -99,7 +102,8 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 - 后端全量：**14,953 用例**（分段/CI 口径以 `backend-test` 为准）；
 - 前端：**347 个测试文件 / 7,420 用例**，生产构建成功；
 - Electron：`npm run test:electron` **14/14**（含 AES-GCM 往返/篡改/短文件守护）；
-- 安装冒烟：Windows 10 x64 隔离目录静默安装 + 后端 `/health` + 卸载（结果见本页末）；
+- 安装冒烟：安装包 payload 解包后启动内置后端，`/health` 返回 1.18.26 /
+  `migration.at_head=true` / WAL、时钟正常；**NSIS 静默安装未能在本执行环境落盘**（见第八节）。
 - **ARM64 未在本机实测**：本机无 ARM64 硬件/容器；仅验证 CI 产物与 `SHA256SUMS-*.txt`。
 
 ## 七、升级注意
@@ -111,4 +115,24 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 
 ## 八、本机构建与冒烟记录
 
-> 构建完成后由发布负责人补充 commit、命令、SHA256 与安装冒烟结论。
+- **源码冻结点**：`34bf9d9f`（含全库审计第 1~8 批；第 9 批 schema 在途改动已备份到
+  `backup/parallel-batch9-2026-10-29`，不进入本版）。
+- **Windows x64 安装包**：`dist/electron/MRRS-Setup-1.18.26-x64.exe`（223 MB，
+  FileVersion/ProductVersion = 1.18.26）。
+  SHA256：`dcbed210a0ad2b569c97757fb7932f8a6763eb286950022e9207a18f6546cbff`。
+- **构建命令**：
+  `cd frontend && npm run build` → `npm run build`（PyInstaller onedir + electron-builder）
+  → 前端最终重建后 `./node_modules/.bin/electron-builder --win --x64` 重打包。
+- **打包内容核对**：`resources/frontend/version.json` = 1.18.26（buildTime
+  `2026-10-29T08:57:53Z`）；`app.asar` package version = 1.18.26；
+  未打包 `tests/`、`conftest.py`、`pytest.ini`。
+- **运行时冒烟**：安装包 payload 解包 3,093 项 → 启动
+  `resources/backend/assistance-backend/assistance-backend.exe`（隔离 APPDATA、端口 18026）
+  → `/health` 200：`version=1.18.26`、`git_hash=34bf9d9f`、
+  `migration.at_head=true`、`journal_mode=wal`、`clock.status=ok`。
+  证据：`deliverables/smoke-health-1.18.26.json`。
+- **NSIS 安装器限制（未完成）**：本执行环境禁止跨目录写文件（工作区内/外均 0 files；
+  7-Zip 解包到 `C:\` 直接 `Cannot create folder`），安装器静默执行返回 0/2 且未落盘；
+  验证期间检测到旧 v1.18.17 安装已被升级逻辑移除（用户数据未删）。
+  **发布前需在普通 Windows 桌面手工执行一次 `MRRS-Setup-1.18.26-x64.exe` 安装/卸载冒烟**；
+  在该项完成前，本版状态为“有条件发布”。

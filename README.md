@@ -10,7 +10,7 @@
 
 ## 本版亮点（v1.18.26）
 
-- **全库审计七批 26 项（含 4 个 Critical）**：refresh 此前完全绕过 `token_version`
+- **全库审计八批 28 项（含 4 个 Critical）**：refresh 此前完全绕过 `token_version`
   吊销（登出/强退后旧 refresh 仍可换 access）；权限包可选认证手写解码绕过黑名单/版本/
   禁用/首登改密四项校验，却用于「重写全库 RBAC」；RBAC 8 个写路由零审计；禁用账号的
   未过期 access 仍全权限。均已修复并补负向回归。
