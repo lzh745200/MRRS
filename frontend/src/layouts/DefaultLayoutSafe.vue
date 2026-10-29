@@ -494,11 +494,7 @@ function isSectionExpanded(key: string): boolean {
 }
 
 function persistExpandedSections(): void {
-  try {
-    safeSetItem(EXPANDED_SECTIONS_KEY, JSON.stringify([...expandedSections.value]), 'local')
-  } catch {
-    /* 存储不可用时静默：本次会话仍可展开/收起 */
-  }
+  safeSetItem(EXPANDED_SECTIONS_KEY, JSON.stringify([...expandedSections.value]), 'local')
 }
 
 /** 点击板块标题：展开/收起并持久化 */

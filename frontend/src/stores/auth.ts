@@ -148,20 +148,12 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = ''
     _setCachedToken(null)
     AuthStorage.clearSession()
-    try {
-      safeSetItem('auto_lock_active', '1', 'session')
-    } catch {
-      /* 静默 */
-    }
+    safeSetItem('auto_lock_active', '1', 'session')
   }
 
   /** 登录/自动登录成功后解除锁屏标记 */
   function unlockSession() {
-    try {
-      safeRemoveItem('auto_lock_active', 'session')
-    } catch {
-      /* 静默 */
-    }
+    safeRemoveItem('auto_lock_active', 'session')
   }
 
   /** 当前认证数据（供"记住登录"持久化，含刷新令牌） */

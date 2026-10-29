@@ -93,11 +93,7 @@ export function pickDensityForViewport(height: number): DensityPref {
 
 /** 存储里是否已有用户偏好（用于判断能否安全套用视口推荐值）。 */
 export function hasStoredUiPrefs(): boolean {
-  try {
-    return safeGetItem(UI_PREFS_STORAGE_KEY, 'local') !== null
-  } catch {
-    return false
-  }
+  return safeGetItem(UI_PREFS_STORAGE_KEY, 'local') !== null
 }
 
 function pick<T extends string>(allowed: readonly T[], value: unknown, fallback: T): T {
@@ -128,11 +124,7 @@ export function readUiPrefs(): UiPrefs {
 
 /** 写入偏好（存储不可用静默忽略，内存态仍生效）。 */
 export function writeUiPrefs(prefs: UiPrefs): void {
-  try {
-    safeSetItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs), 'local')
-  } catch {
-    // 隐私模式/配额：静默降级
-  }
+  safeSetItem(UI_PREFS_STORAGE_KEY, JSON.stringify(prefs), 'local')
 }
 
 /** 将偏好应用到 <html data-*>（tokens.scss 显示偏好块据此生效）。 */

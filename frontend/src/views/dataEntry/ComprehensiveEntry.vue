@@ -993,22 +993,19 @@ const handleFileChange = (_file: any) => {
 
 // ==================== 自动保存草稿 ====================
 function saveDraftToLocal() {
-  try {
-    const draft = {
-      formData: JSON.parse(JSON.stringify(formData)),
-      currentStep: currentStep.value,
-      popYearStart: popYearStart.value,
-      popYearEnd: popYearEnd.value,
-      investYearStart: investYearStart.value,
-      investYearEnd: investYearEnd.value,
-      relatedSchoolText: relatedSchoolText.value,
-      relatedFundText: relatedFundText.value,
-      savedAt: new Date().toISOString(),
-    }
-    safeSetItem(DRAFT_STORAGE_KEY, JSON.stringify(draft), 'local')
+  const draft = {
+    formData: JSON.parse(JSON.stringify(formData)),
+    currentStep: currentStep.value,
+    popYearStart: popYearStart.value,
+    popYearEnd: popYearEnd.value,
+    investYearStart: investYearStart.value,
+    investYearEnd: investYearEnd.value,
+    relatedSchoolText: relatedSchoolText.value,
+    relatedFundText: relatedFundText.value,
+    savedAt: new Date().toISOString(),
+  }
+  if (safeSetItem(DRAFT_STORAGE_KEY, JSON.stringify(draft), 'local')) {
     lastSavedAt.value = new Date().toLocaleTimeString()
-  } catch {
-    // localStorage 写满或不可用，静默忽略
   }
 }
 

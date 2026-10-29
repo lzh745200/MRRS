@@ -33,19 +33,11 @@ export function normalizePageSize(raw: unknown): number {
 }
 
 export function readPageSize(scope: string): number {
-  try {
-    return normalizePageSize(safeGetItem(pageSizeStorageKey(scope), 'local'))
-  } catch {
-    return DEFAULT_PAGE_SIZE
-  }
+  return normalizePageSize(safeGetItem(pageSizeStorageKey(scope), 'local'))
 }
 
 export function writePageSize(scope: string, size: number): void {
-  try {
-    safeSetItem(pageSizeStorageKey(scope), String(normalizePageSize(size)), 'local')
-  } catch {
-    // 隐私模式/配额：静默降级为内存态
-  }
+  safeSetItem(pageSizeStorageKey(scope), String(normalizePageSize(size)), 'local')
 }
 
 export function usePageSize(scope: string) {

@@ -42,11 +42,7 @@ function readStored(): NavMenuRecord[] {
 
 /** 写回 localStorage（配额/隐私模式下静默降级，内存态仍可用） */
 function persist(records: NavMenuRecord[]): void {
-  try {
-    safeSetItem(MENU_FAVORITES_STORAGE_KEY, JSON.stringify(records), 'local')
-  } catch {
-    /* 存储不可用时忽略 */
-  }
+  safeSetItem(MENU_FAVORITES_STORAGE_KEY, JSON.stringify(records), 'local')
 }
 
 /** 重置模块级状态（供测试隔离使用） */
