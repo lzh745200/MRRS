@@ -7,6 +7,21 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Security（全库审计第四批：3 项）
+
+- **未知 DataScope 的列表过滤 fail-open**：`apply_scope_to_query` 的兜底分支 `return query`
+  等于放行全量，与同模块 `check_record_access` 对未知 scope 返回 `False` **口径相反**
+  （注释还自称"最严语义"）。同一数据面两条相反口径，扩展枚举值时最易静默泄漏全量。
+  已改为 `query.filter(sa_false())` 并记 warning，两处测试同步改写，
+  另加一条"两条路径必须同口径"的回归用例。
+- **`api_access_logs.user_id` 恒为 NULL**：中间件用 `int(sub)` 解析用户 id，而本项目 JWT 的
+  `sub` 就是**用户名**（`create_token_pair(subject=username)`），`int()` 必然失败 → 静默返回
+  `None, username`，访问日志无法按用户归因/检索。已改为按用户名反查 `users.id`，
+  并加有界进程内缓存（中间件每请求都跑，不能每次都查库）；查库异常返回 None，不影响请求。
+- **全局搜索的 LIKE 通配符未转义**（13 处）：`ilike(f"%{q}%")` 里 `q="%%"` 可枚举本域全表，
+  `q="a_b"` 会把下划线当任意字符 —— 属信息放大（数据域仍由 scoped_filter 兜住）。
+  新增 `_escape_like()`（先转义反斜杠再转义 % 与 _），全部 ilike 显式带 `escape="\"`。
+
 ### Security（全库审计第三批：2 项）
 
 - **审计日志的删除 / 备注改写自身不留审计**（军审口径）：`/system/audit` 的批量删除、

@@ -3651,6 +3651,18 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "未知 DataScope 的列表过滤 fail-open：apply_scope_to_query 的兜底分支 return query等于放行全量，与同模块 check_record_a"
+                "ccess 对未知 scope 返回 False 口径相反（注释还自称\"最严语义\"）。同一数据面两条相反口径，扩展枚举值时最易静默泄漏全量。"
+            ),
+            (
+                "api_access_logs.user_id 恒为 NULL：中间件用 int(sub) 解析用户 id，而本项目 JWT 的sub 就是用户名（create_token_pair(su"
+                "bject=username)），int() 必然失败 → 静默返回None, username，访问日志无法按用户归因/检索。"
+            ),
+            (
+                "全局搜索的 LIKE 通配符未转义（13 处）：ilike(f\"%{q}%\") 里 q=\"%%\" 可枚举本域全表，q=\"a_b\" 会把下划线当任意字符 —— 属信息放大（数据域"
+                "仍由 scoped_filter 兜住）。新增 _escape_like()（先转义反斜杠再转义 % 与 _），全部 ilike 显式带 escape=\"\\\"。"
+            ),
+            (
                 "审计日志的删除 / 备注改写自身不留审计（军审口径）：/system/audit 的批量删除、单条删除、备注 PATCH 三个会破坏审计链的写操作，此前只写 app.log，物理 dele"
                 "te 后「谁删了哪条审计」完全不可追溯。"
             ),
@@ -3683,16 +3695,10 @@ VERSION_HISTORY_DATA = [
                 "审计 details 含 datetime 时整条静默丢失：new_value 直写 JSON 列，驱动抛 TypeError被吞。新增 _json_safe_value() 入库前 ro"
                 "und-trip（default=str）。"
             ),
-            "批量改删组织过滤 fail-open：操作者未绑定组织时原条件整体短路，可跨组织改删；改三分支 fail-closed，新增 2 条负向用例。",
-            "软删除记录永久占用唯一编码：查重区分活跃/已软删，后者给出可行动指引。",
             (
-                "维护窗口豁免 endswith fail-open：(\"/system/backup/restore\", \"/shutdown\") 的后缀匹配会让任意以 /shutdown 结尾的"
-                "新写路由自动继承豁免，静默绕过维护闸门。改为锚定正则^/api/v1/(system/)?backup/(upload-)?restore/?$ / ^/(api/v1/)?(system"
-                "/)?shutdown/?$…"
-            ),
-            (
-                "审计写入会回滚调用方业务事务：AuditLogService.log 在调用方 Session 上 add + commit，失败时 rollback() 连同未提交业务写入一起回滚且异常"
-                "被吞。改为独立 SessionLocal 旁路审计，补 username（原实现恒 NULL）；新增 test_does_not_touch_caller_session。"
+                "批量改删组织过滤 fail-open：操作者未绑定组织时原条件整体短路，可跨组织改删；改三分支 fail-closed，新增 2 条负向用例。会让任意以 /shutdown 结尾的新写路由"
+                "自动继承豁免，静默绕过维护闸门。改为锚定正则^/api/v1/(system/)?backup/(upload-)?restore/?$ / ^/(api/v1/)?(system/)?s"
+                "hutdown/?$…"
             ),
         ],
     },

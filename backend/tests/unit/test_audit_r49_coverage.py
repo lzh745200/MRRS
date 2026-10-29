@@ -160,3 +160,72 @@ class TestSchoolCodeConflictMessage:
         assert "仍被已删除的学校" in message
         assert "已删学校" in message
         assert "请改用其他编码" in message
+
+class TestEscapeLike:
+    """search._escape_like：LIKE 通配符必须转义（2026-10-29 审计）。"""
+
+    def test_percent_escaped(self):
+        from app.api.v1.search import _escape_like
+
+        assert _escape_like("100%") == "100\\%"
+
+    def test_underscore_escaped(self):
+        from app.api.v1.search import _escape_like
+
+        assert _escape_like("a_b") == "a\\_b"
+
+    def test_backslash_escaped_first(self):
+        from app.api.v1.search import _escape_like
+
+        # 反斜杠必须先转义，否则会破坏后面两个转义（顺序错误是常见坑）
+        assert _escape_like("a\\b") == "a\\\\b"
+
+    def test_plain_text_unchanged(self):
+        from app.api.v1.search import _escape_like
+
+        assert _escape_like("普通文本") == "普通文本"
+
+    def test_non_str_coerced(self):
+        from app.api.v1.search import _escape_like
+
+        assert _escape_like(123) == "123"
+
+
+class TestLookupUserId:
+    """audit_middleware._lookup_user_id：访问日志按用户名归因（带缓存）。"""
+
+    def test_empty_username_returns_none(self):
+        from app.core import audit_middleware as am
+
+        assert am._lookup_user_id(None) is None
+        assert am._lookup_user_id("") is None
+
+    def test_hit_uses_cache(self, monkeypatch):
+        from app.core import audit_middleware as am
+
+        monkeypatch.setitem(am._USER_ID_CACHE, "cached_user", 42)
+        assert am._lookup_user_id("cached_user") == 42
+
+    def test_miss_queries_db_and_caches(self, monkeypatch):
+        from app.core import audit_middleware as am
+
+        am._USER_ID_CACHE.pop("new_user", None)
+        fake_db = MagicMock()
+        fake_db.query.return_value.filter.return_value.first.return_value = (7,)
+        monkeypatch.setattr("app.core.database.SessionLocal", lambda: fake_db)
+
+        assert am._lookup_user_id("new_user") == 7
+        fake_db.close.assert_called_once()
+        assert am._USER_ID_CACHE["new_user"] == 7
+
+    def test_db_error_returns_none(self, monkeypatch):
+        from app.core import audit_middleware as am
+
+        am._USER_ID_CACHE.pop("boom_user", None)
+
+        def _boom():
+            raise RuntimeError("db down")
+
+        monkeypatch.setattr("app.core.database.SessionLocal", _boom)
+        # 归因失败不得影响请求
+        assert am._lookup_user_id("boom_user") is None
