@@ -468,6 +468,11 @@ esult["success"] = not result["errors"]，
 - **mypy 1310 → 890（启用 SQLAlchemy 官方 mypy 插件，一次性消 420 个误报）**：
 - **mypy 890 → 880**：`services/rbac_service.py` 的 `_log_access(resource_type, resource_id)`
 - **修回上一提交引入的回归（分段全量测试抓到的，记录在此而不是悄悄改）**：
+- **门禁基线按实测同步（两项，均非本批引入）**：`broad_except` 801 → **802** ——
+  并发提交在 `api/v1/auth/rbac.py` 新增 1 处带日志的宽泛捕获；`mypy` 仍 **880**、`as any` 仍 **0**。
+  后端用例数 14,921 → **14,922**（同上，来自并发批次的新增用例）。
+  说明：基线由 `check_type_debt.py --update` 重算，`_locations` 清单一并刷新（此前只改了数字、
+  清单停留在旧行号，导致「52 条新增位置」这类误读）。
   `excel_template_service._ensure_styles` 的幂等守卫改成 `if _title_font is not None` 后，
   `test_startup_lazy_imports_p2_4::test_styles_built_on_first_use` 失败 —— 该用例用
   `monkeypatch.delitem(mod.__dict__, "_title_font")` 模拟冷启动，删掉后直接读名字会 `NameError`。
