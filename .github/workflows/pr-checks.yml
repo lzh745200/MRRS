@@ -835,3 +835,21 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
+      # Electron 外壳单测同样在 Windows 上跑：path-guard.js 是**路径语义敏感**模块
+      # （大小写、分隔符、盘符、UNC、`..` 规范化），Linux 全绿不代表 Windows 正确 ——
+      # 这正是本作业存在的理由（v1.12.3 编码崩溃、v1.12.6 GBK 管道均为"Linux 绿、Windows 红"）。
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22'
+      - name: Electron shell unit tests (Windows)
+        run: npm run test:electron
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      # 编码/句柄/路径敏感子集：管道解码、打包产物校验、备份路径、
+      # 数据同步路由、帮扶村上传——历史上全部在 Windows 端暴露过问题
+      - name: Windows-sensitive test subset
+        run: |
+          cd backend
+          python -m pytest tests/unit/test_pragma_reason_ratchet_f2.py tests/unit/test_verify_package_no_tests_v123.py tests/unit/test_backup_path_alignment.py tests/unit/test_data_sync_route.py tests/unit/test_supported_village_api.py -q --tb=short
+      # 与 Linux lint 作业同口径（含 C901 复杂度上限）
+      - name: Lint (app/)
+        run: cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
