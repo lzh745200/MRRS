@@ -136,6 +136,15 @@ beforeEach(() => {
 })
 
 describe('批次 3 设备与授权中心增强', () => {
+  it('列表响应缺 total → 总数回落 0', async () => {
+    apiMock.listMachineCodes.mockResolvedValue({ data: { items: [recA] } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.pagination.total).toBe(0)
+    wrapper.unmount()
+  })
+
   it('列表响应缺 data 段（异常形状）→ 不更新列表与总数', async () => {
     apiMock.listMachineCodes.mockResolvedValue({})
     const wrapper = mountComp()

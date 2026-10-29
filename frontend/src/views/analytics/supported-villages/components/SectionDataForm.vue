@@ -1109,8 +1109,9 @@ async function loadSectionData() {
   try {
     const data = await getYearlyData(props.villageId, selectedYear.value)
     const apiKey = resolveApiKey(props.sectionKey)
-    // 年度数据用索引签名承载各板块（字段名由 resolveApiKey 决定），取到后按对象收窄
-    const sectionRaw = apiKey ? data[apiKey] : undefined
+    // 年度数据用索引签名承载各板块（字段名由 resolveApiKey 决定），取到后按对象收窄。
+    // resolveSectionApiKey 对未知 key 原样返回，恒为非空字符串，故不需要再判空。
+    const sectionRaw = data[apiKey]
     if (sectionRaw && typeof sectionRaw === "object") {
       const sectionData = sectionRaw as Record<string, unknown>
       Object.keys(formData).forEach((k) => {
