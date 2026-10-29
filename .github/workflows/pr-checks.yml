@@ -231,16 +231,18 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm config set fetch-retries 5
-          npm config set fetch-retry-mintimeout 20000
-          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-retries 2
+          npm config set fetch-retry-mintimeout 10000
+          npm config set fetch-retry-maxtimeout 30000
           npm config set fetch-timeout 60000
           npm cache verify || true
           # 2026-10-29：安装步骤必须**有界**。实测 5 轮 × fetch-timeout 300s + 双镜像把
           # 该步骤拖到 45 分 09 秒，正好撞上本作业 timeout-minutes: 45 → 整条 job 被判
           # **cancelled**（看起来像被外部取消，其实是超时），既掩盖真因又空耗 45 分钟。
-          # 现收紧为有界阶梯：单次 fetch 60s、默认源 3 轮、每镜像 2 轮 =
-          # 最多 3+2+2=7 次尝试 × ≈60-90s ≈ 10 分钟，远低于 job 超时。
+          # 有界阶梯：fetch-retries 2 × fetch-timeout 60s ⇒ 单次外层尝试≈2-2.5 分钟；
+          # 外层 2（默认源）+1（yarnpkg）+1（npmmirror）= **4 次 ≈ 10 分钟**，远低于 job 超时。
+          # ⚠️ 别再把 fetch-retries/外层轮数调高：fetch-retries 5 × timeout 60s 会让单次
+          # 尝试就耗 5 分钟，7 次外层尝试≈35 分钟，实测直接跑满 30+ 分钟仍不结束。
           # 2026-10-28（v1.18.24）：默认 registry 连续 ECONNRESET 时**切镜像重试**。
           # 实测本仓 runner 的 registry 连接会整段不可用（同一 commit 重跑两次仍红），
           # 而 setup-node 的缓存 key 绑在 package-lock.json 上 —— lock 一改缓存即 miss，
@@ -252,7 +254,7 @@ jobs:
             echo "npm ci OK (offline cache)"
             exit 0
           fi
-          for i in 1 2 3; do
+          for i in 1 2; do
             echo "===== npm ci attempt $i (default registry) ====="
             if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
               echo "npm ci OK (attempt $i)"
@@ -261,7 +263,7 @@ jobs:
             echo "npm ci attempt $i failed; retrying in $((i * 20))s"
             sleep $((i * 20))
           done
-          echo "::warning::默认 registry 连续 3 次失败，改用镜像 $MIRROR 重试"
+          echo "::warning::默认 registry 连续 2 次失败，改用镜像列表重试"
           # 2026-10-28：镜像**按列表顺序**尝试。GitHub runner 在境外，
           # 访问 npmmirror（中国）常被重置，所以先试 registry.yarnpkg.com（npm 同源 CDN，
           # 境外友好、内容一致），再退回 npmmirror。`--replace-registry-host=npm`
@@ -269,7 +271,7 @@ jobs:
           for MIRROR in "https://registry.yarnpkg.com" "https://registry.npmmirror.com"; do
             echo "===== mirror ${MIRROR} ====="
             npm ping --registry "$MIRROR" || echo "::warning::npm ping ${MIRROR} 失败（继续尝试）"
-            for i in 1 2; do
+            for i in 1; do
               echo "===== npm ci attempt $i via ${MIRROR} ====="
               if npm ci --legacy-peer-deps --no-fund --no-audit \
                    --registry "$MIRROR" --replace-registry-host=npm; then
@@ -736,16 +738,18 @@ jobs:
       - name: Install frontend deps and Playwright browser
         run: |
           cd frontend
-          npm config set fetch-retries 5
-          npm config set fetch-retry-mintimeout 20000
-          npm config set fetch-retry-maxtimeout 120000
+          npm config set fetch-retries 2
+          npm config set fetch-retry-mintimeout 10000
+          npm config set fetch-retry-maxtimeout 30000
           npm config set fetch-timeout 60000
           npm cache verify || true
           # 2026-10-29：安装步骤必须**有界**。实测 5 轮 × fetch-timeout 300s + 双镜像把
           # 该步骤拖到 45 分 09 秒，正好撞上本作业 timeout-minutes: 45 → 整条 job 被判
           # **cancelled**（看起来像被外部取消，其实是超时），既掩盖真因又空耗 45 分钟。
-          # 现收紧为有界阶梯：单次 fetch 60s、默认源 3 轮、每镜像 2 轮 =
-          # 最多 3+2+2=7 次尝试 × ≈60-90s ≈ 10 分钟，远低于 job 超时。
+          # 有界阶梯：fetch-retries 2 × fetch-timeout 60s ⇒ 单次外层尝试≈2-2.5 分钟；
+          # 外层 2（默认源）+1（yarnpkg）+1（npmmirror）= **4 次 ≈ 10 分钟**，远低于 job 超时。
+          # ⚠️ 别再把 fetch-retries/外层轮数调高：fetch-retries 5 × timeout 60s 会让单次
+          # 尝试就耗 5 分钟，7 次外层尝试≈35 分钟，实测直接跑满 30+ 分钟仍不结束。
           # 2026-10-28（v1.18.24）：与 frontend-check 同款镜像兜底 —— 默认 registry 整段
           # ECONNRESET 时（本仓实测同一 commit 重跑两次仍红）改用镜像再试，避免 E2E 作业
           # 因下载依赖失败而阻断整轮 PR Checks（进而阻断 tag 发布的 release gate）。
@@ -754,18 +758,18 @@ jobs:
           if npm ci --legacy-peer-deps --offline --no-fund --no-audit; then
             echo "npm ci OK (offline cache)"
           else
-          for i in 1 2 3; do
+          for i in 1 2; do
             echo "===== npm ci attempt $i (default registry) ====="
             if npm ci --legacy-peer-deps --prefer-offline --no-fund --no-audit; then
               echo "npm ci OK (attempt $i)"
               break
             fi
-            if [ "$i" = "3" ]; then
-              echo "::warning::默认 registry 连续 3 次失败，改用镜像列表"
+            if [ "$i" = "2" ]; then
+              echo "::warning::默认 registry 连续 2 次失败，改用镜像列表"
               INSTALLED=0
               for MIRROR in "https://registry.yarnpkg.com" "https://registry.npmmirror.com"; do
                 npm ping --registry "$MIRROR" || echo "::warning::npm ping ${MIRROR} 失败（继续尝试）"
-                for j in 1 2; do
+                for j in 1; do
                   if npm ci --legacy-peer-deps --no-fund --no-audit \
                        --registry "$MIRROR" --replace-registry-host=npm; then
                     echo "npm ci OK via ${MIRROR} (attempt $j)"; INSTALLED=1; break 2
