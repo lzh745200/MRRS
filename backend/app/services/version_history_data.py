@@ -3650,6 +3650,10 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            "setItem × 10 → safeSetItem(key, value, kind)（失败返回 false，不阻断）",
+            "removeItem × 12 → safeRemoveItem(key, kind)",
+            "getItem × 6（含 safeGet(() => sessionStorage, ...) 形式）→ safeGetItem(key, kind)",
+            "删除模块内本地 safeGet 定义，统一用共享实现（避免两套语义）",
             (
                 "新增 utils/safeStorage.ts（共享安全存储）：safeGetItem / safeSetItem / safeRemoveItem /isStorageAvailable"
                 "，读取异常返回 null（fail-closed）、写入异常静默丢弃。接上三处在关键路径上的裸读取"
@@ -3685,19 +3689,6 @@ VERSION_HISTORY_DATA = [
                 "projects/Edit.vue 的 isDirty 永不复位：原实现只把标记置 true，全文再无复位 ——打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍提示。照抄同族"
                 "三页（schools / organization / policies 的 Edit）做法：加 suppressDirty 在回填 / 重置期间抑制，回填后 nextTick 复位，保存"
                 "成功与 resetForm 后各复位一次。"
-            ),
-            "模型 machine_codes.py 补 ondelete=\"SET NULL\"；",
-            (
-                "迁移 fk_machine_codes_created_by_001：SQLite 不支持 ALTER CONSTRAINT，改为「读 sqlite_master 的 DDL → 正则替换"
-                "外键子句 → 建临时表-拷数据-drop-rename」，逐项守卫（表/列/外键缺失、已有 ondelete 都跳过，可重入）。"
-            ),
-            (
-                "自证单测 4 例：识别「有外键无 ondelete」/ 表缺失返回 None / 已有 ondelete 幂等 /真跑 upgrade 后 PRAGMA foreign_key_list "
-                "读出 SET NULL，并在 PRAGMA foreign_keys=ON下验证删用户后 created_by 被置 NULL。"
-            ),
-            (
-                "表不存在 → skipped（幂等）；models/base.py 的 Base.to_dict 是类创建后动态赋值（Base.to_dict = _base_to_dict），mypy "
-                "看不见 → 没有显式定义 to_dict 的模型（FundAllocationOrder/FundAssetVerification …）在调用处被判 attr-defined。"
             ),
         ],
     },

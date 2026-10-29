@@ -7,6 +7,24 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第二十二批：`authStorage` 全部 28 处裸存储调用收口）
+
+**问题**：上一批只把 `authStorage` 的 `_readSlot` 改成安全读取，其余 **28 处** 仍是裸
+`localStorage./sessionStorage.` 调用（写入、删除、以及 `_readLegacy` / 迁移逻辑里的读取）。
+该模块是路由守卫（`router/guards.ts` 每次导航调 `getToken`）与登录/登出链路的底座，
+受限存储下任何一处抛 `SecurityError` 都会中断导航或登录流程。
+
+**修复**：全部改为共享的 `utils/safeStorage`（上一批新建）：
+
+- `setItem` × 10 → `safeSetItem(key, value, kind)`（失败返回 false，不阻断）
+- `removeItem` × 12 → `safeRemoveItem(key, kind)`
+- `getItem` × 6（含 `safeGet(() => sessionStorage, ...)` 形式）→ `safeGetItem(key, kind)`
+- 删除模块内本地 `safeGet` 定义，统一用共享实现（避免两套语义）
+
+**验证**：`vue-tsc --noEmit` **0 错误** · `eslint` **0** ·
+`vitest tests/unit/{utils,composables,router}` **60 文件 / 1185 用例通过** ·
+`authStorage.ts` 裸调用计数 **0**。
+
 ### Fixed（全库审计第二十一批：`/sync` 上传无端点级上限）
 
 **问题**：`data_sync._save_upload_file` 只做**分块读取**（`while chunk := await file.read(CHUNK_SIZE)`），

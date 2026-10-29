@@ -1,3 +1,4 @@
+import { safeGetItem, safeRemoveItem, safeSetItem } from '@/utils/safeStorage'
 /**
  * 统一的认证存储工具
  *
@@ -55,14 +56,6 @@ const LEGACY_KEYS = {
 // 写了 fail-closed 注释，说明团队知道这个风险 —— 这里补齐同款保护：
 // 读取异常返回 null（视作未登录，fail-closed）。写入点保持原样：
 // setItem 只在配额满时抛，且失败不影响本次会话（内存态仍可用），优先级低于读。
-function safeGet(storage: () => Storage, key: string): string | null {
-  try {
-    return storage().getItem(key)
-  } catch {
-    return null
-  }
-}
-
 /** 单一来源的整份凭据（token / user / refresh 必须同源，绝不跨来源拼接） */
 interface CredentialSlot {
   token: string | null
@@ -91,7 +84,7 @@ export class AuthStorage {
   /** 读取旧版 localStorage 键（按顺序取第一个非空值） */
   private static _readLegacy(keys: readonly string[]): string | null {
     for (const key of keys) {
-      const value = localStorage.getItem(key)
+      const value = safeGetItem(key, 'local')
       if (value) return value
     }
     return null
@@ -101,16 +94,16 @@ export class AuthStorage {
   private static _readSlot(source: CredentialSource): CredentialSlot {
     if (source === 'session') {
       return {
-        token: safeGet(() => sessionStorage, STORAGE_KEYS.TOKEN),
-        user: AuthStorage._parseUser(safeGet(() => sessionStorage, STORAGE_KEYS.USER)),
-        refresh: safeGet(() => sessionStorage, STORAGE_KEYS.REFRESH_TOKEN),
+        token: safeGetItem(STORAGE_KEYS.TOKEN, 'session'),
+        user: AuthStorage._parseUser(safeGetItem(STORAGE_KEYS.USER, 'session')),
+        refresh: safeGetItem(STORAGE_KEYS.REFRESH_TOKEN, 'session'),
       }
     }
     if (source === 'persist') {
       return {
-        token: safeGet(() => localStorage, STORAGE_KEYS.PERSIST_TOKEN),
-        user: AuthStorage._parseUser(safeGet(() => localStorage, STORAGE_KEYS.PERSIST_USER)),
-        refresh: safeGet(() => localStorage, STORAGE_KEYS.PERSIST_REFRESH),
+        token: safeGetItem(STORAGE_KEYS.PERSIST_TOKEN, 'local'),
+        user: AuthStorage._parseUser(safeGetItem(STORAGE_KEYS.PERSIST_USER, 'local')),
+        refresh: safeGetItem(STORAGE_KEYS.PERSIST_REFRESH, 'local'),
       }
     }
     return {
@@ -159,7 +152,7 @@ export class AuthStorage {
    * 注意：不再写入 localStorage，避免数据持久化风险
    */
   static setToken(token: string): void {
-    sessionStorage.setItem(STORAGE_KEYS.TOKEN, token)
+    safeSetItem(STORAGE_KEYS.TOKEN, token, 'session')
   }
 
   /**
@@ -177,7 +170,7 @@ export class AuthStorage {
    * 保存用户信息到 sessionStorage
    */
   static setUser(user: AuthData['user']): void {
-    sessionStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
+    safeSetItem(STORAGE_KEYS.USER, JSON.stringify(user), 'session')
   }
 
   /**
@@ -191,7 +184,7 @@ export class AuthStorage {
    * 保存刷新令牌到 sessionStorage
    */
   static setRefreshToken(token: string): void {
-    sessionStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token)
+    safeSetItem(STORAGE_KEYS.REFRESH_TOKEN, token, 'session')
   }
 
   /**
@@ -215,7 +208,7 @@ export class AuthStorage {
     } else {
       // 本次登录没有 refresh_token：必须清掉上一会话遗留的会话级刷新令牌，
       // 否则 401 续期会用它换出**上一个用户**的 access token（身份串号）。
-      sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
+      safeRemoveItem(STORAGE_KEYS.REFRESH_TOKEN, 'session')
     }
   }
 
@@ -244,23 +237,23 @@ export class AuthStorage {
    * 退出登录（logout → AuthStorage.clear）会彻底清除，不留残余凭据。
    */
   static persistForAutoLogin(data: AuthData): void {
-    localStorage.setItem(STORAGE_KEYS.PERSIST_TOKEN, data.token)
-    localStorage.setItem(STORAGE_KEYS.PERSIST_USER, JSON.stringify(data.user))
+    safeSetItem(STORAGE_KEYS.PERSIST_TOKEN, data.token, 'local')
+    safeSetItem(STORAGE_KEYS.PERSIST_USER, JSON.stringify(data.user), 'local')
     if (data.refreshToken) {
-      localStorage.setItem(STORAGE_KEYS.PERSIST_REFRESH, data.refreshToken)
+      safeSetItem(STORAGE_KEYS.PERSIST_REFRESH, data.refreshToken, 'local')
     }
   }
 
   /** 清除记住登录的持久数据 */
   static clearPersisted(): void {
-    localStorage.removeItem(STORAGE_KEYS.PERSIST_TOKEN)
-    localStorage.removeItem(STORAGE_KEYS.PERSIST_USER)
-    localStorage.removeItem(STORAGE_KEYS.PERSIST_REFRESH)
+    safeRemoveItem(STORAGE_KEYS.PERSIST_TOKEN, 'local')
+    safeRemoveItem(STORAGE_KEYS.PERSIST_USER, 'local')
+    safeRemoveItem(STORAGE_KEYS.PERSIST_REFRESH, 'local')
   }
 
   /** 是否已开启记住登录（存在持久令牌） */
   static hasPersistedAuth(): boolean {
-    return !!localStorage.getItem(STORAGE_KEYS.PERSIST_TOKEN)
+    return !!safeGetItem(STORAGE_KEYS.PERSIST_TOKEN, 'local')
   }
 
   /**
@@ -268,9 +261,9 @@ export class AuthStorage {
    * 用于自动/手动锁屏：结束会话但不破坏下次开机免登录。
    */
   static clearSession(): void {
-    sessionStorage.removeItem(STORAGE_KEYS.TOKEN)
-    sessionStorage.removeItem(STORAGE_KEYS.USER)
-    sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
+    safeRemoveItem(STORAGE_KEYS.TOKEN, 'session')
+    safeRemoveItem(STORAGE_KEYS.USER, 'session')
+    safeRemoveItem(STORAGE_KEYS.REFRESH_TOKEN, 'session')
   }
 
   /**
@@ -278,14 +271,14 @@ export class AuthStorage {
    */
   static clear(): void {
     // 清除 sessionStorage
-    sessionStorage.removeItem(STORAGE_KEYS.TOKEN)
-    sessionStorage.removeItem(STORAGE_KEYS.USER)
-    sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
+    safeRemoveItem(STORAGE_KEYS.TOKEN, 'session')
+    safeRemoveItem(STORAGE_KEYS.USER, 'session')
+    safeRemoveItem(STORAGE_KEYS.REFRESH_TOKEN, 'session')
 
     // 清除旧版 localStorage（向后兼容）
     Object.values(LEGACY_KEYS)
       .flat()
-      .forEach((key) => localStorage.removeItem(key))
+      .forEach((key) => safeRemoveItem(key, 'local'))
 
     // 清除记住登录的持久数据（防止退出后仍自动登录）
     this.clearPersisted()
@@ -308,7 +301,7 @@ export class AuthStorage {
    */
   static migrateFromLocalStorage(): boolean {
     // 检查是否已迁移
-    if (sessionStorage.getItem(STORAGE_KEYS.MIGRATED) === 'true') {
+    if (safeGetItem(STORAGE_KEYS.MIGRATED, 'session') === 'true') {
       return false
     }
 
@@ -316,33 +309,33 @@ export class AuthStorage {
 
     // 迁移 token
     const legacyToken = this.getToken()
-    if (legacyToken && !sessionStorage.getItem(STORAGE_KEYS.TOKEN)) {
+    if (legacyToken && !safeGetItem(STORAGE_KEYS.TOKEN, 'session')) {
       // 注意：这里不调用 setToken，避免触发 linter 规则
-      sessionStorage.setItem(STORAGE_KEYS.TOKEN, legacyToken)
+      safeSetItem(STORAGE_KEYS.TOKEN, legacyToken, 'session')
       migrated = true
     }
 
     // 迁移 user
     const legacyUser = this.getUser()
-    if (legacyUser && !sessionStorage.getItem(STORAGE_KEYS.USER)) {
-      sessionStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(legacyUser))
+    if (legacyUser && !safeGetItem(STORAGE_KEYS.USER, 'session')) {
+      safeSetItem(STORAGE_KEYS.USER, JSON.stringify(legacyUser), 'session')
       migrated = true
     }
 
     // 迁移 refresh token
     const legacyRefresh = this.getRefreshToken()
-    if (legacyRefresh && !sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)) {
-      sessionStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, legacyRefresh)
+    if (legacyRefresh && !safeGetItem(STORAGE_KEYS.REFRESH_TOKEN, 'session')) {
+      safeSetItem(STORAGE_KEYS.REFRESH_TOKEN, legacyRefresh, 'session')
       migrated = true
     }
 
     // 标记已迁移并清理旧数据
     if (migrated) {
-      sessionStorage.setItem(STORAGE_KEYS.MIGRATED, 'true')
+      safeSetItem(STORAGE_KEYS.MIGRATED, 'true', 'session')
       // 清理所有旧版 localStorage 数据
       Object.values(LEGACY_KEYS)
         .flat()
-        .forEach((key) => localStorage.removeItem(key))
+        .forEach((key) => safeRemoveItem(key, 'local'))
     }
 
     return migrated
