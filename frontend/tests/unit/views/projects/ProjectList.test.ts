@@ -60,7 +60,7 @@ vi.mock('@/api/projects', () => ({
   },
 }))
 
-import ProjectList from '../List.vue'
+import ProjectList from '@/views/projects/List.vue'
 import { ElMessage } from 'element-plus'
 
 // ==================== Helpers ====================

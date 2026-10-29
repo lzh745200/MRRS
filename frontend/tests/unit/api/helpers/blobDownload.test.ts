@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { AxiosResponse } from 'axios'
-import { parseFileName, downloadBlobAsFile, getFileNameFromResponse } from '../blobDownload'
+import { parseFileName, downloadBlobAsFile, getFileNameFromResponse } from '@/api/helpers/blobDownload'
 
 // ─── Mock DOM ───
 

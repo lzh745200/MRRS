@@ -81,7 +81,9 @@ export default defineConfig({
       // 虚假信心来源）——纳入执行并纳入 CI
       '**/tests/*.test.ts',
       '**/tests/property/**/*.test.ts',
-      '**/src/**/__tests__/**/*.spec.ts'
+      // 2026-10-29：原先还 include 了 `src/**/__tests__/**/*.spec.ts`（3 个测试文件住在 src 里，
+      // 与全仓 `tests/` 约定不一致，也让「src 内 as any」统计被测试代码污染）。已全部迁移到
+      // tests/unit/ 并改名为 *.test.ts；此处**故意移除**该模式，防止再放回去。
     ],
     coverage: {
       // provider 保持 v8（istanbul 共用同一 BaseCoverageProvider、同样触发 #9758，切换无收益且阈值口径

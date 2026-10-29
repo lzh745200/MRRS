@@ -286,6 +286,13 @@
   基线 110 → 71（门禁 total=71 baseline=71 NEW=0）。
 - **静默吞异常清零（71 → 0），门禁转为「零容忍」**：35 个文件、71 处宽泛兜底全部改为
 - **`as any` 再清 10 处（103 → 93）**：`router/index.ts` 用 `declare global` 声明
+- **前端测试目录约定收编：3 个住在 `src/` 里的测试文件迁到 `tests/`（并锁死约定）**：
+  `src/views/projects/__tests__/ProjectList.spec.ts`、`src/api/helpers/__tests__/blobDownload.spec.ts`、
+  `src/api/__tests__/projects.spec.ts` → `tests/unit/...` 并改名为 `*.test.ts`（vitest 的 `tests/unit`
+  只匹配 `.test.ts`，原 `.spec.ts` 放在那里根本不会被执行）；相对导入相应改为 `@/` 别名。
+  `vitest.config.ts` **移除** `**/src/**/__tests__/**/*.spec.ts` 这个 include —— 测试只放 `tests/`，
+  防止再被放回 src（原本也让 `src` 内 `as any` 统计被测试代码污染）。
+  迁移后 3 个文件 75 个用例全绿；`as any` 统计随之从 93 降到 59；前端测试文件数 344 → 347。
   `window.electronAPI`（Electron 预加载桥）替代两处 `(window as any)`；`approval/History.vue`
   复用 `TaskDiff` 已声明的旧键名；`ruralWorks/List.vue` 去掉 api 参数断言；
   `dataPackage/ReceivePackage.vue` + `stores/dataPackage.ts` 把「裸数组 / `{data:[...]}`」
