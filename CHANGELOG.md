@@ -7,6 +7,33 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第二十三批：前端剩余 39 处裸存储调用清零）
+
+按 `authStorage` 同一口径，把其余 20 个文件的 **39 处**裸 `localStorage./sessionStorage.` 调用
+全部收敛到 `utils/safeStorage`（含 `router/guards.ts`、`stores/auth.ts`、`stores/config.ts`、
+`useUiPrefs` / `useRecentMenus` / `useMenuFavorites` / `usePageSize` / `useVersionCheck`、
+`layouts/DefaultLayoutSafe.vue`、`dashboard/index.vue`、`dataEntry/ComprehensiveEntry.vue`、
+`system/{BackupManagement,HealthCheck,MonitoringDashboard}.vue`、`work-calendar/Index.vue`、
+`utils/lockDigest.ts` 等）。导入按实际使用裁剪，避免 unused。
+
+**过程中发现并修掉 3 处“我引入的语义回归”**（都由既有单测抓到，未流出一行）：
+
+1. `dashboard/index.vue::saveLayout` —— 原来靠 `try/catch` 判断写入成功，换成 `safeSetItem` 后
+   不再抛异常 → **写入失败被谎报为成功**。改为用返回值判断。
+2. `lockDigest.consumeLockDigest` —— 原语义是「删除打点失败 ⇒ 本次消费失败」（删不掉下次会重复弹），
+   `safeRemoveItem` 吞异常后语义反转。给 `safeRemoveItem` 加 `boolean` 返回值并让调用点据此提前返回。
+3. `router/guards.ts::readLockFlag` —— 这是一处**安全判定**，要求异常时 fail-closed（按已锁定处理）；
+   `safeGetItem` 把异常统一变成 `null` → 判定为「未锁定」→ **fail-open**。该处回滚为原生 try/catch，
+   并在注释里写明"这里必须用原生调用，不能换 safeGetItem"。
+
+另：`safeStorage.pick()` 改为优先取**全局** `localStorage/sessionStorage`（回退 `window`）——
+jsdom 里二者不一定是同一个对象，走 `window.*` 会绕过测试的 `vi.stubGlobal` 桩，
+导致「写入失败降级」类用例失效。
+
+**验证**：`eslint src` **0** · `vue-tsc --noEmit` **0 错误** ·
+`vitest tests/unit/{utils,composables,router,stores,views/dashboard,views/system,layouts}`
+**114 文件 / 2439 用例全部通过**。
+
 - **mypy 869 → 851：13 个文件 18 处空容器补显式注解**（`var-annotated` 清零一半）：
   `by_type`/`action_counts`/`by_severity`/`counts`/`warnings`/`errors`/`name_map`/`row_map`/`ancestors` …
   这些是 `x = {}` / `x = []` 的空字面量，mypy 无法推断元素类型。统一补 `dict[Any, Any]` / `list[Any]`
@@ -404,11 +431,11 @@ Update schema 同口径校验。
 
 - **类型债**：启用 SQLAlchemy mypy 插件，mypy **1310 → 880**（消 420 个误报）；
   `rbac_service._log_access` 形参放宽为 `Optional[str]`；`as any` 保持 **0**。
-- **门禁基线按实测同步**：`broad_except` 801→802、后端用例 **14,976**、locations 清单刷新。
+- **门禁基线按实测同步**：`broad_except` 801→802、后端用例 **14,994**、locations 清单刷新。
 
 ### Tests
 
-- 后端 **14,976 用例**、前端 **347 个测试文件 / 7,420 用例**；统一门禁 **34/34 PASS**；
+- 后端 **14,994 用例**、前端 **348 个测试文件 / 7,428 用例**；统一门禁 **34/34 PASS**；
   flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；覆盖率以 tag 的 `PR Checks` 为准。
 
 ## [1.18.25] - 2026-10-29 — 收口重建：合并双写者分支 + 修掉最后一处过时断言
