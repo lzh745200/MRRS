@@ -3651,6 +3651,18 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "新增迁移 idx_dedup_002：按列集合分组判重（区别于历史 index_dedup_001 的按名字清孤儿），每组保留模型显式声明的那个（KEEP_INDEX_NAMES 硬编码自"
+                " models/*.py 的 Index(...)，附来源行号），sqlite_autoindex_* 永不删。实测删除 8 个、UPGRADE_EXIT=0。"
+            ),
+            (
+                "新增 tests/unit/test_idx_dedup_002.py（5 例）作为自证证据（新门禁要求）：手工建「三索引同列」断言只保留模型声明的那个；断言 sqlite_autoind"
+                "ex 不被删；无重复表不动；同列但唯一性不同不算重复（不误删）；并锁定 KEEP_INDEX_NAMES 与模型声明一致。"
+            ),
+            (
+                "为什么不动态读 Base.metadata：app.models 是 getattr 惰性导出，import app.models后 metadata.tables 仍为空（实测），会让迁"
+                "移静默退回“字典序第一个”——本次恰好与模型一致，但不能靠运气，故改为显式清单 + 单测对账。列宽一开始已是 256（模型建的），迁移逻辑根本没被执行。"
+            ),
+            (
                 "新增门禁 scripts/check_migration_self_evidence.py：扫描 alembic/versions/*.py，凡含 alter/add/drop colum"
                 "n、create/drop index、create/drop table 的迁移，必须自带一个以 revision 命名的测试文件（能手工构造「旧库状态」再驱动迁移函数）；"
             ),
@@ -3681,19 +3693,6 @@ VERSION_HISTORY_DATA = [
                 "4 个「生产零引用」的 schema 模块加 DEPRECATED 标记：schemas/policy.py、schemas/project.py、schemas/school.py、sc"
                 "hemas/village.py 只被测试的模块清单导入，生产代码从不引用；而同名类在 app/api/v1/*.py 里另有真正在用且与模型对齐的定义（如 SchoolCreate）——"
                 " 这正是\"按类名配对会产生假阳性\"的第二事实源。"
-            ),
-            (
-                "/health/database-health 把 DB 绝对路径出站：database_health_service.check_integrity在库文件缺失时把 f\"数据库文件不存"
-                "在: {self.db_path}\" 写进 message 与 issues，而该端点匿名可访问（运维探针，已有测试锁定其无需登录）—— 等于对外泄露部署目录结构。改为对外只给分类码 D"
-                "B_FILE_MISSING，路径只进 logger.error。"
-            ),
-            (
-                "UserCreate 的 phone_number / role_id 是死字段：users 表列名是 phone，而 create_user 只取 username/email/full"
-                "_name/role —— 注册链路传的电话被静默丢弃（前端也不传，所以长期没被发现）。"
-            ),
-            (
-                "system/audit.py 14 处内联角色比较漏掉 is_superuser 标记：normalize_role(role) not in (\"admin\", \"super_a"
-                "dmin\") 不看 is_superuser=True，于是「打了超管标记、role 仍是 user」的账号访问审计页被误拒 403（军审场景下\"超管进不去审计页\"）。"
             ),
         ],
     },

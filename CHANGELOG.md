@@ -7,6 +7,30 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十三批：冗余索引去重，迁移类最后一项）
+
+**实测**（空库 `alembic upgrade head` 后按「表 + 列有序集合 + 唯一性」判重）：11 组重复，
+其中 4 组是 `sqlite_autoindex_*`（表级 UNIQUE 自动生成，不可删）→ **7 组真冗余**，
+合计应删 8 个索引（`audit_logs.created_at` 一组就有 3 份）：
+
+    audit_logs.created_at             ix_audit_timestamp / ix_audit_logs_created_at / idx_audit_created
+    audit_logs.(user_id, action)      ix_audit_user_action / idx_audit_user_action
+    households.supported_village_id   ix_households_village_id / ix_households_village
+    household_members.household_id    ix_household_members_household_id / ..._household
+    household_risk_records.household_id
+    consumption_records.supported_village_id
+    token_blacklist.expires_at
+
+- 新增迁移 `idx_dedup_002`：按列集合分组判重（区别于历史 `index_dedup_001` 的按**名字**清孤儿），
+  每组保留**模型显式声明**的那个（`KEEP_INDEX_NAMES` 硬编码自 `models/*.py` 的 `Index(...)`，
+  附来源行号），`sqlite_autoindex_*` 永不删。实测删除 8 个、`UPGRADE_EXIT=0`。
+- 新增 `tests/unit/test_idx_dedup_002.py`（5 例）作为**自证证据**（新门禁要求）：
+  手工建「三索引同列」断言只保留模型声明的那个；断言 `sqlite_autoindex` 不被删；
+  无重复表不动；**同列但唯一性不同不算重复**（不误删）；并锁定 `KEEP_INDEX_NAMES` 与模型声明一致。
+- 为什么不动态读 `Base.metadata`：`app.models` 是 `__getattr__` 惰性导出，`import app.models`
+  后 `metadata.tables` 仍为空（实测），会让迁移静默退回“字典序第一个”——本次恰好与模型一致，
+  但不能靠运气，故改为显式清单 + 单测对账。
+
 ### Fixed（全库审计第十二批：迁移基线自证 —— Critical 收口）
 
 **问题**：`001_baseline` 在核心表缺失时 `Base.metadata.create_all()` —— 新库在第一个迁移
