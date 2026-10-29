@@ -408,6 +408,13 @@ esult["success"] = not result["errors"]，
   `funds/Detail.vue` 的报销明细兼容「裸数组 / `{items}` / `{data:{items}}` / `{data:{}}`」四形态
   （由现有分支测试逼出来的正确口径）。
   验证：`vue-tsc` 0 错误；技术债 `as any` 基线 **0**（新增一处即红）；受影响区域 1699 passed。
+- **mypy 1376 → 1310（单个文件消 66 个错误）**：`services/excel_template_service.py` 的 21 个
+  openpyxl 样式对象（`_title_fill`/`_header_font`/`_zebra_fills`/`_thin_border` …）是**惰性构造后
+  注入模块全局**的，mypy 看不到这些名字 → 66 个 `name-defined` 及下游 `union-attr`/`arg-type`。
+  改为在模块级显式声明 `_x: Any = None`（仍是惰性构造，不提前拉起 openpyxl），
+  并把幂等守卫从 `if "_title_font" in globals()` 改成 `if _title_font is not None`
+  —— 否则名字已存在会让样式永远不构造（改完实测 `_title_font`/`_zebra_fills` 均正确生成）。
+  验证：该文件 mypy 0 错、flake8 0；`test_excel_template_*` 8 passed；基线 1376 → 1310。
 - **mypy 1379 → 1376**：`core/transaction.py` 4 处（`SessionTransaction.name` 不存在 → 用
   `setattr` 保留调试名；`bulk_insert_mappings`/`bulk_update_mappings` 的 `type` 与 `Mapper[Any]`
   不符 → `cast(Any, ...)`；`model_class.id` → `getattr(model_class, 'id')`，并把三个 batch 方法

@@ -15,6 +15,30 @@ from app.services.entity_import_validator import EntityImportValidator
 
 logger = logging.getLogger(__name__)
 
+# openpyxl 样式对象：在 _ensure_styles() 里惰性构造并注入模块全局（避免 import 即拉起 openpyxl）。
+# 显式声明为模块级变量，mypy 才能识别这些名字；具体类型由 openpyxl 在运行时给出。
+_title_fill: Any = None
+_title_font: Any = None
+_subtitle_font: Any = None
+_info_font: Any = None
+_header_fill: Any = None
+_header_font: Any = None
+_data_font: Any = None
+_example_fill: Any = None
+_example_font: Any = None
+_required_fill: Any = None
+_zebra_fills: Any = None
+_decor_line_fill: Any = None
+_footer_font: Any = None
+_section_font: Any = None
+_note_font: Any = None
+_thin_side: Any = None
+_thin_border: Any = None
+_bottom_gold: Any = None
+_header_border: Any = None
+_center_align: Any = None
+_left_align: Any = None
+
 
 def _system_version() -> str:
     """系统版本号（单一事实源：settings.PROJECT_VERSION，读取失败回落占位）。
@@ -67,7 +91,8 @@ def _ensure_styles() -> None:
     global _thin_side, _thin_border, _bottom_gold, _header_border
     global _center_align, _left_align
 
-    if "_title_font" in globals():
+    # 名称在模块级已声明（初值 None），因此不能用 globals() 判断是否已构造
+    if _title_font is not None:
         return
 
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
