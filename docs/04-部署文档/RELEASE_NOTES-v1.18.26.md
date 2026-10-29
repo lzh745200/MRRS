@@ -21,7 +21,7 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 
 > **未签名包提示**：证书尚未采购，首次运行会触发 SmartScreen（「更多信息」→「仍要运行」）。
 
-## 二、认证与权限（4 个 Critical）
+## 二、认证与权限（4 个 Critical，审计七批 26 项）
 
 - **refresh 完全绕过 `token_version` 吊销**：`validate_token` 只验签名/jti/type，不比对版本，
   而 access 链路有校验。登出或强退后，未随登出提交的 refresh（其他设备/被窃）仍能换发
@@ -34,6 +34,29 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
   `_audit_permission_change()`，覆盖 assign/revoke role 与 grant/revoke/save permissions。
 - **禁用账号未即时失效**：`is_active` 原先只在 `get_current_active_user` 校验，而绝大多数
   端点依赖 `get_current_user`。新增 `_reject_inactive_user()`，禁用后未过期 access 立即 403。
+
+### 审计其余批次（数据面 / 契约 / 审计链）
+
+- **未知 `DataScope` 列表过滤 fail-open**：`apply_scope_to_query` 兜底放行全量，与
+  `check_record_access` 返回 `False` 的口径相反；改 `sa_false()` + warning，并加
+  「两条路径必须同口径」回归。
+- **`api_access_logs.user_id` 恒为 NULL**：中间件把 JWT `sub`（用户名）当 int 解析，
+  访问日志无法按人归因；改为按用户名反查 `users.id`（有界缓存，异常不影响请求）。
+- **全局搜索 LIKE 未转义（13 处）**：`q="%%"` 可枚举本域全表；新增 `_escape_like()`，
+  全部 `ilike` 显式 `escape`。
+- **`fund_lifecycle` 无项目归属记录跨组织可读写**：12 处守卫只在 `project_id` 有值时校验，
+  空值时完全不校验；新增「创建人本人或管理员」兜底，其余 403，补 4 条负向用例。
+- **`system/audit.py` 14 处内联角色比较漏掉 `is_superuser`**：超管标记但 role=user 的账号
+  被误拒 403；统一改 `is_admin(current_user)`。
+- **审计日志删除/备注自身不留审计**：三处破坏审计链的写操作补 `AuditLogger`
+  （删除前快照关键字段、备注记录前后值），独立 Session 写入。
+- **审计备注无入参模型**：`PATCH .../remark` 原 `body: dict` 无长度上限；新增
+  `AuditRemarkUpdate(max_length=500)`，超长 422。
+- **契约收敛**：改密响应改 `success_response()`；删除 `work_logs` 无效
+  `response_model=dict`；审计详情裸 ORM 改为 11 字段白名单信封，避免全列外泄。
+- **政策附件下载计数 best-effort**：计数失败不再让下载 500。
+- **学校导入冗余临时文件**：删除从未读取的 15MB 级临时落盘；schema 与模型漂移改为 warning 可见。
+- **`v-permission="[]"` fail-open**：无效用法分支只 warn 不隐藏；改为默认隐藏并补断言。
 
 ## 三、维护窗口与审计正确性
 
@@ -68,12 +91,12 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 - 启用 SQLAlchemy mypy 插件，mypy **1310 → 880**（消除 420 个误报）；
   `rbac_service._log_access` 形参放宽为 `Optional[str]`。
 - `as any` 保持 **0**；静默吞异常 **0**；统一门禁 **34/34 PASS**。
-- 门禁基线按实测同步：`broad_except` 801→802、后端用例 **14,938**、locations 清单刷新。
+- 门禁基线按实测同步：`broad_except` 801→802、后端用例 **14,953**、locations 清单刷新。
 
 ## 六、验证（发布前本地实测）
 
 - 统一门禁入口 `backend/.venv/Scripts/python.exe scripts/run_gates.py`：**34 道 PASS**；
-- 后端全量：**14,938 用例**（分段/CI 口径以 `backend-test` 为准）；
+- 后端全量：**14,953 用例**（分段/CI 口径以 `backend-test` 为准）；
 - 前端：**347 个测试文件 / 7,420 用例**，生产构建成功；
 - Electron：`npm run test:electron` **14/14**（含 AES-GCM 往返/篡改/短文件守护）；
 - 安装冒烟：Windows 10 x64 隔离目录静默安装 + 后端 `/health` + 卸载（结果见本页末）；

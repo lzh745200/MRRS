@@ -100,27 +100,6 @@
   改三分支 fail-closed，新增 2 条负向用例。
 - **软删除记录永久占用唯一编码**：查重区分活跃/已软删，后者给出可行动指引。
 
-### Security（审计后续批次：数据权限 / 访问日志 / 契约 / 权限指令）
-
-- **未知 `DataScope` 列表过滤 fail-open**：`apply_scope_to_query` 兜底 `return query` 等于放行
-  全量，与同模块 `check_record_access` 对未知 scope 返回 `False` 的口径相反。改为
-  `sa_false()` + warning，并加「两条路径必须同口径」回归。
-- **`api_access_logs.user_id` 恒为 NULL**：中间件用 `int(sub)` 解析用户，而本项目 JWT 的
-  `sub` 是用户名，`int()` 必然失败 → 访问日志无法按人归因。改为按用户名反查 `users.id`，
-  加有界进程内缓存；查库异常返回 None，不影响请求。
-- **全局搜索 LIKE 通配符未转义（13 处）**：`ilike(f"%{q}%")` 中 `q="%%"` 可枚举本域全表、
-  `a_b` 把下划线当任意字符。新增 `_escape_like()`（先转义 `\` 再转义 `%`/`_`），
-  全部 `ilike` 显式 `escape="\\"`。
-- **契约收敛 3 处**：`auth/users.py` 改密响应用 `success_response()`；`work_logs.py` 删除
-  与实际返回不符的 `response_model=dict`；`system/audit.py` 详情端点由裸 ORM 改为信封 +
-  11 字段白名单（原实现全列外泄）。
-- **政策附件下载计数 best-effort**：计数失败不再让下载 500，只记日志并照常下发文件。
-- **学校导入冗余临时文件**：上传内容已走内存解析，删除从未被读取的 15MB 级临时文件写入。
-- **审计备注改为入参模型**：`PATCH /system/audit/logs/{id}/remark` 原 `body: dict` 无长度
-  上限直写 JSON 列；新增 `AuditRemarkUpdate(max_length=500)`，超长返回 422。
-- **`v-permission="[]"` fail-open**：指令自称 fail-closed，但「无效用法」分支只 warn 不隐藏，
-  空数组/角色配置被清空时元素仍可见。改为默认隐藏（DEV 仍 warn），并补隐藏断言。
-
 ### Fixed
 
 - **维护窗口豁免 `endswith` fail-open**：`("/system/backup/restore", "/shutdown")` 的后缀匹配
@@ -141,11 +120,11 @@
 
 - **类型债**：启用 SQLAlchemy mypy 插件，mypy **1310 → 880**（消 420 个误报）；
   `rbac_service._log_access` 形参放宽为 `Optional[str]`；`as any` 保持 **0**。
-- **门禁基线按实测同步**：`broad_except` 801→802、后端用例 **14,938**、locations 清单刷新。
+- **门禁基线按实测同步**：`broad_except` 801→802、后端用例 **14,953**、locations 清单刷新。
 
 ### Tests
 
-- 后端 **14,938 用例**、前端 **347 个测试文件 / 7,420 用例**；统一门禁 **34/34 PASS**；
+- 后端 **14,953 用例**、前端 **347 个测试文件 / 7,420 用例**；统一门禁 **34/34 PASS**；
   flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；覆盖率以 tag 的 `PR Checks` 为准。
 
 ## [1.18.25] - 2026-10-29 — 收口重建：合并双写者分支 + 修掉最后一处过时断言
