@@ -3589,15 +3589,6 @@ VERSION_HISTORY_DATA = [
                 " 500，不再 200 + 全 0 / null；权限包校验异常由「None 视为通过」改 fail-closed（该返回值的下一步是 _clear_existing_data()，损坏包"
                 "会被当成合法包清库）；"
             ),
-            (
-                "口径补齐：funds overview 补 planned_count（planned 是 FundStatus 合法值，前端「规划中」卡片恒 0 的根因）、multi-dimension"
-                " 支持 fund_type（前端发 type，FastAPI 静默忽略 → 图形不随筛选变）；前端 schools/Analysis 把本就是万元口径的project_total_budg"
-                "et 又除了一次 10000（比详情页缩水一万倍）；"
-            ),
-            (
-                "测试：一并纠正 5 条把旧行为当预期的用例（reminders / dashboard summary / stats /dashboard 缓存），其中缓存用例的链式 mock 靠 ex"
-                "cept 吞掉 MagicMock > int 的 TypeError才「通过」，从未真正跑过查询路径。相关模块 1244 passed、前端六个目录 1967 passed。"
-            ),
         ],
     },
 ]
