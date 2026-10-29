@@ -102,6 +102,16 @@
   dashboard 缓存），其中缓存用例的链式 mock 靠 `except` 吞掉 `MagicMock > int` 的 `TypeError`
   才「通过」，从未真正跑过查询路径。相关模块 **1244 passed**、前端六个目录 **1967 passed**。
 
+### Fixed（收口补测 · 过时断言）
+
+- **	est_coverage_tail_gaps.py::TestDataSyncEdge::test_import_package_blocks_sensitive_table
+  仍按旧语义断言整包成功**：R20「故障伪装成功」修复后 
+esult["success"] = not result["errors"]，
+  敏感表硬禁止会记入 errors 并让整包 success=False、sync_log.status="failed"；
+  原用例却断言 success is True（同时又断言 errors 含「禁止导入敏感表」——自相矛盾）。
+  已按新契约改为断言 False，并注明这是不得有错误但报成功的语义锁定。
+  复现：python -m pytest tests/unit/test_coverage_tail_gaps.py -q（修前 1 failed，修后 33 passed）。
+
 ## [1.18.23] - 2026-10-28 — 发布收口重建（补齐应用内更新日志同步）
 
 > **为什么还要 1.18.23**：v1.18.22 的 tag 打在 `4dc1db7`，而该提交的

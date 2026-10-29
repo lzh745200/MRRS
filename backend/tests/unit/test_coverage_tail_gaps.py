@@ -252,7 +252,9 @@ class TestDataSyncEdge:
         ), patch.object(svc, "_get_db_context") as ctx:
             ctx.return_value.__enter__.return_value = mock_db
             result = await svc.import_package(str(pkg))
-        assert result["success"] is True
+        # R20「故障伪装成功」修复后：任一逐表错误（含敏感表硬禁止）都必须让整包
+        # success=False、sync_log 记 failed —— 不能再有错误但报成功。
+        assert result["success"] is False
         assert any("禁止导入敏感表: users" in e for e in result["errors"])  # 360-362
 
 
