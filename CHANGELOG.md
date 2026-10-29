@@ -7,6 +7,16 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第六批：2 项）
+
+- **审计备注端点无入参模型**：`PATCH /system/audit/logs/{id}/remark` 原为 `body: dict`，
+  `remark` 无长度上限、直写 JSON 列。新增 `AuditRemarkUpdate(remark: str = Field(max_length=500))`，
+  超长由 FastAPI 返回 422 而不是静默写库。
+- **`v-permission="[]"` fail-open**：指令自称 fail-closed，但末尾「无效用法」分支只 warn
+  **不隐藏元素** —— 传空数组（或运行时角色配置被清空）时元素照样可见，拼错即等于放行。
+  改为默认 `_hideElement(el)`（DEV 仍 warn 便于定位），并给现有的两条「无效用法」用例补上
+  「必须隐藏」断言（原来只断言 warn）。
+
 ### Fixed（全库审计第五批：3 项）
 
 - **契约收敛 3 处**：`auth/users.py` 的改密响应手写 `{"code":200,...}` → `success_response()`；

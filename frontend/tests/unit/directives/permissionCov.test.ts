@@ -224,16 +224,20 @@ describe('mounted 钩子', () => {
     expect(loggerMock.warn.mock.calls[0][1]).toBeNull()
   })
 
-  it('无效用法：数字（非对象非字符串非数组）→ warn', () => {
+  it('无效用法：数字（非对象非字符串非数组）→ warn 且必须隐藏（fail-closed）', () => {
     const { el } = makeEl()
     callMounted(el, 123)
     expect(loggerMock.warn).toHaveBeenCalledTimes(1)
+    expect(el.style.display).toBe('none')
   })
 
-  it('无效用法：空数组（length=0 穿透）→ warn', () => {
+  it('无效用法：空数组（length=0 穿透）→ warn 且必须隐藏（fail-closed）', () => {
+    // 2026-10-29 审计：原实现只 warn 不隐藏，v-permission="[]"（或运行时被清空）
+    // 会让元素**照样可见** —— 与指令「fail-closed」的自我声明相反，拼错即等于放行。
     const { el } = makeEl()
     callMounted(el, [])
     expect(loggerMock.warn).toHaveBeenCalledTimes(1)
+    expect(el.style.display).toBe('none')
   })
 
   it('无效用法：对象缺 menu/module → warn', () => {

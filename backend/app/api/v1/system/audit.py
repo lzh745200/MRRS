@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -23,6 +23,12 @@ router = APIRouter(prefix="/audit", tags=["Audit Logs"])
 
 
 # ─── 请求体 Schema ───────────────────────────────────────────────────────────
+
+
+class AuditRemarkUpdate(BaseModel):
+    """审计备注更新体（2026-10-29 审计：原为裸 body: dict，remark 无长度上限）。"""
+
+    remark: str = Field(default="", max_length=500, description="备注内容，最多 500 字")
 
 
 class BatchDeleteRequest(BaseModel):
@@ -241,11 +247,11 @@ async def delete_audit_log(
 @router.patch("/logs/{log_id}/remark")
 async def update_audit_log_remark(
     log_id: int,
-    body: dict,
+    body: AuditRemarkUpdate,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """更新审计日志备注"""
+    """更新审计日志备注（remark 最长 500 字，超长 422 而非静默写库）"""
     if normalize_role(getattr(current_user, "role", None)) not in ("admin", "super_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")
 
@@ -255,7 +261,7 @@ async def update_audit_log_remark(
     if not log:
         raise HTTPException(status_code=404, detail="Audit log not found")
 
-    remark = body.get("remark", "")
+    remark = body.remark
     # Store remark in metadata JSON field
     import json
 

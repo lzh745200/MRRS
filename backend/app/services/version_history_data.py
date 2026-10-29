@@ -3651,6 +3651,14 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "审计备注端点无入参模型：PATCH /system/audit/logs/{id}/remark 原为 body: dict，remark 无长度上限、直写 JSON 列。新增 Audit"
+                "RemarkUpdate(remark: str = Field(max_length=500))，超长由 FastAPI 返回 422 而不是静默写库。"
+            ),
+            (
+                "v-permission=\"[]\" fail-open：指令自称 fail-closed，但末尾「无效用法」分支只 warn不隐藏元素 —— 传空数组（或运行时角色配置被清空）时元素照"
+                "样可见，拼错即等于放行。改为默认 _hideElement(el)（DEV 仍 warn 便于定位），并给现有的两条「无效用法」用例补上「必须隐藏」断言（原来只断言 warn）。"
+            ),
+            (
                 "契约收敛 3 处：auth/users.py 的改密响应手写 {\"code\":200,...} → success_response()；work_logs.py 的 @router."
                 "get(\"\", response_model=dict) 形同零校验（实际返回 ok_list() 信封），已删除该 response_model；"
             ),
@@ -3689,16 +3697,8 @@ VERSION_HISTORY_DATA = [
             ),
             (
                 "Critical｜权限包可选认证绕过全部校验：手写解码跳过黑名单 / token_version / is_active /首登改密四项，却被「重写全库 RBAC」的 /permissio"
-                "n-package/import、/confirm 使用，已吊销令牌可远程改写整库权限。改为复用 get_current_user 完整链路。"
-            ),
-            (
-                "Critical｜学校分析页图表恒空：前端请求 page_size=1000 而后端上限 200，每次进入都 422，被同一 try 吞掉只弹「加载学校分析数据失败」。改为按 200 分页"
-                "拉全量 + 页数上限防御。"
-            ),
-            (
-                "Critical｜权限/角色变更零审计：rbac.py 8 个写路由 AuditLogger 出现 0 次。新增 _audit_permission_change()，覆盖 assign/"
-                "revoke role 与 grant/revoke/save permissions。依赖 get_current_user。新增 _reject_inactive_user()，禁用后"
-                "未过期 access 立即 403。被吞。"
+                "n-package/import、/confirm 使用，已吊销令牌可远程改写整库权限。改为复用 get_current_user 完整链路。被同一 try 吞掉只弹「加载学校分析数据失败"
+                "」。改为按 200 分页拉全量 + 页数上限防御。"
             ),
         ],
     },
