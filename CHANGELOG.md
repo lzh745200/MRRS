@@ -7,6 +7,20 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第二十一批：`/sync` 上传无端点级上限）
+
+**问题**：`data_sync._save_upload_file` 只做**分块读取**（`while chunk := await file.read(CHUNK_SIZE)`），
+省了内存但**不限总量** —— 客户端可持续灌数据把磁盘写满。全局 `BodySizeLimitMiddleware` 是分级兜底，
+端点自身不该依赖它（与权限包/备份包的写法不一致，那两处都有显式累计上限）。
+
+**修复**：加 `MAX_UPLOAD_BYTES = 512MB`（与权限包/备份包同口径）+ 累计计数，超限即 **413**；
+异常路径复用既有 `_cleanup_file()` 清理半成品。
+
+**回归 `test_data_sync_upload_limit_r52.py`（2 例）**：monkeypatch 把小上限与 chunk 调小后，
+**超限 → 413 且目录不留半成品**；未超限 → 内容完整落盘、文件名保留原名。
+
+**验证**：flake8 0 · sync 相关域 **1844 passed** · 新增 **2 passed**。
+
 ### Fixed（全库审计第二十批：storage 读取共享保护 + 启动迁移说明）
 
 - **新增 `utils/safeStorage.ts`（共享安全存储）**：`safeGetItem` / `safeSetItem` / `safeRemoveItem` /

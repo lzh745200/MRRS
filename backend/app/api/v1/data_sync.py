@@ -37,6 +37,10 @@ ALLOWED_UPLOAD_EXTENSIONS = {".zip", ".rrs"}
 
 # 分块读取缓冲区大小 (1MB)
 CHUNK_SIZE = 1024 * 1024
+# 2026-10-29 审计：本端点原先**只分块读、不限总量** —— 分块省了内存，但客户端
+# 可以持续灌数据把磁盘写满（全局 BodySizeLimitMiddleware 是分级兜底，端点自身
+# 不该依赖它）。加显式上限，超限即 413 并清理半成品文件。
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024  # 512MB，与权限包/备份包口径一致
 
 
 def _safe_filename(filename: str) -> str:
@@ -75,9 +79,17 @@ async def _save_upload_file(file: UploadFile, upload_dir: Path, default_name: st
     file_path = upload_dir / f"{uuid.uuid4().hex}_{safe_name}"
 
     try:
+        total = 0
         with open(file_path, "wb") as f:
             # 分块读取，避免一次性读入内存
             while chunk := await file.read(CHUNK_SIZE):
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    # 端点级上限：不依赖全局中间件，也不允许它写满磁盘
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"上传文件超出上限（{MAX_UPLOAD_BYTES // (1024 * 1024)}MB）",
+                    )
                 f.write(chunk)
     except Exception:
         _cleanup_file(file_path)
