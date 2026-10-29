@@ -592,7 +592,7 @@ import { logger } from '@/utils/logger'
 import { unwrapList } from '@/utils/unwrapList'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { useDirtyGuard } from '@/composables/useDirtyGuard'
@@ -726,11 +726,15 @@ const projectForm = reactive({
 })
 
 // Dirty guard: warn before leaving with unsaved changes
+// 2026-10-29 审计：原实现只把 isDirty 置 true，**全文再无复位** —— 打开既有项目、
+// 什么都没改也会提示「有未保存的更改」，保存成功后仍提示。同族三页都有复位
+// （schools/Edit.vue、organization/Edit.vue、policies/Edit.vue），此处照抄。
 const isDirty = ref(false)
+let suppressDirty = false // 回填/提交期间抑制，避免把程序化赋值当用户编辑
 watch(
   () => projectForm,
   () => {
-    isDirty.value = true
+    if (!suppressDirty) isDirty.value = true
   },
   { deep: true }
 )
@@ -1043,6 +1047,8 @@ async function loadProjectData() {
       return
     }
 
+    // 回填期间抑制 dirty 标记：程序化赋值不算「用户未保存的修改」
+    suppressDirty = true
     // 后端字段 → 前端表单字段映射
     Object.assign(projectForm, {
       id: String(data.id ?? rawId),
@@ -1086,6 +1092,11 @@ async function loadProjectData() {
       createTime: data.created_at || '',
       updateTime: data.updated_at || '',
     })
+
+    // 回填完成：复位 dirty（照抄 schools/Edit.vue 的做法）
+    await nextTick()
+    suppressDirty = false
+    isDirty.value = false
 
     // 加载已上传的附件列表
     await loadProjectFiles(projectId)
@@ -1231,6 +1242,8 @@ async function handleSaveAndContinue() {
     const result = await saveProjectData()
     if (result !== false) {
       ElMessage.success('项目创建成功')
+      // 保存成功即不再有未保存修改（2026-10-29 审计：原来成功后仍提示"有未保存更改"）
+      isDirty.value = false
 
       // 重置表单
       resetForm()
@@ -1246,6 +1259,8 @@ async function handleSaveAndContinue() {
 
 // 重置表单
 function resetForm() {
+  // 重置也是程序化赋值，不应把表单标脏
+  suppressDirty = true
   if (projectFormRef.value) {
     projectFormRef.value.resetFields()
   }
@@ -1279,6 +1294,11 @@ function resetForm() {
   })
 
   fileList.value = []
+  // 重置完成：标记为"干净"
+  nextTick(() => {
+    suppressDirty = false
+    isDirty.value = false
+  })
 }
 
 // 处理取消

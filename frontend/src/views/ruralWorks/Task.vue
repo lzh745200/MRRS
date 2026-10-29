@@ -562,6 +562,7 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 import {
   Search,
   Plus,
@@ -871,8 +872,12 @@ const loadData = async () => {
         description: item.description || '',
       }))
     }
-  } catch {
-    // API不可用，使用本地模拟数据
+  } catch (err) {
+    // 2026-10-29 审计：原 catch 体只有一句「API不可用，使用本地模拟数据」的注释，
+    // 但文件里**没有任何模拟数据**，tasks 初值是空数组 —— 后端挂掉/500 时页面显示
+    // 「暂无数据」，用户会以为数据丢了（台账类系统里这是最糟的误导）。
+    // 改为明确报错，让用户知道是加载失败而不是没数据。
+    ElMessage.error(getErrorMessage(err, '任务列表加载失败，请稍后重试'))
   } finally {
     loading.value = false
   }

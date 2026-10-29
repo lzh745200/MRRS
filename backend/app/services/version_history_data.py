@@ -3650,6 +3650,20 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            (
+                "policies/Detail.vue 预览 iframe 缺 sandbox：previewUrl 是 URL.createObjectURL(blob)，blob: 与主文档同源，if"
+                "rame 无 sandbox 时其中脚本可访问 window.parent。同仓 components/FilePreview.vue 早已加 sandbox=\"\"，此处补齐（纵深防御"
+                "；当前后端限pdf/doc/docx/pptx，故非直接可利用）。"
+            ),
+            (
+                "ruralWorks/Task.vue 加载失败静默：catch 体只有一句「API不可用，使用本地模拟数据」的注释，但文件里没有任何模拟数据，tasks 初值是空数组 —— 后端挂掉/5"
+                "00 时页面显示「暂无数据」，用户会以为数据丢了（台账系统里这是最糟的误导）。改为 getErrorMessage 明确报错。"
+            ),
+            (
+                "projects/Edit.vue 的 isDirty 永不复位：原实现只把标记置 true，全文再无复位 ——打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍提示。照抄同族"
+                "三页（schools / organization / policies 的 Edit）做法：加 suppressDirty 在回填 / 重置期间抑制，回填后 nextTick 复位，保存"
+                "成功与 resetForm 后各复位一次。"
+            ),
             "模型 machine_codes.py 补 ondelete=\"SET NULL\"；",
             (
                 "迁移 fk_machine_codes_created_by_001：SQLite 不支持 ALTER CONSTRAINT，改为「读 sqlite_master 的 DDL → 正则替换"
@@ -3675,18 +3689,6 @@ VERSION_HISTORY_DATA = [
             (
                 "新增迁移 idx_dedup_002：按列集合分组判重（区别于历史 index_dedup_001 的按名字清孤儿），每组保留模型显式声明的那个（KEEP_INDEX_NAMES 硬编码自"
                 " models/*.py 的 Index(...)，附来源行号），sqlite_autoindex_* 永不删。实测删除 8 个、UPGRADE_EXIT=0。"
-            ),
-            (
-                "新增 tests/unit/test_idx_dedup_002.py（5 例）作为自证证据（新门禁要求）：手工建「三索引同列」断言只保留模型声明的那个；断言 sqlite_autoind"
-                "ex 不被删；无重复表不动；同列但唯一性不同不算重复（不误删）；并锁定 KEEP_INDEX_NAMES 与模型声明一致。"
-            ),
-            (
-                "为什么不动态读 Base.metadata：app.models 是 getattr 惰性导出，import app.models后 metadata.tables 仍为空（实测），会让迁"
-                "移静默退回“字典序第一个”——本次恰好与模型一致，但不能靠运气，故改为显式清单 + 单测对账。列宽一开始已是 256（模型建的），迁移逻辑根本没被执行。"
-            ),
-            (
-                "新增门禁 scripts/check_migration_self_evidence.py：扫描 alembic/versions/*.py，凡含 alter/add/drop colum"
-                "n、create/drop index、create/drop table 的迁移，必须自带一个以 revision 命名的测试文件（能手工构造「旧库状态」再驱动迁移函数）；"
             ),
         ],
     },

@@ -7,6 +7,22 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十七批：前端 3 项）
+
+- **`policies/Detail.vue` 预览 iframe 缺 `sandbox`**：`previewUrl` 是 `URL.createObjectURL(blob)`，
+  blob: 与主文档**同源**，iframe 无 sandbox 时其中脚本可访问 `window.parent`。
+  同仓 `components/FilePreview.vue` 早已加 `sandbox=""`，此处补齐（纵深防御；当前后端限
+  pdf/doc/docx/pptx，故非直接可利用）。
+- **`ruralWorks/Task.vue` 加载失败静默**：catch 体只有一句「API不可用，使用本地模拟数据」的
+  注释，但文件里**没有任何模拟数据**，`tasks` 初值是空数组 —— 后端挂掉/500 时页面显示
+  「暂无数据」，用户会以为数据丢了（台账系统里这是最糟的误导）。改为 `getErrorMessage` 明确报错。
+- **`projects/Edit.vue` 的 `isDirty` 永不复位**：原实现只把标记置 true，全文再无复位 ——
+  打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍提示。
+  照抄同族三页（schools / organization / policies 的 Edit）做法：加 `suppressDirty` 在
+  回填 / 重置期间抑制，回填后 `nextTick` 复位，保存成功与 resetForm 后各复位一次。
+
+**验证**：`eslint` **0** · `vue-tsc --noEmit` **0 错误** · `vitest run tests/unit/views/{projects,policies,ruralWorks}` **17 文件 / 610 用例通过**。
+
 ### Fixed（全库审计第十六批：前端 axios 英文原文直出 → getErrorMessage）
 
 **问题**：`ElMessage.error(e?.message || '默认文案')` 这类写法在 4xx/5xx 时会把 axios 的
