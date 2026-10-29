@@ -759,12 +759,12 @@ class RBACService:
         db: Session,
         user_id: str,
         action: str,
-        resource_type: str,
-        resource_id: str,
+        resource_type: Optional[str],
+        resource_id: Optional[str],
         access_granted: bool,
         reason: str,
     ):
-        """记录访问日志"""
+        """记录访问日志（resource_* 允许 None：写入时以空串兜底）"""
         try:
             log = AccessLog(
                 user_id=str(user_id),

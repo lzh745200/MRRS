@@ -447,6 +447,11 @@ esult["success"] = not result["errors"]，
   （由现有分支测试逼出来的正确口径）。
   验证：`vue-tsc` 0 错误；技术债 `as any` 基线 **0**（新增一处即红）；受影响区域 1699 passed。
 - **mypy 1310 → 890（启用 SQLAlchemy 官方 mypy 插件，一次性消 420 个误报）**：
+- **mypy 890 → 880**：`services/rbac_service.py` 的 `_log_access(resource_type, resource_id)`
+  在 10 处调用点传入 `Optional[str]`（列表/详情接口里 resource_id 可能缺省），而函数体本来就写了
+  `resource_type or ""` / `resource_id or ""` 兜底 —— 把形参注解放宽为 `Optional[str]`
+  （**纯注解修正，行为不变**），消除 10 个 `arg-type`。
+  验证：该文件 flake8 0、rbac 相关 **108 passed**；基线 890 → 880。
   模型字段在类上是 `Column[T]`、在实例上才是 `T`。仓库一直没开插件，于是每个
   `TodoResponse(id=todo.id)` 都被判成 `Column[int]` 与 `int` 不兼容 —— 这正是 `assignment`(444)、
   `arg-type`(538) 两类噪声的唯一来源。`backend/mypy.ini` 加 `plugins = sqlalchemy.ext.mypy.plugin`。
