@@ -9,7 +9,6 @@ from app.core.database import get_db
 from app.core.security import get_current_user as _get_current_user
 
 
-
 def _make_user(**kwargs):
     user = Mock()
     user.id = kwargs.get("id", 1)
@@ -25,12 +24,17 @@ def _make_user(**kwargs):
     user.permissions_list = kwargs.get("permissions_list", ["read"])
     user.allowed_menus = kwargs.get("allowed_menus", None)
     user.allowed_menus_list = kwargs.get("allowed_menus_list", None)
+    # token_version：refresh 现在会比对它（W1-T5 吊销在 refresh 面补齐），
+    # 真实 User 模型该属性恒为 int，Mock 必须显式设，否则 int(Mock) 抛错。
+    user.token_version = kwargs.get("token_version", 0)
     user.failed_login_count = kwargs.get("failed_login_count", 0)
     user.locked_until = kwargs.get("locked_until", None)
     user.must_change_password = kwargs.get("must_change_password", False)
     user.password_changed_at = kwargs.get("password_changed_at", None)
     user.last_login = kwargs.get("last_login", None)
-    user.token_version_safe = kwargs.get("token_version_safe", 1)
+    # 与 token_version 同源（真实 User.token_version_safe 是它的只读属性），
+    # 默认必须一致，否则 refresh 的版本比对会把合法令牌判成已吊销。
+    user.token_version_safe = kwargs.get("token_version_safe", user.token_version)
     return user
 
 
@@ -584,7 +588,7 @@ class TestRefresh:
     @patch("app.api.v1.auth.auth.UserService")
     def test_refresh_success(self, mock_usr_svc, mock_tm, mock_ip, mock_rl, client):
         mock_rl.return_value = True
-        mock_tm.decode_token.return_value = {"sub": "testuser"}
+        mock_tm.decode_token.return_value = {"sub": "testuser", "token_version": 0}
         user = _make_user()
         inst = Mock()
         inst.get_user_by_username.return_value = user
@@ -595,6 +599,41 @@ class TestRefresh:
         assert response.json()["data"]["access_token"] == "new_at"
         assert response.json()["refresh_token"] == "new_rt"
         mock_tm.revoke_token.assert_called_once_with("valid_rt")
+
+    @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
+    @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")
+    @patch("app.api.v1.auth.auth.token_manager")
+    @patch("app.api.v1.auth.auth.UserService")
+    def test_refresh_rejects_stale_token_version(
+        self, mock_usr_svc, mock_tm, mock_ip, mock_rl, client
+    ):
+        """W1-T5 吊销必须在 refresh 面生效（负向回归）。
+
+        背景：validate_token 只验签名/jti 黑名单/type，**不比对 token_version**，
+        而 access 链路（security.get_current_user）有该校验。若 refresh 不补这一步，
+        用户登出（token_version+1）或管理员强退之后，未随登出提交的 refresh token
+        （其他设备 / 被窃）仍能换发一枚带"新版本号"的合法 access —— 版本吊销形同虚设。
+        """
+        mock_rl.return_value = True
+        # 旧令牌：签发时 version=0
+        mock_tm.decode_token.return_value = {"sub": "testuser", "token_version": 0}
+        # 用户已登出/被强退：当前 version=1
+        user = _make_user(token_version=1)
+        inst = Mock()
+        inst.get_user_by_username.return_value = user
+        mock_usr_svc.return_value = inst
+        mock_tm.create_token_pair.return_value = {
+            "access_token": "should_not_exist",
+            "refresh_token": "should_not_exist",
+        }
+
+        response = client.post(f"{self.prefix}/refresh", json={"token": "stale_rt"})
+
+        assert response.status_code == 401
+        # 不得签发任何新令牌
+        mock_tm.create_token_pair.assert_not_called()
+        # 该 refresh 必须被吊销，避免反复尝试
+        mock_tm.revoke_token.assert_called_once_with("stale_rt", "token_version 不匹配")
 
     @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
     @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")

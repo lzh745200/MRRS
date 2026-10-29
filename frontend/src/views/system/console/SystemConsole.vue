@@ -262,7 +262,12 @@ const currentTab = computed<string>({
     return keys.includes(queryTab) ? queryTab : keys[0]
   },
   set(key: string) {
-    void router.replace({ path: route.path, query: { ...route.query, tab: key } })
+    // Vue Router 4 对重复/被取消导航会 reject；约定走 pushSafe，此处 replace 补 catch。
+    // 用 Promise.resolve 包一层：测试里 router.replace 常被 mock 成返回 undefined，
+    // 直接链 .catch 会抛 "reading 'catch'"。
+    Promise.resolve(
+      router.replace({ path: route.path, query: { ...route.query, tab: key } })
+    ).catch(() => {})
   },
 })
 

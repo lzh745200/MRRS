@@ -120,12 +120,25 @@ async function loadData() {
     const data = res?.data ?? res ?? {}
     stats.value = { ...stats.value, ...data }
 
-    // 聚合状态/地区分布(取全量列表)
-    const listRes: any = await schoolsApi.list({ page: 1, page_size: 1000, all: true })
-    // 信封兼容 + 强制数组兜底：非数组（如对象/未解包信封）时回退空数组，避免 for...of 抛错被吞导致图表恒空
-    const raw = listRes?.data ?? listRes
-    const rawItems = Array.isArray(raw) ? raw : (raw?.items ?? [])
-    const rows: any[] = Array.isArray(rawItems) ? rawItems : []
+    // 聚合状态/地区分布：**分页拉全量**。
+    // 历史缺陷（2026-10-29 审计，Critical）：原写法 page_size=1000 + 后端不存在的
+    // all:true，而后端 /schools 是 Query(20, ge=1, le=200) → 每次请求都 422，
+    // 被同一个 try 吞掉后只弹"加载学校分析数据失败"，分布图表恒空（真因是参数越界）。
+    // 现在按后端上限 200 逐页取，并设页数上限防御后端数据异常导致的长循环。
+    const PAGE_SIZE = 200
+    const MAX_PAGES = 50 // 最多 1 万条，超出时以已取到为准
+    const allRows: any[] = []
+    for (let pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
+      const listRes: any = await schoolsApi.list({ page: pageNo, page_size: PAGE_SIZE })
+      // 信封兼容 + 强制数组兜底：非数组（如对象/未解包信封）时回退空数组，
+      // 避免 for...of 抛错被吞导致图表恒空
+      const raw = listRes?.data ?? listRes
+      const rawItems = Array.isArray(raw) ? raw : (raw?.items ?? [])
+      const pageRows: any[] = Array.isArray(rawItems) ? rawItems : []
+      allRows.push(...pageRows)
+      if (pageRows.length < PAGE_SIZE) break // 最后一页
+    }
+    const rows: any[] = allRows
     const statusCount: Record<string, number> = {}
     const regionCount: Record<string, number> = {}
     for (const row of rows) {

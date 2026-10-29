@@ -762,6 +762,23 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
         # 检查账户锁定状态
         _check_account_lockout(user, username, db)
 
+        # W1-T5（ADR-0001）token_version 吊销校验 —— refresh 链路此前**缺失**：
+        # validate_token 只验签名/jti 黑名单/type，不比对版本；而 access 链路
+        # （security.get_current_user）有该校验。后果：登出（_bump_token_version）
+        # 或管理员强退（system/admin.py 递增 token_version）之后，**未随登出请求提交**的
+        # refresh token（其他设备的、或被窃的）不在 jti 黑名单里，仍能换发一枚
+        # 带"新版本号"的合法 access —— 版本吊销在 refresh 面完全失效。
+        # 这里补齐与 access 链路同口径的比对；不改版本即 401 并吊销该 refresh。
+        _payload_version = payload.get("token_version")
+        _current_version = getattr(user, "token_version_safe", 0) or 0
+        if _payload_version is None or int(_payload_version) != _current_version:
+            token_manager.revoke_token(token, "token_version 不匹配")
+            logger.warning(
+                "refresh 被拒：token_version 不匹配 user=%s payload=%s current=%s",
+                username, _payload_version, _current_version,
+            )
+            raise HTTPException(status_code=401, detail="令牌已失效，请重新登录")
+
         # 会话跟随令牌轮换：jti 必须在吊销旧令牌之前取出（入黑名单后再解析会失败）；
         # 会话行的更新在下方新令牌签发后执行，否则"按会话吊销"会吊销到已废弃的旧 jti
         # （表面成功、实际失效的安全缺口）。

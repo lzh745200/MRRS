@@ -355,6 +355,24 @@ def _enforce_must_change_password(user, request: Optional[Request]) -> None:
         )
 
 
+def _reject_inactive_user(user) -> None:
+    """禁用账号立即失效（2026-10-29 审计，Important）。
+
+    历史缺陷：is_active 只在 get_current_active_user 里校验，而全仓绝大多数端点
+    依赖的是 get_current_user（后者使用面远大于前者）—— 管理员禁用账号后，
+    该用户未过期的 access token 在有效期内仍可调用全部业务端点。
+
+    把「账户停用」提升到与 token_version 同级：一经禁用，下一次请求即 403。
+    独立成函数是为了不抬高 get_current_user 的圈复杂度（避免新增 C901）。
+    """
+    if hasattr(user, "is_active") and not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账户已禁用，请联系管理员",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
     db: Session = Depends(get_db),
@@ -469,6 +487,10 @@ async def get_current_user(
                 detail="令牌已失效（版本不匹配），请重新登录",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        # 禁用账号必须立即失效（2026-10-29 审计，Important）—— 抽成独立函数
+        # 以保持 get_current_user 的圈复杂度（flake8 C901 ≤16）。
+        _reject_inactive_user(user)
+
         # 审计归因：将当前用户 ID 写入 ContextVar，供 SQLAlchemy 事件级审计
         # （audit_event_handler）在 commit/flush 时读取，实现写操作可追责到人。
         # ContextVar 为请求任务级隔离，请求结束后自动复位为默认值 None。

@@ -435,7 +435,9 @@ const handleDelete = async (row: RoleItem) => {
     loadRoles()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+      // 后端对"角色仍被用户/权限包引用"会给出可行动 detail；统一吞成"删除失败"
+      // 会让管理员无从修复（本文件其余 2 处已用 getErrorMessage，此处补齐）
+      ElMessage.error(getErrorMessage(error, '删除失败'))
     }
   }
 }

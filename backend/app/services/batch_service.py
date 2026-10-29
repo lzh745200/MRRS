@@ -154,12 +154,26 @@ class BatchService:
             base_query = self.db.query(model).filter(model.id.in_(ids))
             total_matched = base_query.count()
             # 数据隔离：非超级管理员只能操作本组织数据
+            # 2026-10-29 审计（fail-open 修复）：原条件是
+            #   not is_superuser and organization_id is not None and org_col is not None
+            # —— 操作者 organization_id 为 None（未绑组织的 admin、role=super_admin 但
+            # is_superuser=False 等）时三个条件整体短路，直接走全量分支，按裸 id 列表
+            # 跨组织批量改/删，违反 ADR-0002 fail-closed。
             org_col = getattr(model, 'organization_id', None)
-            if not is_superuser and organization_id is not None and org_col is not None:
+            if is_superuser or org_col is None:
+                # 超管：全局；模型本身无组织列：该表不需要组织隔离（按模型结构判定）
+                instances = base_query.all()
+            elif organization_id is None:
+                # 非超管且账号未绑定组织 → 不得操作任何记录（fail-closed）
+                return {
+                    "success": False,
+                    "success_count": 0,
+                    "skipped": total_matched,
+                    "error": "账号未绑定组织，无权批量操作该表数据",
+                }
+            else:
                 instances = base_query.filter(org_col == organization_id).all()
                 skipped = total_matched - len(instances)
-            else:
-                instances = base_query.all()
             for inst in instances:
                 for k, v in safe_updates.items():
                     if hasattr(inst, k):
@@ -181,13 +195,20 @@ class BatchService:
             # 批量查询替代逐条 GET（避免 N+1）
             base_query = self.db.query(model).filter(model.id.in_(ids))
             total_matched = base_query.count()
-            # 数据隔离：非超级管理员只能操作本组织数据
+            # 数据隔离：非超级管理员只能操作本组织数据（同 batch_update 的 fail-closed 口径）
             org_col = getattr(model, 'organization_id', None)
-            if not is_superuser and organization_id is not None and org_col is not None:
+            if is_superuser or org_col is None:
+                instances = base_query.all()
+            elif organization_id is None:
+                return {
+                    "success": False,
+                    "success_count": 0,
+                    "skipped": total_matched,
+                    "error": "账号未绑定组织，无权批量删除该表数据",
+                }
+            else:
                 instances = base_query.filter(org_col == organization_id).all()
                 skipped = total_matched - len(instances)
-            else:
-                instances = base_query.all()
             for inst in instances:
                 if soft_delete:
                     # 优先使用 is_active 列（SupportedVillage/School/Project/Fund）

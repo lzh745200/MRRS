@@ -119,29 +119,36 @@ def _resolve_package_upload_path(file_name: str) -> str:
     return file_path
 
 
-def _optional_current_user(authorization: Optional[str] = Header(None)) -> Optional[User]:
+async def _optional_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+) -> Optional[User]:
     """可选认证：未登录时返回 None（登录前离线导入权限包场景）。
 
-    与 get_current_user 不同，本依赖不抛 401，供全新系统登录前导入权限包使用。
+    **必须复用 get_current_user 的完整校验链**（黑名单 / token_version / is_active /
+    must_change_password / 2FA 中间态），本依赖只把 401/403 转成 None。
+
+    历史缺陷（2026-10-29 审计，Critical）：本依赖原先是"手写解码 + 按 username 查库"，
+    黑名单、token_version、is_active、首登改密拦截四项全不查；而 middleware/viewer_readonly.py
+    明确把这几项交给认证依赖。它又被"重写全库 RBAC"的 /import 与 /confirm 使用，且
+    is_admin 成立时会跳过本机来源限制 —— 于是**已吊销的令牌**可以远程改写整库权限。
+    手写解码是这类漏洞的根因，禁止再写第二份。
     """
-    token = None
-    if authorization:
-        parts = authorization.split(" ", 1)
-        token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else parts[0]
+    if not authorization or not authorization.strip():
+        return None
+    parts = authorization.split(" ", 1)
+    token = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else parts[0]
     if not token:
         return None
     try:
-        from app.core.security import decode_token
-        from app.core.database import SessionLocal
+        from fastapi.security import HTTPAuthorizationCredentials
 
-        payload = decode_token(token)
-        if not payload or not payload.get("sub"):
-            return None
-        db = SessionLocal()
-        try:
-            return db.query(User).filter(User.username == payload["sub"]).first()
-        finally:
-            db.close()
+        return await get_current_user(
+            credentials=HTTPAuthorizationCredentials(scheme="Bearer", credentials=token),
+            db=db,
+            request=request,
+        )
     except HTTPException:
         return None
 

@@ -757,8 +757,21 @@ describe('删除角色', () => {
     expect(ElMessage.error).not.toHaveBeenCalled()
   })
 
-  it('删除接口失败 → 错误提示', async () => {
-    mockDel.mockRejectedValue(new Error('net'))
+  it('删除接口失败 → 透出后端可行动原因（getErrorMessage）', async () => {
+    // 2026-10-29 审计：后端对"角色仍被用户/权限包引用"会给具体 detail，
+    // 原先统一吞成"删除失败"让管理员无从修复。这里断言 detail 被透出。
+    mockDel.mockRejectedValue({
+      response: { data: { detail: '该角色仍被 3 个用户引用，无法删除' } },
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.handleDelete({ ...rowA })
+    expect(ElMessage.error).toHaveBeenCalledWith('该角色仍被 3 个用户引用，无法删除')
+  })
+
+  it('删除接口失败且后端无 detail → 回退通用文案', async () => {
+    mockDel.mockRejectedValue({ response: { data: {} } })
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any

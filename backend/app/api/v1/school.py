@@ -869,6 +869,14 @@ async def create_school(
     if data.code:
         existing = db.query(School).filter(School.code == data.code).first()
         if existing:
+            # 软删除（is_active=False）的记录仍占着唯一编码 —— 直接说"编码已存在"会让用户
+            # 在列表里找不到那条记录，以为是系统错乱。这里把真实原因讲清楚（2026-10-29 审计）。
+            if not existing.is_active:
+                raise AppError.conflict(
+                    f"编码 {data.code} 仍被已删除的学校「{existing.name}」占用。"
+                    "编码在数据库中保持唯一（含已删除记录），请改用其他编码；"
+                    "确需复用请由管理员彻底清理该历史记录后重试。"
+                )
             raise AppError.conflict("学校编码已存在")
 
     school_data = data.model_dump()
@@ -973,6 +981,13 @@ async def update_school(
     if "code" in update_data and update_data["code"]:
         existing = db.query(School).filter(School.code == update_data["code"], School.id != school_id).first()
         if existing:
+            # 同 create：区分"活跃记录占用"与"已软删除记录占用"，后者给出可行动指引
+            if not existing.is_active:
+                raise AppError.conflict(
+                    f"编码 {update_data['code']} 仍被已删除的学校「{existing.name}」占用。"
+                    "编码在数据库中保持唯一（含已删除记录），请改用其他编码；"
+                    "确需复用请由管理员彻底清理该历史记录后重试。"
+                )
             raise AppError.conflict("学校编码已存在")
 
     # 转换枚举

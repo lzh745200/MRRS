@@ -39,6 +39,23 @@ def _safe_json(payload: Dict[str, Any]) -> str:
         )
 
 
+def _json_safe_value(value: Any) -> Any:
+    """把 details 归一成**可 JSON 序列化的结构**（datetime/Decimal/ORM → str）。
+
+    背景（2026-10-29 审计）：new_value 直接写 Column(JSON)，而引擎未设 json_serializer，
+    details 里出现 datetime/Decimal/ORM 对象时驱动写出抛 TypeError → 被外层 except 吞掉，
+    只留下一条 error 日志，**整条审计记录静默丢失**。带日期的操作（恢复备份、重置密码等
+    恰好是最需要审计的）就是这样丢的。这里入库前先 round-trip 一次，把不可直写类型转字符串。
+    """
+    if value is None:
+        return None
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+    except (TypeError, ValueError) as exc:
+        logger.warning("审计 details 无法序列化，已降级为字符串摘要: %s", exc)
+        return {"_unserializable": str(value)[:2000]}
+
+
 class AuditAction(str, Enum):
     """审计操作类型"""
 
@@ -171,7 +188,7 @@ class AuditLogger:
                 action=audit_data.get("action", ""),
                 resource_type=audit_data.get("resource_type"),
                 resource_id=str(audit_data["resource_id"]) if audit_data.get("resource_id") else None,
-                new_value=audit_data.get("details"),
+                new_value=_json_safe_value(audit_data.get("details")),
                 status="success",
                 level=audit_data.get("level", "info"),
             )

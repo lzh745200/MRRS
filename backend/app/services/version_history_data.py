@@ -3597,19 +3597,48 @@ VERSION_HISTORY_DATA = [
         "description": "收口重建：合并双写者分支 + 修掉最后一处过时断言",
         "features": [
             (
-                "test_coverage_tail_gaps.py 敏感表导入用例按旧语义断言整包成功：R20「故障伪装成功」修复后 success = not errors，敏感表硬禁止必须让整包失败"
-                "；原用例同时断言success is True 与 errors 含「禁止导入敏感表」，自相矛盾。已改为断言 False。"
+                "Critical｜refresh 完全绕过 token_version 吊销：validate_token 只验签名 / jti 黑名单 / type，不比对版本，而 access 链路有"
+                "该校验。登出或强退后，未随登出提交的 refresh（其他设备 / 被窃）仍能换发带「新版本号」的合法 access。"
             ),
             (
-                "应用内更新日志在合并后重新生成：两侧各自生成的 version_history_data.py 条目叠加后与 CHANGELOG 不再一致（check_update_log 红），用 sc"
-                "ripts/sync_update_log.py 重建。"
+                "Critical｜permission_package 的可选认证手写解码绕开全部校验：黑名单 / token_version /is_active / 首登改密四项全不查，却被「重写全库"
+                " RBAC」的 /import、/confirm 使用，且 is_admin 时跳过本机来源限制 —— 已吊销令牌可远程改写整库权限。改为复用 get_current_user 完整链路（"
+                "401/403 → None）。"
             ),
             (
-                "补齐覆盖率缺口测试：analytics/dashboard 钻取提前返回、policies/List 导入结果兜底、MachineCodeManagement 的 pass_code 信封"
-                "兼容、MonitoringDashboard 内层 data 兜底、policy/policies/projects 的 ?? 右侧、ruralWorks/Task 的 progressF"
-                "ileList。"
+                "Critical｜学校分析页图表恒空：请求 page_size=1000 而后端上限 200，每次进入都 422，被同一 try 吞掉只弹「加载学校分析数据失败」。改为按 200 分页拉全"
+                "量 + 页数上限防御。"
             ),
-            "版本同步到 1.18.25；README/INDEX/RELEASE_NOTES/三份 PPT 同步。",
+            (
+                "Critical｜权限 / 角色变更零审计：rbac.py 8 个写路由 AuditLogger 出现 0 次。新增 _audit_permission_change()，覆盖 assig"
+                "n/revoke role 与 grant/revoke/save permissions。"
+            ),
+            (
+                "禁用账号立即失效：is_active 原先只在 get_current_active_user 校验，而绝大多数端点依赖get_current_user —— 禁用后未过期 access "
+                "仍全权限。新增 _reject_inactive_user()，一经禁用即 403。"
+            ),
+            (
+                "审计 details 含 datetime 时整条记录静默丢失：new_value 直写 Column(JSON)、引擎无json_serializer，驱动写出抛 TypeError 被"
+                "吞 —— 带日期的操作恰好最需审计。新增 _json_safe_value() 入库前 round-trip（default=str）。"
+            ),
+            (
+                "批量更新 / 删除的组织过滤 fail-open：操作者未绑定组织时原条件整体短路 → 可按裸 id跨组织改删（违反 ADR-0002）。改为三分支，无组织账号直接拒绝；新增 2 条负向用"
+                "例。"
+            ),
+            "软删除记录永久占用唯一编码：重建同编码报「已存在」却在列表看不到。查重区分活跃 / 已软删���，后者给出可行动指引（彻底修复需 partial unique index，留待迁移批次）。",
+            (
+                "前端三处：dashboard 的 saveLayout 缺 try（deep watcher 抛异常却仍提示已保存）、SystemConsole / dataVerify 的 router"
+                ".replace 未 catch、Role.vue 删除失败吞掉后端原因。"
+            ),
+            (
+                "backend/tests/ 从未纳入 flake8 门禁，实测 1461 条违规长期不可见；其中 8 个 F811 同名定义让测试静默失效（已修 3 处：r16 双重失效、report_"
+                "templates 覆盖版本缺 finally、recommendation 整类复制两遍）。"
+            ),
+            "mypy 未启用（基线 1379，缺 SQLAlchemy 插件时全为 Column[str] 类噪声）。",
+            (
+                "core.autocrlf=true 与 .gitattributes eol=lf 冲突，导致前端 26,265 条 prettier CRLF 警告。修复后 success = not"
+                " errors，敏感表硬禁止必须让整包失败；原用例同时断言success is True 与 errors 含「禁止导入敏感表」，自相矛盾。已改为断言 False。"
+            ),
         ],
     },
 ]

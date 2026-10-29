@@ -17,9 +17,40 @@ from app.models.rbac import RbacRole, RolePermission, UserRole
 from app.models.user import User
 from app.core.transaction import TransactionManager
 from app.services.rbac_service import Permission, rbac_service
+from app.utils.audit_logger import AuditLevel, AuditLogger
 from app.utils.pagination import clamp_offset_limit
 
 router = APIRouter(prefix="/rbac", tags=["权限管理"])
+
+logger = __import__("logging").getLogger(__name__)
+
+
+def _audit_permission_change(
+    action: str,
+    current_user,
+    details: dict,
+    level: AuditLevel = AuditLevel.INFO,
+) -> None:
+    """权限/角色变更审计（2026-10-29 审计补口）。
+
+    背景：本文件 8 个写路由此前 AuditLogger 出现 0 次 —— 军审口径下
+    「谁把哪个权限给了谁/撤了谁」完全不可追溯，而权限变更恰恰是最高危操作。
+
+    约定：
+    - details 只放可 JSON 序列化的标量（id/name/username/role/权限列表），
+      绝不放 ORM 对象或 datetime（否则写 JSON 列时 TypeError，整条审计被静默丢弃）；
+    - **审计失败不得阻断业务**，但必须落 error 日志（不允许无声失败）。
+    """
+    try:
+        AuditLogger.log(
+            action=action,
+            username=getattr(current_user, "username", None),
+            resource_type="rbac",
+            details=details,
+            level=level,
+        )
+    except Exception:
+        logger.exception("RBAC 审计写入失败 action=%s details=%s", action, details)
 
 
 # ==================== 数据模型 ====================
@@ -320,6 +351,16 @@ async def assign_role(
 
     if result["success"]:
         status = "已完成分配" if result["newly_granted"] else "角色已存在（无需操作）"
+        _audit_permission_change(
+            "rbac_assign_role",
+            current_user,
+            {
+                "target_user_id": str(assignment.user_id),
+                "role_id": assignment.role_id,
+                "newly_granted": bool(result["newly_granted"]),
+                "expires_at": assignment.expires_at.isoformat() if assignment.expires_at else None,
+            },
+        )
         return success_response(
             newly_granted=result["newly_granted"],
             message=f"角色分配成功: 用户 {assignment.user_id} -> 角色 {assignment.role_id} — {status}",
@@ -340,6 +381,12 @@ async def revoke_role(
         )
 
     if success:
+        _audit_permission_change(
+            "rbac_revoke_role",
+            current_user,
+            {"target_user_id": str(revoke.user_id), "role_id": revoke.role_id},
+            level=AuditLevel.WARNING,
+        )
         return success_response(
             message=f"角色撤销成功: 用户 {revoke.user_id} -> 角色 {revoke.role_id}",
         )
@@ -362,6 +409,17 @@ async def grant_permission(
             db=sess,
         )
 
+    _audit_permission_change(
+        "rbac_grant_permissions",
+        current_user,
+        {
+            "target_user_id": str(grant.user_id),
+            "granted": list(result["granted"]),
+            "skipped": list(result["skipped"]),
+            "failed": list(result["failed"]),
+        },
+        level=AuditLevel.WARNING,
+    )
     return success_response(
         granted=result["granted"],
         skipped=result["skipped"],
@@ -387,6 +445,16 @@ async def revoke_permission(
             db=sess,
         )
 
+    _audit_permission_change(
+        "rbac_revoke_permissions",
+        current_user,
+        {
+            "target_user_id": str(revoke.user_id),
+            "revoked": list(revoked),
+            "failed": list(failed),
+        },
+        level=AuditLevel.WARNING,
+    )
     return success_response(
         success=len(failed) == 0,
         revoked=revoked,
@@ -411,6 +479,17 @@ async def save_permissions(
             db=sess,
         )
 
+    _audit_permission_change(
+        "rbac_save_permissions",
+        current_user,
+        {
+            "target_user_id": str(grant.user_id),
+            "granted": list(result.get("granted") or []),
+            "revoked": list(result.get("revoked") or []),
+            "skipped": list(result.get("skipped") or []),
+        },
+        level=AuditLevel.WARNING,
+    )
     return success_response(
         success=True,
         **result,

@@ -537,34 +537,52 @@ class TestFundsTail:
 
 
 class TestPermissionPackageTail:
+    """_optional_current_user 的语义（2026-10-29 重写）。
+
+    实现已从"手写 decode_token + 查库"改为**复用 get_current_user 的完整校验链**
+    （黑名单 / token_version / is_active / 首登改密 / 2FA 中间态），因此这里断言的是
+    「委托关系」与「401→None 的降级」，而不是旧的 decode 细节。
+    """
+
+    @staticmethod
+    def _call(authorization, request=None, db=None):
+        import asyncio
+
+        from app.api.v1.permission_package import _optional_current_user
+
+        return asyncio.run(
+            _optional_current_user(
+                request=request or MagicMock(),
+                db=db or MagicMock(),
+                authorization=authorization,
+            )
+        )
+
     def test_optional_current_user_no_auth(self):
-        from app.api.v1.permission_package import _optional_current_user
-        assert _optional_current_user(None) is None
+        assert self._call(None) is None
 
-    def test_optional_current_user_empty_payload(self):
-        from app.api.v1.permission_package import _optional_current_user
-        with patch("app.core.security.decode_token", return_value={}):
-            assert _optional_current_user("Bearer sometoken") is None
+    def test_optional_current_user_blank_header(self):
+        assert self._call("   ") is None
 
-    def test_optional_current_user_valid_token(self):
-        from app.api.v1.permission_package import _optional_current_user
+    def test_optional_current_user_delegates_to_full_chain(self):
+        """有令牌时必须走 get_current_user（不得再手写解码）。"""
         user = SimpleNamespace(username="admin")
-        session = MagicMock()
-        q = MagicMock()
-        session.query.return_value = q
-        q.filter.return_value = q
-        q.first.return_value = user
-        with patch("app.core.security.decode_token", return_value={"sub": "admin"}):
-            with patch("app.core.database.SessionLocal", return_value=session):
-                result = _optional_current_user("Bearer sometoken")
-        assert result is user
-        session.close.assert_called_once()
 
-    def test_optional_current_user_http_exception(self):
-        from app.api.v1.permission_package import _optional_current_user
-        with patch("app.core.security.decode_token",
-                   side_effect=HTTPException(status_code=401, detail="bad")):
-            assert _optional_current_user("Bearer sometoken") is None
+        async def fake_gcu(credentials=None, db=None, request=None):
+            assert credentials is not None and credentials.credentials == "sometoken"
+            return user
+
+        with patch("app.api.v1.permission_package.get_current_user", fake_gcu):
+            assert self._call("Bearer sometoken") is user
+
+    def test_optional_current_user_401_becomes_none(self):
+        """get_current_user 判定失效（401/403）时降级为 None，而不是 500。"""
+
+        async def raise_401(credentials=None, db=None, request=None):
+            raise HTTPException(status_code=401, detail="bad")
+
+        with patch("app.api.v1.permission_package.get_current_user", raise_401):
+            assert self._call("Bearer sometoken") is None
 
     def test_download_traversal_bad_name(self):
         from app.api.v1.permission_package import download_permission_package

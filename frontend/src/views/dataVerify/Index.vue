@@ -326,7 +326,9 @@ function needValue(operator: string): boolean {
 /** Tab 切换并同步到路由 query（?tab=rules 兼容旧独立规则页链接） */
 function switchTab(key: TabKey): void {
   activeTab.value = key
-  router.replace({ query: { ...route.query, tab: key } })
+  // 同上：被取消/重复导航会 reject，补 catch 避免 unhandledrejection 噪音。
+  // Promise.resolve 兜住测试里 mock 返回 undefined 的情况。
+  Promise.resolve(router.replace({ query: { ...route.query, tab: key } })).catch(() => {})
 }
 
 /** 字段说明/条件构建共用：按模块加载字段中文标签 */

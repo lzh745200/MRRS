@@ -214,13 +214,23 @@ function loadLayout() {
   }
   layoutSections.splice(0, 99, ...defaults.map((s) => ({ ...s })))
 }
-function saveLayout() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...layoutSections]))
+function saveLayout(): boolean {
+  // 读路径有 try（见上），写路径原来没有：配额满/存储被禁用时会在 deep watcher 里抛异常，
+  // 而 resetLayout() 仍提示"已恢复默认布局"，用户以为已持久化（2026-10-29 审计）。
+  // 返回是否真的写入成功，调用方据此决定提示文案。
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...layoutSections]))
+    return true
+  } catch {
+    return false
+  }
 }
 function resetLayout() {
   layoutSections.splice(0, 99, ...defaults.map((s) => ({ ...s })))
-  saveLayout()
-  ElMessage.success('已恢复默认布局')
+  const persisted = saveLayout()
+  ElMessage.success(
+    persisted ? '已恢复默认布局' : '已恢复默认布局（当前存储不可用，仅本次会话生效）'
+  )
 }
 const visible = computed(() => {
   const m: Record<string, boolean> = {}

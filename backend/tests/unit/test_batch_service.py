@@ -234,8 +234,9 @@ class TestBatchUpdate:
     async def test_no_db_returns_zero(self):
         from app.services.batch_service import BatchService
         svc = BatchService(db=None)
-        result = await svc.batch_update("projects", [1, 2],
-                                        {"name": "x"})
+        result = await svc.batch_update(
+            "projects", [1, 2], {"name": "x"}, is_superuser=True
+        )
         assert result == {"success": True, "success_count": 0, "skipped": 0}
 
     async def test_with_db_get_inst_found_attr_exists(self):
@@ -251,7 +252,8 @@ class TestBatchUpdate:
         svc = BatchService(db)
         result = await svc.batch_update(
             "projects", [1],
-            {"name": "new", "status": "active"}
+            {"name": "new", "status": "active"},
+            is_superuser=True,
         )
         assert result == {"success": True, "success_count": 1, "skipped": 0}
         assert inst.name == "new"
@@ -272,7 +274,8 @@ class TestBatchUpdate:
         svc = BatchService(db)
         result = await svc.batch_update(
             "projects", [1],
-            {"name": "new", "nonexistent": "val"}
+            {"name": "new", "nonexistent": "val"},
+            is_superuser=True,
         )
         assert result == {"success": True, "success_count": 1, "skipped": 0}
         assert inst.name == "new"
@@ -289,8 +292,9 @@ class TestBatchUpdate:
         mock_f.count.return_value = 0
         mock_f.all.return_value = []
         svc = BatchService(db)
-        result = await svc.batch_update("projects", [1, 2],
-                                        {"name": "x"})
+        result = await svc.batch_update(
+            "projects", [1, 2], {"name": "x"}, is_superuser=True
+        )
         assert result == {"success": True, "success_count": 0, "skipped": 0}
 
     async def test_with_db_query_path(self):
@@ -305,8 +309,9 @@ class TestBatchUpdate:
         mock_f.count.return_value = 1
         mock_f.all.return_value = [inst]
         svc = BatchService(db)
-        result = await svc.batch_update("projects", [1],
-                                        {"name": "new"})
+        result = await svc.batch_update(
+            "projects", [1], {"name": "new"}, is_superuser=True
+        )
         assert result == {"success": True, "success_count": 1, "skipped": 0}
         assert inst.name == "new"
         db.query.assert_called_once()
@@ -325,7 +330,7 @@ class TestBatchDelete:
     async def test_no_db_returns_zero(self):
         from app.services.batch_service import BatchService
         svc = BatchService(db=None)
-        result = await svc.batch_delete("projects", [1, 2])
+        result = await svc.batch_delete("projects", [1, 2], is_superuser=True)
         assert result == {"success": True, "success_count": 0, "skipped": 0}
 
     async def test_soft_delete_has_is_deleted(self):
@@ -340,8 +345,9 @@ class TestBatchDelete:
         mock_f.count.return_value = 1
         mock_f.all.return_value = [inst]
         svc = BatchService(db)
-        result = await svc.batch_delete("projects", [1],
-                                        soft_delete=True)
+        result = await svc.batch_delete(
+            "projects", [1], soft_delete=True, is_superuser=True
+        )
         assert result == {"success": True, "success_count": 1, "skipped": 0}
         assert inst.is_deleted is True
 
@@ -357,8 +363,9 @@ class TestBatchDelete:
         mock_f.count.return_value = 1
         mock_f.all.return_value = [inst]
         svc = BatchService(db)
-        result = await svc.batch_delete("projects", [1],
-                                        soft_delete=True)
+        result = await svc.batch_delete(
+            "projects", [1], soft_delete=True, is_superuser=True
+        )
         assert result == {"success": True, "success_count": 1, "skipped": 0}
         db.delete.assert_called_once_with(inst)
 
@@ -374,8 +381,9 @@ class TestBatchDelete:
         mock_f.count.return_value = 1
         mock_f.all.return_value = [inst]
         svc = BatchService(db)
-        result = await svc.batch_delete("projects", [1],
-                                        soft_delete=False)
+        result = await svc.batch_delete(
+            "projects", [1], soft_delete=False, is_superuser=True
+        )
         assert result == {"success": True, "success_count": 1, "skipped": 0}
         db.delete.assert_called_once_with(inst)
 
@@ -390,7 +398,7 @@ class TestBatchDelete:
         mock_f.count.return_value = 0
         mock_f.all.return_value = []
         svc = BatchService(db)
-        result = await svc.batch_delete("projects", [1, 2])
+        result = await svc.batch_delete("projects", [1, 2], is_superuser=True)
         assert result == {"success": True, "success_count": 0, "skipped": 0}
         db.delete.assert_not_called()
 
@@ -544,3 +552,56 @@ class TestValidateBatch:
         svc = BatchService(db)
         result = await svc.validate_batch("projects", [1, 2, 3])
         assert result == {"success": True, "existing_count": 3}
+
+
+# ── fail-closed：无组织非超管必须拒绝 ────────────────────────────
+
+
+class TestBatchOrgFailClosed:
+    """非超管且账号未绑定组织 → 批量改/删必须拒绝（ADR-0002 fail-closed）。
+
+    背景（2026-10-29 审计）：原判据是
+      not is_superuser and organization_id is not None and org_col is not None
+    —— 操作者 organization_id 为 None（未绑组织的 admin 等）时三个条件整体短路，
+    直接走全量分支，可按裸 id 列表**跨组织**批量改/删。
+    """
+
+    async def test_batch_update_rejects_user_without_org(self):
+        from app.services.batch_service import BatchService
+
+        db = Mock()
+        mock_q, mock_f = Mock(), Mock()
+        db.query.return_value = mock_q
+        mock_q.filter.return_value = mock_f
+        mock_f.count.return_value = 3
+        svc = BatchService(db)
+
+        result = await svc.batch_update(
+            "projects", [1, 2, 3], {"name": "x"},
+            organization_id=None, is_superuser=False,
+        )
+
+        assert result["success"] is False
+        assert result["success_count"] == 0
+        assert "未绑定组织" in result["error"]
+        db.commit.assert_not_called()
+
+    async def test_batch_delete_rejects_user_without_org(self):
+        from app.services.batch_service import BatchService
+
+        db = Mock()
+        mock_q, mock_f = Mock(), Mock()
+        db.query.return_value = mock_q
+        mock_q.filter.return_value = mock_f
+        mock_f.count.return_value = 2
+        svc = BatchService(db)
+
+        result = await svc.batch_delete(
+            "projects", [1, 2],
+            organization_id=None, is_superuser=False,
+        )
+
+        assert result["success"] is False
+        assert result["success_count"] == 0
+        assert "未绑定组织" in result["error"]
+        db.delete.assert_not_called()
