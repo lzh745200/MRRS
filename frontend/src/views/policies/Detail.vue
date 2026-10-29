@@ -37,9 +37,7 @@
         }}</el-descriptions-item>
         <el-descriptions-item label="级别">{{ getLevelLabel(policy.level) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="getStatusColor(policy.status)">{{
-            getStatusLabel(policy.status)
-          }}</el-tag>
+          <el-tag :type="getStatusColor(policy.status)">{{ getStatusLabel(policy.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="生效日期">{{
           policy.effective_date || '-'
@@ -86,9 +84,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusColor(row.status)">{{
-              getStatusLabel(row.status)
-            }}</el-tag>
+            <el-tag :type="getStatusColor(row.status)">{{ getStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
       </el-table>

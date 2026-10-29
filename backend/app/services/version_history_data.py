@@ -3597,6 +3597,11 @@ VERSION_HISTORY_DATA = [
         "description": "收口重建：合并双写者分支 + 修掉最后一处过时断言",
         "features": [
             (
+                "前端 lint:check 门禁 29 处 prettier 警告清零：frontend-check 在npm run lint:check（--max-warnings=0）红，✖ 29"
+                " problems (0 errors, 29 warnings)，全部是格式问题（模板换行、空行、文件尾缺换行）。npm run lint 自动修复后lint:check 与 type-"
+                "check 均退出 0。"
+            ),
+            (
                 "test_coverage_tail_gaps.py 敏感表导入用例按旧语义断言整包成功：R20「故障伪装成功」修复后 success = not errors，敏感表硬禁止必须让整包失败"
                 "；原用例同时断言success is True 与 errors 含「禁止导入敏感表」，自相矛盾。已改为断言 False。"
             ),

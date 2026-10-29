@@ -437,9 +437,13 @@ const handleUpload = async () => {
     const formData = new FormData()
     formData.append('file', file.raw ?? file)
 
-    const response = await post<ImportPreviewPayload>('/import/preview?entity_type=project', formData, {
-      timeout: 120000,
-    })
+    const response = await post<ImportPreviewPayload>(
+      '/import/preview?entity_type=project',
+      formData,
+      {
+        timeout: 120000,
+      }
+    )
 
     if (response?.rows) {
       previewData.value = response.rows.map((item, idx) => ({

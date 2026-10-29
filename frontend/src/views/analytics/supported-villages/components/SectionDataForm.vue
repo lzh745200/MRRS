@@ -1112,7 +1112,7 @@ async function loadSectionData() {
     // 年度数据用索引签名承载各板块（字段名由 resolveApiKey 决定），取到后按对象收窄。
     // resolveSectionApiKey 对未知 key 原样返回，恒为非空字符串，故不需要再判空。
     const sectionRaw = data[apiKey]
-    if (sectionRaw && typeof sectionRaw === "object") {
+    if (sectionRaw && typeof sectionRaw === 'object') {
       const sectionData = sectionRaw as Record<string, unknown>
       Object.keys(formData).forEach((k) => {
         if (sectionData[k] !== undefined && sectionData[k] !== null) {
