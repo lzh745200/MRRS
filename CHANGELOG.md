@@ -7,6 +7,22 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十六批：前端 axios 英文原文直出 → getErrorMessage）
+
+**问题**：`ElMessage.error(e?.message || '默认文案')` 这类写法在 4xx/5xx 时会把 axios 的
+`Request failed with status code 422` 直出给用户 —— 项目自己的 `utils/getErrorMessage`
+已明确把它列为反模式（其余 60+ 处早已用该 helper），这 **25 处**是漏网。
+
+**修复**：统一替换为 `ElMessage.error(getErrorMessage(e, '默认文案'))`，覆盖 13 个视图；
+并给 9 个文件补上 `import { getErrorMessage } from '@/utils/getErrorMessage'`。
+
+> 过程记录：首轮替换脚本用「替换后文本是否含 `getErrorMessage`」判断是否需要补导入 ——
+> 被自己插入的调用误导，导致 9 个文件缺导入（`vue-tsc` 报 8 处 TS2304）。改为检查
+> **import 语句本身**后一次修好。
+
+**验证**：`vue-tsc --noEmit` **0 错误** · `eslint src/views` **0** ·
+`vitest run tests/unit/views` **148 文件 / 3929 用例全部通过**。
+
 ### Fixed（全库审计第十五批：`machine_codes.created_by` 补 ondelete）
 
 **问题**：`machine_codes.created_by` 是全库**唯一**一处没写 `ondelete` 的 `users` 外键

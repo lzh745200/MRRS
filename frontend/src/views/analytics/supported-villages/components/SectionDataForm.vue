@@ -793,6 +793,7 @@ import {
   deleteSectionAttachment,
   resolveSectionApiKey,
 } from '@/api/supportedVillage'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 interface SectionAttachment {
   id: number
   fileName: string
@@ -1196,7 +1197,7 @@ async function handleSave() {
     emit('close')
   } catch (error: any) {
     logger.error('保存失败:', error)
-    ElMessage.error(error?.message || '保存失败，请重试')
+    ElMessage.error(getErrorMessage(error, '保存失败，请重试'))
   } finally {
     saving.value = false
   }
@@ -1227,7 +1228,7 @@ async function handleCustomUpload(options: UploadRequestOptions) {
     attachments.value.push(att)
     ElMessage.success('上传成功')
   } catch (error: any) {
-    ElMessage.error(error?.message || '上传失败')
+    ElMessage.error(getErrorMessage(error, '上传失败'))
   }
 }
 
@@ -1246,7 +1247,7 @@ async function handleDeleteAttachment(att: SectionAttachment) {
     attachments.value = attachments.value.filter((a) => a.id !== att.id)
     ElMessage.success('删除成功')
   } catch (error: any) {
-    ElMessage.error(error?.message || '删除失败')
+    ElMessage.error(getErrorMessage(error, '删除失败'))
   }
 }
 

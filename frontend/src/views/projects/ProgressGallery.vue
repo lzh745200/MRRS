@@ -134,6 +134,7 @@ import { projectsApi } from '@/api/projects'
 import { safeRouteParam } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
 import { getProjectStatusLabel } from '@/config/enums'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const route = useRoute()
 const router = useRouter()
@@ -289,7 +290,7 @@ async function handleUpload(options: any) {
     await loadAllBlobUrls()
   } catch (e: any) {
     logger.error('上传进度照片失败', e)
-    ElMessage.error(e?.message || '上传失败')
+    ElMessage.error(getErrorMessage(e, '上传失败'))
   }
 }
 
@@ -310,7 +311,7 @@ async function handleDelete(fileId: number) {
   } catch (e: any) {
     if (e === 'cancel' || e?.toString?.().includes('cancel')) return
     logger.error('删除进度照片失败', e)
-    ElMessage.error(e?.message || '删除失败')
+    ElMessage.error(getErrorMessage(e, '删除失败'))
   }
 }
 

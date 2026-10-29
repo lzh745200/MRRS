@@ -124,6 +124,7 @@ import { CircleCheckFilled, Key } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { get, post } from '@/api/request'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const { pushSafe } = useRouterSafe()
 
@@ -160,7 +161,7 @@ const useCurrentMachineCode = async () => {
       resetForm.value.verification_code = payload.verification_code ?? ''
       ElMessage.success('已自动填入当前机器码和校验码')
     } else {
-      ElMessage.error(response?.message || '获取机器码失败，请重试')
+      ElMessage.error(getErrorMessage(response, '获取机器码失败，请重试'))
     }
   } catch (error: any) {
     logger.error('[ForgotPassword] 获取机器码失败', error)

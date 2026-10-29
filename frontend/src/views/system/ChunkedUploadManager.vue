@@ -148,6 +148,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import { chunkedUploadApi } from '@/api/chunkedUpload'
 import type { InitUploadResult, UploadProgress, MergeResult } from '@/api/chunkedUpload'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 type UploadState = 'idle' | 'initializing' | 'uploading' | 'merging' | 'done' | 'error'
 
@@ -331,7 +332,7 @@ async function startUpload() {
       }
     }
   } catch (err: any) {
-    ElMessage.error(err?.message || '初始化上传失败')
+    ElMessage.error(getErrorMessage(err, '初始化上传失败'))
     uploadState.value = 'error'
   } finally {
     initializing.value = false
@@ -348,7 +349,7 @@ async function doMerge() {
     currentStep.value = 3
     ElMessage.success('文件上传并合并成功！')
   } catch (err: any) {
-    ElMessage.error(err?.message || '合并失败')
+    ElMessage.error(getErrorMessage(err, '合并失败'))
     uploadState.value = 'error'
   }
 }

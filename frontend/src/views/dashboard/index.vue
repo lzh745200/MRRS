@@ -161,6 +161,7 @@ import { createBackup } from '@/api/backup'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { isAdminUser } from '@/utils/roleAccess'
 import { format } from '@/utils'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const { pushSafe } = useRouterSafe()
 const backingUp = ref(false)
@@ -351,7 +352,7 @@ async function handleBackup() {
     await createBackup({ description: '手动备份' })
     ElMessage.success('备份创建成功')
   } catch (e: any) {
-    ElMessage.error(e?.message || '备份失败，请前往系统管理→备份管理重试')
+    ElMessage.error(getErrorMessage(e, '备份失败，请前往系统管理→备份管理重试'))
   } finally {
     backingUp.value = false
   }

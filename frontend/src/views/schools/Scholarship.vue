@@ -141,6 +141,7 @@ import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowLeft, Plus, Upload } from '@element-plus/icons-vue'
 import { schoolsApi } from '@/api/schools'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const route = useRoute()
 const { pushSafe } = useRouterSafe()
@@ -282,7 +283,7 @@ async function handleSubmit() {
     dialogVisible.value = false
     await loadData()
   } catch (err: any) {
-    ElMessage.error(err?.message || '保存失败')
+    ElMessage.error(getErrorMessage(err, '保存失败'))
   } finally {
     submitting.value = false
   }
@@ -294,7 +295,7 @@ async function handleDelete(row: any) {
     ElMessage.success('删除成功')
     await loadData()
   } catch (err: any) {
-    ElMessage.error(err?.message || '删除失败')
+    ElMessage.error(getErrorMessage(err, '删除失败'))
   }
 }
 
