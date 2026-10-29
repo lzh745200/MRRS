@@ -45,7 +45,7 @@ vi.mock('@/utils/echarts', () => ({
 }))
 
 vi.mock('@/api/ruralWork', () => ({
-  getRuralWorks: vi.fn(),
+  generateWorkReport: vi.fn(),
 }))
 
 vi.mock('@/composables/useDesensitize', () => ({
@@ -67,7 +67,7 @@ vi.mock('element-plus', async (importOriginal) => {
 })
 
 import WorkAnalysis from '@/views/analytics/reports/WorkAnalysis.vue'
-import { getRuralWorks } from '@/api/ruralWork'
+import { generateWorkReport } from '@/api/ruralWork'
 import { ElMessage } from 'element-plus'
 
 /** 取某实例收到的 option（series[0].type 匹配） */
@@ -229,14 +229,14 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockInstances.length = 0
-    vi.mocked(getRuralWorks).mockResolvedValue({ items: makeItems() } as any)
+    vi.mocked(generateWorkReport).mockResolvedValue({ items: makeItems() } as any)
   })
 
   it('挂载后加载数据、渲染统计卡片并创建三个图表', async () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    expect(getRuralWorks).toHaveBeenCalledWith({ limit: 100 })
+    expect(generateWorkReport).toHaveBeenCalledWith({})
 
     const text = wrapper.text()
     expect(text).toContain('工作总数')
@@ -245,6 +245,9 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
     expect(text).toContain('平均进度')
     // delayed=1 → '1项延期' 分支
     expect(text).toContain('1项延期')
+    // 不得出现凭空编造的环境比（旧实现写死“较上月 +12%”）
+    expect(text).not.toContain('较上月 +12%')
+    expect(text).toContain('全部工作记录')
     // 占比/完成率（total>0 分支）
     expect(text).toContain('占比 20%')
     expect(text).toContain('完成率 20%')
@@ -263,7 +266,7 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
   })
 
   it('空数据时统计卡片走 total=0 兜底分支', async () => {
-    vi.mocked(getRuralWorks).mockResolvedValue({ items: [] } as any)
+    vi.mocked(generateWorkReport).mockResolvedValue({ items: [] } as any)
     const wrapper = mountPage()
     await flushPromises()
 
@@ -275,18 +278,19 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
     wrapper.unmount()
   })
 
-it('接口直接返回数组（非 {items} 信封）→ 直接采用', async () => {
-    vi.mocked(getRuralWorks).mockResolvedValue(makeItems() as any)
+  it('报表返回 150 条明细 → 工作总数不按列表首页 100 条截断', async () => {
+    const many = Array.from({ length: 150 }, (_, i) => ({ ...makeItems()[0], id: i + 1 }))
+    vi.mocked(generateWorkReport).mockResolvedValue({ items: many } as any)
     const wrapper = mountPage()
     await flushPromises()
 
-    expect(findPagination(wrapper).props('total')).toBe(5)
-    expect(wrapper.text()).toContain('工作总数')
+    expect(wrapper.text()).toContain('150')
+    expect(findPagination(wrapper).props('total')).toBe(150)
     wrapper.unmount()
   })
 
   it('接口返回结构异常时 allData 置空', async () => {
-    vi.mocked(getRuralWorks).mockResolvedValue(null as any)
+    vi.mocked(generateWorkReport).mockResolvedValue(null as any)
     const wrapper = mountPage()
     await flushPromises()
 
@@ -295,7 +299,7 @@ it('接口直接返回数组（非 {items} 信封）→ 直接采用', async () 
   })
 
   it('加载失败时提示错误', async () => {
-    vi.mocked(getRuralWorks).mockRejectedValue(new Error('接口异常'))
+    vi.mocked(generateWorkReport).mockRejectedValue(new Error('接口异常'))
     const wrapper = mountPage()
     await flushPromises()
 
@@ -306,13 +310,13 @@ it('接口直接返回数组（非 {items} 信封）→ 直接采用', async () 
   it('点击刷新按钮重新加载并提示成功', async () => {
     const wrapper = mountPage()
     await flushPromises()
-    vi.mocked(getRuralWorks).mockClear()
+    vi.mocked(generateWorkReport).mockClear()
 
     const refreshBtn = wrapper.findAll('button').find((b) => b.text().includes('刷新'))!
     await refreshBtn.trigger('click')
     await flushPromises()
 
-    expect(getRuralWorks).toHaveBeenCalledTimes(1)
+    expect(generateWorkReport).toHaveBeenCalledTimes(1)
     expect(ElMessage.success).toHaveBeenCalledWith('数据已刷新')
     wrapper.unmount()
   })
@@ -320,13 +324,23 @@ it('接口直接返回数组（非 {items} 信封）→ 直接采用', async () 
   it('日期范围变化触发刷新', async () => {
     const wrapper = mountPage()
     await flushPromises()
-    vi.mocked(getRuralWorks).mockClear()
+    vi.mocked(generateWorkReport).mockClear()
 
     await wrapper.find('.dp-trigger').trigger('click')
     await flushPromises()
 
-    expect(getRuralWorks).toHaveBeenCalledTimes(1)
+    expect(generateWorkReport).toHaveBeenCalledTimes(1)
+    // 日期范围必须真正传给后端（旧实现只刷新、不带区间，筛选等于没生效）
+    expect(generateWorkReport).toHaveBeenCalledWith({
+      start_date: '2024-01-01',
+      end_date: '2024-12-31',
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('数据已刷新')
+    // 月度趋势按所选区间分桶，而非恒用当前年份
+    const trend = instancesBySeriesType('line').at(-1)
+    expect(trend.option.xAxis.data[0]).toBe('2024-01')
+    expect(trend.option.xAxis.data.at(-1)).toBe('2024-12')
+    expect(wrapper.text()).toContain('当前日期范围')
     wrapper.unmount()
   })
 
@@ -398,7 +412,7 @@ it('接口直接返回数组（非 {items} 信封）→ 直接采用', async () 
   })
 
   it('无数据时导出提示警告', async () => {
-    vi.mocked(getRuralWorks).mockResolvedValue({ items: [] } as any)
+    vi.mocked(generateWorkReport).mockResolvedValue({ items: [] } as any)
     const wrapper = mountPage()
     await flushPromises()
 
@@ -502,7 +516,7 @@ describe('分支补全：进度三元/映射兜底/分页 v-model/导出稀疏�
   })
 
   it('updateCharts 类型为空字符串 → 其他 兜底', async () => {
-    vi.mocked(getRuralWorks).mockResolvedValue({
+    vi.mocked(generateWorkReport).mockResolvedValue({
       items: [{ id: 1, name: 'X', type: '', status: 'completed', progress: 50, start_date: thisMonthDate }],
     } as any)
     const wrapper = mountPage()
@@ -530,7 +544,7 @@ describe('分支补全：进度三元/映射兜底/分页 v-model/导出稀疏�
   })
 
   it('导出稀疏行：name/type/village_name 等全字段 || 兜底', async () => {
-    vi.mocked(getRuralWorks).mockResolvedValue({ items: [{ id: 1 }] } as any)
+    vi.mocked(generateWorkReport).mockResolvedValue({ items: [{ id: 1 }] } as any)
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const wrapper = mountPage()
     await flushPromises()
@@ -544,7 +558,7 @@ describe('分支补全：进度三元/映射兜底/分页 v-model/导出稀疏�
 
   // W11-041：空数据 → 空态而非全 0 图
   it('空数据时渲染 el-empty 空态且不渲染图表容器', async () => {
-    vi.mocked(getRuralWorks).mockResolvedValue({ items: [] } as any)
+    vi.mocked(generateWorkReport).mockResolvedValue({ items: [] } as any)
     const wrapper = mountPage()
     await flushPromises()
     const empty = wrapper.find('.el-empty-stub')

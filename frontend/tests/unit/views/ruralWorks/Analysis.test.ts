@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const { ElMessage, getRuralWorksMock, logError, echartsInit, mockInstances } = vi.hoisted(() => {
+const { ElMessage, generateWorkReportMock, logError, echartsInit, mockInstances } = vi.hoisted(() => {
   const instances: any[] = []
   const init = vi.fn((_el: any) => {
     const inst: any = {
@@ -25,7 +25,7 @@ const { ElMessage, getRuralWorksMock, logError, echartsInit, mockInstances } = v
   })
   return {
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-    getRuralWorksMock: vi.fn(),
+    generateWorkReportMock: vi.fn(),
     logError: vi.fn(),
     echartsInit: init,
     mockInstances: instances,
@@ -34,7 +34,7 @@ const { ElMessage, getRuralWorksMock, logError, echartsInit, mockInstances } = v
 
 vi.mock('element-plus', () => ({ ElMessage }))
 
-vi.mock('@/api/ruralWork', () => ({ getRuralWorks: getRuralWorksMock }))
+vi.mock('@/api/ruralWork', () => ({ generateWorkReport: generateWorkReportMock }))
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -138,7 +138,7 @@ function mountComp() {
 beforeEach(() => {
   vi.clearAllMocks()
   mockInstances.length = 0
-  getRuralWorksMock.mockResolvedValue({ items })
+  generateWorkReportMock.mockResolvedValue({ items })
 })
 
 describe('挂载与数据加载', () => {
@@ -146,7 +146,7 @@ describe('挂载与数据加载', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(getRuralWorksMock).toHaveBeenCalledWith({ limit: 100 })
+    expect(generateWorkReportMock).toHaveBeenCalledWith()
     expect(vm.analysisData).toHaveLength(4)
     expect(vm.analysisData[0]).toEqual({
       workName: '道路建设',
@@ -166,8 +166,21 @@ describe('挂载与数据加载', () => {
     wrapper.unmount()
   })
 
+  it('报表返回 120 条明细 → 分析数据不再被列表首页 100 条截断', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      ...items[0],
+      id: i + 1,
+      name: `工作${i + 1}`,
+    }))
+    generateWorkReportMock.mockResolvedValue({ items: many })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).analysisData).toHaveLength(120)
+    wrapper.unmount()
+  })
+
   it('后端直接返回数组（非 {items} 信封）→ 直接采用', async () => {
-    getRuralWorksMock.mockResolvedValue(items)
+    generateWorkReportMock.mockResolvedValue(items)
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -176,7 +189,7 @@ describe('挂载与数据加载', () => {
   })
 
   it('加载失败 → logger + 提示', async () => {
-    getRuralWorksMock.mockRejectedValue(new Error('net'))
+    generateWorkReportMock.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     expect(logError).toHaveBeenCalled()
@@ -187,7 +200,7 @@ describe('挂载与数据加载', () => {
 
   it('首屏加载未完成即卸载 → 不再初始化图表或注册 resize', async () => {
     let resolveRequest!: (value: unknown) => void
-    getRuralWorksMock.mockReturnValue(new Promise((resolve) => (resolveRequest = resolve)))
+    generateWorkReportMock.mockReturnValue(new Promise((resolve) => (resolveRequest = resolve)))
     const addSpy = vi.spyOn(window, 'addEventListener')
 
     const wrapper = mountComp()
@@ -202,7 +215,7 @@ describe('挂载与数据加载', () => {
   })
 
   it('响应无 items → 空数组', async () => {
-    getRuralWorksMock.mockResolvedValue({})
+    generateWorkReportMock.mockResolvedValue({})
     const wrapper = mountComp()
     await flushPromises()
     expect((wrapper.vm as any).analysisData).toEqual([])
@@ -224,7 +237,7 @@ describe('挂载与数据加载', () => {
   })
 
   it('item 无 type/status/name 字段 → || 兜底', async () => {
-    getRuralWorksMock.mockResolvedValue({
+    generateWorkReportMock.mockResolvedValue({
       items: [{ progress: 10 }],
     })
     const wrapper = mountComp()
@@ -343,7 +356,7 @@ describe('指标计算', () => {
     expect(vm).not.toHaveProperty('totalInvestment')
     wrapper.unmount()
 
-    getRuralWorksMock.mockResolvedValue({ items: [] })
+    generateWorkReportMock.mockResolvedValue({ items: [] })
     const w2 = mountComp()
     await flushPromises()
     expect((w2.vm as any).averageCompletionRate).toBe(0)
@@ -356,15 +369,15 @@ describe('刷新与导出', () => {
   it('refreshData → 重新加载 + 提示', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    getRuralWorksMock.mockClear()
+    generateWorkReportMock.mockClear()
     await (wrapper.vm as any).refreshData()
-    expect(getRuralWorksMock).toHaveBeenCalled()
+    expect(generateWorkReportMock).toHaveBeenCalled()
     expect(ElMessage.success).toHaveBeenCalledWith('数据刷新成功')
     wrapper.unmount()
   })
 
   it('exportAnalysis 空数据 → warning', async () => {
-    getRuralWorksMock.mockResolvedValue({ items: [] })
+    generateWorkReportMock.mockResolvedValue({ items: [] })
     const wrapper = mountComp()
     await flushPromises()
     await (wrapper.vm as any).exportAnalysis()
@@ -401,10 +414,10 @@ describe('刷新与导出', () => {
     await flushPromises()
     const btns = wrapper.findAll('.el-button-stub')
     const refresh = btns.find((b) => b.text().includes('刷新数据'))
-    getRuralWorksMock.mockClear()
+    generateWorkReportMock.mockClear()
     await refresh!.trigger('click')
     await flushPromises()
-    expect(getRuralWorksMock).toHaveBeenCalled()
+    expect(generateWorkReportMock).toHaveBeenCalled()
 
     const exportBtn = btns.find((b) => b.text().includes('导出分析报告'))
     await exportBtn!.trigger('click')
@@ -567,11 +580,11 @@ describe('视图与图表切换', () => {
   it('watch 筛选变化 → 重新加载 + 更新图表', async () => {
     const wrapper = mountComp()
     await flushPromises()
-    getRuralWorksMock.mockClear()
+    generateWorkReportMock.mockClear()
     ;(wrapper.vm as any).selectedVillage = '村B'
     await nextTick()
     await flushPromises()
-    expect(getRuralWorksMock).toHaveBeenCalled()
+    expect(generateWorkReportMock).toHaveBeenCalled()
     wrapper.unmount()
   })
 

@@ -247,7 +247,7 @@ import {
 } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
 import { COLOR_PALETTE, MILITARY_BLUE, themeColor } from '@/utils/echarts-theme'
-import { getRuralWorks } from '@/api/ruralWork'
+import { generateWorkReport } from '@/api/ruralWork'
 
 // 定义 ECharts 实例类型
 type ChartInstance = echarts.ECharts | null
@@ -391,7 +391,9 @@ watch([timeRange, selectedVillage, selectedType], async () => {
 const loadData = async () => {
   loading.value = true
   try {
-    const res = await getRuralWorks({ limit: 100 })
+    // 分析口径必须覆盖全部记录：原先只取列表首页 100 条，
+    // 超过 100 条后覆盖率/延期率/涉及村庄数都会系统性偏小。
+    const res = await generateWorkReport()
     const typeMap: Record<string, string> = {
       infrastructure: '基础设施建设',
       industry: '产业发展',

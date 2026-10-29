@@ -17,9 +17,20 @@ export type WorkType =
   | 'talent'
 
 export interface WorkReportData {
-  summary: Record<string, any>
-  details: any[]
-  generated_at: string
+  /** 与 backend RuralWorkService.generate_work_report 的真实返回保持一致 */
+  total?: number
+  by_status?: Record<string, number>
+  by_type?: Record<string, number>
+  completion_rate?: number
+  summary?: {
+    total?: number
+    completed?: number
+    in_progress?: number
+    delayed?: number
+    planned?: number
+  }
+  /** 分析页需要完整明细；该接口不做列表首页的分页截断 */
+  items?: RuralWorkRecord[]
 }
 
 /**
@@ -64,7 +75,8 @@ export const updateRuralWork = (id: number, data: Record<string, unknown>) =>
 
 export const deleteRuralWork = (id: number) => del('/rural-works/' + id)
 
-export const generateWorkReport = (params?: any) => get('/rural-works/report/generate', params)
+export const generateWorkReport = (params?: Record<string, unknown>) =>
+  get<WorkReportData>('/rural-works/report/generate', params)
 
 // Backward-compatible object form
 export const ruralWorkApi = {

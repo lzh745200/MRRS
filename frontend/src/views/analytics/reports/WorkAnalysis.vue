@@ -171,7 +171,7 @@ import {
   TrendCharts,
 } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
-import { getRuralWorks } from '@/api/ruralWork'
+import { generateWorkReport } from '@/api/ruralWork'
 import PageHeader from '@/components/common/PageHeader.vue'
 
 // 类型映射
@@ -232,8 +232,8 @@ const statsCards = computed(() => {
       icon: markRaw(DataAnalysis),
       color: 'var(--color-primary)',
       bgColor: 'rgba(45,106,79,0.1)',
-      trend: '较上月 +12%',
-      trendType: 'up',
+      trend: dateRange.value ? '当前日期范围' : '全部工作记录',
+      trendType: 'neutral',
     },
     {
       label: '进行中',
@@ -314,8 +314,13 @@ function filterTable() {
 async function loadData() {
   loading.value = true
   try {
-    const res = await getRuralWorks({ limit: 100 })
-    allData.value = Array.isArray(res) ? res : (res?.items ?? [])
+    // 分析必须基于完整数据集，不能把列表首页 limit=100 当成“工作总数”。
+    // 报表端点在后端按数据权限取全量明细，并原生支持日期区间。
+    const params: Record<string, string> = {}
+    if (dateRange.value?.[0]) params.start_date = dateRange.value[0]
+    if (dateRange.value?.[1]) params.end_date = dateRange.value[1]
+    const res = await generateWorkReport(params)
+    allData.value = Array.isArray(res?.items) ? res.items : []
   } catch (e) {
     logger.error('加载工作数据失败:', e)
     allData.value = []
@@ -422,23 +427,33 @@ function updateCharts() {
 
   // 月度趋势 - 折线图
   if (trendChartRef.value) {
-    // 从真实数据中计算月度统计
+    // 从真实数据中计算月度统计。
+    // 未选日期时展示「本年度 1 月至今」；选了日期则按所选区间分桶——
+    // 否则筛 2024 年数据仍按当前年份过滤，图表恒为 0，筛选等于失效。
     const now = new Date()
-    const currentMonth = now.getMonth() // 0-based
-    const monthCount = Math.min(currentMonth + 1, 12)
+    const rangeStart = dateRange.value
+      ? new Date(`${dateRange.value[0]}T00:00:00`)
+      : new Date(now.getFullYear(), 0, 1)
+    const rangeEnd = dateRange.value ? new Date(`${dateRange.value[1]}T23:59:59`) : now
     const months: string[] = []
     const completedByMonth: number[] = []
     const newByMonth: number[] = []
-    for (let i = 0; i < monthCount; i++) {
-      months.push(`${i + 1}月`)
+    const cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
+    while (cursor <= rangeEnd) {
+      const year = cursor.getFullYear()
+      const month = cursor.getMonth()
+      months.push(
+        dateRange.value ? `${year}-${String(month + 1).padStart(2, '0')}` : `${month + 1}月`
+      )
       const monthItems = data.filter((d) => {
         const created = d.start_date || d.created_at
         if (!created) return false
         const date = new Date(created)
-        return date.getMonth() === i && date.getFullYear() === now.getFullYear()
+        return date.getMonth() === month && date.getFullYear() === year
       })
       newByMonth.push(monthItems.length)
       completedByMonth.push(monthItems.filter((d) => d.status === 'completed').length)
+      cursor.setMonth(month + 1)
     }
     trendChart = echarts.init(trendChartRef.value)
     trendChart.setOption({
