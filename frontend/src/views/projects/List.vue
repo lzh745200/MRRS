@@ -272,6 +272,7 @@ import {
   previewPurgeProject,
   purgeProject,
   type Project,
+  type ProjectPurgePreview,
 } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
 import { chartColor } from '@/utils/chartColors'
@@ -335,7 +336,7 @@ const ganttItems = computed<GanttItem[]>(() =>
     name: p.name,
     start: p.start_date || null,
     end: p.end_date || null,
-    progress: (p as any).progress,
+    progress: p.progress,
   }))
 )
 
@@ -413,8 +414,8 @@ const loadData = async () => {
     }
     const res = await projectApi.list(params)
     // 防御：兼容信封（data.items）与裸分页（items）两种形态
-    projectList.value = unwrapList<Project>(res as any).items
-    pagination.total = (res as any)?.data?.total ?? (res as any)?.total ?? 0
+    projectList.value = unwrapList<Project>(res).items
+    pagination.total = res?.data?.total ?? res?.total ?? 0
   } catch (e) {
     logger.error('[Projects] loadData failed:', e)
     ElMessage.error('加载项目列表失败')
@@ -513,8 +514,8 @@ const handlePurge = async (row: any) => {
   let cascadeHint = ''
   let totalRefs = 0
   try {
-    const preview = (await previewPurgeProject(row.id)) as any
-    const data = preview?.data || preview || {}
+    const preview = await previewPurgeProject(row.id)
+    const data: ProjectPurgePreview = preview?.data ?? preview ?? {}
     totalRefs = Number(data.total_references || 0)
     const top = Object.entries(data.details || {})
       .sort((a: any, b: any) => b[1] - a[1])
@@ -552,7 +553,7 @@ const handlePurge = async (row: any) => {
   }
   loading.value = true
   try {
-    const result = (await purgeProject(row.id, confirmPassword)) as any
+    const result = await purgeProject(row.id, confirmPassword)
     projectList.value = projectList.value.filter((item) => item.id !== row.id)
     pagination.total = Math.max(0, pagination.total - 1)
     ElMessage.success(`已彻底删除及清理 ${result?.data?.deleted_records ?? 0} 条关联数据`)

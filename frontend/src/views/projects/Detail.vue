@@ -648,14 +648,16 @@ function msStatusLabel(st: string) {
   }
   return m[st] || st
 }
+const MS_STATUS_TAGS = {
+  pending: 'info',
+  in_progress: 'primary',
+  completed: 'success',
+  overdue: 'danger',
+} as const
+
+/** 里程碑状态 → el-tag type（as const 让字面量联合自动推导，无需断言） */
 function msStatusTag(st: string) {
-  const m: Record<string, string> = {
-    pending: 'info',
-    in_progress: 'primary',
-    completed: 'success',
-    overdue: 'danger',
-  }
-  return (m[st] || 'info') as any
+  return MS_STATUS_TAGS[st as keyof typeof MS_STATUS_TAGS] ?? 'info'
 }
 
 async function loadMilestones() {
@@ -664,8 +666,9 @@ async function loadMilestones() {
   msLoading.value = true
   try {
     const res = await listMilestones(id)
-    const data = (res as any)?.data ?? res
-    milestones.value = Array.isArray(data) ? data : (data?.items ?? [])
+    // 三种形态：裸数组 / {items:[...]} / {data:[...]}；任何非数组一律回落空数组
+    const raw = Array.isArray(res) ? res : (res?.items ?? res?.data)
+    milestones.value = Array.isArray(raw) ? raw : []
   } catch (e) {
     logger.error('里程碑加载失败:', e)
     milestones.value = []
@@ -714,7 +717,7 @@ async function submitMilestone() {
       description: msForm.description || undefined,
     }
     if (msForm.id) await updateMilestone(id!, msForm.id, payload)
-    else await createMilestone(id!, payload as any)
+    else await createMilestone(id!, payload)
     ElMessage.success(msForm.id ? '里程碑已更新' : '里程碑已新增')
     msDialogVisible.value = false
     await loadMilestones()

@@ -11,6 +11,8 @@ export interface Project {
   budget?: number
   start_date?: string
   end_date?: string
+  /** 完成进度（甘特图用） */
+  progress?: number
   created_at?: string
   updated_at?: string
 }
@@ -44,6 +46,25 @@ export interface ProjectFilesPayload {
   files?: ProjectFileItem[]
 }
 
+/** 列表响应：裸分页 {items,total} 与信封 {data:{items,total}} 双形态 */
+export interface ProjectListPayload {
+  items?: Project[]
+  total?: number
+  data?: { items?: Project[]; total?: number }
+}
+
+/** 彻底删除前的级联引用统计 */
+export interface ProjectPurgePreview {
+  total_references?: number
+  details?: Record<string, number>
+  data?: ProjectPurgePreview
+}
+
+export interface ProjectPurgeResult {
+  deleted_records?: number
+  data?: { deleted_records?: number }
+}
+
 export interface CreateProjectRequest {
   name: string
   village_id: number
@@ -57,7 +78,7 @@ export interface CreateProjectRequest {
 // Core API
 export const projectsApi = {
   // ========== 基础 CRUD ==========
-  list: (params?: any) => get('/projects', params),
+  list: (params?: Record<string, unknown>) => get<ProjectListPayload>('/projects', params),
   get: (id: number) => get('/projects/' + id),
   create: (data: Record<string, unknown>) => post<ProjectCreated>('/projects', data),
   update: (id: number | string, data: Record<string, unknown>) =>
@@ -122,6 +143,7 @@ export const projectsApi = {
 export const projectApi = projectsApi
 // 回收站：恢复 / 彻底删除（具名导出，供列表页直接使用）
 export const restoreProject = (id: number) => post(`/projects/${id}/restore`, {})
-export const previewPurgeProject = (id: number) => get(`/projects/${id}/purge/preview`)
+export const previewPurgeProject = (id: number) =>
+  get<ProjectPurgePreview>(`/projects/${id}/purge/preview`)
 export const purgeProject = (id: number, confirmPassword?: string) =>
-  post(`/projects/${id}/purge`, { confirm_password: confirmPassword || '' })
+  post<ProjectPurgeResult>(`/projects/${id}/purge`, { confirm_password: confirmPassword || '' })

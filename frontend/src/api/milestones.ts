@@ -26,9 +26,14 @@ export interface MilestoneProgress {
 
 const base = (projectId: number | string) => `/projects/${projectId}/milestones`
 
-/** 里程碑列表 */
+/** 里程碑列表：后端可能直接返回数组，也可能包一层 { data } / { items } */
+export interface MilestoneListPayload {
+  data?: ProjectMilestone[]
+  items?: ProjectMilestone[]
+}
+
 export const listMilestones = (projectId: number | string) =>
-  get<ProjectMilestone[]>(base(projectId))
+  get<ProjectMilestone[] | MilestoneListPayload>(base(projectId))
 
 /** 新增里程碑 */
 export const createMilestone = (projectId: number | string, data: Partial<ProjectMilestone>) =>

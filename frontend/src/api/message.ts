@@ -170,11 +170,14 @@ export async function updateNotificationPreferences(
 /**
  * 格式化消息类型
  */
+/** el-tag 的 type 联合（与 element-plus 一致） */
+export type MessageTagType = 'primary' | 'success' | 'info' | 'warning' | 'danger'
+
 export function formatMessageType(type: MessageType): {
   text: string
-  type: string
+  type: MessageTagType
 } {
-  const typeMap: Record<MessageType, { text: string; type: string }> = {
+  const typeMap: Record<MessageType, { text: string; type: MessageTagType }> = {
     system: { text: '系统通知', type: 'info' },
     approval: { text: '审批通知', type: 'warning' },
     task: { text: '任务提醒', type: 'primary' },

@@ -287,6 +287,14 @@
 - **静默吞异常清零（71 → 0），门禁转为「零容忍」**：35 个文件、71 处宽泛兜底全部改为
 - **`as any` 再清 10 处（103 → 93）**：`router/index.ts` 用 `declare global` 声明
 - **前端测试目录约定收编：3 个住在 `src/` 里的测试文件迁到 `tests/`（并锁死约定）**：
+- **`as any` 再清 10 处（59 → 49）**：`projects/List.vue`（列表载荷/彻底删除/进度，5 处）、
+  `projects/Detail.vue`（里程碑状态标签改用 `as const` 映射自动推导联合类型；里程碑列表
+  兼容裸数组/`{items}`/`{data}` 且非数组一律回落空数组；新增里程碑去掉参数断言，3 处）、
+  `message/MessageCenter.vue`（`formatMessageType` 的返回 `type` 收紧为 `MessageTagType`，2 处）。
+  `api/projects.ts` 补 `ProjectListPayload`/`ProjectPurgePreview`/`ProjectPurgeResult` 并给
+  `list`/`previewPurgeProject`/`purgeProject` 加泛型，`Project` 补 `progress`；
+  `api/milestones.ts` 的 `listMilestones` 放宽为「数组 或 `{data|items}`」。
+  `vue-tsc` 0 错误，项目/消息相关 **425 passed**，基线 59 → 49。
   `src/views/projects/__tests__/ProjectList.spec.ts`、`src/api/helpers/__tests__/blobDownload.spec.ts`、
   `src/api/__tests__/projects.spec.ts` → `tests/unit/...` 并改名为 `*.test.ts`（vitest 的 `tests/unit`
   只匹配 `.test.ts`，原 `.spec.ts` 放在那里根本不会被执行）；相对导入相应改为 `@/` 别名。

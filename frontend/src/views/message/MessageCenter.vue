@@ -67,7 +67,7 @@
             <el-table-column type="selection" width="48" />
             <el-table-column label="类型" width="120">
               <template #default="{ row }">
-                <el-tag :type="formatMessageType(row.message_type).type as any">
+                <el-tag :type="formatMessageType(row.message_type).type">
                   {{ formatMessageType(row.message_type).text }}
                 </el-tag>
               </template>
@@ -186,7 +186,7 @@
       <div v-if="currentMessage" class="message-detail">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="类型">
-            <el-tag :type="formatMessageType(currentMessage.message_type).type as any">
+            <el-tag :type="formatMessageType(currentMessage.message_type).type">
               {{ formatMessageType(currentMessage.message_type).text }}
             </el-tag>
           </el-descriptions-item>
