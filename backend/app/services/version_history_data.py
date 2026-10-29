@@ -3645,4 +3645,55 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.26",
+        "date": "2026-10-29",
+        "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
+        "features": [
+            (
+                "审计日志的删除 / 备注改写自身不留审计（军审口径）：/system/audit 的批量删除、单条删除、备注 PATCH 三个会破坏审计链的写操作，此前只写 app.log，物理 dele"
+                "te 后「谁删了哪条审计」完全不可追溯。"
+            ),
+            (
+                "学校 schema 与模型漂移可见化：SchoolBase 有 10 个 schools 表不存在的字段（其中 school_level 是必填），create 时被 model_cols"
+                " 白名单静默剥掉；更误导的是代码里还有一步 school_level → level 的改名，而 schools 根本没有 level 列 —— 读代码时会以为它落库了。"
+            ),
+            (
+                "Critical｜refresh 完全绕过 token_version 吊销：validate_token 只验签名/jti/type，不比对版本，而 access 链路有校验 —— 登出"
+                "或强退后，未随登出提交的 refresh（其他设备/被窃）仍能换发带新版本号的合法 access。补版本比对并在命中旧版本时吊销该 refresh，新增负向回归 test_refresh_"
+                "rejects_stale_token_version。"
+            ),
+            (
+                "Critical｜权限包可选认证绕过全部校验：手写解码跳过黑名单 / token_version / is_active /首登改密四项，却被「重写全库 RBAC」的 /permissio"
+                "n-package/import、/confirm 使用，已吊销令牌可远程改写整库权限。改为复用 get_current_user 完整链路。"
+            ),
+            (
+                "Critical｜学校分析页图表恒空：前端请求 page_size=1000 而后端上限 200，每次进入都 422，被同一 try 吞掉只弹「加载学校分析数据失败」。改为按 200 分页"
+                "拉全量 + 页数上限防御。"
+            ),
+            (
+                "Critical｜权限/角色变更零审计：rbac.py 8 个写路由 AuditLogger 出现 0 次。新增 _audit_permission_change()，覆盖 assign/"
+                "revoke role 与 grant/revoke/save permissions。"
+            ),
+            (
+                "禁用账号立即失效：is_active 原先只在 get_current_active_user 校验，而绝大多数端点依赖 get_current_user。新增 _reject_inact"
+                "ive_user()，禁用后未过期 access 立即 403。"
+            ),
+            (
+                "审计 details 含 datetime 时整条静默丢失：new_value 直写 JSON 列，驱动抛 TypeError被吞。新增 _json_safe_value() 入库前 ro"
+                "und-trip（default=str）。"
+            ),
+            "批量改删组织过滤 fail-open：操作者未绑定组织时原条件整体短路，可跨组织改删；改三分支 fail-closed，新增 2 条负向用例。",
+            "软删除记录永久占用唯一编码：查重区分活跃/已软删，后者给出可行动指引。",
+            (
+                "维护窗口豁免 endswith fail-open：(\"/system/backup/restore\", \"/shutdown\") 的后缀匹配会让任意以 /shutdown 结尾的"
+                "新写路由自动继承豁免，静默绕过维护闸门。改为锚定正则^/api/v1/(system/)?backup/(upload-)?restore/?$ / ^/(api/v1/)?(system"
+                "/)?shutdown/?$…"
+            ),
+            (
+                "审计写入会回滚调用方业务事务：AuditLogService.log 在调用方 Session 上 add + commit，失败时 rollback() 连同未提交业务写入一起回滚且异常"
+                "被吞。改为独立 SessionLocal 旁路审计，补 username（原实现恒 NULL）；新增 test_does_not_touch_caller_session。"
+            ),
+        ],
+    },
 ]

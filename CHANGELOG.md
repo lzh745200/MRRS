@@ -5,6 +5,75 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/),
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
+
+### Security（全库审计第三批：2 项）
+
+- **审计日志的删除 / 备注改写自身不留审计**（军审口径）：`/system/audit` 的批量删除、
+  单条删除、备注 PATCH 三个会破坏审计链的写操作，此前只写 app.log，物理 delete 后
+  「谁删了哪条审计」完全不可追溯。现三处都写 `AuditLogger`（动作名 `audit_log_delete` /
+  `audit_log_batch_delete` / `audit_log_remark_update`），删除前先快照被删记录的关键字段
+  （id/action/username/resource_type/created_at），备注改写记录前后值。
+  `AuditLogger` 走独立 Session，不受删除事务影响。
+  连带修正一个测试假设：SQLite 的 INTEGER PRIMARY KEY 在 max(id) 被删后会复用 id，
+  留痕记录可能正好拿到被删 id，因此断言改为「被删的那条 create 记录不在了」而非「该 id 为空」。
+- **学校 schema 与模型漂移可见化**：`SchoolBase` 有 10 个 `schools` 表不存在的字段
+  （其中 `school_level` 是必填），create 时被 `model_cols` 白名单静默剥掉；更误导的是
+  代码里还有一步 `school_level → level` 的改名，而 `schools` 根本没有 level 列 —— 读代码时
+  会以为它落库了。已删除该无效映射，并把「未落库字段」改为记 warning（列出字段名），
+  让 schema/模型漂移在日志里可见。
+
+> 范围：v1.18.25 发布后 main 上的 10 个提交。方法：40 个门禁脚本对 549,806 行机器逐行检查，
+> 再按 API / core+security / models+migrations / frontend 四个域并行深审、交叉复现后确认。
+
+### Security（审计第一批：11 项，含 4 个 Critical）
+
+- **Critical｜refresh 完全绕过 `token_version` 吊销**：`validate_token` 只验签名/jti/type，
+  不比对版本，而 access 链路有校验 —— 登出或强退后，未随登出提交的 refresh（其他设备/被窃）
+  仍能换发带新版本号的合法 access。补版本比对并在命中旧版本时吊销该 refresh，
+  新增负向回归 `test_refresh_rejects_stale_token_version`。
+- **Critical｜权限包可选认证绕过全部校验**：手写解码跳过黑名单 / token_version / is_active /
+  首登改密四项，却被「重写全库 RBAC」的 `/permission-package/import`、`/confirm` 使用，
+  已吊销令牌可远程改写整库权限。改为复用 `get_current_user` 完整链路。
+- **Critical｜学校分析页图表恒空**：前端请求 `page_size=1000` 而后端上限 200，每次进入都 422，
+  被同一 `try` 吞掉只弹「加载学校分析数据失败」。改为按 200 分页拉全量 + 页数上限防御。
+- **Critical｜权限/角色变更零审计**：`rbac.py` 8 个写路由 `AuditLogger` 出现 0 次。
+  新增 `_audit_permission_change()`，覆盖 assign/revoke role 与 grant/revoke/save permissions。
+- **禁用账号立即失效**：`is_active` 原先只在 `get_current_active_user` 校验，而绝大多数端点
+  依赖 `get_current_user`。新增 `_reject_inactive_user()`，禁用后未过期 access 立即 403。
+- **审计 details 含 datetime 时整条静默丢失**：`new_value` 直写 JSON 列，驱动抛 TypeError
+  被吞。新增 `_json_safe_value()` 入库前 round-trip（`default=str`）。
+- **批量改删组织过滤 fail-open**：操作者未绑定组织时原条件整体短路，可跨组织改删；
+  改三分支 fail-closed，新增 2 条负向用例。
+- **软删除记录永久占用唯一编码**：查重区分活跃/已软删，后者给出可行动指引。
+
+### Fixed
+
+- **维护窗口豁免 `endswith` fail-open**：`("/system/backup/restore", "/shutdown")` 的后缀匹配
+  会让任意以 `/shutdown` 结尾的**新写路由**自动继承豁免，静默绕过维护闸门。改为锚定正则
+  `^/api/v1/(system/)?backup/(upload-)?restore/?$` / `^/(api/v1/)?(system/)?shutdown/?$`，
+  并补上此前漏登记的 `upload-restore`。
+- **审计写入会回滚调用方业务事务**：`AuditLogService.log` 在调用方 Session 上 `add + commit`，
+  失败时 `rollback()` 连同未提交业务写入一起回滚且异常被吞。改为独立 `SessionLocal` 旁路审计，
+  补 `username`（原实现恒 NULL）；新增 `test_does_not_touch_caller_session`。
+- **`/system/env` 任意登录用户可读依赖清单与运行环境** → `require_admin()`。
+- **备份恢复回传异常原文**（含本地绝对路径）→ 固定文案 + 日志留原文。
+- **前端错误提示失真**：dashboard `saveLayout` 缺 `try`（写盘失败仍提示已保存）；
+  SystemConsole / dataVerify 的 `router.replace` 未 catch；Role 删除失败吞掉后端原因。
+- **3 处同名测试 F811 静默失效**：r16 双重失效、report_templates 覆盖版本缺 `finally`、
+  recommendation 整类复制两遍 —— 已重命名并恢复有效断言。
+
+### Changed
+
+- **类型债**：启用 SQLAlchemy mypy 插件，mypy **1310 → 880**（消 420 个误报）；
+  `rbac_service._log_access` 形参放宽为 `Optional[str]`；`as any` 保持 **0**。
+- **门禁基线按实测同步**：`broad_except` 801→802、后端用例 **14,938**、locations 清单刷新。
+
+### Tests
+
+- 后端 **14,938 用例**、前端 **347 个测试文件 / 7,420 用例**；统一门禁 **34/34 PASS**；
+  flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；覆盖率以 tag 的 `PR Checks` 为准。
+
 ## [1.18.25] - 2026-10-29 — 收口重建：合并双写者分支 + 修掉最后一处过时断言
 
 ### Fixed

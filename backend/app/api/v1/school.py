@@ -895,11 +895,21 @@ async def create_school(
     # Map schema field names to model column names
     if "school_type" in school_data:
         school_data["type"] = school_data.pop("school_type")
-    if "school_level" in school_data:
-        school_data["level"] = school_data.pop("school_level")
+    # 注意（2026-10-29 审计）：这里原先还有 school_level → "level" 的映射，但
+    # schools 表根本没有 level 列，映射完立刻被下面的白名单剥掉 —— 等于把
+    # "school_level 必填却不落库"这件事藏得更深（读代码时会以为它落到 level）。
+    # 已删除该映射，改为在下方统一报告未落库字段，让契约漂移可见。
 
-    # Remove schema-only fields not in the model table
+    # Remove schema-only fields not in the model table。
+    # 未落库的字段不再静默丢弃：记 warning，便于发现 schema 与模型漂移
+    # （SchoolBase 目前有 10 个模型不存在的字段，其中 school_level 是必填）。
     model_cols = {c.name for c in School.__table__.columns}
+    _dropped = sorted(k for k in school_data if k not in model_cols)
+    if _dropped:
+        logger.warning(
+            "创建学校: 以下字段在 schools 表无对应列，已忽略（schema/模型漂移）: %s",
+            ", ".join(_dropped),
+        )
     school_data = {k: v for k, v in school_data.items() if k in model_cols}
 
     # 转换枚举

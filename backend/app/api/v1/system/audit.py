@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,6 +12,8 @@ from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.audit import AuditAction, AuditLevel, AuditStatus
 from app.services.audit_service import AuditService, SecurityEventService
+from app.utils.audit_logger import AuditLevel as AuditLoggerLevel
+from app.utils.audit_logger import AuditLogger
 from app.core.transaction import safe_commit
 from app.utils.time_utils import utcnow
 
@@ -174,6 +176,20 @@ async def batch_delete_audit_logs(
 
     deleted = query.delete(synchronize_session=False)
     safe_commit(db)
+    # 批量删除是杀伤面最大的一次审计链改动，必须留痕（含条件与条数）
+    AuditLogger.log(
+        action="audit_log_batch_delete",
+        username=getattr(current_user, "username", None),
+        resource_type="audit",
+        details={
+            "deleted_count": deleted,
+            "ids": list(body.ids) if body.ids else None,
+            "actions": list(body.actions) if getattr(body, "actions", None) else None,
+            "action": getattr(body, "action", None),
+            "before_date": str(body.before_date) if getattr(body, "before_date", None) else None,
+        },
+        level=AuditLoggerLevel.WARNING,
+    )
     logger.info("批量删除审计日志完成: 删除 %d 条", deleted)
     return success_response(data={"deleted_count": deleted}, message=f"已删除 {deleted} 条日志记录")
 
@@ -199,8 +215,25 @@ async def delete_audit_log(
         logger.warning("删除审计日志失败: id=%d 不存在", log_id)
         raise HTTPException(status_code=404, detail="Audit log not found")
 
+    # 删除前快照：删完就查不到了，审计里必须能回答"删了哪一条"
+    _snapshot = {
+        "log_id": log.id,
+        "log_action": getattr(log, "action", None),
+        "log_username": getattr(log, "username", None),
+        "log_resource_type": getattr(log, "resource_type", None),
+        "log_created_at": str(getattr(log, "created_at", "") or ""),
+    }
     db.delete(log)
     safe_commit(db)
+    # 自身留痕（2026-10-29 审计，Important）：删除审计日志是最会破坏审计链的操作，
+    # 而它此前只写 app.log。AuditLogger 走独立 Session，不受本事务影响。
+    AuditLogger.log(
+        action="audit_log_delete",
+        username=getattr(current_user, "username", None),
+        resource_type="audit",
+        details=_snapshot,
+        level=AuditLoggerLevel.WARNING,
+    )
     logger.info("删除审计日志成功 id=%d", log_id)
     return success_response(message="删除成功")
 
@@ -233,9 +266,22 @@ async def update_audit_log_remark(
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"解析审计日志元数据失败 (id={log_id}): {e}")
             meta = {}
+    _prev_remark = (meta.get("remark") or "") if isinstance(meta, dict) else ""
     meta["remark"] = remark
     log.metadata_ = meta
     safe_commit(db)
+    # 改写审计备注同样会动审计链，必须留痕（含改动前后值）
+    AuditLogger.log(
+        action="audit_log_remark_update",
+        username=getattr(current_user, "username", None),
+        resource_type="audit",
+        details={
+            "log_id": log_id,
+            "prev_remark": _prev_remark,
+            "new_remark": remark,
+        },
+        level=AuditLoggerLevel.WARNING,
+    )
     return success_response(data={"id": log_id, "remark": remark}, message="备注更新成功")
 
 

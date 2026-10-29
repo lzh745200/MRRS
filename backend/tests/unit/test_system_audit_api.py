@@ -277,7 +277,16 @@ class TestBatchDeleteAuditLogs:
         resp = _delete_json(client, self.URL, {"ids": "12"})
         assert resp.status_code == 200
         assert resp.json()["data"]["deleted_count"] == 1
-        assert session.query(AuditLog).filter(AuditLog.id == 12).first() is None
+        # 断言"被删的那条 create 记录不在了"，而不是"id 12 为空"。
+        # 2026-10-29 起批量删除会自留痕（audit_log_batch_delete），而 SQLite 的
+        # INTEGER PRIMARY KEY 在 max(id) 被删后会复用 id —— 留痕记录可能正好拿到 12。
+        # 依赖"id 空缺"会让测试随留痕行为变化而假红。
+        assert (
+            session.query(AuditLog)
+            .filter(AuditLog.id == 12, AuditLog.action == "create")
+            .first()
+            is None
+        )
         assert session.query(AuditLog).filter(AuditLog.id == 1).first() is not None
         assert session.query(AuditLog).filter(AuditLog.id == 2).first() is not None
 
