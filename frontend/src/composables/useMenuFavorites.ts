@@ -8,6 +8,7 @@
  */
 import { ref, type Ref } from 'vue'
 import type { NavMenuRecord } from '@/composables/useRecentMenus'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 export const MENU_FAVORITES_STORAGE_KEY = 'nav:favorites'
 export const MENU_FAVORITES_LIMIT = 8
@@ -29,7 +30,7 @@ function isStoredRecord(value: unknown): value is NavMenuRecord {
 /** 从 localStorage 读取收藏（任何异常/脏数据回退空数组） */
 function readStored(): NavMenuRecord[] {
   try {
-    const raw = localStorage.getItem(MENU_FAVORITES_STORAGE_KEY)
+    const raw = safeGetItem(MENU_FAVORITES_STORAGE_KEY, 'local')
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
@@ -42,7 +43,7 @@ function readStored(): NavMenuRecord[] {
 /** 写回 localStorage（配额/隐私模式下静默降级，内存态仍可用） */
 function persist(records: NavMenuRecord[]): void {
   try {
-    localStorage.setItem(MENU_FAVORITES_STORAGE_KEY, JSON.stringify(records))
+    safeSetItem(MENU_FAVORITES_STORAGE_KEY, JSON.stringify(records), 'local')
   } catch {
     /* 存储不可用时忽略 */
   }

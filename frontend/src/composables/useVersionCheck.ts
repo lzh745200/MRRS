@@ -18,7 +18,7 @@
  */
 import { ElMessage } from 'element-plus'
 import { SYSTEM_VERSION } from '@/config/constants'
-import { safeGetItem } from '@/utils/safeStorage'
+import { safeGetItem, safeSetItem, safeRemoveItem } from '@/utils/safeStorage'
 
 /** localStorage 键名：上次确认一致的服务端版本 */
 const VERSION_KEY = 'app_version'
@@ -74,8 +74,8 @@ export async function checkVersion(): Promise<void> {
 
     // 当前运行包就是服务端版本 → 落缓存并清除一次性护栏（本次刷新已生效）
     if (getRunningVersion() === serverVersion) {
-      localStorage.setItem(VERSION_KEY, serverVersion)
-      sessionStorage.removeItem(RELOAD_GUARD_KEY)
+      safeSetItem(VERSION_KEY, serverVersion, 'local')
+      safeRemoveItem(RELOAD_GUARD_KEY, 'session')
       return
     }
 
@@ -84,7 +84,7 @@ export async function checkVersion(): Promise<void> {
 
     if (!cachedVersion) {
       // 首次访问 → 记录版本号，不刷新
-      localStorage.setItem(VERSION_KEY, serverVersion)
+      safeSetItem(VERSION_KEY, serverVersion, 'local')
       return
     }
 
@@ -99,7 +99,7 @@ export async function checkVersion(): Promise<void> {
         return
       }
       // 记录一次性护栏（不写 VERSION_KEY：写入后下次比对即相等，将永久停留在旧代码）
-      sessionStorage.setItem(RELOAD_GUARD_KEY, serverVersion)
+      safeSetItem(RELOAD_GUARD_KEY, serverVersion, 'session')
       ElMessage.warning({
         message: `系统已更新至 v${serverVersion}，即将自动刷新...`,
         duration: RELOAD_DELAY,

@@ -14,6 +14,7 @@
  * - 存储不可用/损坏 JSON/非法值 一律回退默认 20，绝不抛错（模块在渲染热路径上）。
  */
 import { computed, ref } from 'vue'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 export const PAGE_SIZE_OPTIONS: readonly number[] = [20, 50, 100, 200]
 export const DEFAULT_PAGE_SIZE = 20
@@ -33,7 +34,7 @@ export function normalizePageSize(raw: unknown): number {
 
 export function readPageSize(scope: string): number {
   try {
-    return normalizePageSize(localStorage.getItem(pageSizeStorageKey(scope)))
+    return normalizePageSize(safeGetItem(pageSizeStorageKey(scope), 'local'))
   } catch {
     return DEFAULT_PAGE_SIZE
   }
@@ -41,7 +42,7 @@ export function readPageSize(scope: string): number {
 
 export function writePageSize(scope: string, size: number): void {
   try {
-    localStorage.setItem(pageSizeStorageKey(scope), String(normalizePageSize(size)))
+    safeSetItem(pageSizeStorageKey(scope), String(normalizePageSize(size)), 'local')
   } catch {
     // 隐私模式/配额：静默降级为内存态
   }

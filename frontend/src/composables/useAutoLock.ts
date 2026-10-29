@@ -5,7 +5,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { AuthStorage } from '@/utils/authStorage'
 import { markLockNow } from '@/utils/lockDigest'
 import { logger } from '@/utils/logger'
-import { safeGetItem } from '@/utils/safeStorage'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 const STORAGE_KEY = 'auto-lock-minutes'
 const DEFAULT_MINUTES = 15
@@ -39,7 +39,7 @@ export function useAutoLock(opts: AutoLockOptions = {}) {
       // 但从不生效」（不清会话、不落锁屏标记）。必须用顶层 import。
       try {
         AuthStorage.clearSession()
-        window.sessionStorage.setItem('auto_lock_active', '1')
+        safeSetItem('auto_lock_active', '1', 'session')
         markLockNow()
       } catch (err) {
         // 锁屏失败必须可观测：静默吞掉会表现为"锁屏已启用却从不生效"

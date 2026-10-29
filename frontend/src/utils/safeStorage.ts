@@ -16,7 +16,17 @@
 type StorageKind = 'local' | 'session'
 
 function pick(kind: StorageKind): Storage {
-  return kind === 'local' ? window.localStorage : window.sessionStorage
+  // 优先用**全局** localStorage/sessionStorage：jsdom 里 window.localStorage 与
+  // 全局对象不一定是同一个，测试用 vi.stubGlobal('localStorage', stub) 替换的是全局，
+  // 走 window.* 会绕过桩、打到真实 jsdom Storage（实测会让"写入失败降级"的用例失效）。
+  // 浏览器里两者等同；无 window 的环境（SSR/单测）回退到 window，再不行则抛错由上层 catch。
+  const g = globalThis as unknown as Record<string, Storage | undefined>
+  const direct = g[kind === 'local' ? 'localStorage' : 'sessionStorage']
+  if (direct) return direct
+  if (typeof window !== 'undefined') {
+    return kind === 'local' ? window.localStorage : window.sessionStorage
+  }
+  throw new Error('storage unavailable')
 }
 
 /** 读；任何异常（含 window 不存在）都返回 fallback */
@@ -38,12 +48,19 @@ export function safeSetItem(key: string, value: string, kind: StorageKind = 'loc
   }
 }
 
-/** 删；异常静默 */
-export function safeRemoveItem(key: string, kind: StorageKind = 'local'): void {
+/**
+ * 删；返回是否真的删成功。
+ *
+ * 为什么返回 boolean：个别调用点（lockDigest.consumeLockDigest）的语义依赖
+ * 「删除失败 = 本次消费失败」—— 删不掉就打点还在，下次会重复弹摘要，因此要提前放弃。
+ * 只静默吞掉异常会让那边谎报成功（单测已抓到）。
+ */
+export function safeRemoveItem(key: string, kind: StorageKind = 'local'): boolean {
   try {
     pick(kind).removeItem(key)
+    return true
   } catch {
-    /* ignore */
+    return false
   }
 }
 

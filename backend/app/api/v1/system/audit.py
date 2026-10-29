@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -706,7 +706,7 @@ async def get_user_activity(
         .all()
     )
 
-    action_counts = {}
+    action_counts: dict[Any, Any] = {}
     for log in logs:
         action = log.action
         action_counts[action] = action_counts.get(action, 0) + 1

@@ -5,7 +5,7 @@ Data Report Service
 
 import logging
 from datetime import timezone, datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import uuid
 
 from sqlalchemy.orm import Session
@@ -320,13 +320,13 @@ class DataReportService:
         approval_rate = (approved / reviewed * 100) if reviewed > 0 else 0
 
         # 按来源组织统计
-        by_source_org = {}
+        by_source_org: dict[Any, Any] = {}
         for report in reports:
             org_key = str(report.source_org_id)
             by_source_org[org_key] = by_source_org.get(org_key, 0) + 1
 
         # 按月份统计
-        by_month = {}
+        by_month: dict[Any, Any] = {}
         for report in reports:
             if report.submitted_at:
                 month_key = report.submitted_at.strftime("%Y-%m")
@@ -380,7 +380,7 @@ class DataReportService:
         )
 
         # 按组织ID分组报告
-        reports_by_org = {}
+        reports_by_org: dict[Any, Any] = {}
         for report in all_reports:
             if report.source_org_id not in reports_by_org:
                 reports_by_org[report.source_org_id] = []

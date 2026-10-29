@@ -8,6 +8,7 @@ import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import { verifyLoginTwoFactor } from '@/api/twoFactor'
 import type { AuthData } from '@/utils/authStorage'
 import type { ApiResponse } from '@/types/api'
+import { safeSetItem, safeRemoveItem } from '@/utils/safeStorage'
 
 export type UserInfo = AuthData['user']
 
@@ -148,7 +149,7 @@ export const useAuthStore = defineStore('auth', () => {
     _setCachedToken(null)
     AuthStorage.clearSession()
     try {
-      sessionStorage.setItem('auto_lock_active', '1')
+      safeSetItem('auto_lock_active', '1', 'session')
     } catch {
       /* 静默 */
     }
@@ -157,7 +158,7 @@ export const useAuthStore = defineStore('auth', () => {
   /** 登录/自动登录成功后解除锁屏标记 */
   function unlockSession() {
     try {
-      sessionStorage.removeItem('auto_lock_active')
+      safeRemoveItem('auto_lock_active', 'session')
     } catch {
       /* 静默 */
     }

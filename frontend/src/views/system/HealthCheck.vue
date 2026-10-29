@@ -153,6 +153,7 @@ import { get } from '@/api/request'
 import { chartColor } from '@/utils/chartColors'
 
 import { format } from '@/utils'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 // ── 类型定义 ──
 
 type CheckStatus = 'pending' | 'running' | 'success' | 'warning' | 'error'
@@ -295,7 +296,7 @@ function markFailed(item: CheckItem, err: any): void {
 
 function loadLastCheck(): string {
   try {
-    return localStorage.getItem(LAST_CHECK_KEY) || ''
+    return safeGetItem(LAST_CHECK_KEY, 'local') || ''
   } catch {
     return ''
   }
@@ -303,7 +304,7 @@ function loadLastCheck(): string {
 
 function persistLastCheck(value: string): void {
   try {
-    localStorage.setItem(LAST_CHECK_KEY, value)
+    safeSetItem(LAST_CHECK_KEY, value, 'local')
   } catch {
     // 存储不可用时静默忽略
   }

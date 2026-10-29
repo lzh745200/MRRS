@@ -3650,6 +3650,10 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            (
+                "mypy 869 → 851：13 个文件 18 处空容器补显式注解（var-annotated 清零一半）：by_type/action_counts/by_severity/count"
+                "s/warnings/errors/name_map/row_map/ancestors …这些是 x = {} / x = [] 的空字面量，mypy 无法推断元素类型。"
+            ),
             "setItem × 10 → safeSetItem(key, value, kind)（失败返回 false，不阻断）",
             "removeItem × 12 → safeRemoveItem(key, kind)",
             "getItem × 6（含 safeGet(() => sessionStorage, ...) 形式）→ safeGetItem(key, kind)",
@@ -3683,12 +3687,8 @@ VERSION_HISTORY_DATA = [
             ),
             (
                 "ruralWorks/Task.vue 加载失败静默：catch 体只有一句「API不可用，使用本地模拟数据」的注释，但文件里没有任何模拟数据，tasks 初值是空数组 —— 后端挂掉/5"
-                "00 时页面显示「暂无数据」，用户会以为数据丢了（台账系统里这是最糟的误导）。改为 getErrorMessage 明确报错。"
-            ),
-            (
-                "projects/Edit.vue 的 isDirty 永不复位：原实现只把标记置 true，全文再无复位 ——打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍提示。照抄同族"
-                "三页（schools / organization / policies 的 Edit）做法：加 suppressDirty 在回填 / 重置期间抑制，回填后 nextTick 复位，保存"
-                "成功与 resetForm 后各复位一次。"
+                "00 时页面显示「暂无数据」，用户会以为数据丢了（台账系统里这是最糟的误导）。改为 getErrorMessage 明确报错。打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍"
+                "提示。"
             ),
         ],
     },

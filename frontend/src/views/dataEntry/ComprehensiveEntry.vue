@@ -780,6 +780,7 @@ import type {
   VillageCommitteeMember,
 } from '@/types/helpProject'
 import PageHeader from '@/components/common/PageHeader.vue'
+import { safeGetItem, safeSetItem, safeRemoveItem } from '@/utils/safeStorage'
 
 const DRAFT_STORAGE_KEY = 'comprehensive_entry_draft'
 const AUTO_SAVE_INTERVAL = 30_000 // 30秒自动保存
@@ -1004,7 +1005,7 @@ function saveDraftToLocal() {
       relatedFundText: relatedFundText.value,
       savedAt: new Date().toISOString(),
     }
-    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
+    safeSetItem(DRAFT_STORAGE_KEY, JSON.stringify(draft), 'local')
     lastSavedAt.value = new Date().toLocaleTimeString()
   } catch {
     // localStorage 写满或不可用，静默忽略
@@ -1013,7 +1014,7 @@ function saveDraftToLocal() {
 
 function loadDraftFromLocal() {
   try {
-    const raw = localStorage.getItem(DRAFT_STORAGE_KEY)
+    const raw = safeGetItem(DRAFT_STORAGE_KEY, 'local')
     if (!raw) return
     const draft = JSON.parse(raw)
     if (!draft?.formData?.basicInfo) return
@@ -1023,7 +1024,7 @@ function loadDraftFromLocal() {
       const savedDate = new Date(draft.savedAt)
       const diffDays = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60 * 24)
       if (diffDays > 7) {
-        localStorage.removeItem(DRAFT_STORAGE_KEY)
+        safeRemoveItem(DRAFT_STORAGE_KEY, 'local')
         return
       }
     }
@@ -1057,7 +1058,7 @@ function loadDraftFromLocal() {
 }
 
 function clearDraft() {
-  localStorage.removeItem(DRAFT_STORAGE_KEY)
+  safeRemoveItem(DRAFT_STORAGE_KEY, 'local')
   lastSavedAt.value = ''
 }
 

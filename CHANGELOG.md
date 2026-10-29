@@ -7,6 +7,15 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+- **mypy 869 → 851：13 个文件 18 处空容器补显式注解**（`var-annotated` 清零一半）：
+  `by_type`/`action_counts`/`by_severity`/`counts`/`warnings`/`errors`/`name_map`/`row_map`/`ancestors` …
+  这些是 `x = {}` / `x = []` 的空字面量，mypy 无法推断元素类型。统一补 `dict[Any, Any]` / `list[Any]`
+  （**纯注解，运行期零变化**；局部变量注解不产生字节码，也不影响覆盖率）。
+  涉及 `api/v1/{organization,system/audit,system/zero_trust,data/data/bigscreen}`、
+  `services/{backup_service,data_package_service,data_report_service,fund_anomaly_detector,
+  organization_service,permission_package_service,smart_conflict_resolver,supported_village_export_service}`、
+  `core/database_indexes`。`,
+  验证：13 个文件 flake8 0、语法检查通过；相关 **74 个测试文件 1480 passed**；基线 869 → 851。
 ### Fixed（全库审计第二十二批：`authStorage` 全部 28 处裸存储调用收口）
 
 **问题**：上一批只把 `authStorage` 的 `_readSlot` 改成安全读取，其余 **28 处** 仍是裸

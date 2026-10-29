@@ -17,6 +17,11 @@ const changePasswordWhitelist = ['/change-password', '/logout']
  * 这是一处安全判定，异常时宁可要求重新输密码，也不能静默放行。
  */
 function readLockFlag(): boolean {
+  // 注意：这里**必须**用原生调用，不能换成 safeGetItem。
+  // safeGetItem 把「存储抛错」统一变成「返回 null」，而本函数是安全判定，
+  // 要求异常时 fail-closed（按已锁定处理）；用 safeGetItem 会让异常退化成
+  // null → 判定为「未锁定」→ fail-open（单测 test_guards「sessionStorage 抛错」
+  // 已抓到该回归）。
   try {
     return sessionStorage.getItem('auto_lock_active') === '1'
   } catch {

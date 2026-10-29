@@ -7,6 +7,7 @@
  * - 模块级单例：侧栏、菜单搜索弹窗、移动端导航共享同一份响应式数据
  */
 import { ref, type Ref } from 'vue'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 /** 最近访问/收藏菜单的最小记录（只存导航必需字段，菜单结构变化时降级丢弃） */
 export interface NavMenuRecord {
@@ -40,7 +41,7 @@ function isStoredRecord(value: unknown): value is NavMenuRecord {
 /** 从 localStorage 读取最近访问（任何异常/脏数据回退空数组） */
 function readStored(): NavMenuRecord[] {
   try {
-    const raw = localStorage.getItem(RECENT_MENUS_STORAGE_KEY)
+    const raw = safeGetItem(RECENT_MENUS_STORAGE_KEY, 'local')
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
@@ -53,7 +54,7 @@ function readStored(): NavMenuRecord[] {
 /** 写回 localStorage（配额/隐私模式下静默降级，内存态仍可用） */
 function persist(records: NavMenuRecord[]): void {
   try {
-    localStorage.setItem(RECENT_MENUS_STORAGE_KEY, JSON.stringify(records))
+    safeSetItem(RECENT_MENUS_STORAGE_KEY, JSON.stringify(records), 'local')
   } catch {
     /* 存储不可用时忽略 */
   }

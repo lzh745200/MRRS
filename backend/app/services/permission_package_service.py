@@ -552,7 +552,7 @@ class PermissionPackageService:
                 "integrity_failed": True,
             }
 
-        errors = []
+        errors: list[Any] = []
         stats = self._init_import_stats()
 
         try:

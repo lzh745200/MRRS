@@ -1270,7 +1270,7 @@ async def get_organization_detail(
         ]
 
         # 上级组织路径
-        ancestors = []
+        ancestors: list[Any] = []
         current_id = org.parent_id
         visited: set = set()
         while current_id and current_id not in visited:

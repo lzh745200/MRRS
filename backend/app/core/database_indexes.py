@@ -5,6 +5,7 @@
 索引定义归属于对应的 ORM 模型 __table_args__，本模块仅负责启动时验证和补建。
 """
 
+from typing import Any
 import logging
 
 from sqlalchemy import inspect, text
@@ -42,7 +43,7 @@ EXTRA_INDEXES = [
 
 # 向后兼容别名（测试/system_health 引用）
 INDEX_DEFINITIONS = EXTRA_INDEXES
-COMPOSITE_INDEXES = []
+COMPOSITE_INDEXES: list[Any] = []
 
 
 def _validate_columns(engine, table_name, index_name, columns, inspector=None):

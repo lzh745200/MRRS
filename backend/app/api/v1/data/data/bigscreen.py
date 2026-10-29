@@ -13,7 +13,7 @@
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import String, cast, func, or_
@@ -548,7 +548,7 @@ def _bump_unit_count(units: dict, raw_name, field: str) -> None:
 
 def _collect_unit_filters(db: Session, data_scope: OrgScopeFilter) -> list:
     """可筛选帮扶单位 facet：村 / 学校 / 项目 / 结对四路并集，同名合并计数。"""
-    units = {}
+    units: dict[Any, Any] = {}
 
     village_query = db.query(SupportedVillage.support_unit).filter(
         SupportedVillage.is_active == True  # noqa: E712
@@ -1012,7 +1012,7 @@ def _school_project_totals(projects: list) -> tuple:
 
 def _school_phase_counts(projects: list) -> dict:
     """学校项目阶段计数。"""
-    counts = {}
+    counts: dict[Any, Any] = {}
     for _name, phase, _category, _budget, _actual in projects:
         key = _phase_key(phase)
         counts[key] = counts.get(key, 0) + 1

@@ -456,7 +456,7 @@ class DataPackageService:
     def _validate_package_sync(self, file_path: str) -> DataPackageValidationResult:
         """验证数据包（同步实现，只做 CPU/文件 I/O）。"""
         errors = []
-        warnings = []
+        warnings: list[Any] = []
         manifest = None
 
         if not os.path.exists(file_path):

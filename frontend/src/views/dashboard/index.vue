@@ -162,6 +162,7 @@ import { useRouterSafe } from '@/composables/useRouterSafe'
 import { isAdminUser } from '@/utils/roleAccess'
 import { format } from '@/utils'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { safeGetItem, safeSetItem } from '@/utils/safeStorage'
 
 const { pushSafe } = useRouterSafe()
 const backingUp = ref(false)
@@ -199,7 +200,7 @@ const layoutSections = reactive<{ key: string; label: string; visible: boolean }
 function loadLayout() {
   const VALID_KEYS = new Set(['kpi', 'todos', 'charts', 'quickActions', 'info'])
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = safeGetItem(STORAGE_KEY, 'local')
     if (raw) {
       const parsed = JSON.parse(raw)
       if (
@@ -219,12 +220,9 @@ function saveLayout(): boolean {
   // 读路径有 try（见上），写路径原来没有：配额满/存储被禁用时会在 deep watcher 里抛异常，
   // 而 resetLayout() 仍提示"已恢复默认布局"，用户以为已持久化（2026-10-29 审计）。
   // 返回是否真的写入成功，调用方据此决定提示文案。
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...layoutSections]))
-    return true
-  } catch {
-    return false
-  }
+  // 注意：改为 safeSetItem 后**不再抛异常**（它内部吞掉并返回 boolean），
+  // 因此必须看返回值，不能靠 catch —— 否则写入失败会被谎报为成功（单测已抓到）。
+  return safeSetItem(STORAGE_KEY, JSON.stringify([...layoutSections]), 'local')
 }
 function resetLayout() {
   layoutSections.splice(0, 99, ...defaults.map((s) => ({ ...s })))

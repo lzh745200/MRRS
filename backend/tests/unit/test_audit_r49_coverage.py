@@ -276,3 +276,48 @@ class TestStandaloneRecordAccess:
         record = MagicMock(created_by="alice")
         user = MagicMock(username="flag_admin", role="user", is_superuser=True)
         assert _assert_standalone_record_access(record, user) is None
+
+class TestToDictMixinRuntime:
+    """Base 的声明式混入在运行时也必须可调用（类型可见化的兜底）。"""
+
+    def test_mixin_to_dict_delegates_to_base_impl(self):
+        from types import SimpleNamespace
+
+        from app.models.base import _ToDictMixin
+
+        class Dummy(_ToDictMixin):
+            __mapper__ = SimpleNamespace(column_attrs=[SimpleNamespace(key="x")])
+            x = 1
+
+        assert Dummy().to_dict() == {"x": 1}
+
+
+class TestAuditLogServiceNoneSession:
+    """SessionLocal 返回 None 时审计必须静默降级，且不执行 rollback/close。"""
+
+    @pytest.mark.asyncio
+    async def test_none_session_is_swallowed(self):
+        from app.core.security import AuditLogService
+
+        with patch("app.core.database.SessionLocal", return_value=None), \
+                patch("app.core.security.logger.warning") as warn:
+            await AuditLogService.log(action="test_none_session")
+
+        assert warn.called
+
+
+class TestAuditMiddlewareUserIdCache:
+    """用户名→id 缓存满时仍返回查到的 id，但不得继续写入缓存。"""
+
+    def test_cache_full_returns_uid_without_insert(self, monkeypatch):
+        from app.core import audit_middleware as am
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = (7,)
+        monkeypatch.setattr("app.core.database.SessionLocal", lambda: db)
+        monkeypatch.setattr(am, "_USER_ID_CACHE", {"existing": 1})
+        monkeypatch.setattr(am, "_USER_ID_CACHE_MAX", 1)
+
+        assert am._lookup_user_id("new-user") == 7
+        assert "new-user" not in am._USER_ID_CACHE
+        db.close.assert_called_once()
