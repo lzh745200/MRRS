@@ -375,7 +375,7 @@ async function handleExportExcel() {
       },
       responseType: 'blob',
     })
-    await downloadBlobAsFile(res as any, {
+    await downloadBlobAsFile(res, {
       fallbackFileName: `审计日志_${new Date().toISOString().slice(0, 10)}.xlsx`,
     })
     ElMessage.success('导出成功')

@@ -963,7 +963,10 @@ router.beforeEach((to, _from, next) => {
  */
 declare global {
   interface Window {
-    electronAPI?: { onNavigate?: (cb: (route: string) => void) => void }
+    electronAPI?: {
+      onNavigate?: (cb: (route: string) => void) => void
+      updateTrayUnread?: (count: number) => void
+    }
   }
 }
 

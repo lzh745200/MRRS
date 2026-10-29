@@ -61,8 +61,8 @@
         <el-table-column prop="description" label="说明" width="200" />
         <el-table-column fixed="right" label="操作" width="160">
           <template #default="{ row }">
-            <el-button text type="primary" @click="editConfig(row as any)">编辑</el-button>
-            <el-button text type="danger" @click="deleteConfig(row as any)">删除</el-button>
+            <el-button text type="primary" @click="editConfig(toConfigRow(row))">编辑</el-button>
+            <el-button text type="danger" @click="deleteConfig(toConfigRow(row))">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -173,6 +173,11 @@ async function loadConfig() {
   } finally {
     loading.value = false
   }
+}
+
+/** el-table 插槽的 row 是宽泛的 DefaultRow，统一在此收窄（避免模板里 2 处宽松断言） */
+function toConfigRow(row: unknown): ConfigItem {
+  return row as ConfigItem
 }
 
 function editConfig(row: ConfigItem) {

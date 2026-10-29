@@ -791,7 +791,7 @@ const previewUrl = ref('')
 const previewTitle = ref('')
 
 // 审批流程当前步骤索引（el-steps active 语义：已完成步骤数）
-const approvalActiveStep = computed(() => deriveActiveStep(approvalFlow.value.nodes as any))
+const approvalActiveStep = computed(() => deriveActiveStep(approvalFlow.value.nodes))
 
 // 加载历史记录
 async function loadStatusHistory() {
@@ -1182,8 +1182,14 @@ async function loadExpenses() {
       url: '/fund-budgets/transactions',
       params: { fund_id: fundData.id, page_size: 100 },
     })
-    const data = (res as any)?.data ?? res
-    expenses.value = Array.isArray(data) ? data : (data?.items ?? [])
+    // 四种形态：裸数组 / {items} / {data:{items}} / {data:{}}（末者回落空数组）
+    const payload = res as
+      | { items?: unknown; data?: { items?: unknown } | unknown }
+      | null
+      | undefined
+    const nested = payload?.data as { items?: unknown } | undefined
+    const rows = Array.isArray(res) ? res : (payload?.items ?? nested?.items)
+    expenses.value = Array.isArray(rows) ? rows : []
   } catch (e) {
     logger.error('报销明细加载失败:', e)
     expenses.value = []

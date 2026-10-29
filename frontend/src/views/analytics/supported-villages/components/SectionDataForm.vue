@@ -1109,23 +1109,26 @@ async function loadSectionData() {
   try {
     const data = await getYearlyData(props.villageId, selectedYear.value)
     const apiKey = resolveApiKey(props.sectionKey)
-    if (apiKey && (data as any)[apiKey]) {
-      const sectionData = (data as any)[apiKey]
+    // 年度数据用索引签名承载各板块（字段名由 resolveApiKey 决定），取到后按对象收窄
+    const sectionRaw = apiKey ? data[apiKey] : undefined
+    if (sectionRaw && typeof sectionRaw === "object") {
+      const sectionData = sectionRaw as Record<string, unknown>
       Object.keys(formData).forEach((k) => {
         if (sectionData[k] !== undefined && sectionData[k] !== null) {
-          formData[k] = sectionData[k]
+          formData[k] = sectionData[k] as never
         }
       })
       // 村委会板块加载成员列表
-      if (props.sectionKey === 'committee' && sectionData.members) {
+      if (props.sectionKey === 'committee' && Array.isArray(sectionData.members)) {
         // 后端可能返回布尔/数字/字符串 "0"/"1"，Boolean("0") 会误判为 true，故用显式判断
-        const toBool = (v: any) => v === true || v === 1 || v === '1'
-        committeeMembers.value = sectionData.members.map((m: any) => ({
-          name: m.name || '',
-          position: m.position || '',
-          phone: m.phone || '',
+        const toBool = (v: unknown) => v === true || v === 1 || v === '1'
+        const members = sectionData.members as Array<Record<string, unknown>>
+        committeeMembers.value = members.map((m) => ({
+          name: (m.name as string) || '',
+          position: (m.position as string) || '',
+          phone: (m.phone as string) || '',
           isVeteran: toBool(m.isVeteran),
-          remark: m.remark || '',
+          remark: (m.remark as string) || '',
         }))
       }
     }

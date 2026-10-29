@@ -455,7 +455,7 @@ async function fetchData() {
       },
     })
     // 防御：apiRequest 已解包；信封保留 data 键，裸数据直接使用
-    const resData = (response as any)?.data ?? response
+    const resData = response?.data ?? response
     tableData.value = unwrapList(resData).items
     total.value = resData?.total || resData?.data?.total || tableData.value.length
   } catch (e) {

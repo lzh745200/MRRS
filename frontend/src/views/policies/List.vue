@@ -320,7 +320,7 @@ const loadData = async () => {
 
 // 排序变化
 const handleSortChange = ({ prop, order }: { prop: string | null; order: string | null }) => {
-  ;(policyStore as any).setFilters({
+  policyStore.setFilters({
     order_by: prop || 'publish_date',
     order_desc: order !== 'ascending',
   })

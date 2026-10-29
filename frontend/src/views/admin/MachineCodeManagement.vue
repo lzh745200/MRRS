@@ -349,10 +349,10 @@ const fetchMachineCodeList = async () => {
 
     // 响应结构: { data: { data: MachineCodeListResponse } }
     // 拦截器已将 data.data 字段展开到顶层，但 data 键保留以兼容旧代码
-    const data = response as any
-    if (data.data) {
+    const data = response as { data?: { total?: number } } | undefined
+    if (data?.data) {
       machineCodeList.value = unwrapList<MachineCodeRecord>(data).items
-      pagination.total = data.data.total
+      pagination.total = data.data.total ?? 0
     }
   } catch (error: any) {
     logger.error('获取机器码列表失败', error)

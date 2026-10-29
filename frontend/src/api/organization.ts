@@ -1,6 +1,15 @@
 import { get, post, put, apiRequest } from '@/api/request'
+import type { Organization } from '@/types/organization'
 
-export const getOrganizations = (params?: any) => get('/organizations', params)
+/** 组织列表响应：裸分页 {items,total} 或信封 {data:{items,total}} */
+export interface OrganizationListPayload {
+  items?: Organization[]
+  total?: number
+  data?: { items?: Organization[]; total?: number }
+}
+
+export const getOrganizations = (params?: Record<string, unknown>) =>
+  get<OrganizationListPayload>('/organizations', params)
 export const getOrganization = (id: number) => get('/organizations/' + id)
 export const getOrganizationTree = () => get('/organizations/tree')
 export const createOrganization = (data: any) => post('/organizations', data)

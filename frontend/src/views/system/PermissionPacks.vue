@@ -322,7 +322,10 @@ async function openBind(row: any) {
     })
     const users = unwrapList(res).items
     // 仅普通用户/访客可绑定（管理员不受权限包限制）
-    bindableUsers.value = (users as any[]).filter((u) => u.role === 'user' || u.role === 'viewer')
+    const candidate = users as Array<{ id: number; role?: string; full_name?: string; username?: string }>
+    bindableUsers.value = candidate.filter(
+      (u) => u.role === 'user' || u.role === 'viewer'
+    )
   } catch {
     ElMessage.error('加载用户列表失败')
   }

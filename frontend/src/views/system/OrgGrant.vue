@@ -177,7 +177,7 @@ async function loadOrgOptions(): Promise<void> {
   orgLoading.value = true
   try {
     const tree = await getOrganizationTree()
-    orgOptions.value = flattenOrgs(tree as any[])
+    orgOptions.value = flattenOrgs(Array.isArray(tree) ? tree : [])
     orgLoadFailed.value = orgOptions.value.length === 0
   } catch {
     orgOptions.value = []

@@ -73,7 +73,7 @@
         <el-tree-select
           :model-value="form.organization_id"
           :data="orgTreeOptions"
-          :props="{ label: 'name', value: 'id', children: 'children' } as any"
+          :props="treeSelectProps"
           placeholder="请选择所属组织"
           check-strictly
           clearable
@@ -217,6 +217,9 @@ interface UserFormModel {
   organization_id: number | string | null
   permissions: string[]
 }
+
+/** el-tree-select 的字段映射（label / children 指向组织树字段名） */
+const treeSelectProps = { label: 'name', children: 'children' } as const
 
 defineProps<{
   modelValue: boolean

@@ -7,8 +7,27 @@ import { get, post, put, del } from '@/api/request'
 
 const BASE_URL = '/validation'
 
+/** 校验规则（后端 /validation/rules 的常用字段） */
+export interface ValidationRuleOut {
+  id: number
+  module: string
+  field: string
+  rule_type: string
+  is_active?: boolean
+  error_message?: string
+  [key: string]: unknown
+}
+
+/** 校验执行结果（结构由规则决定，用索引签名放行） */
+export interface ValidationRunResult {
+  [key: string]: unknown
+}
+
 /** 获取校验规则列表 */
-export function listRules(params?: { module?: string; is_active?: boolean }): Promise<any> {
+export function listRules(params?: {
+  module?: string
+  is_active?: boolean
+}): Promise<ValidationRuleOut[] | { data?: ValidationRuleOut[]; items?: ValidationRuleOut[] }> {
   return get(`${BASE_URL}/rules`, params)
 }
 
@@ -49,6 +68,9 @@ export function deleteRule(ruleId: number): Promise<any> {
 }
 
 /** 对提交数据执行校验 */
-export function runValidation(module: string, data: Record<string, any>): Promise<any> {
+export function runValidation(
+  module: string,
+  data: Record<string, unknown>
+): Promise<ValidationRunResult | { data?: ValidationRunResult }> {
   return post(`${BASE_URL}/validate`, data, { params: { module } })
 }

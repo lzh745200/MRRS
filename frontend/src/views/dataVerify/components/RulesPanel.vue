@@ -291,7 +291,7 @@ async function loadRules() {
     if (filterActive.value !== '') params.is_active = filterActive.value === 'true'
     const res = await listRules(params)
     // 后端裸返回数组（response_model=List[ValidationRuleOut]）
-    const list = (res as any)?.data || (res as any)?.items || res
+    const list = Array.isArray(res) ? res : (res?.data ?? res?.items ?? [])
     rules.value = Array.isArray(list) ? list : []
   } catch {
     ElMessage.error('加载校验规则失败')
@@ -423,7 +423,7 @@ async function executeValidation() {
   validationResult.value = null
   try {
     const res = await runValidation(runModule.value, parsedData)
-    validationResult.value = (res as any)?.data || res
+    validationResult.value = (res && 'data' in res ? res.data : res) ?? null
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.detail || '校验执行失败')
   } finally {

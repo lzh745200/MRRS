@@ -74,7 +74,7 @@
           <el-form
             ref="profileFormRef"
             :model="profileForm"
-            :rules="profileRules as any"
+            :rules="profileRules"
             label-position="top"
             label-width="80px"
             size="default"

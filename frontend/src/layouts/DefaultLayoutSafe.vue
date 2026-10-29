@@ -600,7 +600,7 @@ async function loadUnreadCount() {
     const d = res?.data ?? res
     unreadCount.value = Number(d?.total ?? d?.count ?? 0) || 0
     // Electron 托盘角标与未读数联动（浏览器/麒麟模式无 electronAPI，可选链静默跳过）
-    ;(window as any).electronAPI?.updateTrayUnread?.(unreadCount.value)
+    window.electronAPI?.updateTrayUnread?.(unreadCount.value)
     // T037：锁屏归来摘要——近 30 分钟内锁定过且有未读增量时弹一次
     if (authStore.isAuthenticated && consumeLockDigest(unreadCount.value)) {
       ElNotification({

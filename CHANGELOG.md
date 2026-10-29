@@ -308,6 +308,15 @@
 - **前端测试目录约定收编：3 个住在 `src/` 里的测试文件迁到 `tests/`（并锁死约定）**：
 - **`as any` 再清 10 处（59 → 49）**：`projects/List.vue`（列表载荷/彻底删除/进度，5 处）、
 - **`as any` 49 → 24（本轮再清 25 处）**：
+- **`as any` 全仓清零（24 → 0），技术债基线首次归零**：
+  `api/organization.ts` 补 `OrganizationListPayload`（复用 `Organization` 类型）、`api/validationRules.ts`
+  补 `ValidationRuleOut`/`ValidationRunResult`；`router/index.ts` 的 `window.electronAPI` 全局声明补
+  `updateTrayUnread`，`layouts/DefaultLayoutSafe.vue` 随之去掉断言；`SectionDataForm` 的板块数据按
+  `Record<string, unknown>` 收窄（含村委会成员数组逐字段取值）；`ConfigPackage` 用 `toConfigRow()`、
+  `UserFormDialog` 新增 `treeSelectProps` 常量、`PermissionPacks` 的绑定用户先收窄再筛、
+  `funds/Detail.vue` 的报销明细兼容「裸数组 / `{items}` / `{data:{items}}` / `{data:{}}`」四形态
+  （由现有分支测试逼出来的正确口径）。
+  验证：`vue-tsc` 0 错误；技术债 `as any` 基线 **0**（新增一处即红）；受影响区域 1699 passed。
   ① **7 处其实只出现在注释里**（历史上写说明时引用了这个写法），门禁按字面量统计会误计 —— 统一改写为「宽松断言」；
   ② `api/supportedVillage.ts` 补 `TransitionFundingRow`/`TransitionFundingPayload`/`SectionImportResult`，
   `getTransitionFunding`/`importSectionData`/`importAllSectionsData`/`saveTransitionFunding` 全部带类型，

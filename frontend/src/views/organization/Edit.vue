@@ -40,7 +40,7 @@
                 filterable
                 style="width: 100%"
               >
-                <el-option label="无（顶级组织）" :value="null as any" />
+                <el-option label="无（顶级组织）" :value="null as unknown as number" />
                 <el-option
                   v-for="item in parentOptions"
                   :key="item.id"
@@ -202,7 +202,7 @@ const loadParentOptions = async () => {
   try {
     const res = await getOrganizations({ page_size: 200, is_active: true })
     const currentId = safeRouteParam(route.params.id)
-    parentOptions.value = ((res as any).items || []).filter(
+    parentOptions.value = (res?.items ?? []).filter(
       (item: Organization) => item.id !== currentId
     )
   } catch (error) {

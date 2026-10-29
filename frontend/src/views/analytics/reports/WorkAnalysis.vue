@@ -315,7 +315,7 @@ async function loadData() {
   loading.value = true
   try {
     const res = await getRuralWorks({ limit: 100 })
-    allData.value = res && (res as any).items ? (res as any).items : []
+    allData.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch (e) {
     logger.error('加载工作数据失败:', e)
     allData.value = []
