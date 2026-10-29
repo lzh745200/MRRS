@@ -358,19 +358,37 @@ esult["success"] = not result["errors"]，
   便于定位；`core/logging_config.py` 的 2 处加 `nosec:swallow` 豁免（logger 自身不可用，无法再留痕）。
   基线 110 → 71（门禁 total=71 baseline=71 NEW=0）。
 - **静默吞异常清零（71 → 0），门禁转为「零容忍」**：35 个文件、71 处宽泛兜底全部改为
+  **留痕降级**（`logger.warning('<函数名> 兜底失败（已降级）: %s', exc, exc_info=True)`），
+  行为不变、可观测性补齐；10 个原本没有 logger 的模块同时补 `import logging` + 模块 logger。
+  **门禁语义再校正一处**：原先用前缀匹配，把 `except HTTPException:`、
+  `except (asyncio.CancelledError, Exception):` 这类**具体异常**也算进来（误报）—— 现改为
+  `(?<![A-Za-z_])(?:Base)?Exception\b` 精确匹配，只查真正的宽泛兜底；基线文件已收敛为 **0 条**
+  （`gate_baselines/silent_swallow.txt` 为空 = 新增一处即红）。
+  验证：`check_silent_swallow` total=0 baseline=0 NEW=0；`flake8 app/` 0；`import app.main` 通过；
+  seg02（313 passed）+ seg03（178 passed）全绿。
 - **`as any` 再清 10 处（103 → 93）**：`router/index.ts` 用 `declare global` 声明
+  `window.electronAPI`（Electron 预加载桥）替代两处 `(window as any)`；`approval/History.vue`
+  复用 `TaskDiff` 已声明的旧键名；`ruralWorks/List.vue` 去掉 api 参数断言；
+  `dataPackage/ReceivePackage.vue` + `stores/dataPackage.ts` 把「裸数组 / `{data:[...]}`」
+  双形态收敛到 `previewDataPackage` 的返回类型里（新增 `DataPackagePreviewPayload`）；
+  `organization/List.vue` 3 处（`response.data` 解包、message、`el-option` 的空值）。
+  `vue-tsc` 0 错误，dataPackage 相关 **156 passed**，基线 103 → 93。
 - **前端测试目录约定收编：3 个住在 `src/` 里的测试文件迁到 `tests/`（并锁死约定）**：
+  `src/views/projects/__tests__/ProjectList.spec.ts`、`src/api/helpers/__tests__/blobDownload.spec.ts`、
+  `src/api/__tests__/projects.spec.ts` → `tests/unit/...` 并改名为 `*.test.ts`（vitest 的 `tests/unit`
+  只匹配 `.test.ts`，原 `.spec.ts` 放在那里根本不会被执行）；相对导入相应改为 `@/` 别名。
+  `vitest.config.ts` **移除** `**/src/**/__tests__/**/*.spec.ts` 这个 include —— 测试只放 `tests/`，
+  防止再被放回 src（原本也让 `src` 内 `as any` 统计被测试代码污染）。
+  迁移后 3 个文件 75 个用例全绿；`as any` 统计随之从 93 降到 59；前端测试文件数 344 → 347。
 - **`as any` 再清 10 处（59 → 49）**：`projects/List.vue`（列表载荷/彻底删除/进度，5 处）、
+  `projects/Detail.vue`（里程碑状态标签改用 `as const` 映射自动推导联合类型；里程碑列表
+  兼容裸数组/`{items}`/`{data}` 且非数组一律回落空数组；新增里程碑去掉参数断言，3 处）、
+  `message/MessageCenter.vue`（`formatMessageType` 的返回 `type` 收紧为 `MessageTagType`，2 处）。
+  `api/projects.ts` 补 `ProjectListPayload`/`ProjectPurgePreview`/`ProjectPurgeResult` 并给
+  `list`/`previewPurgeProject`/`purgeProject` 加泛型，`Project` 补 `progress`；
+  `api/milestones.ts` 的 `listMilestones` 放宽为「数组 或 `{data|items}`」。
+  `vue-tsc` 0 错误，项目/消息相关 **425 passed**，基线 59 → 49。
 - **`as any` 49 → 24（本轮再清 25 处）**：
-- **`as any` 全仓清零（24 → 0），技术债基线首次归零**：
-  `api/organization.ts` 补 `OrganizationListPayload`（复用 `Organization` 类型）、`api/validationRules.ts`
-  补 `ValidationRuleOut`/`ValidationRunResult`；`router/index.ts` 的 `window.electronAPI` 全局声明补
-  `updateTrayUnread`，`layouts/DefaultLayoutSafe.vue` 随之去掉断言；`SectionDataForm` 的板块数据按
-  `Record<string, unknown>` 收窄（含村委会成员数组逐字段取值）；`ConfigPackage` 用 `toConfigRow()`、
-  `UserFormDialog` 新增 `treeSelectProps` 常量、`PermissionPacks` 的绑定用户先收窄再筛、
-  `funds/Detail.vue` 的报销明细兼容「裸数组 / `{items}` / `{data:{items}}` / `{data:{}}`」四形态
-  （由现有分支测试逼出来的正确口径）。
-  验证：`vue-tsc` 0 错误；技术债 `as any` 基线 **0**（新增一处即红）；受影响区域 1699 passed。
   ① **7 处其实只出现在注释里**（历史上写说明时引用了这个写法），门禁按字面量统计会误计 —— 统一改写为「宽松断言」；
   ② `api/supportedVillage.ts` 补 `TransitionFundingRow`/`TransitionFundingPayload`/`SectionImportResult`，
   `getTransitionFunding`/`importSectionData`/`importAllSectionsData`/`saveTransitionFunding` 全部带类型，
@@ -381,33 +399,22 @@ esult["success"] = not result["errors"]，
   `schools/Projects`（`null as string | null`）、`KpiCards`/`InfoRow`（参数与 unwrapList 断言）、
   `work-calendar`（新增 `eventTagType()` 收敛 el-tag 联合）、`test/setup.ts`（`Object.assign(globalThis, ...)`）。
   验证：`vue-tsc` 0 错误，受影响区域 **30 个测试文件 648 passed**，基线 49 → 24。
-  `projects/Detail.vue`（里程碑状态标签改用 `as const` 映射自动推导联合类型；里程碑列表
-  兼容裸数组/`{items}`/`{data}` 且非数组一律回落空数组；新增里程碑去掉参数断言，3 处）、
-  `message/MessageCenter.vue`（`formatMessageType` 的返回 `type` 收紧为 `MessageTagType`，2 处）。
-  `api/projects.ts` 补 `ProjectListPayload`/`ProjectPurgePreview`/`ProjectPurgeResult` 并给
-  `list`/`previewPurgeProject`/`purgeProject` 加泛型，`Project` 补 `progress`；
-  `api/milestones.ts` 的 `listMilestones` 放宽为「数组 或 `{data|items}`」。
-  `vue-tsc` 0 错误，项目/消息相关 **425 passed**，基线 59 → 49。
-  `src/views/projects/__tests__/ProjectList.spec.ts`、`src/api/helpers/__tests__/blobDownload.spec.ts`、
-  `src/api/__tests__/projects.spec.ts` → `tests/unit/...` 并改名为 `*.test.ts`（vitest 的 `tests/unit`
-  只匹配 `.test.ts`，原 `.spec.ts` 放在那里根本不会被执行）；相对导入相应改为 `@/` 别名。
-  `vitest.config.ts` **移除** `**/src/**/__tests__/**/*.spec.ts` 这个 include —— 测试只放 `tests/`，
-  防止再被放回 src（原本也让 `src` 内 `as any` 统计被测试代码污染）。
-  迁移后 3 个文件 75 个用例全绿；`as any` 统计随之从 93 降到 59；前端测试文件数 344 → 347。
-  `window.electronAPI`（Electron 预加载桥）替代两处 `(window as any)`；`approval/History.vue`
-  复用 `TaskDiff` 已声明的旧键名；`ruralWorks/List.vue` 去掉 api 参数断言；
-  `dataPackage/ReceivePackage.vue` + `stores/dataPackage.ts` 把「裸数组 / `{data:[...]}`」
-  双形态收敛到 `previewDataPackage` 的返回类型里（新增 `DataPackagePreviewPayload`）；
-  `organization/List.vue` 3 处（`response.data` 解包、message、`el-option` 的空值）。
-  `vue-tsc` 0 错误，dataPackage 相关 **156 passed**，基线 103 → 93。
-  **留痕降级**（`logger.warning('<函数名> 兜底失败（已降级）: %s', exc, exc_info=True)`），
-  行为不变、可观测性补齐；10 个原本没有 logger 的模块同时补 `import logging` + 模块 logger。
-  **门禁语义再校正一处**：原先用前缀匹配，把 `except HTTPException:`、
-  `except (asyncio.CancelledError, Exception):` 这类**具体异常**也算进来（误报）—— 现改为
-  `(?<![A-Za-z_])(?:Base)?Exception` 精确匹配，只查真正的宽泛兜底；基线文件已收敛为 **0 条**
-  （`gate_baselines/silent_swallow.txt` 为空 = 新增一处即红）。
-  验证：`check_silent_swallow` total=0 baseline=0 NEW=0；`flake8 app/` 0；`import app.main` 通过；
-  seg02（313 passed）+ seg03（178 passed）全绿。
+- **`as any` 全仓清零（24 → 0），技术债基线首次归零**：
+  `api/organization.ts` 补 `OrganizationListPayload`（复用 `Organization` 类型）、`api/validationRules.ts`
+  补 `ValidationRuleOut`/`ValidationRunResult`；`router/index.ts` 的 `window.electronAPI` 全局声明补
+  `updateTrayUnread`，`layouts/DefaultLayoutSafe.vue` 随之去掉断言；`SectionDataForm` 的板块数据按
+  `Record<string, unknown>` 收窄（含村委会成员数组逐字段取值）；`ConfigPackage` 用 `toConfigRow()`、
+  `UserFormDialog` 新增 `treeSelectProps` 常量、`PermissionPacks` 的绑定用户先收窄再筛、
+  `funds/Detail.vue` 的报销明细兼容「裸数组 / `{items}` / `{data:{items}}` / `{data:{}}`」四形态
+  （由现有分支测试逼出来的正确口径）。
+  验证：`vue-tsc` 0 错误；技术债 `as any` 基线 **0**（新增一处即红）；受影响区域 1699 passed。
+- **mypy 1379 → 1376**：`core/transaction.py` 4 处（`SessionTransaction.name` 不存在 → 用
+  `setattr` 保留调试名；`bulk_insert_mappings`/`bulk_update_mappings` 的 `type` 与 `Mapper[Any]`
+  不符 → `cast(Any, ...)`；`model_class.id` → `getattr(model_class, 'id')`，并把三个 batch 方法
+  的 `model_class: type` 收紧为 `type[Any]`），`core/pii_crypto.py` 1 处（`decrypt_pii` 里 `value`
+  是 `Optional[str]`，mypy 无法从 `is_encrypted()` 收窄 → 显式 `value is None` 先返回）。
+  验证：两文件 mypy 0 错、flake8 0；`test_core_transaction.py` 46 passed、PII 相关 41 passed；
+  基线 1379 → 1376。
 - **mypy 再收紧一个模块：`core/security.py` 清零（1385 → 1379）**：
   bcrypt 兼容补丁里 `_bcrypt.__about__` / `__version__` 是**运行时注入的动态属性**，直接写属性赋值
   会让 mypy 报 `attr-defined` —— 改用 `setattr`/`getattr`（行为等价，且版本缺失时有 `'0.0'` 兜底）；

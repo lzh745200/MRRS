@@ -99,7 +99,8 @@ def decrypt_pii(value: Optional[str]) -> Optional[str]:
     W18-offline P1-1：解密失败不再只是静默 —— 除日志外累计失败计数与时间，
     供诊断包/预检暴露「密钥漂移」这一现场事实。
     """
-    if not is_encrypted(value):
+    # 先排除 None：mypy 无法从 is_encrypted 收窄 Optional，且 None 本就该原样返回
+    if value is None or not is_encrypted(value):
         return value
     try:
         raw = base64.b64decode(value[len(MARKER):])

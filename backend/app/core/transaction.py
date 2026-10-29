@@ -6,7 +6,7 @@
 import logging
 from contextlib import contextmanager
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -244,7 +244,9 @@ class TransactionManager:
         """
         sp = db.begin_nested()
         if name:
-            sp.name = name
+            # SQLAlchemy 2.0 的 SessionTransaction 没有公开的 name 属性；
+            # 名称仅用于日志/调试可读性，setattr 保留原有行为且不影响 SQL 语义。
+            setattr(sp, "name", name)
         try:
             yield sp
             sp.commit()
@@ -505,7 +507,7 @@ class BatchOperation:
     """批量操作工具"""
 
     @staticmethod
-    def batch_insert(db: Session, model_class: type, items: list[dict], batch_size: int = 1000) -> int:
+    def batch_insert(db: Session, model_class: type[Any], items: list[dict], batch_size: int = 1000) -> int:
         """
         批量插入
 
@@ -523,7 +525,7 @@ class BatchOperation:
         try:
             for i in range(0, len(items), batch_size):
                 batch = items[i: i + batch_size]
-                db.bulk_insert_mappings(model_class, batch)
+                db.bulk_insert_mappings(cast(Any, model_class), batch)
                 total_inserted += len(batch)
 
                 # 每个批次后刷新，避免内存占用过大
@@ -536,7 +538,7 @@ class BatchOperation:
             raise _batch_failure(e, "批量插入") from e
 
     @staticmethod
-    def batch_update(db: Session, model_class: type, updates: list[dict], batch_size: int = 1000) -> int:
+    def batch_update(db: Session, model_class: type[Any], updates: list[dict], batch_size: int = 1000) -> int:
         """
         批量更新
 
@@ -554,7 +556,7 @@ class BatchOperation:
         try:
             for i in range(0, len(updates), batch_size):
                 batch = updates[i: i + batch_size]
-                db.bulk_update_mappings(model_class, batch)
+                db.bulk_update_mappings(cast(Any, model_class), batch)
                 total_updated += len(batch)
                 db.flush()
 
@@ -565,7 +567,7 @@ class BatchOperation:
             raise _batch_failure(e, "批量更新") from e
 
     @staticmethod
-    def batch_delete(db: Session, model_class: type, ids: list, batch_size: int = 1000) -> int:
+    def batch_delete(db: Session, model_class: type[Any], ids: list, batch_size: int = 1000) -> int:
         """
         批量删除
 
@@ -583,7 +585,10 @@ class BatchOperation:
         try:
             for i in range(0, len(ids), batch_size):
                 batch_ids = ids[i: i + batch_size]
-                db.query(model_class).filter(model_class.id.in_(batch_ids)).delete(synchronize_session=False)
+                id_col = getattr(model_class, "id")
+                db.query(model_class).filter(id_col.in_(batch_ids)).delete(
+                    synchronize_session=False
+                )
                 total_deleted += len(batch_ids)
                 db.flush()
 
