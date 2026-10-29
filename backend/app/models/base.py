@@ -18,6 +18,7 @@ from sqlalchemy.types import TypeDecorator
 
 # ── 声明式基类 ──
 
+
 class _ToDictMixin:
     """为所有模型提供 to_dict 的类型可见声明。
 
