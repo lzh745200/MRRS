@@ -7,6 +7,14 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第十批：1 项）
+
+- **`/health/database` 与 `/health/database-health` 失败时返回 HTTP 200**：body 里写 `code:500`，
+  但探针/监控只看**状态码** —— "数据库挂了"在外部看来和"一切正常"没区别，告警永远不会触发。
+  改为 `JSONResponse(status_code=503)`（body 保留 `code: 500` 以兼容仍读 body 的调用方）。
+  前端 `HealthCheck.vue` 的 `/health` 调用本就在 try/catch 里（503 会走 `markFailed` → 正确显示失败），
+  三处锁定"200 + code:500"的断言已同步更新为 503。
+
 ### Docs（全库审计第九批：1 项）
 
 - **4 个「生产零引用」的 schema 模块加 DEPRECATED 标记**：`schemas/policy.py`、

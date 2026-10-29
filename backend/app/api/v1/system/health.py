@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.core.database import SessionLocal
@@ -57,7 +58,13 @@ async def health_database():
     except Exception as e:
         # 无认证端点：异常原文可能含数据库路径/内部拓扑，仅回类型名，原文进日志
         logger.error("健康检查（database）失败", exc_info=True)
-        return {"code": 500, "message": f"health check failed: {type(e).__name__}"}
+        # 2026-10-29 审计：原实现返回 HTTP **200** 且 body 里 code:500 —— 探针/监控只看
+        # 状态码，因此"数据库挂了"在外部看来和"一切正常"没区别，告警永远不会触发。
+        # 改为 503（body 保留 code:500 以兼容仍读 body 的调用方）。
+        return JSONResponse(
+            status_code=503,
+            content={"code": 500, "message": f"health check failed: {type(e).__name__}"},
+        )
     finally:
         db.close()
 
@@ -82,7 +89,15 @@ async def health_database_detail():
     except Exception as e:
         # 无认证端点：同上，只回类型名，不回显异常原文
         logger.error("健康检查（database-health）失败", exc_info=True)
-        return {"code": 500, "message": f"health check failed: {type(e).__name__}", "data": {"status": "error"}}
+        # 同上：失败必须以 503 出站，否则探针读不到
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": 500,
+                "message": f"health check failed: {type(e).__name__}",
+                "data": {"status": "error"},
+            },
+        )
 
 
 @router.get("/liveness")

@@ -3651,6 +3651,11 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "/health/database 与 /health/database-health 失败时返回 HTTP 200：body 里写 code:500，但探针/监控只看状态码 —— \"数据"
+                "库挂了\"在外部看来和\"一切正常\"没区别，告警永远不会触发。改为 JSONResponse(status_code=503)（body 保留 code: 500 以兼容仍读 body "
+                "的调用方）。"
+            ),
+            (
                 "4 个「生产零引用」的 schema 模块加 DEPRECATED 标记：schemas/policy.py、schemas/project.py、schemas/school.py、sc"
                 "hemas/village.py 只被测试的模块清单导入，生产代码从不引用；而同名类在 app/api/v1/*.py 里另有真正在用且与模型对齐的定义（如 SchoolCreate）——"
                 " 这正是\"按类名配对会产生假阳性\"的第二事实源。"
@@ -3696,10 +3701,6 @@ VERSION_HISTORY_DATA = [
             (
                 "未知 DataScope 的列表过滤 fail-open：apply_scope_to_query 的兜底分支 return query等于放行全量，与同模块 check_record_a"
                 "ccess 对未知 scope 返回 False 口径相反（注释还自称\"最严语义\"）。同一数据面两条相反口径，扩展枚举值时最易静默泄漏全量。"
-            ),
-            (
-                "api_access_logs.user_id 恒为 NULL：中间件用 int(sub) 解析用户 id，而本项目 JWT 的sub 就是用户名（create_token_pair(su"
-                "bject=username)），int() 必然失败 → 静默返回None, username，访问日志无法按用户归因/检索。"
             ),
         ],
     },
