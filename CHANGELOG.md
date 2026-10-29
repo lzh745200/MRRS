@@ -446,6 +446,16 @@ esult["success"] = not result["errors"]，
   `funds/Detail.vue` 的报销明细兼容「裸数组 / `{items}` / `{data:{items}}` / `{data:{}}`」四形态
   （由现有分支测试逼出来的正确口径）。
   验证：`vue-tsc` 0 错误；技术债 `as any` 基线 **0**（新增一处即红）；受影响区域 1699 passed。
+- **mypy 1310 → 890（启用 SQLAlchemy 官方 mypy 插件，一次性消 420 个误报）**：
+  模型字段在类上是 `Column[T]`、在实例上才是 `T`。仓库一直没开插件，于是每个
+  `TodoResponse(id=todo.id)` 都被判成 `Column[int]` 与 `int` 不兼容 —— 这正是 `assignment`(444)、
+  `arg-type`(538) 两类噪声的唯一来源。`backend/mypy.ini` 加 `plugins = sqlalchemy.ext.mypy.plugin`。
+  实测：`arg-type` 538 → 439、`assignment` 444 → **93**；`attr-defined` 51 → 90（插件对实例属性
+  访问更严格，多出来的是**更真实的信号**，例如访问了不存在的列）；总数 **1310 → 890**。
+  ⚠️ 坑：`mypy.ini` 必须保持 ASCII —— mypy 用平台 locale（本机 GBK）读配置，中文注释会直接
+  `UnicodeDecodeError` 打挂整个门禁（已复现并改为 ASCII 注释）。
+  验证：`check_type_debt` mypy 890（基线同步下调）、`test_mypy_clean_modules` 3 passed、
+  `run_gates` 34/34 PASS。
 - **mypy 1376 → 1310（单个文件消 66 个错误）**：`services/excel_template_service.py` 的 21 个
   openpyxl 样式对象（`_title_fill`/`_header_font`/`_zebra_fills`/`_thin_border` …）是**惰性构造后
   注入模块全局**的，mypy 看不到这些名字 → 66 个 `name-defined` 及下游 `union-attr`/`arg-type`。
