@@ -77,6 +77,120 @@ async function runTests() {
     fs.unlinkSync(tmpFile);
   });
 
+  // ── AES-256-GCM 加解密往返（布局 IV+TAG+密文）──
+  // 旧实现加密写 IV+TAG+CT，解密却把文件末尾 16 字节当 TAG，
+  // 因此连自己刚生成的文件都解不开（本用例在旧实现上必失败）。
+  await test('encrypt-file → decrypt-file 往返一致（IV+TAG+密文）', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const crypto = require('crypto');
+
+    const source = path.join(os.tmpdir(), `mrrms-plain-${Date.now()}.bin`);
+    const encrypted = path.join(os.tmpdir(), `mrrms-enc-${Date.now()}.enc`);
+    const decrypted = path.join(os.tmpdir(), `mrrms-dec-${Date.now()}.bin`);
+    const content = crypto.randomBytes(512 * 1024);
+    fs.writeFileSync(source, content);
+
+    const pool = new WorkerPool(1);
+    try {
+      await pool.exec(
+        'encrypt-file',
+        { inputPath: source, outputPath: encrypted, password: 'test-pass-123' },
+        20000,
+        { allowedRoots: [os.tmpdir()] }
+      );
+      assert.strictEqual(fs.statSync(encrypted).size, content.length + 32, '密文应为 IV+TAG+明文长度');
+
+      await pool.exec(
+        'decrypt-file',
+        { inputPath: encrypted, outputPath: decrypted, password: 'test-pass-123' },
+        20000,
+        { allowedRoots: [os.tmpdir()] }
+      );
+      assert.ok(fs.readFileSync(decrypted).equals(content), '解密结果必须与原文一致');
+    } finally {
+      for (const f of [source, encrypted, decrypted]) {
+        try {
+          fs.unlinkSync(f);
+        } catch {
+          /* 忽略清理失败 */
+        }
+      }
+    }
+  });
+
+  await test('解密被篡改的密文必须认证失败且不产出明文', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+
+    const source = path.join(os.tmpdir(), `mrrms-tamper-src-${Date.now()}.bin`);
+    const encrypted = path.join(os.tmpdir(), `mrrms-tamper-${Date.now()}.enc`);
+    const output = path.join(os.tmpdir(), `mrrms-tamper-out-${Date.now()}.bin`);
+    fs.writeFileSync(source, Buffer.from('tamper-check-content'));
+
+    const pool = new WorkerPool(1);
+    try {
+      await pool.exec(
+        'encrypt-file',
+        { inputPath: source, outputPath: encrypted, password: 'test-pass-123' },
+        20000,
+        { allowedRoots: [os.tmpdir()] }
+      );
+      const bytes = fs.readFileSync(encrypted);
+      bytes[bytes.length - 1] ^= 0xff;
+      fs.writeFileSync(encrypted, bytes);
+
+      await assert.rejects(
+        () =>
+          pool.exec(
+            'decrypt-file',
+            { inputPath: encrypted, outputPath: output, password: 'test-pass-123' },
+            20000,
+            { allowedRoots: [os.tmpdir()] }
+          ),
+        /authenticate|Unsupported state/i
+      );
+      assert.ok(!fs.existsSync(output), '认证失败不得留下半成品明文');
+    } finally {
+      for (const f of [source, encrypted, output]) {
+        try {
+          fs.unlinkSync(f);
+        } catch {
+          /* 忽略清理失败 */
+        }
+      }
+    }
+  });
+
+  await test('过短的加密文件被拒绝（不足 IV+TAG）', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const shortFile = path.join(os.tmpdir(), `mrrms-short-${Date.now()}.enc`);
+    fs.writeFileSync(shortFile, Buffer.alloc(31));
+    const pool = new WorkerPool(1);
+    try {
+      await assert.rejects(
+        () =>
+          pool.exec(
+            'decrypt-file',
+            { inputPath: shortFile, outputPath: shortFile + '.out', password: 'x' },
+            5000,
+            { allowedRoots: [os.tmpdir()] }
+          ),
+        /长度非法/
+      );
+    } finally {
+      try {
+        fs.unlinkSync(shortFile);
+      } catch {
+        /* 忽略清理失败 */
+      }
+    }
+  });
+
   // ── 超时测试 ──
   // 2026-10-14（M50 收口）：旧断言用 '/nonexistent/file' 期望 ENOENT，但该路径
   // 本就在白名单之外 —— hash-file 现在与其它文件任务走同一份 validatePath，

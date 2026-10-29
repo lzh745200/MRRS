@@ -11,6 +11,7 @@ const fs = require('fs');
 const zlib = require('zlib');
 const path = require('path');
 const os = require('os');
+const { pipeline } = require('stream/promises');
 
 // M50：规则收口到 electron/path-guard.js（主进程 IPC 层与 worker 共用同一实现）
 const { assertPathAllowed } = require('./path-guard');
@@ -44,16 +45,32 @@ function validatePath(filePath) {
 
 /**
  * 分块读取文件 → 处理 → 写入（避免大文件撑爆内存）
+ *
+ * 用 stream.pipeline 串起三段：它会在任一段报错时销毁其余流，
+ * 不会像手写 pipe + 单侧 error 监听那样留下未关闭的写入流。
  */
-function streamProcess(inputPath, outputPath, transform) {
-  return new Promise((resolve, reject) => {
-    const readStream = fs.createReadStream(inputPath, { highWaterMark: 64 * 1024 });
-    const writeStream = fs.createWriteStream(outputPath);
-    readStream.on('error', reject);
-    writeStream.on('error', reject);
-    writeStream.on('finish', () => resolve({ outputPath }));
-    readStream.pipe(transform).pipe(writeStream);
-  });
+async function streamProcess(inputPath, outputPath, transform) {
+  await pipeline(
+    fs.createReadStream(inputPath, { highWaterMark: 64 * 1024 }),
+    transform,
+    fs.createWriteStream(outputPath)
+  );
+  return { outputPath };
+}
+
+/** 尽力删除临时产物；清理失败不能覆盖真正的业务异常。 */
+function removeQuiet(filePath) {
+  try {
+    fs.rmSync(filePath, { force: true });
+  } catch {
+    // 临时文件清理失败只影响磁盘占用，保留原始异常
+  }
+}
+
+/** 校验通过后用临时文件原子替换目标，避免失败时留下半个文件。 */
+function replaceAtomically(tempPath, outputPath) {
+  removeQuiet(outputPath);
+  fs.renameSync(tempPath, outputPath);
 }
 
 async function run() {
@@ -70,20 +87,28 @@ async function run() {
         const iv = crypto.randomBytes(16);
         const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 
-        // 写入 IV + 认证标签头
-        const header = Buffer.concat([iv]);
-        const tempPath = payload.outputPath + '.tmp';
-        await streamProcess(payload.inputPath, tempPath, cipher);
+        // 文件格式：IV(16) + 认证标签(16) + 密文。
+        // 标签必须等密文流结束后才能取到，故先加密到临时文件，再以
+        // 「头部 + 追加密文」的方式拼出最终文件；全程流式，不把整包读回内存。
+        const cipherTemp = payload.outputPath + '.cipher.tmp';
+        const finalTemp = payload.outputPath + '.final.tmp';
+        try {
+          await streamProcess(payload.inputPath, cipherTemp, cipher);
 
-        // 获取认证标签并写入最终文件
-        const tag = cipher.getAuthTag();
-        const fd = fs.openSync(payload.outputPath, 'w');
-        fs.writeSync(fd, header);
-        fs.writeSync(fd, tag);
-        const encrypted = fs.readFileSync(tempPath);
-        fs.writeSync(fd, encrypted);
-        fs.closeSync(fd);
-        fs.unlinkSync(tempPath);
+          // 获取认证标签并写入最终文件
+          const tag = cipher.getAuthTag();
+          await fs.promises.writeFile(finalTemp, Buffer.concat([iv, tag]));
+          await pipeline(
+            fs.createReadStream(cipherTemp),
+            fs.createWriteStream(finalTemp, { flags: 'a' })
+          );
+          replaceAtomically(finalTemp, payload.outputPath);
+        } catch (err) {
+          removeQuiet(finalTemp);
+          throw err;
+        } finally {
+          removeQuiet(cipherTemp);
+        }
 
         result = { outputPath: payload.outputPath, size: fs.statSync(payload.outputPath).size };
         break;
@@ -93,24 +118,39 @@ async function run() {
       case 'decrypt-file': {
         payload.inputPath = validatePath(payload.inputPath);
         payload.outputPath = validatePath(payload.outputPath);
+        const fileSize = fs.statSync(payload.inputPath).size;
+        if (fileSize < 32) {
+          throw new Error('加密文件长度非法（不足 IV + 认证标签）');
+        }
         const key = crypto.scryptSync(payload.password, payload.salt || 'mrrms', 32);
         const fd = fs.openSync(payload.inputPath, 'r');
         const iv = Buffer.alloc(16);
         fs.readSync(fd, iv, 0, 16, 0);
         const tag = Buffer.alloc(16);
-        const fileSize = fs.statSync(payload.inputPath).size;
-        fs.readSync(fd, tag, 0, 16, fileSize - 16);
-        const encryptedSize = fileSize - 32;
-        const encrypted = Buffer.alloc(encryptedSize);
-        fs.readSync(fd, encrypted, 0, encryptedSize, 16);
+        // 与 encrypt-file 的写盘布局一致：IV(0..16) + 认证标签(16..32) + 密文。
+        // 旧实现从**文件末尾**取 16 字节当 tag，把自己刚写出的密文尾部当标签，
+        // 于是它连自身产物都解不开（AES-GCM 认证失败）。
+        fs.readSync(fd, tag, 0, 16, 16);
         fs.closeSync(fd);
 
         const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
         decipher.setAuthTag(tag);
-        const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-        fs.writeFileSync(payload.outputPath, decrypted);
+        // 只读 [32, EOF) 的密文区间，逐块解密；
+        // 认证失败会在 pipeline 结束时由 decipher.final() 抛出。
+        const decryptTemp = payload.outputPath + '.tmp';
+        try {
+          await pipeline(
+            fs.createReadStream(payload.inputPath, { start: 32 }),
+            decipher,
+            fs.createWriteStream(decryptTemp)
+          );
+          replaceAtomically(decryptTemp, payload.outputPath);
+        } catch (err) {
+          removeQuiet(decryptTemp);
+          throw err;
+        }
 
-        result = { outputPath: payload.outputPath, size: decrypted.length };
+        result = { outputPath: payload.outputPath, size: fs.statSync(payload.outputPath).size };
         break;
       }
 
