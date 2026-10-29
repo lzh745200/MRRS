@@ -3651,6 +3651,15 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "system/audit.py 14 处内联角色比较漏掉 is_superuser 标记：normalize_role(role) not in (\"admin\", \"super_a"
+                "dmin\") 不看 is_superuser=True，于是「打了超管标记、role 仍是 user」的账号访问审计页被误拒 403（军审场景下\"超管进不去审计页\"）。"
+            ),
+            (
+                "fund_lifecycle 无项目归属记录跨组织可读/可写：12 处 if xxx.project_id:只在有项目时才校验数据权限，project_id 为空时完全不校验 —— 而 F"
+                "undContract /FundTransferVoucher / 结算单 / 订单都没有 organization_id 列，无法用组织过滤，于是任意登录用户可读写其它单位的合同金额、"
+                "供应商、付款明细（跨组织财务数据泄漏）。"
+            ),
+            (
                 "审计备注端点无入参模型：PATCH /system/audit/logs/{id}/remark 原为 body: dict，remark 无长度上限、直写 JSON 列。新增 Audit"
                 "RemarkUpdate(remark: str = Field(max_length=500))，超长由 FastAPI 返回 422 而不是静默写库。"
             ),
@@ -3689,16 +3698,6 @@ VERSION_HISTORY_DATA = [
             (
                 "学校 schema 与模型漂移可见化：SchoolBase 有 10 个 schools 表不存在的字段（其中 school_level 是必填），create 时被 model_cols"
                 " 白名单静默剥掉；更误导的是代码里还有一步 school_level → level 的改名，而 schools 根本没有 level 列 —— 读代码时会以为它落库了。"
-            ),
-            (
-                "Critical｜refresh 完全绕过 token_version 吊销：validate_token 只验签名/jti/type，不比对版本，而 access 链路有校验 —— 登出"
-                "或强退后，未随登出提交的 refresh（其他设备/被窃）仍能换发带新版本号的合法 access。补版本比对并在命中旧版本时吊销该 refresh，新增负向回归 test_refresh_"
-                "rejects_stale_token_version。"
-            ),
-            (
-                "Critical｜权限包可选认证绕过全部校验：手写解码跳过黑名单 / token_version / is_active /首登改密四项，却被「重写全库 RBAC」的 /permissio"
-                "n-package/import、/confirm 使用，已吊销令牌可远程改写整库权限。改为复用 get_current_user 完整链路。被同一 try 吞掉只弹「加载学校分析数据失败"
-                "」。改为按 200 分页拉全量 + 页数上限防御。"
             ),
         ],
     },

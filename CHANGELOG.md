@@ -7,6 +7,20 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Security（全库审计第七批：2 项）
+
+- **`system/audit.py` 14 处内联角色比较漏掉 `is_superuser` 标记**：
+  `normalize_role(role) not in ("admin", "super_admin")` 不看 `is_superuser=True`，
+  于是「打了超管标记、role 仍是 user」的账号访问审计页被**误拒 403**
+  （军审场景下"超管进不去审计页"）。全部改用 `is_admin(current_user)`（单一入口，
+  内部分支即含 is_superuser）；新增用例锁定 `role=user + is_superuser=True` 可放行。
+- **`fund_lifecycle` 无项目归属记录跨组织可读/可写**：12 处 `if xxx.project_id:`
+  只在有项目时才校验数据权限，**project_id 为空时完全不校验** —— 而 FundContract /
+  FundTransferVoucher / 结算单 / 订单都没有 organization_id 列，无法用组织过滤，
+  于是任意登录用户可读写其它单位的合同金额、供应商、付款明细（跨组织财务数据泄漏）。
+  新增 `_assert_standalone_record_access()`：project_id 为空时按「创建人本人 或 管理员」
+  兜底，其余 403；12 处守卫点统一接入，并补 4 条用例（管理员 / 创建人 / 非创建人 403 / 超管标记）。
+
 ### Fixed（全库审计第六批：2 项）
 
 - **审计备注端点无入参模型**：`PATCH /system/audit/logs/{id}/remark` 原为 `body: dict`，

@@ -229,3 +229,46 @@ class TestLookupUserId:
         monkeypatch.setattr("app.core.database.SessionLocal", _boom)
         # 归因失败不得影响请求
         assert am._lookup_user_id("boom_user") is None
+
+class TestStandaloneRecordAccess:
+    """fund_lifecycle._assert_standalone_record_access：project_id 为空时的兜底授权。
+
+    2026-10-29 审计：project_id 有值时由 _get_project_or_403 走项目级数据权限；为空时
+    原实现完全不校验，而这些表没有 organization_id 列，任意登录用户可读写其它单位的
+    合同/凭证/结算单。兜底口径：创建人本人 或 管理员。
+    """
+
+    def test_admin_allowed(self):
+        from app.api.v1.fund_lifecycle import _assert_standalone_record_access
+
+        record = MagicMock(created_by="other_user")
+        user = MagicMock(username="admin", role="admin", is_superuser=False)
+        # 不抛即通过
+        assert _assert_standalone_record_access(record, user) is None
+
+    def test_creator_allowed(self):
+        from app.api.v1.fund_lifecycle import _assert_standalone_record_access
+
+        record = MagicMock(created_by="alice")
+        user = MagicMock(username="alice", role="user", is_superuser=False)
+        assert _assert_standalone_record_access(record, user) is None
+
+    def test_non_creator_denied(self):
+        from fastapi import HTTPException
+
+        from app.api.v1.fund_lifecycle import _assert_standalone_record_access
+
+        record = MagicMock(created_by="alice")
+        user = MagicMock(username="bob", role="user", is_superuser=False)
+        with pytest.raises(HTTPException) as ei:
+            _assert_standalone_record_access(record, user, kind="合同")
+        assert ei.value.status_code == 403
+        assert "合同" in ei.value.detail
+
+    def test_superuser_flag_allowed(self):
+        """is_superuser=True 但 role=user 也必须放行（与 is_admin 口径一致）。"""
+        from app.api.v1.fund_lifecycle import _assert_standalone_record_access
+
+        record = MagicMock(created_by="alice")
+        user = MagicMock(username="flag_admin", role="user", is_superuser=True)
+        assert _assert_standalone_record_access(record, user) is None

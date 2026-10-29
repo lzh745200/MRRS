@@ -765,3 +765,31 @@ class TestGetUserActivity:
         assert data["action_breakdown"]["update"] == 1
         assert data["action_breakdown"]["delete"] == 1
         assert len(data["recent_activity"]) == 3
+
+
+def test_superuser_flag_grants_audit_access():
+    """is_superuser=True 但 role="user" 的账号必须能访问审计端点。
+
+    2026-10-29 审计：audit.py 原来有 14 处内联
+    `normalize_role(role) not in ("admin", "super_admin")`，漏掉 is_superuser 标记
+    → 超管标记账号被误拒 403（军审场景下「超管却进不了审计页」）。
+    统一改用 is_admin() 后该分支被覆盖；此用例锁定行为。
+    """
+    from app.main import app
+    from app.core.security import get_current_user
+    from fastapi.testclient import TestClient
+
+    original = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: mock.MagicMock(
+        id=9, username="flag_admin", role="user", is_superuser=True,
+    )
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get(f"{BASE}/stats")
+        # 关键是被鉴权放行（不再是 403）；后续可能因空库等原因非 200
+        assert resp.status_code != 403, resp.text
+    finally:
+        if original is not None:
+            app.dependency_overrides[get_current_user] = original
+        else:
+            app.dependency_overrides.pop(get_current_user, None)
