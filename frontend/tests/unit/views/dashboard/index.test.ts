@@ -206,6 +206,28 @@ describe('布局加载与持久化', () => {
     wrapper3.unmount()
   })
 
+  it('resetLayout：写入存储失败（配额满/被禁用）→ 降级文案，不谎报已落盘', async () => {
+    const wrapper = mountComp()
+    const vm = wrapper.vm as any
+    await nextTick()
+
+    // 只让本实例写失败：spy 在 localStorage 实例上（jsdom 的方法继承自 Storage.prototype）
+    const spy = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('QuotaExceededError', 'QuotaExceededError')
+    })
+    // saveLayout 直接返回 false（写路径的 catch）
+    expect(vm.saveLayout()).toBe(false)
+    // resetLayout 据此走降级提示
+    vm.resetLayout()
+    expect(ElMessage.success).toHaveBeenCalledWith(
+      '已恢复默认布局（当前存储不可用，仅本次会话生效）'
+    )
+    expect(vm.layoutSections.every((s: any) => s.visible)).toBe(true)
+
+    spy.mockRestore()
+    wrapper.unmount()
+  })
+
   it('resetLayout → 恢复默认 + 持久化 + 成功提示', async () => {
     const wrapper = mountComp()
     const vm = wrapper.vm as any
