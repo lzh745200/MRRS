@@ -50,7 +50,8 @@ RUN cd frontend \
     if [ "${installed}" != "1" ]; then \
         echo "npm install 默认源连续失败，改用镜像 registry.npmmirror.com"; \
         if npm install --legacy-peer-deps --no-fund --no-audit \
-             --registry "https://registry.npmmirror.com" > /tmp/npm-install.log 2>&1; then \
+             --registry "https://registry.npmmirror.com" --replace-registry-host=npm \
+             > /tmp/npm-install.log 2>&1; then \
             installed=1; \
         fi; \
     fi; \

@@ -241,7 +241,6 @@ jobs:
           # 而 setup-node 的缓存 key 绑在 package-lock.json 上 —— lock 一改缓存即 miss，
           # `--prefer-offline` 仍需全量下载，于是「重试 5 次 + 兜底」全部落在同一故障窗口。
           # 镜像只在默认源失败后启用，产物语义不变（仍是 npm ci + package-lock）。
-          MIRROR="https://registry.npmmirror.com"
           # 首试：完全离线（只吃 ~/.npm 缓存）。缓存命中时**零网络**即可安装 ——
           # 这是 registry 整段不可达时唯一还能出包的路径；未命中会秒失败，不影响后续在线重试。
           if npm ci --legacy-peer-deps --offline --no-fund --no-audit; then
@@ -258,13 +257,22 @@ jobs:
             sleep $((i * 20))
           done
           echo "::warning::默认 registry 连续 5 次失败，改用镜像 $MIRROR 重试"
-          for i in 1 2 3; do
-            echo "===== npm ci attempt $i (mirror) ====="
-            if npm ci --legacy-peer-deps --no-fund --no-audit --registry "$MIRROR"; then
-              echo "npm ci OK via mirror (attempt $i)"
-              exit 0
-            fi
-            sleep $((i * 20))
+          # 2026-10-28：镜像**按列表顺序**尝试。GitHub runner 在境外，
+          # 访问 npmmirror（中国）常被重置，所以先试 registry.yarnpkg.com（npm 同源 CDN，
+          # 境外友好、内容一致），再退回 npmmirror。`--replace-registry-host=npm`
+          # 让 lock 里写死的 resolved host 一并改道（本仓 506 个包指向 registry.npmjs.org）。
+          for MIRROR in "https://registry.yarnpkg.com" "https://registry.npmmirror.com"; do
+            echo "===== mirror ${MIRROR} ====="
+            npm ping --registry "$MIRROR" || echo "::warning::npm ping ${MIRROR} 失败（继续尝试）"
+            for i in 1 2 3; do
+              echo "===== npm ci attempt $i via ${MIRROR} ====="
+              if npm ci --legacy-peer-deps --no-fund --no-audit \
+                   --registry "$MIRROR" --replace-registry-host=npm; then
+                echo "npm ci OK via ${MIRROR} (attempt $i)"
+                exit 0
+              fi
+              sleep $((i * 20))
+            done
           done
           echo "::warning::镜像 npm ci 也失败，回退 npm install --prefer-offline（网络兜底）"
           for i in 1 2; do
@@ -735,7 +743,6 @@ jobs:
           # 2026-10-28（v1.18.24）：与 frontend-check 同款镜像兜底 —— 默认 registry 整段
           # ECONNRESET 时（本仓实测同一 commit 重跑两次仍红）改用镜像再试，避免 E2E 作业
           # 因下载依赖失败而阻断整轮 PR Checks（进而阻断 tag 发布的 release gate）。
-          MIRROR="https://registry.npmmirror.com"
           # 首试：完全离线（只吃 ~/.npm 缓存）。缓存命中时**零网络**即可安装 ——
           # 这是 registry 整段不可达时唯一还能出包的路径；未命中会秒失败，不影响后续在线重试。
           if npm ci --legacy-peer-deps --offline --no-fund --no-audit; then
@@ -748,13 +755,17 @@ jobs:
               break
             fi
             if [ "$i" = "5" ]; then
-              echo "::warning::默认 registry 连续 5 次失败，改用镜像 $MIRROR"
+              echo "::warning::默认 registry 连续 5 次失败，改用镜像列表"
               INSTALLED=0
-              for j in 1 2 3; do
-                if npm ci --legacy-peer-deps --no-fund --no-audit --registry "$MIRROR"; then
-                  echo "npm ci OK via mirror (attempt $j)"; INSTALLED=1; break
-                fi
-                sleep $((j * 20))
+              for MIRROR in "https://registry.yarnpkg.com" "https://registry.npmmirror.com"; do
+                npm ping --registry "$MIRROR" || echo "::warning::npm ping ${MIRROR} 失败（继续尝试）"
+                for j in 1 2 3; do
+                  if npm ci --legacy-peer-deps --no-fund --no-audit \
+                       --registry "$MIRROR" --replace-registry-host=npm; then
+                    echo "npm ci OK via ${MIRROR} (attempt $j)"; INSTALLED=1; break 2
+                  fi
+                  sleep $((j * 20))
+                done
               done
               if [ "$INSTALLED" != "1" ]; then
                 echo "::warning::镜像 ci 也失败，回退 npm install --prefer-offline"
