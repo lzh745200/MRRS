@@ -1078,11 +1078,16 @@ class TestGetBackupStatistics:
         stats = svc.get_backup_statistics()
         assert stats["total_backups"] == 1
 
-    def test_statistics_exception(self, mock_db, tmp_path):
+    def test_statistics_exception_propagates(self, mock_db, tmp_path):
+        """统计失败必须抛出，由端点转 500。
+
+        旧实现吞成 {"status": "error"}，端点按缺省值返回 200 + 全 0，
+        体检页会把「查询失败」显示成「从未备份」。
+        """
         svc = _make_svc(mock_db, str(tmp_path / "b"), "/d/db", "/u")
         with patch.object(svc.db, "query", side_effect=RuntimeError("db error")):
-            stats = svc.get_backup_statistics()
-        assert stats["status"] == "error"
+            with pytest.raises(RuntimeError, match="db error"):
+                svc.get_backup_statistics()
 
 
 class TestGetBackupServiceFactory:

@@ -1672,28 +1672,29 @@ class BackupService:
             return {"status": "error", "message": error_msg}
 
     def get_backup_statistics(self) -> Dict:
-        """获取备份统计信息"""
-        try:
-            backups = self.list_backups()
+        """获取备份统计信息。
 
-            total_size = sum(b.file_size for b in backups)
-            full_backups = [b for b in backups if b.backup_type == "full"]
-            incremental_backups = [b for b in backups if b.backup_type == "incremental"]
+        异常必须向上抛出：唯一调用方 `/system/backup/stats` 的兜底是 HTTP 500。
+        旧实现返回 ``{"status": "error"}``，端点却按缺省值组装成
+        ``success: true + 全 0`` —— 体检页随后把「统计查询失败」误报成
+        「从未执行过备份」，运维会据此误判数据安全状态。
+        """
+        backups = self.list_backups()
 
-            return {
-                "total_backups": len(backups),
-                "full_backups": len(full_backups),
-                "incremental_backups": len(incremental_backups),
-                "total_size": total_size,
-                "total_size_mb": round(total_size / 1024 / 1024, 2),
-                "oldest_backup": (backups[-1].created_at.isoformat() if backups else None),
-                "newest_backup": backups[0].created_at.isoformat() if backups else None,
-                "disk_space": self.get_disk_space_info(),
-            }
+        total_size = sum(b.file_size for b in backups)
+        full_backups = [b for b in backups if b.backup_type == "full"]
+        incremental_backups = [b for b in backups if b.backup_type == "incremental"]
 
-        except Exception as e:
-            logger.error(f"获取备份统计失败: {e}")
-            return {"status": "error", "message": str(e)}
+        return {
+            "total_backups": len(backups),
+            "full_backups": len(full_backups),
+            "incremental_backups": len(incremental_backups),
+            "total_size": total_size,
+            "total_size_mb": round(total_size / 1024 / 1024, 2),
+            "oldest_backup": (backups[-1].created_at.isoformat() if backups else None),
+            "newest_backup": backups[0].created_at.isoformat() if backups else None,
+            "disk_space": self.get_disk_space_info(),
+        }
 
     def get_disk_space_info(self) -> Dict:
         """W12-T045: 返回备份目录 / 数据库目录剩余空间（MB）与阈值充足标记"""
