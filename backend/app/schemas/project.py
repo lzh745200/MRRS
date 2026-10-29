@@ -1,3 +1,16 @@
+
+# DEPRECATED / 非契约（2026-10-29 全库审计标记）。
+#
+# 本模块**生产代码零引用**，仅被测试的模块清单导入；真正在用的同名契约定义在
+# `app/api/v1/` 下（FastAPI 端点文件内），例如 SchoolCreate 在 app/api/v1/school.py
+# 里另有一份与模型对齐的定义。
+#
+# 其中字段**可能与 ORM 模型漂移**（如 schemas/project.py 声明了 projects 表不存在的
+# category / location / responsible_person_id），不得据此推断接口契约，也不要在此新增字段。
+#
+# 保留原因：删除需同步改 3 个测试的模块清单 + 1 个专门覆盖测试，收益低于风险；
+# 后续重整 schema 层时应整体删除。
+
 from datetime import datetime
 from typing import Optional
 

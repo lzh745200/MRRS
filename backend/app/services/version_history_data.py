@@ -3651,6 +3651,11 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "4 个「生产零引用」的 schema 模块加 DEPRECATED 标记：schemas/policy.py、schemas/project.py、schemas/school.py、sc"
+                "hemas/village.py 只被测试的模块清单导入，生产代码从不引用；而同名类在 app/api/v1/*.py 里另有真正在用且与模型对齐的定义（如 SchoolCreate）——"
+                " 这正是\"按类名配对会产生假阳性\"的第二事实源。"
+            ),
+            (
                 "/health/database-health 把 DB 绝对路径出站：database_health_service.check_integrity在库文件缺失时把 f\"数据库文件不存"
                 "在: {self.db_path}\" 写进 message 与 issues，而该端点匿名可访问（运维探针，已有测试锁定其无需登录）—— 等于对外泄露部署目录结构。改为对外只给分类码 D"
                 "B_FILE_MISSING，路径只进 logger.error。"
@@ -3695,10 +3700,6 @@ VERSION_HISTORY_DATA = [
             (
                 "api_access_logs.user_id 恒为 NULL：中间件用 int(sub) 解析用户 id，而本项目 JWT 的sub 就是用户名（create_token_pair(su"
                 "bject=username)），int() 必然失败 → 静默返回None, username，访问日志无法按用户归因/检索。"
-            ),
-            (
-                "全局搜索的 LIKE 通配符未转义（13 处）：ilike(f\"%{q}%\") 里 q=\"%%\" 可枚举本域全表，q=\"a_b\" 会把下划线当任意字符 —— 属信息放大（数据域"
-                "仍由 scoped_filter 兜住）。新增 _escape_like()（先转义反斜杠再转义 % 与 _），全部 ilike 显式带 escape=\"\\\"。"
             ),
         ],
     },

@@ -7,6 +7,16 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Docs（全库审计第九批：1 项）
+
+- **4 个「生产零引用」的 schema 模块加 DEPRECATED 标记**：`schemas/policy.py`、
+  `schemas/project.py`、`schemas/school.py`、`schemas/village.py` 只被测试的模块清单导入，
+  生产代码从不引用；而同名类在 `app/api/v1/*.py` 里另有**真正在用且与模型对齐**的定义
+  （如 `SchoolCreate`）—— 这正是"按类名配对会产生假阳性"的第二事实源。
+  其中 `schemas/project.py` 还声明了 `projects` 表不存在的 `category` / `location` /
+  `responsible_person_id` 必填字段。本轮加文件头注释标注"非契约、勿新增字段、勿据以推断接口"，
+  不做删除（删除需同步改 3 个测试的模块清单 + 1 个专门覆盖测试，收益低于风险）。
+
 ### Security（全库审计第八批：2 项）
 
 - **`/health/database-health` 把 DB 绝对路径出站**：`database_health_service.check_integrity`
