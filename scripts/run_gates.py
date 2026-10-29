@@ -113,6 +113,8 @@ GATES: List[Gate] = [
     _gate("pragma_reasons", "scripts/check_pragma_reasons.py",
           args=["--diff-base", "auto", "--allow-missing-base", "--max-bare", "0"],
           why="pragma 豁免必须写理由"),
+    _gate("migration_evidence", "scripts/check_migration_self_evidence.py",
+          why="会改 schema 的迁移必须自带旧库自证测试"),
     # 需要构建产物或外部数据：缺失自动 SKIP，不伪装成绿
     _gate("branch_coverage", "../scripts/check_branch_coverage.py", backend=True,
           args=["--json", "coverage-branch.json",

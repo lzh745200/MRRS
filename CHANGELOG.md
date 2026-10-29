@@ -7,6 +7,11 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+- **把 `migration_evidence` 门禁接进统一入口（修 `test_gate_entrypoints` 唯一红点）**：
+  `scripts/check_migration_self_evidence.py` 已存在且自跑为绿（47 个改 schema 的迁移全部有自证测试、
+  未登记 0 个），`pr-checks.yml` 也在跑它，但漏了在 `scripts/run_gates.py` 注册 ——
+  `test_ci_check_scripts_are_all_registered` 因此变红（seg09 全段唯一失败）。
+  注册后 `run_gates` 由 34 道增至 **35 道**，该回归测试 10 passed。
 ### Fixed（全库审计第十九批：报表订阅 `send_time` 无格式校验）
 
 **问题**：`supported_village.send_time` 是 `Column(String(10))`，而 `ReportSubscriptionCreate` /

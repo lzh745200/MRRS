@@ -3651,6 +3651,10 @@ VERSION_HISTORY_DATA = [
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
             (
+                "把 migration_evidence 门禁接进统一入口（修 test_gate_entrypoints 唯一红点）：scripts/check_migration_self_evide"
+                "nce.py 已存在且自跑为绿（47 个改 schema 的迁移全部有自证测试、未登记 0 个），pr-checks.yml 也在跑它…"
+            ),
+            (
                 "utils/authStorage.ts 的 storage 读取无 try：_readSlot 直接 sessionStorage.getItem /localStorage.getIt"
                 "em，而本模块被 router/guards.ts 在每次导航调用（getToken）——浏览器在隐私模式 / 禁用存储 / 受限 webview 下会抛 SecurityError，整次"
                 "跳转就炸。"
@@ -3685,11 +3689,10 @@ VERSION_HISTORY_DATA = [
             ),
             "表不存在 → skipped（幂等）；",
             "0 行 → DROP；",
-            "有数据 → 改名 legacy_<表名> 归档（归档表已存在时保留原表、记 warning 等人工确认）。",
             (
-                "mypy 880 → 869：修掉「动态挂载方法」这一类属性不可见的债：models/base.py 的 Base.to_dict 是类创建后动态赋值（Base.to_dict = _ba"
-                "se_to_dict），mypy 看不见 → 没有显式定义 to_dict 的模型（FundAllocationOrder/FundAssetVerification …）在调用处被判 a"
-                "ttr-defined。"
+                "有数据 → 改名 legacy_<表名> 归档（归档表已存在时保留原表、记 warning 等人工确认）。models/base.py 的 Base.to_dict 是类创建后动态赋值（B"
+                "ase.to_dict = _base_to_dict），mypy 看不见 → 没有显式定义 to_dict 的模型（FundAllocationOrder/FundAssetVerifi"
+                "cation …）在调用处被判 attr-defined。"
             ),
         ],
     },
