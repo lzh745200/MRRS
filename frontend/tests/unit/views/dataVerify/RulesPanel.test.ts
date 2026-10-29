@@ -170,6 +170,41 @@ describe('加载与筛选', () => {
     expect(wrapper.findComponent({ name: 'ElEmpty' }).exists()).toBe(true) // el-empty 真侧
   })
 
+  it('loadRules：后端直接返回数组（裸数组侧）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    mockListRules.mockResolvedValueOnce([rule1])
+    await vm.loadRules()
+    expect(vm.rules).toHaveLength(1)
+  })
+
+  it('executeValidation：返回 null（无 data 键且值为空）→ 结果保持 null', async () => {
+    mockRunValidation.mockResolvedValueOnce(null)
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    vm.showRunDialog()
+    vm.runDataInput = '{"income": 1}'
+    await vm.executeValidation()
+
+    expect(vm.validationResult).toBeNull()
+    expect(vm.runningValidation).toBe(false)
+  })
+
+  it('loadRules：data 不是数组 → 规则列表回落空数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    mockListRules.mockResolvedValueOnce({ data: { not: 'array' } })
+    await vm.loadRules()
+    expect(vm.rules).toEqual([])
+    wrapper.unmount()
+  })
+
   it('loadRules 失败 → 提示「加载校验规则失败」', async () => {
     mockListRules.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()

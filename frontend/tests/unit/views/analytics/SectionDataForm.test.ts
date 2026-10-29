@@ -559,3 +559,22 @@ describe('SectionDataForm.vue 预览类型判断', () => {
     expect(st.getPreviewType(undefined)).toBe('other')
   })
 })
+describe('SectionDataForm.vue 分支兜底（类型收紧后新增分支）', () => {
+  it('板块数据为非对象（字符串）→ 不填充表单、不报错', async () => {
+    mocks.getYearlyData.mockResolvedValue({ population: 'not-an-object' })
+    const wrapper = mountForm()
+    await flushPromises()
+    expect(mocks.getYearlyData).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('村委会板块 members 非数组 → 成员列表保持空', async () => {
+    mocks.getYearlyData.mockResolvedValue({ committee: { members: 'oops' } })
+    const wrapper = mountForm({ sectionKey: 'committee' })
+    await flushPromises()
+    const st = state(wrapper)
+    expect(st.committeeMembers).toEqual([])
+    wrapper.unmount()
+  })
+})
+

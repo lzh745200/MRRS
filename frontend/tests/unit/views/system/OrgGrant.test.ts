@@ -363,3 +363,11 @@ describe('views/system/OrgGrant —— 单位选择器（v1.16.3）', () => {
     expect(option!.text()).toContain('F05')
   })
 })
+
+  it('组织树返回非数组 → 空列表并标记加载失败（分支兜底）', async () => {
+    mockTree.mockResolvedValueOnce({ not: 'array' })
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.vm.orgOptions).toEqual([])
+    expect(wrapper.vm.orgLoadFailed).toBe(true)
+  })

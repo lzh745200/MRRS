@@ -136,6 +136,16 @@ beforeEach(() => {
 })
 
 describe('批次 3 设备与授权中心增强', () => {
+  it('列表响应缺 data 段（异常形状）→ 不更新列表与总数', async () => {
+    apiMock.listMachineCodes.mockResolvedValue({})
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.machineCodeList).toEqual([])
+    expect(vm.pagination.total).toBe(0)
+    wrapper.unmount()
+  })
+
   it('批量复制：未选中时直接返回；选中后按行拼接复制机器码/通行码', async () => {
     const wrapper = mountComp()
     await flushPromises()

@@ -681,3 +681,41 @@ describe('downloadTemplate — 文件名契约（W5-T5）', () => {
     expect(requestMock.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), '项目导入模板.xlsx')
   })
 })
+describe('预览响应容错（类型收紧后的分支）', () => {
+  it('响应无 rows → 提示解析失败且不进入步骤 3', async () => {
+    requestMock.post.mockResolvedValue({})
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fileList = [new File(['x'], 'a.csv')]
+    await vm.handleUpload()
+    expect(ElMessage.error).toHaveBeenCalledWith('文件解析失败，请检查文件格式')
+    expect(vm.currentStep).not.toBe(3)
+  })
+
+  it('文件条目无 raw（纯 File）与字段缺省 → 用 File 本体并回落默认值', async () => {
+    requestMock.post.mockResolvedValue({ rows: [{ data: {} }], invalid_rows: 0 })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fileList = [new File(['x'], 'b.csv')]
+    await vm.handleUpload()
+    expect(vm.previewData[0].rowIndex).toBe(1)
+    expect(vm.previewData[0].status).toBe('规划中')
+    expect(vm.validationFailed).toBe(false)
+    expect(vm.currentStep).toBe(3)
+  })
+})
+
+  it('错误行缺 row_number → index 回落 0', async () => {
+    requestMock.post.mockResolvedValue({
+      rows: [{ data: { name: 'X' }, has_error: true, errors: [{ message: '缺字段' }] }],
+      invalid_rows: 1,
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.fileList = [new File(['x'], 'c.csv')]
+    await vm.handleUpload()
+    expect(vm.validationErrors?.[0]?.index ?? 0).toBe(0)
+  })

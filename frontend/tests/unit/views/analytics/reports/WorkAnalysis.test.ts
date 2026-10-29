@@ -275,6 +275,16 @@ describe('WorkAnalysis.vue (analytics/reports)', () => {
     wrapper.unmount()
   })
 
+it('接口直接返回数组（非 {items} 信封）→ 直接采用', async () => {
+    vi.mocked(getRuralWorks).mockResolvedValue(makeItems() as any)
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(findPagination(wrapper).props('total')).toBe(5)
+    expect(wrapper.text()).toContain('工作总数')
+    wrapper.unmount()
+  })
+
   it('接口返回结构异常时 allData 置空', async () => {
     vi.mocked(getRuralWorks).mockResolvedValue(null as any)
     const wrapper = mountPage()

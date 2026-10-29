@@ -166,6 +166,15 @@ describe('挂载与数据加载', () => {
     wrapper.unmount()
   })
 
+  it('后端直接返回数组（非 {items} 信封）→ 直接采用', async () => {
+    getRuralWorksMock.mockResolvedValue(items)
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.analysisData).toHaveLength(4)
+    wrapper.unmount()
+  })
+
   it('加载失败 → logger + 提示', async () => {
     getRuralWorksMock.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()

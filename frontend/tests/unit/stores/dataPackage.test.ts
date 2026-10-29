@@ -153,6 +153,18 @@ describe('useDataPackageStore', () => {
     expect(store.previewData).toEqual(data)
   })
 
+  it('previewPackage 兼容 { data: [...] } 信封形态', async () => {
+    mockPreviewDataPackage.mockResolvedValueOnce({ data: [{ id: 2, value: 'y' }] })
+    await store.previewPackage(1)
+    expect(store.previewData).toEqual([{ id: 2, value: 'y' }])
+  })
+
+  it('previewPackage：响应既非数组也无 data → 回落空数组', async () => {
+    mockPreviewDataPackage.mockResolvedValueOnce({})
+    await store.previewPackage(1)
+    expect(store.previewData).toEqual([])
+  })
+
   it('confirmImport 成功时更新 status=imported', async () => {
     store.packages = [{ id: 1, status: 'validated' } as any]
     mockConfirmImport.mockResolvedValueOnce({ success: true })
