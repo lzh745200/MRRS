@@ -53,21 +53,29 @@ def needs_fix(fk) -> bool:
 
 
 FK_RE = re.compile(
-    r"FOREIGN\s+KEY\s*\(\s*created_by\s*\)\s*REFERENCES\s+users\s*\(\s*id\s*\)",
+    r"(FOREIGN\s+KEY\s*\(\s*created_by\s*\)\s*REFERENCES\s+users\s*\(\s*id\s*\))"
+    r"(\s*ON\s+DELETE\s+[A-Z][A-Z ]*)?",
     re.IGNORECASE,
 )
 
 
 def rewrite_fk_ddl(ddl: str) -> str | None:
-    """把 DDL 里 created_by 的外键补上 ON DELETE SET NULL；无需改时返回 None。"""
-    if not ddl or "created_by" not in ddl:
+    """把 DDL 里 **created_by 这一条**外键补上 ON DELETE SET NULL；无需改时返回 None。
+
+    2026-10-30 修复：原实现用 `if "ON DELETE SET NULL" in ddl.upper(): return None` 做
+    「已经改过」的快速判断 —— 但整张表的 DDL 里**其它外键**（machine_codes.user_id）
+    本来就带 `ON DELETE SET NULL`，于是每次都误判「已改过」直接跳过。
+    实测：真实开发库升级后 created_by 仍是 NO ACTION（迁移日志「DDL 里未找到目标外键」）。
+    现在只匹配 created_by 那条子句，且只有当它自己**没有** ON DELETE 时才改写。
+    """
+    if not ddl:
         return None
-    if "ON DELETE SET NULL" in ddl.upper():
+    m = FK_RE.search(ddl)
+    if m is None:
         return None
-    new_ddl, n = FK_RE.subn(
-        "FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL", ddl
-    )
-    return new_ddl if n else None
+    if m.group(2):  # 该子句自带 ON DELETE（任意动作）→ 无需改
+        return None
+    return ddl[: m.start()] + m.group(1) + " ON DELETE SET NULL" + ddl[m.end():]
 
 
 def upgrade() -> None:

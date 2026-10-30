@@ -3650,6 +3650,13 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-29",
         "description": "全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降",
         "features": [
+            "PII 8 列全部 VARCHAR(256)（原 5 列 VARCHAR(20)）；",
+            "冗余索引 8 个已删除，重复组归零；",
+            "created_by 外键 SET NULL 已补；",
+            (
+                "数据零丢失（users 2 / projects 6 / supported_villages 6 / audit_logs 216 / machine_codes 1）。不再抛异常 → "
+                "写入失败被谎报为成功。改为用返回值判断。safeRemoveItem 吞异常后语义反转。给 safeRemoveItem 加 boolean 返回值并让调用点据此提前返回。"
+            ),
             (
                 "mypy 869 → 851：13 个文件 18 处空容器补显式注解（var-annotated 清零一半）：by_type/action_counts/by_severity/count"
                 "s/warnings/errors/name_map/row_map/ancestors …这些是 x = {} / x = [] 的空字面量，mypy 无法推断元素类型。"
@@ -3669,26 +3676,6 @@ VERSION_HISTORY_DATA = [
             (
                 "把 migration_evidence 门禁接进统一入口（修 test_gate_entrypoints 唯一红点）：scripts/check_migration_self_evide"
                 "nce.py 已存在且自跑为绿（47 个改 schema 的迁移全部有自证测试、未登记 0 个），pr-checks.yml 也在跑它…"
-            ),
-            (
-                "utils/authStorage.ts 的 storage 读取无 try：_readSlot 直接 sessionStorage.getItem /localStorage.getIt"
-                "em，而本模块被 router/guards.ts 在每次导航调用（getToken）——浏览器在隐私模式 / 禁用存储 / 受限 webview 下会抛 SecurityError，整次"
-                "跳转就炸。"
-            ),
-            (
-                "MonitoringDashboard.vue 在 setup 顶层读 sessionStorage：ref(sessionStorage.getItem(...))位于 setup 同步"
-                "路径，抛错即整页白屏；其余 215 个文件的 storage 调用都有 try，唯独这里没有。改为 readHealthExpanded() 带 fallback（读不到按默认展开），wa"
-                "tch 里的 setItem 也补 try。"
-            ),
-            (
-                "policies/Detail.vue 预览 iframe 缺 sandbox：previewUrl 是 URL.createObjectURL(blob)，blob: 与主文档同源，if"
-                "rame 无 sandbox 时其中脚本可访问 window.parent。同仓 components/FilePreview.vue 早已加 sandbox=\"\"，此处补齐（纵深防御"
-                "；当前后端限pdf/doc/docx/pptx，故非直接可利用）。"
-            ),
-            (
-                "ruralWorks/Task.vue 加载失败静默：catch 体只有一句「API不可用，使用本地模拟数据」的注释，但文件里没有任何模拟数据，tasks 初值是空数组 —— 后端挂掉/5"
-                "00 时页面显示「暂无数据」，用户会以为数据丢了（台账系统里这是最糟的误导）。改为 getErrorMessage 明确报错。打开既有项目、什么都没改也提示「有未保存的更改」，保存成功后仍"
-                "提示。"
             ),
         ],
     },

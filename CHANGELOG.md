@@ -7,6 +7,31 @@
 
 ## [1.18.26] - 2026-10-29 — 全库审计收口：认证/权限 Critical + 维护窗口 fail-open + 类型债下降
 
+### Fixed（全库审计第二十四批：外键迁移在真实库上被误判跳过 + 老库未升级）
+
+**问题 1 —— 迁移逻辑 bug（我上一批引入）**：`fk_machine_codes_created_by_001.rewrite_fk_ddl`
+用 `if "ON DELETE SET NULL" in ddl.upper(): return None` 判断「已经改过」，但整张
+`machine_codes` 的 DDL 里 `user_id` 那条外键**本来就带** `ON DELETE SET NULL` ——
+于是每次都被误判为「已改过」直接跳过。真实开发库升级日志实测：
+`fk_machine_codes_created_by_001: DDL 里未找到目标外键`，`created_by` 保持 `NO ACTION`。
+
+改为只匹配 `created_by` **那一条**外键子句，且仅当它自己没有 `ON DELETE` 时才改写。
+新增 `tests/unit/test_fk_machine_codes_ddl_rewrite.py`（3 例）：用真实库的 DDL 片段做输入，
+断言「其它外键带 ON DELETE 时 created_by 仍必须被改写」、「created_by 已有 ON DELETE 时幂等」、
+「没有该外键时返回 None」。修复后真实库重跑 downgrade/upgrade，`PRAGMA foreign_key_list`
+读出 `created_by -> users.id ondelete=SET NULL`。
+
+**问题 2 —— 实际开发库落后 4 个迁移**：`backend/data/rural_revitalization.db` 的
+`alembic_version` 停在 `r43_prune_dead_columns_001`，意味着 `pii_col_width_001`（PII 列宽 20→256）、
+`idx_dedup_002`（删 8 个冗余索引）、`fk_machine_codes_created_by_001` **在老库上一条都没生效**；
+空库演练全绿掩盖了这一点（空库由 `create_all()` 直接按新模型建表）。
+已备份（`data/rural_revitalization.db.bak_20261030_091040`，22.3MB）后 `alembic upgrade head`，实测：
+
+- PII 8 列全部 `VARCHAR(256)`（原 5 列 `VARCHAR(20)`）；
+- 冗余索引 8 个已删除，重复组归零；
+- `created_by` 外键 `SET NULL` 已补；
+- 数据零丢失（users 2 / projects 6 / supported_villages 6 / audit_logs 216 / machine_codes 1）。
+
 ### Fixed（全库审计第二十三批：前端剩余 39 处裸存储调用清零）
 
 按 `authStorage` 同一口径，把其余 20 个文件的 **39 处**裸 `localStorage./sessionStorage.` 调用
