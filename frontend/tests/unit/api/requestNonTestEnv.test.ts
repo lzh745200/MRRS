@@ -275,6 +275,19 @@ describe('api/request — 非测试环境网络自动重试', () => {
     expect(mockInst.request).toHaveBeenCalledWith(config)
   })
 
+  it('ERR_NETWORK config 无 method 时按 GET 兜底，仍允许一次幂等重试', async () => {
+    vi.useFakeTimers()
+    mockInst.request.mockResolvedValueOnce('method-default-retried')
+    const config: any = { url: '/method-less' }
+    const error = { code: 'ERR_NETWORK', message: 'NetworkError', config }
+    const promise = handlers.responseR(error)
+    const assertion = expect(promise).resolves.toBe('method-default-retried')
+    await vi.advanceTimersByTimeAsync(2000)
+    await assertion
+    expect(config._networkRetried).toBe(true)
+    expect(mockInst.request).toHaveBeenCalledWith(config)
+  })
+
   it('POST 网络错误绝不自动重发，避免服务端已提交但响应中断时重复写入', async () => {
     const config = makeConfig({ method: 'POST', url: '/create-something' })
     const error = { code: 'ERR_NETWORK', message: 'NetworkError', config }

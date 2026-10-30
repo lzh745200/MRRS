@@ -47,7 +47,7 @@ Get-FileHash .\MRRS-Setup-1.18.29-x64.exe -Algorithm SHA256
 ## 三、验证
 
 - 后端 CI 等价 12 段全量 + 覆盖率 100% 通过；
-- 前端全量 3 分片 7,454 用例通过；`vue-tsc` 0、构建通过；
+- 前端全量 3 分片 7,455 用例通过；`vue-tsc` 0、构建通过；
 - 统一门禁 35/35 PASS；
 - `node scripts/sync-version.js --check` 通过（1.18.29 同步）；
 - `python scripts/sync_update_log.py --check` 通过（117 个版本段，最新 1.18.29）。
