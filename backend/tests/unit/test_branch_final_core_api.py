@@ -1418,6 +1418,54 @@ def test_seed_default_admin_existing_admin(monkeypatch):
     seed._seed_default_admin()                                        # 42->86
 
 
+def test_seed_default_admin_existing_and_already_initialized(monkeypatch):
+    """管理员已存在且 initialized=true：跳过建号，也不重复写初始化标记（93->105）。"""
+    import app.startup.seed as seed
+
+    class _FakeQuery:
+        def __init__(self, model):
+            self.model = model
+
+        def filter(self, *a, **k):
+            return self
+
+        def first(self):
+            return SimpleNamespace(id=1, username="admin")
+
+    class _FakeDB:
+        def query(self, model):
+            return _FakeQuery(model)
+
+        def add(self, obj):
+            raise AssertionError("already-initialized 不应创建新管理员")
+
+        def close(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    class _FakeLockoutSvc:
+        def unlock_expired(self, db, admin_username=""):
+            return 0
+
+    cfg = mock.MagicMock()
+    cfg.is_initialized.return_value = True
+    monkeypatch.setattr("app.core.database.SessionLocal", lambda: _FakeDB())
+    monkeypatch.setattr(
+        "app.services.lockout_service.get_lockout_service", lambda: _FakeLockoutSvc()
+    )
+    monkeypatch.setattr(
+        "app.services.system_config_service.SystemConfigService", mock.MagicMock(return_value=cfg)
+    )
+    monkeypatch.setattr(seed, "safe_commit", mock.MagicMock())
+
+    seed._seed_default_admin()
+
+    cfg.set_initialized.assert_not_called()
+    cfg.set.assert_not_called()
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  25. app/api/v1/system/metrics.py  →  收尾补测（清单外，team-lead 追加）
 #     弧：233->234（DB 文件存在）/ 248->249,254（表数 >20 与否）

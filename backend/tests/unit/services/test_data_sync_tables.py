@@ -66,7 +66,7 @@ class TestExportErrorSurfacing:
             ctx.return_value.__enter__ = lambda s: fake_db
             ctx.return_value.__exit__ = lambda s, *a: False
 
-            async def boom(db, table_name, since=None):
+            def boom(db, table_name, since=None):
                 if table_name == "supported_villages":
                     raise RuntimeError("disk io boom")
                 return [{"id": 1}]
@@ -76,7 +76,7 @@ class TestExportErrorSurfacing:
             pkg_path = svc.sync_dir / "test_pkg.zip"
             pkg_path.write_bytes(b"x")
 
-            async def fake_save(data, name, include_files):
+            def fake_save(data, name, include_files):
                 return pkg_path
 
             monkeypatch.setattr(svc, "_save_export_package", fake_save)
@@ -99,7 +99,7 @@ class TestExportErrorSurfacing:
             fake_db.query.return_value = Q()
 
             from app.services.data_sync_service import ExportConfig
-            result = await svc.export_incremental(
+            result = svc.export_incremental(
                 ExportConfig(modules=["supported_villages", "policies"]))
 
             assert result["success"] is False
@@ -120,14 +120,14 @@ class TestExportErrorSurfacing:
             ctx.return_value.__enter__ = lambda s: fake_db
             ctx.return_value.__exit__ = lambda s, *a: False
 
-            async def ok(db, table_name, since=None):
+            def ok(db, table_name, since=None):
                 return []
 
             monkeypatch.setattr(svc, "_export_table_data", ok)
             pkg_path = svc.sync_dir / "empty_pkg.zip"
             pkg_path.write_bytes(b"x")
 
-            async def fake_save(data, name, include_files):
+            def fake_save(data, name, include_files):
                 return pkg_path
 
             monkeypatch.setattr(svc, "_save_export_package", fake_save)
@@ -147,5 +147,5 @@ class TestExportErrorSurfacing:
             fake_db.query.return_value = Q()
 
             from app.services.data_sync_service import ExportConfig
-            result = await svc.export_incremental(ExportConfig())
+            result = svc.export_incremental(ExportConfig())
             assert result["success"] is True

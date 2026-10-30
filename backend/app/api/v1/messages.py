@@ -31,6 +31,7 @@ from app.services.message_template_service import MessageTemplateService
 from app.services.notification_preference_service import NotificationPreferenceService
 from app.services.work_log_service import write_work_log
 from app.core.response import success_response
+from app.utils.time_utils import to_local
 
 logger = logging.getLogger(__name__)
 
@@ -400,7 +401,10 @@ async def get_recent_activities(
 
             created_at = log.created_at
             if created_at:
-                time_str = created_at.strftime("%Y-%m-%d %H:%M")
+                # DB 为 UtcDateTime（读回 aware UTC），不能直接 strftime 当本地时间；
+                # 统一换算到本机时区，避免中国时区固定早 8 小时。
+                local_created_at = to_local(created_at)
+                time_str = local_created_at.strftime("%Y-%m-%d %H:%M") if local_created_at else ""
             else:
                 time_str = ""
 

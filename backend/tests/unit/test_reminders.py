@@ -2,6 +2,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def _msg(**kw):
     m = SimpleNamespace(
@@ -83,11 +85,16 @@ def test_run_reminder_scans_dedupe():
     assert mock_db.add.call_count == 0
 
 
-def test_run_reminder_scans_exception_safe():
+def test_run_reminder_scans_exception_propagates():
+    """扫描/提交失败必须上抛，不能返回 [] 让端点显示「新增 0 条」。
+
+    API 层把异常转 500，调度器 reminder_scan_job 自己捕获并记 error 日志。
+    """
     from app.services.reminder_orchestrator import run_reminder_scans
 
     with patch("app.services.reminder_orchestrator.get_db_context", side_effect=RuntimeError("boom")):
-        assert run_reminder_scans() == []
+        with pytest.raises(RuntimeError, match="boom"):
+            run_reminder_scans()
 
 
 def test_format_reminder_variants():
@@ -173,6 +180,28 @@ def test_reminders_api_scan_failure_returns_500_not_fake_created_zero():
     client = TestClient(app, raise_server_exceptions=False)
     try:
         with patch("app.services.reminder_orchestrator.run_reminder_scans", side_effect=RuntimeError("db down")):
+            resp = client.post("/api/v1/reminders/scan")
+        assert resp.status_code == 500
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_reminders_api_scan_internal_db_failure_returns_500():
+    """服务内部（未 mock 服务函数）扫描失败也要 500，而不是 200+created=0。
+
+    旧 run_reminder_scans 会吞掉异常返回 []，端点因而显示「扫描完成，新增 0 条」。
+    """
+    from app.main import app
+    from fastapi.testclient import TestClient
+    from app.core.security import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1, role="admin")
+    client = TestClient(app, raise_server_exceptions=False)
+    try:
+        with patch(
+            "app.services.reminder_orchestrator.get_db_context",
+            side_effect=RuntimeError("db down"),
+        ):
             resp = client.post("/api/v1/reminders/scan")
         assert resp.status_code == 500
     finally:

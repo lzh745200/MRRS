@@ -33,6 +33,7 @@ from app.models.project import Project
 from app.models.school import School
 from app.models.supported_village import SupportedVillage, VillagePopulation
 from app.models.user import User
+from app.utils.time_utils import to_local
 
 logger = logging.getLogger(__name__)
 
@@ -788,6 +789,12 @@ def _fetch_hidden_activities() -> set:
         sess.close()
 
 
+def _format_activity_time(value) -> str:
+    """UTC 库值 → 本地展示时间（动态 feed 与消息中心统一口径）。"""
+    local = to_local(value)
+    return local.strftime("%m-%d %H:%M") if local else ""
+
+
 def _fetch_custom_activities() -> list:
     sess = SessionLocal()
     items = []
@@ -797,7 +804,7 @@ def _fetch_custom_activities() -> list:
                 "id": f"custom_{act.id}", "type": act.type or "project",
                 "action": act.action or "", "target": act.target or "",
                 "user": act.user or "系统",
-                "time": act.created_at.strftime("%m-%d %H:%M") if act.created_at else "",
+                "time": _format_activity_time(act.created_at),
                 "_custom": True,
             })
     except Exception as e:
@@ -828,7 +835,7 @@ def _fetch_project_activities(data_scope: OrgScopeFilter) -> list:
                 "id": f"project_{p.id}", "type": "project", "action": action,
                 "target": p.name or "",
                 "user": p.responsible_person or getattr(p, "leader", None) or "系统",
-                "time": p.updated_at.strftime("%m-%d %H:%M") if p.updated_at else "",
+                "time": _format_activity_time(p.updated_at),
             })
     except Exception as e:
         logger.warning("获取项目动态失败: %s", e)
@@ -854,7 +861,7 @@ def _fetch_fund_activities(data_scope: OrgScopeFilter) -> list:
                 "action": status_label_map.get(f.status, "更新了"),
                 "target": f.name or "",
                 "user": getattr(f, "applicant", None) or "系统",
-                "time": f.updated_at.strftime("%m-%d %H:%M") if f.updated_at else "",
+                "time": _format_activity_time(f.updated_at),
             })
     except Exception as e:
         logger.warning("获取经费动态失败: %s", e)
@@ -896,9 +903,7 @@ def _fetch_approval_activities(data_scope: OrgScopeFilter) -> list:
                 "action": status_label_map.get(a.status, a.status),
                 "target": a.title or f"{a.entity_type}#{a.entity_id}",
                 "user": (a.submitter.username if a.submitter else None) or "系统",
-                "time": (a.updated_at or a.created_at).strftime("%m-%d %H:%M")
-                if (a.updated_at or a.created_at)
-                else "",
+                "time": _format_activity_time(a.updated_at or a.created_at),
             }
             )
     except Exception as e:
@@ -997,7 +1002,7 @@ async def create_activity(
             "action": activity.action,
             "target": activity.target,
             "user": activity.user,
-            "time": activity.created_at.strftime("%m-%d %H:%M") if activity.created_at else "",
+            "time": _format_activity_time(activity.created_at),
         })
     except Exception as e:
         logger.error("创建自定义动态失败: %s", e, exc_info=True)

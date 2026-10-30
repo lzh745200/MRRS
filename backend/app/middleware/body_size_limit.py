@@ -114,8 +114,10 @@ def _resolve_body_limit(request: Request, max_body_size: int):
             return multipart_limit
         # 非上传路径伪造 multipart 头：收紧到全局上限，防止绕过 10MB 限制
         return min(multipart_limit, max_body_size)
-    if is_large_payload:
-        return None
+    # 非 multipart：业务前缀同样必须受全局上限约束。
+    # 这些前缀只用于“允许该路径的 multipart 上传走分级上限”，不能把 JSON
+    # 面一起打开；否则任意登录用户可向 /projects、/funds 等普通写端点灌
+    # 超大 JSON，在 Starlette 读 body 时直接把进程内存打爆。
     return max_body_size
 
 

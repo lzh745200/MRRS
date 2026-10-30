@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.utils.helpers import safe_json_loads
+from app.core.async_utils import run_in_thread
 from app.core.transaction import safe_commit
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -1287,13 +1288,13 @@ async def upload_filled_template(
         # .xlsx / .xls / WPS .et 统一按容器魔数解析（原先只能读 xlsx）
         from app.services.office_reader import load_workbook_any
 
-        wb = load_workbook_any(content, getattr(file, "filename", None))
+        wb = await run_in_thread(load_workbook_any, content, getattr(file, "filename", None))
         wb.close()
     except Exception:
         raise HTTPException(status_code=400, detail="无法解析 Excel 文件")
 
     # 解析 Excel
-    parsed_data, errors, rows = _parse_template_excel(content, fields)
+    parsed_data, errors, rows = await run_in_thread(_parse_template_excel, content, fields)
 
     # 预览模式
     if mode == "preview":

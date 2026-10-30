@@ -709,6 +709,10 @@ class TestIntervalJobClosure:
             def now(cls):
                 return now
 
+            @classmethod
+            def combine(cls, day, time_value):
+                return datetime.combine(day, time_value)
+
         with patch.object(bm, "datetime", FakeDateTime), \
              patch.object(bm.threading, "Timer", _FakeTimer):
             bm.start_backup_scheduler()

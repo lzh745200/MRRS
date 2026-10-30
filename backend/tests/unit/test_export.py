@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import pytest
 from fastapi import status
 
-from app.api.v1.import_export.export import format_datetime
+from app.api.v1.import_export.export import format_datetime, _to_csv
 from app.core.database import get_db
 
 BASE = "/api/v1/export"
@@ -575,3 +575,11 @@ class TestExportReportPdf:
 
         assert resp.status_code == status.HTTP_403_FORBIDDEN
 
+
+
+def test_csv_formula_prefix_is_escaped():
+    """以 =/+/-/@ 开头的字符串必须加单引号，防止 Excel 公式注入。"""
+    csv_bytes = _to_csv([{"name": "=cmd|' /C calc'!A0", "safe": "普通文本"}])
+    text = csv_bytes.decode("utf-8-sig")
+    assert "'=cmd|' /C calc'!A0" in text
+    assert "普通文本" in text

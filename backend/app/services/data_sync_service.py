@@ -153,7 +153,7 @@ class DataSyncService:
             except Exception as e:
                 self.logger.error(f"关闭数据库连接失败: {e}")
 
-    async def export_incremental(
+    def export_incremental(
         self,
         config: ExportConfig,
     ) -> Dict[str, Any]:
@@ -218,7 +218,9 @@ class DataSyncService:
 
                 for table_name in tables_to_export:
                     try:
-                        records = await self._export_table_data(db, table_name, config.since)
+                        # 同步实现：整个 export_incremental 已由端点放入工作线程，
+                        # Session 不能跨线程复用（SQLAlchemy Session 非线程安全）。
+                        records = self._export_table_data(db, table_name, config.since)
                         export_data["data"][table_name] = records
                         total_records += len(records)
                         self.logger.info(f"表 {table_name} 导出 {len(records)} 条记录")
@@ -242,7 +244,7 @@ class DataSyncService:
                     export_data["report_ledger"] = []
 
                 # 保存数据包
-                package_path = await self._save_export_package(export_data, package_name, config.include_files)
+                package_path = self._save_export_package(export_data, package_name, config.include_files)
 
                 # 更新同步日志
                 sync_log.status = "completed"
@@ -286,10 +288,14 @@ class DataSyncService:
             self.logger.error(f"导出数据失败: {str(e)}")
             raise BusinessLogicError(f"数据导出失败: {str(e)}")
 
-    async def _export_table_data(
+    def _export_table_data(
         self, db: Session, table_name: str, since: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
-        """导出表数据"""
+        """导出表数据（同步实现；端点负责整体放入工作线程）。
+
+        SQLAlchemy ``Session`` 非线程安全，因此这里**不**再自行切线程：调用方
+        必须让 Session 的创建与全部查询留在同一线程。
+        """
         try:
             # 构建查询（表名已在调用处通过 syncable_tables 白名单验证）
             safe_table = self._validate_table_name(table_name)
@@ -326,15 +332,19 @@ class DataSyncService:
             self.logger.error(f"导出表 {table_name} 数据失败: {str(e)}")
             raise
 
-    async def _save_export_package(self, export_data: Dict[str, Any], package_name: str, include_files: bool) -> Path:
-        """保存导出数据包"""
+    def _save_export_package(self, export_data: Dict[str, Any], package_name: str, include_files: bool) -> Path:
+        """保存导出数据包（同步实现；端点负责整体放入工作线程）。"""
         package_path = self.sync_dir / f"{package_name}.zip"
 
         with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            # 保存数据JSON
-            # 不缩进：data.json 主要供程序解析，indent=2 会让大包序列化体积膨胀约
-            # 30%~50%，在 100MB 量级上直接放大内存峰值与压缩耗时。
-            zipf.writestr("data.json", json.dumps(export_data, ensure_ascii=False, separators=(",", ":")))
+            # 分块编码并直接写入 ZIP 成员。旧的 json.dumps(export_data) 会先构造
+            # 一份完整 JSON 字符串，再由 writestr 编码成字节，峰值内存同时包含
+            # 记录对象、完整字符串和字节内容；iterencode 保持相同 JSON 结构，
+            # 但不再额外生成整包字符串。ZIP 内 data.json 的契约不变。
+            encoder = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
+            with zipf.open("data.json", "w") as member:
+                for chunk in encoder.iterencode(export_data):
+                    member.write(chunk.encode("utf-8"))
 
             # 如果需要，打包上传文件
             if include_files:
@@ -913,7 +923,9 @@ class DataSyncService:
                         continue
 
                     try:
-                        records = await self._export_table_data(db, table_name, since)
+                        # 直接用同步实现：export_encrypted 由端点整体放入工作线程，
+                        # 同一 Session 必须留在同一线程，不能逐表再切线程复用。
+                        records = self._export_table_data(db, table_name, since)
                         export_data[table_name] = records
                         total_records += len(records)
                         self.logger.info(f"表 {table_name} 导出 {len(records)} 条记录")

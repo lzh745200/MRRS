@@ -66,7 +66,9 @@ class TestGetTaskDiffOwnership:
         task = SimpleNamespace(submitter_id=2, current_approver_id=3)
         svc = _service(task=task, diff={"change": 3})
         with patch.object(approval_api, "ApprovalWorkflowService", return_value=svc):
-            result = approval_api.get_task_diff(9, db=MagicMock(), current_user=_actor(uid=1, role="admin"))
+            result = approval_api.get_task_diff(
+                9, db=MagicMock(), current_user=_actor(uid=1, role="super_admin", is_superuser=True)
+            )
         assert result["data"] == {"change": 3}
 
     def test_task_without_owner_fields_denied_for_plain_user(self):
@@ -147,7 +149,7 @@ class TestApprovalSerializationAndLists:
         with patch.object(approval_api, "ApprovalWorkflowService", return_value=svc):
             approval_api.get_task_history(
                 entity_type=None, status=None, completed=None, skip=0, limit=100,
-                db=MagicMock(), current_user=_actor(role="admin"),
+                db=MagicMock(), current_user=_actor(role="super_admin", is_superuser=True),
             )
         assert svc.get_tasks_with_count.call_args.kwargs["submitter_id"] is None
 

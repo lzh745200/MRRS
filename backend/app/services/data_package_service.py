@@ -231,19 +231,16 @@ class DataPackageService:
 
         package_code = self._generate_package_code(org.code, "EXP")
 
-        data_dict = {}
-        record_counts = {}
+        data_iterators = {}
         for data_type in data_types:
             if data_type in DATA_TYPE_MODELS:
                 model = DATA_TYPE_MODELS[data_type]
-                records = self._export_data_type(
+                data_iterators[data_type] = self._iter_export_data_type(
                     org_id, model,
                     since_sync_version=since_sync_version if incremental else None,
                     since_time=since_time if incremental else None,
                     owner_id=owner_id,
                 )
-                data_dict[data_type] = records
-                record_counts[data_type] = len(records)
 
         manifest = DataPackageManifest(
             version=CURRENT_VERSION,
@@ -252,7 +249,7 @@ class DataPackageService:
             org_name=org.name or f"组织{org.id}",
             export_time=datetime.now(timezone.utc),
             data_types=data_types,
-            record_counts=record_counts,
+            record_counts={},
             exported_by=str(export_by),
             description=description,
             checksum="",
@@ -267,9 +264,11 @@ class DataPackageService:
 
         file_name = f"{package_code}.zip"
         file_path = os.path.join(self.upload_dir, file_name)
-        self._create_zip_package(file_path, manifest, data_dict)
+        record_counts = await run_in_thread(
+            self._create_zip_package, file_path, manifest, data_iterators
+        )
 
-        checksum = self._calculate_checksum(file_path)
+        checksum = await run_in_thread(self._calculate_checksum, file_path)
         manifest.checksum = checksum
         file_size = os.path.getsize(file_path)
 
@@ -302,10 +301,27 @@ class DataPackageService:
         since_time: Optional[datetime] = None,
         owner_id: Optional[int] = None,
     ) -> List[Dict]:
-        """导出指定类型的数据（增量模式: 按 sync_version 或 updated_at 时间过滤）
+        """导出指定类型的数据（列表接口，兼容内部/测试调用）。
 
-        owner_id 非 None 且模型有 created_by 列时，仅导出该用户本人录入的记录。
+        大包导出请使用 ``_iter_export_data_type``，避免整表列表驻留内存。
         """
+        return list(
+            self._iter_export_data_type(
+                org_id,
+                model,
+                since_sync_version=since_sync_version,
+                since_time=since_time,
+                owner_id=owner_id,
+            )
+        )
+
+    def _iter_export_data_type(
+        self, org_id: int, model: Any,
+        since_sync_version: Optional[int] = None,
+        since_time: Optional[datetime] = None,
+        owner_id: Optional[int] = None,
+    ):
+        """逐行导出指定类型的数据（内存上限为单行，不 fetchall）。"""
         # W18-D8：改用 raw SQL 拉取 —— 走 ORM 时 EncryptedText 的 TypeDecorator 会把
         # PII 列**解密成明文**带进数据包（uploads/packages/*.zip 明文存活 7 天，还会被
         # include_uploads 备份一起带走）；data_sync 链（.zip/.rrs）走 raw SQL 拿到的就是
@@ -338,7 +354,7 @@ class DataPackageService:
             params["since_time"] = since_time
         if conditions:
             sql += " WHERE " + " AND ".join(conditions)
-        rows = self.db.execute(_sql_text(sql), params).fetchall()
+        rows = self.db.execute(_sql_text(sql), params)
 
         # W22 数据上报链路修复：raw SQL 取到的是数据库存储值 —— SQLAlchemy Enum
         # （native_enum=False）默认落库的是**枚举名**（如 `PRIMARY`/`INACTIVE`），
@@ -346,25 +362,43 @@ class DataPackageService:
         # rejected，上级接收后学校/项目等数据不可见。这里把枚举列归一为 `.value`
         # （PII 列仍保持密文原样，不影响 W18-D8）。
         enum_columns = _enum_column_map(model)
-        result = []
         for row in rows:
             record_dict = {}
             for col_name, value in zip(col_names, row):
                 value = _normalize_enum_export_value(value, enum_columns.get(col_name))
                 record_dict[col_name] = _normalize_export_data_value(value)
-            result.append(record_dict)
-        return result
+            yield record_dict
 
     def _create_zip_package(
-        self, file_path: str, manifest: DataPackageManifest, data_dict: Dict[str, List[Dict]]
-    ) -> None:
-        """创建ZIP数据包"""
+        self,
+        file_path: str,
+        manifest: DataPackageManifest,
+        data_dict: Dict[str, Any],
+    ) -> Dict[str, int]:
+        """流式创建 ZIP：逐表逐行序列化，不把整表 JSON 放入内存。"""
+        record_counts: Dict[str, int] = {}
         with zipfile.ZipFile(file_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            manifest_json = manifest.model_dump_json(indent=2)
-            zf.writestr("manifest.json", manifest_json)
             for data_type, records in data_dict.items():
-                data_json = json.dumps(records, ensure_ascii=False, indent=2, cls=CustomJSONEncoder)
-                zf.writestr(f"data/{data_type}.json", data_json)
+                count = 0
+                with zf.open(f"data/{data_type}.json", "w", force_zip64=True) as fp:
+                    fp.write(b"[")
+                    for record in records:
+                        if count:
+                            fp.write(b",")
+                        fp.write(
+                            json.dumps(
+                                record,
+                                ensure_ascii=False,
+                                cls=CustomJSONEncoder,
+                                separators=(",", ":"),
+                            ).encode("utf-8")
+                        )
+                        count += 1
+                    fp.write(b"]")
+                record_counts[data_type] = count
+            manifest.record_counts = record_counts
+            zf.writestr("manifest.json", manifest.model_dump_json(indent=2))
+        return record_counts
 
     # ========================================================================
     # 2. 导入功能

@@ -641,13 +641,21 @@ class BackupService:
 
     def _safe_extractall(self, zipf: zipfile.ZipFile, dest_dir: str) -> None:
         """
-        安全解压 ZIP 文件，防止 zip slip 路径穿越攻击。
+        安全解压 ZIP 文件，防止 zip slip 与解压炸弹。
 
-        对包内每个成员的目标路径进行规范化校验，确保最终路径仍在
-        dest_dir 内部，否则跳过该成员并记录警告。
+        路径校验之外，先按中央目录声明的 ``file_size`` 累加总量；超限直接
+        拒绝，不进入 ``extract``。备份上传上限是 10GB，解压后限 5GB（与
+        恢复包量级一致，避免高压缩比样本撑满磁盘/临时目录）。
         """
+        from app.utils.upload_helper import ensure_zip_within_limit
+
+        ensure_zip_within_limit(zipf, max_bytes=5 * 1024 * 1024 * 1024)
         dest_path = Path(dest_dir).resolve()
         for member in zipf.infolist():
+            # 单成员上限与总量同口径，防“声明总量合规但单文件巨大”绕过
+            if int(getattr(member, "file_size", 0) or 0) > 5 * 1024 * 1024 * 1024:
+                logger.warning("跳过超大的 zip 成员: %s", member.filename)
+                continue
             # 规范化成员名称中的反斜杠（Windows zip 兼容）
             member_name = member.filename.replace("\\", "/")
             # 拒绝绝对路径或包含 ".." 的成员

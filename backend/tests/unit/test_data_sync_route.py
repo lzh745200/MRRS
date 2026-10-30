@@ -44,7 +44,7 @@ class TestExportData:
     def test_success(self, client):
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
-            mock_svc.export_incremental = AsyncMock(return_value={"success": True, "package_name": "export.zip"})
+            mock_svc.export_incremental = MagicMock(return_value={"success": True, "package_name": "export.zip"})
             resp = test_client.post(self.URL)
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -52,16 +52,35 @@ class TestExportData:
     def test_with_since(self, client):
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
-            mock_svc.export_incremental = AsyncMock(return_value={"success": True})
+            mock_svc.export_incremental = MagicMock(return_value={"success": True})
             resp = test_client.post(self.URL + "?since=2024-01-01T00:00:00")
         assert resp.status_code == 200
 
     def test_with_modules_and_include_files(self, client):
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
-            mock_svc.export_incremental = AsyncMock(return_value={"success": True})
+            mock_svc.export_incremental = MagicMock(return_value={"success": True})
             resp = test_client.post(self.URL + "?modules=village,population&include_files=true")
         assert resp.status_code == 200
+
+    def test_export_runs_service_through_thread_pool(self, client):
+        """普通导出必须整体交给 run_in_thread。
+
+        服务方法虽是 async，但内部是同步 SQL + 逐行转换 + ZIP 压缩，留在事件循环
+        上会让大导出期间全站请求排队。旧实现直接 await export_incremental，
+        本用例会因 run_in_thread 未被调用而失败。
+        """
+        test_client, db = client
+        runner = AsyncMock(
+            return_value={"success": True, "package_name": "t.zip", "total_records": 0}
+        )
+        with patch("app.api.v1.data_sync.run_in_thread", new=runner), \
+                patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock):
+            resp = test_client.post(self.URL + "?modules=village")
+
+        assert resp.status_code == 200
+        assert runner.await_count == 1
+        assert runner.await_args.kwargs["config"].user_id == 1
 
     def test_invalid_since_format(self, client):
         test_client, db = client
@@ -71,7 +90,7 @@ class TestExportData:
     def test_exception(self, client):
         test_client, db = client
         with patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock) as mock_svc:
-            mock_svc.export_incremental = AsyncMock(side_effect=RuntimeError("export failed"))
+            mock_svc.export_incremental = MagicMock(side_effect=RuntimeError("export failed"))
             resp = test_client.post(self.URL)
         assert resp.status_code == 400
         assert "失败" in resp.json()["message"]
@@ -105,6 +124,17 @@ class TestExportEncrypted:
                 "password": "pw", "export_type": "full", "since": "2024-06-01T00:00:00"
             })
         assert resp.status_code == 200
+
+    def test_export_encrypted_runs_through_thread_pool(self, client):
+        """加密导出同样整体进线程池：PBKDF2 600k 次不能占用事件循环。"""
+        test_client, db = client
+        runner = AsyncMock(return_value={"success": True, "package_name": "e.rrs"})
+        with patch("app.api.v1.data_sync.run_in_thread", new=runner), \
+                patch("app.api.v1.data_sync.data_sync_service", new_callable=AsyncMock):
+            resp = test_client.post(self.URL, json={"password": "secret123", "export_type": "full"})
+
+        assert resp.status_code == 200
+        assert runner.await_count == 1
 
     def test_invalid_export_type(self, client):
         test_client, db = client

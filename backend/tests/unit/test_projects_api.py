@@ -503,7 +503,35 @@ class TestProjectsAPI:
             sample_project
         )
         resp = client.put("/api/v1/projects/1", json={"name": "x"})
-        assert resp.status_code == 500  # AppError → handle_db_errors_async → 500
+        # 跨组织/非创建人访问是权限问题，不能被 db_error_handler 降级成 500
+        assert resp.status_code == 403
+
+    async def test_update_project_forbidden_after_record_access_passes(self):
+        """项目可见但非创建人/非管理员：更新必须 403（覆盖 AppError.forbidden 分支）。"""
+        from app.api.v1.projects import ProjectUpdate, update_project
+        from app.core.errors import AppError
+
+        project = MagicMock()
+        project.id = 1
+        project.created_by = 99
+        project.organization_id = 2
+        user = MagicMock()
+        user.id = 2
+        user.role = "user"
+        user.is_superuser = False
+        with patch(
+            "app.api.v1.projects._get_project_or_404", return_value=project
+        ), patch(
+            "app.api.v1.projects.check_record_access", return_value=False
+        ):
+            with pytest.raises(AppError):
+                await update_project.__wrapped__(
+                    project_id=1,
+                    data=ProjectUpdate(name="x"),
+                    request=MagicMock(),
+                    current_user=user,
+                    db=MagicMock(),
+                )
 
     def test_update_project_date_validation(
         self, client, mock_db, admin_user, sample_project
@@ -591,7 +619,33 @@ class TestProjectsAPI:
             sample_project
         )
         resp = client.delete("/api/v1/projects/1")
-        assert resp.status_code == 500
+        assert resp.status_code == 403
+
+    async def test_delete_project_forbidden_after_record_access_passes(self):
+        """项目可见但既非超管也非创建人：删除必须 403。"""
+        from app.api.v1.projects import delete_project
+        from app.core.errors import AppError
+
+        project = MagicMock()
+        project.id = 1
+        project.created_by = 99
+        project.organization_id = 2
+        user = MagicMock()
+        user.id = 2
+        user.role = "user"
+        user.is_superuser = False
+        with patch(
+            "app.api.v1.projects._get_project_or_404", return_value=project
+        ), patch(
+            "app.api.v1.projects.is_superuser", return_value=False
+        ):
+            with pytest.raises(AppError):
+                await delete_project.__wrapped__(
+                    project_id=1,
+                    request=MagicMock(),
+                    current_user=user,
+                    db=MagicMock(),
+                )
 
     def test_get_project_change_history(
         self, client, mock_db, admin_user, sample_project

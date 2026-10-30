@@ -1,12 +1,24 @@
 # -*- coding: utf-8 -*-
 """system/init.py 覆盖率测试：initialize 分支 + reset 分支"""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 import app.api.v1.system.init as mod
+
+
+@pytest.fixture(autouse=True)
+def _skip_first_run_gate():
+    """本文件只测初始化下游分支；首次运行门禁由专用用例覆盖。"""
+    with patch.object(mod, "_ensure_first_run_bootstrap", lambda *a, **k: None):
+        yield
+
+
+def _http():
+    return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), headers={})
 
 
 def _svc(initialized=False):
@@ -35,7 +47,7 @@ async def test_initialize_weak_password_400():
         mod, "PasswordPolicy", pp
     ):
         with pytest.raises(HTTPException) as exc:
-            await mod.initialize_system(request=_req(), db=MagicMock())
+            await mod.initialize_system(request=_req(), http_request=_http(), db=MagicMock())
     assert exc.value.status_code == 400
     assert exc.value.detail == "密码强度不足"
 
@@ -59,7 +71,7 @@ async def test_initialize_full_optional_fields_and_existing_admin():
     with patch.object(mod, "SystemConfigService", return_value=svc), patch.object(
         mod, "PasswordPolicy", pp
     ):
-        resp = await mod.initialize_system(request=req, db=db)
+        resp = await mod.initialize_system(request=req, http_request=_http(), db=db)
     assert resp["success"] is True
     steps = {s["step"]: s["status"] for s in resp["data"]["steps"]}
     assert steps["admin_user"] == "skipped"
@@ -87,7 +99,7 @@ async def test_initialize_admin_creation_failure_aborts():
         mod, "PasswordPolicy", pp
     ):
         with pytest.raises(HTTPException) as exc:
-            await mod.initialize_system(request=_req(), db=db)
+            await mod.initialize_system(request=_req(), http_request=_http(), db=db)
     assert exc.value.status_code == 500
     assert "系统未初始化" in exc.value.detail
     db.rollback.assert_called_once()
@@ -100,7 +112,7 @@ async def test_initialize_outer_exception_500():
     svc.is_initialized.side_effect = RuntimeError("config table missing")
     with patch.object(mod, "SystemConfigService", return_value=svc):
         with pytest.raises(HTTPException) as exc:
-            await mod.initialize_system(request=_req(), db=MagicMock())
+            await mod.initialize_system(request=_req(), http_request=_http(), db=MagicMock())
     assert exc.value.status_code == 500
     assert "系统初始化失败" in exc.value.detail
 
@@ -109,9 +121,13 @@ async def test_initialize_outer_exception_500():
 
 @pytest.mark.asyncio
 async def test_reset_not_admin_403():
-    with patch("app.core.permission_utils.is_admin", return_value=False):
+    with patch.object(mod, "is_superuser", return_value=False):
         with pytest.raises(HTTPException) as exc:
-            await mod.reset_initialization(confirm="RESET", current_user=MagicMock(), db=MagicMock())
+            await mod.reset_initialization(
+                body=SimpleNamespace(confirm="RESET", admin_password="x"),
+                current_user=MagicMock(),
+                db=MagicMock(),
+            )
     assert exc.value.status_code == 403
 
 
@@ -120,13 +136,13 @@ async def test_reset_service_exception_500():
     svc = MagicMock()
     svc.set.side_effect = RuntimeError("write fail")
     with (
-        patch("app.core.permission_utils.is_admin", return_value=True),
+        patch.object(mod, "is_superuser", return_value=True),
         patch.object(mod, "SystemConfigService", return_value=svc),
         patch("app.core.security.verify_password", return_value=True),
     ):
         with pytest.raises(HTTPException) as exc:
             await mod.reset_initialization(
-                confirm="RESET", admin_password="x",
+                body=SimpleNamespace(confirm="RESET", admin_password="x"),
                 current_user=MagicMock(), db=MagicMock(),
             )
     assert exc.value.status_code == 500

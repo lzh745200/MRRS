@@ -7,10 +7,9 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.data_permission import get_accessible_org_ids
 from app.core.database import get_db
-from app.core.permission_utils import is_admin
 from app.core.security import get_current_user
+from app.models.audit import AuditLog
 from app.models.fund import Fund
 from app.models.project import Project
 from app.models.school import School, SchoolSupport
@@ -263,6 +262,27 @@ def _build_7day_trend(day_counts) -> list:
     return trend
 
 
+def _overview_users_query(db: Session, current_user, org_scope):
+    """总览用户数：严格按组织子树收敛（部门级 admin 不再放行全量）。"""
+    query = db.query(User).filter(User.is_active == True)  # noqa: E712
+    if org_scope is not None and not org_scope.is_admin:
+        if org_scope.self_only or not org_scope.org_ids:
+            query = query.filter(User.id == getattr(current_user, "id", None))
+        else:
+            query = query.filter(User.organization_id.in_(org_scope.org_ids))
+    return query
+
+
+def _overview_audit_query(query, db: Session, current_user, org_scope):
+    """总览审计流水：超管/全局全量；部门 admin 本组织子树；self-only 仅本人。"""
+    if org_scope is None or org_scope.is_admin:
+        return query
+    if org_scope.self_only or not org_scope.org_ids:
+        return query.filter(AuditLog.user_id == getattr(current_user, "id", None))
+    org_user_ids = db.query(User.id).filter(User.organization_id.in_(org_scope.org_ids))
+    return query.filter(AuditLog.user_id.in_(org_user_ids))
+
+
 def _build_recent_logs(logs) -> list:
     """把审计日志 ORM 行转成看板所需的精简字典。"""
     return [
@@ -283,10 +303,15 @@ async def _get_overview_impl(db: Session, current_user=None):
     用户总数按可访问组织收敛；审计日志（今日操作/7 天趋势/最近操作）在受限范围内
     收敛为"本人操作"，避免向任意登录用户回显全局操作流水（M9 同类问题）。
     """
-    from app.core.data_permission import OrgScopeFilter, apply_scope_filter
-    from app.models.audit import AuditLog
+    from app.core.data_permission import apply_scope_filter, get_org_scope
     from app.models.supported_village import SupportedVillage
     from app.utils.time_utils import utcnow_naive
+
+    org_scope = (
+        await get_org_scope(current_user=current_user, db=db)
+        if current_user is not None
+        else None
+    )
 
     def _scoped(query, model, org_field="organization_id"):
         """统一数据域过滤入口（严格口径：部门级 admin 仅本组织及子树）。
@@ -299,16 +324,8 @@ async def _get_overview_impl(db: Session, current_user=None):
         return apply_scope_filter(query, current_user, model, org_field, db=db)
 
     def _users_query():
-        """用户统计口径：受限用户只统计可访问组织内的活跃用户。
-
-        User 模型无 created_by 列（"仅本人"范围无法表达），故不经
-        apply_scope_filter 的 OWN 分支，直接按可访问组织收敛。
-        """
-        query = db.query(User).filter(User.is_active == True)  # noqa: E712
-        if current_user is not None and not is_admin(current_user):
-            org_ids = get_accessible_org_ids(current_user, db=db)
-            query = query.filter(User.organization_id.in_(org_ids or []))
-        return query
+        """用户统计口径：受限用户只统计可访问组织内的活跃用户。"""
+        return _overview_users_query(db, current_user, org_scope)
 
     villages_count = _scoped(
         db.query(SupportedVillage).filter(SupportedVillage.is_active.is_(True)), SupportedVillage
@@ -329,17 +346,10 @@ async def _get_overview_impl(db: Session, current_user=None):
         or 0
     )
 
-    # 审计日志范围：全量访问者看全局；受限用户只看本人操作（不泄漏他人操作流水）
-    audit_scope = OrgScopeFilter(is_admin=True)
-    if current_user is not None and not is_admin(current_user):
-        audit_scope = OrgScopeFilter(
-            is_admin=False,
-            self_only=True,
-            user_id=getattr(current_user, "id", None),
-        )
-
+    # 审计日志 scope：超管/全局看全量；部门级 admin 看本组织子树用户；
+    # self-only 用户仅看本人。绝不能把部门级 admin 当全局管理员。
     def _audit_scoped(query):
-        return audit_scope.filter_by_org_ids(query, AuditLog.user_id, created_by_column=AuditLog.user_id)
+        return _overview_audit_query(query, db, current_user, org_scope)
 
     # 各模块最后更新时间
     def _last_update(model):
@@ -411,8 +421,9 @@ async def _get_overview_impl(db: Session, current_user=None):
         today_ops = _audit_scoped(
             db.query(AuditLog).filter(AuditLog.created_at >= today_start)
         ).count()
-    except Exception:
-        logger.warning("查询今日操作数失败（看板将显示 0）", exc_info=True)
+    except Exception as exc:
+        logger.error("查询今日操作数失败", exc_info=True)
+        raise HTTPException(status_code=500, detail="今日操作统计查询失败") from exc
 
     # 近7天数据趋势（单次 GROUP BY 查询替代 7 次循环查询）
     trend = []
@@ -427,9 +438,9 @@ async def _get_overview_impl(db: Session, current_user=None):
             )
         ).group_by(local_day).all()
         day_counts = {r.day: r.cnt for r in daily_results}
-    except Exception:
-        logger.warning("查询近7天趋势失败（看板趋势将为空）", exc_info=True)
-        day_counts = {}
+    except Exception as exc:
+        logger.error("查询近7天趋势失败", exc_info=True)
+        raise HTTPException(status_code=500, detail="近7天趋势查询失败") from exc
 
     trend = _build_7day_trend(day_counts)
 
@@ -438,8 +449,9 @@ async def _get_overview_impl(db: Session, current_user=None):
     try:
         logs = _audit_scoped(db.query(AuditLog)).order_by(AuditLog.created_at.desc()).limit(8).all()
         recent_logs = _build_recent_logs(logs)
-    except Exception:
-        logger.warning("查询最近操作记录失败（最近操作列表将为空）", exc_info=True)
+    except Exception as exc:
+        logger.error("查询最近操作记录失败", exc_info=True)
+        raise HTTPException(status_code=500, detail="最近操作记录查询失败") from exc
 
     return {
         "villages": villages_count,

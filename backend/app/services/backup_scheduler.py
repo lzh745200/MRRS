@@ -18,6 +18,7 @@ import os
 import sys
 import threading
 from datetime import datetime, time, timedelta
+from typing import Optional
 
 from app.core.transaction import get_db_context
 from app.services.backup_service import BackupService
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 _scheduler_started = False
 _timers: list[threading.Timer] = []
+_backup_timer: threading.Timer | None = None
+_backup_timer_lock = threading.Lock()
 # 停止标志：_job 在重排下一次之前必须检查，否则 stop 之后 interval/daily 链
 # 仍会继续自我重排（cancel 只能取消「尚未触发」的 Timer，拦不住正在运行中的 _job）
 _stopping = threading.Event()
@@ -903,6 +906,93 @@ def _schedule_oneshot(coro_func, delay_seconds, task_name):
     t.start()
 
 
+def parse_backup_schedule(schedule: str) -> tuple[int, int, Optional[int], Optional[int]]:
+    """解析 UI 生成的 5 段 cron：分 时 日 月 周。
+
+    仅支持本项目 UI 可表达的形式：日/周至少一个为 ``*``。返回
+    ``(minute, hour, month_day, weekday)``，其中 weekday 为 cron 语义
+    （0=周日）。非法输入抛 ``ValueError``，由调用方给 400。
+    """
+    parts = (schedule or "").split()
+    if len(parts) != 5:
+        raise ValueError("cron 必须为 5 段（分 时 日 月 周）")
+    minute_s, hour_s, dom_s, month_s, dow_s = parts
+    try:
+        minute = int(minute_s)
+        hour = int(hour_s)
+    except ValueError as exc:
+        raise ValueError("cron 分/时必须是数字") from exc
+    if not (0 <= minute <= 59 and 0 <= hour <= 23):
+        raise ValueError("cron 分/时越界")
+    if month_s != "*":
+        raise ValueError("备份计划暂只支持每月每天（月份字段必须为 *）")
+    if dom_s != "*" and dow_s != "*":
+        raise ValueError("cron 日与周只能指定一个（另一个必须为 *）")
+    try:
+        dom = int(dom_s) if dom_s != "*" else None
+        dow = int(dow_s) if dow_s != "*" else None
+    except ValueError as exc:
+        raise ValueError("cron 日/周必须是数字或 *") from exc
+    if dom is not None and not (1 <= dom <= 31):
+        raise ValueError("cron 日越界")
+    if dow is not None and not (0 <= dow <= 6):
+        raise ValueError("cron 周越界（0=周日）")
+    return minute, hour, dom, dow
+
+
+def next_backup_run(schedule: str, now: datetime | None = None) -> datetime:
+    """计算下一次备份时间（本地时区；最多向前扫描 370 天）。"""
+    minute, hour, dom, dow = parse_backup_schedule(schedule)
+    base = now or datetime.now()
+    for offset in range(0, 371):
+        day = (base + timedelta(days=offset)).date()
+        if dom is not None and day.day != dom:
+            continue
+        if dow is not None and ((day.weekday() + 1) % 7) != dow:
+            continue
+        candidate = datetime.combine(day, time(hour=hour, minute=minute))
+        if candidate > base:
+            return candidate
+    raise ValueError("cron 在一年内没有可执行时间")
+
+
+def _schedule_auto_backup_cron() -> None:
+    """按 SystemConfig 的 cron 重排自动备份；配置变更后立即热生效。"""
+    global _backup_timer
+    schedule = get_config("backup_schedule_cron", "0 2 * * *") or "0 2 * * *"
+    try:
+        target = next_backup_run(schedule)
+    except ValueError:
+        logger.warning("备份 cron 非法，回退每日 02:00: %s", schedule)
+        target = next_backup_run("0 2 * * *")
+    delay = max(1.0, (target - datetime.now()).total_seconds())
+
+    def _job():
+        if _stopping.is_set():
+            return
+        _run_scheduler_job(auto_backup_job)
+        if _stopping.is_set():
+            return
+        _schedule_auto_backup_cron()
+
+    with _backup_timer_lock:
+        if _backup_timer is not None:
+            _backup_timer.cancel()
+        t = threading.Timer(delay, _job)
+        t.daemon = True
+        t.name = "scheduler-auto_backup"
+        _register_timer(t)
+        _backup_timer = t
+        t.start()
+
+
+def reschedule_auto_backup_job() -> None:
+    """配置更新后热重排；调度器未启动时只做校验，不创建 Timer。"""
+    if not _scheduler_started:
+        return
+    _schedule_auto_backup_cron()
+
+
 def _schedule_backup_catchup(delay_seconds: int = BACKUP_CATCHUP_DELAY_SECONDS) -> None:
     """登记启动备份补跑（一次性；判定与执行见 ``_run_backup_catchup_job``）。"""
     _schedule_oneshot(_run_backup_catchup_job, delay_seconds, "backup_catchup")
@@ -923,7 +1013,7 @@ def start_backup_scheduler():
     _schedule_daily(kpi_precalculate_job, 0, 30, "kpi_precalculate")
     _schedule_daily(recycle_retention_job, 4, 30, "recycle_retention")
     _schedule_daily(anomaly_detection_job, 1, 0, "anomaly_detection")
-    _schedule_daily(auto_backup_job, 2, 0, "auto_backup")
+    _schedule_auto_backup_cron()
     # R36（离线长期运行可靠性）：启动补跑 —— 机器每天只开机数小时/刚好错过 02:00 时，
     # 纯每日定时会让自动备份长期不执行。启动后延迟 BACKUP_CATCHUP_DELAY_SECONDS 秒
     # 判定一次：距上次备份超过 backup_interval_days（或从未备份）→ 立即补跑一次。
@@ -960,11 +1050,13 @@ def start_backup_scheduler():
 
 def stop_backup_scheduler():
     """停止备份调度器"""
-    global _scheduler_started
+    global _scheduler_started, _backup_timer
     # 先置停止标志再 cancel：拦住「正在执行、即将重排下一次」的 _job
     _stopping.set()
     for t in _timers:
         t.cancel()
     _timers.clear()
+    with _backup_timer_lock:
+        _backup_timer = None
     _scheduler_started = False
     logger.info("调度器已停止")

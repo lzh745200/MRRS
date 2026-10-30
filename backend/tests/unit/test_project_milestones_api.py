@@ -126,6 +126,19 @@ class TestUpdateMilestone:
         resp = client.put("/projects/1/milestones/1", json={"name": "更新名称"})
         assert resp.status_code == 200
 
+    def test_explicit_null_on_required_field_returns_422(self, client, mock_db):
+        """显式 null 不能当成“不更新”写进 NOT NULL 列。
+
+        旧实现会用 exclude_unset=True 把 None setattr 到模型，mock 环境下返回
+        200，真实库则在 commit 时抛 IntegrityError → 500。
+        """
+        mock_db.first.return_value = _make_milestone()
+        for payload in ({"planned_date": None}, {"name": None}):
+            resp = client.put("/projects/1/milestones/1", json=payload)
+            assert resp.status_code == 422
+        # 校验发生在写入前，不应产生任何 db.add/commit 副作用
+        mock_db.add.assert_not_called()
+
     def test_not_found(self, client, mock_db):
         mock_db.first.return_value = None
         resp = client.put("/projects/1/milestones/999", json={"name": "更新"})

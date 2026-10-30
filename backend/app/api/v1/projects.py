@@ -20,16 +20,17 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from app.core.async_utils import run_in_thread
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.transaction import safe_commit
 from app.core.data_permission import require_data_permission, check_record_access
 from app.core.data_permission import apply_scope_filter
-from app.core.permission_utils import is_admin
+from app.core.permission_utils import is_superuser
 from app.api.v1.deps import enforce_admin_include_deleted, build_viewable_because
 from app.core.errors import AppError
 from app.core.exceptions import NotFoundException
@@ -48,7 +49,6 @@ from app.services.approval_workflow_service import (
     ApprovalWorkflowService,
     submit_entity_change_approval,
 )
-from .deps import ADMIN_ROLES
 
 logger = logging.getLogger(__name__)
 
@@ -117,12 +117,16 @@ ApprovalWorkflowService.register_entity_apply_handler("project", _apply_project_
 
 
 def _can_modify_project(project: Project, user) -> bool:
-    """检查用户是否可以修改项目"""
-    # 管理员可修改所有
-    if user.role in ADMIN_ROLES:
+    """检查用户是否可以修改项目（严格数据域，部门级 admin 不得跨组织）。
+
+    超级管理员 → 全部；其他角色 → 本人创建或本组织/子树内（check_record_access）。
+    历史实现只判断 ``role in ADMIN_ROLES``，导致部门级 admin 读 403、写放行。
+    """
+    if is_superuser(user):
         return True
-    # 普通用户只能修改自己创建的项目
-    return getattr(user, "id", None) == project.created_by
+    return check_record_access(
+        project, user, owner_field="created_by", dept_field="organization_id"
+    )
 
 
 def _get_project_or_404(db: Session, project_id: int, current_user=None) -> Project:
@@ -576,7 +580,7 @@ async def export_projects(
 
     projects = query.order_by(Project.id.desc()).limit(10000).all()
 
-    try:
+    def _build_projects_xlsx() -> bytes:
         import openpyxl
 
         wb = openpyxl.Workbook()
@@ -616,10 +620,13 @@ async def export_projects(
             )
         buf = BytesIO()
         wb.save(buf)
-        buf.seek(0)
+        return buf.getvalue()
+
+    try:
+        content = await run_in_thread(_build_projects_xlsx)
         filename = f"项目列表_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        return StreamingResponse(
-            buf,
+        return Response(
+            content=content,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
         )
@@ -1044,7 +1051,7 @@ async def update_project(
     db: Session = Depends(get_db),
 ):
     """更新项目。进度 0-100，状态仅限有效枚举值。"""
-    project = _get_project_or_404(db, project_id)
+    project = _get_project_or_404(db, project_id, current_user)
 
     if not _can_modify_project(project, current_user):
         raise AppError.forbidden("仅管理员或项目创建者可更新项目")
@@ -1104,9 +1111,9 @@ async def delete_project(
     db: Session = Depends(get_db),
 ):
     """软删除项目。仅管理员或项目创建者可执行。"""
-    project = _get_project_or_404(db, project_id)
+    project = _get_project_or_404(db, project_id, current_user)
 
-    can_delete = is_admin(current_user) or getattr(current_user, "id", None) == project.created_by
+    can_delete = is_superuser(current_user) or getattr(current_user, "id", None) == project.created_by
     if not can_delete:
         raise AppError.forbidden("仅管理员或项目创建者可以删除项目")
 
@@ -1761,7 +1768,8 @@ async def _parse_import_excel(file: UploadFile):
             file, settings.MAX_FILE_SIZE, limit_label="Excel 导入文件"
         )
         # .xlsx / .xls / WPS .et 统一按容器魔数解析（原先只能读 openpyxl 的 xlsx）
-        return load_workbook_any(content, getattr(file, "filename", None)).active
+        wb = await run_in_thread(load_workbook_any, content, getattr(file, "filename", None))
+        return wb.active
     except HTTPException:
         raise  # 413/400 原样上抛，不被解析兜底降级
     except Exception:
@@ -1978,7 +1986,7 @@ async def upload_project_files(
     if category not in _VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"无效分类，可选: {', '.join(_VALID_CATEGORIES)}")
 
-    project = _get_project_or_404(db, project_id)
+    project = _get_project_or_404(db, project_id, current_user)
 
     # 权限检查：管理员或项目创建者可上传
     if not _can_modify_project(project, current_user):

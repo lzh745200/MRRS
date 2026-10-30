@@ -158,8 +158,14 @@ class ExcelExportService:
         # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy）
         from openpyxl import Workbook
 
+        def _safe_export_value(value):
+            """防公式注入：字符串危险前缀加单引号，保持数值/日期原样。"""
+            if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+                return "'" + value
+            return value
+
         wb = Workbook()
-        matrix = [[row.get(h, "") for h in headers] for row in rows]
+        matrix = [[_safe_export_value(row.get(h, "")) for h in headers] for row in rows]
         ws, _data_start, data_end = build_report_sheet(
             wb,
             title=sheet_name,

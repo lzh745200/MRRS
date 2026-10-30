@@ -25,8 +25,7 @@ def _admin():
 def _run(confirm, admin_password, current_user):
     return asyncio.run(
         reset_initialization(
-            confirm=confirm,
-            admin_password=admin_password,
+            body=SimpleNamespace(confirm=confirm, admin_password=admin_password),
             current_user=current_user,
             db=MagicMock(),
         )

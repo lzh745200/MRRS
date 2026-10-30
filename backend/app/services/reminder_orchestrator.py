@@ -83,8 +83,10 @@ def run_reminder_scans() -> List[Dict[str, Any]]:
             safe_commit(db)
     except Exception as e:
         logger.error("提醒扫描失败: %s", e, exc_info=True)
-        # 提交失败 → 本批提醒全部未落库，返回空列表（防止上层误报"新增 N 条"）
-        return []
+        # 不能返回空列表：调用方（/reminders/scan）会把它渲染成
+        # 「扫描完成，新增 0 条」，把数据库/扫描故障伪装成真实的业务结果。
+        # 调度器 reminder_scan_job 已有 try/except 记录日志，这里上抛即可。
+        raise
     return created
 
 

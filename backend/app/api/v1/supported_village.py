@@ -16,6 +16,7 @@ from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.async_utils import run_in_thread
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.response import ok_list, success_response
@@ -813,7 +814,7 @@ async def import_villages(
         from app.services.office_reader import load_workbook_any
 
         # .xlsx / .xls / WPS .et 统一按容器魔数解析
-        wb = load_workbook_any(contents, getattr(file, "filename", None))
+        wb = await run_in_thread(load_workbook_any, contents, getattr(file, "filename", None))
         ws = wb.active
     except Exception:
         raise HTTPException(status_code=400, detail="无法解析 Excel 文件，请检查文件格式")
@@ -1790,7 +1791,7 @@ async def import_section_data(
     try:
         from app.services.office_reader import load_workbook_any
 
-        wb = load_workbook_any(_section_bytes, getattr(file, "filename", None))
+        wb = await run_in_thread(load_workbook_any, _section_bytes, getattr(file, "filename", None))
         ws = wb.active
     except Exception:
         raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
@@ -1821,7 +1822,7 @@ async def import_all_sections_data(
     try:
         from app.services.office_reader import load_workbook_any
 
-        wb = load_workbook_any(_all_bytes, getattr(file, "filename", None))
+        wb = await run_in_thread(load_workbook_any, _all_bytes, getattr(file, "filename", None))
     except Exception:
         raise HTTPException(status_code=400, detail="文件解析失败，请稍后重试或联系管理员")
     # 工作表名 → 板块键：兼容 section_key（population）与模型表名/中文名

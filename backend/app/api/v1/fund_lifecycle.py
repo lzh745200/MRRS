@@ -82,6 +82,37 @@ def _get_project_or_403(project_id: int, current_user, db: Session) -> Project:
     return project
 
 
+def _get_accessible_fund_or_403(fund_id: int, current_user, db: Session) -> Fund:
+    """加载经费并校验记录级数据域（合同/凭证创建必须先过此关）。"""
+    fund = db.query(Fund).filter(Fund.id == fund_id).first()
+    if not fund:
+        raise HTTPException(status_code=404, detail="关联经费不存在")
+    if not check_record_access(fund, current_user):
+        raise HTTPException(status_code=403, detail="无权操作该组织的经费")
+    if getattr(fund, "project_id", None):
+        _get_project_or_403(fund.project_id, current_user, db)
+    return fund
+
+
+def _ensure_contract_access(contract, current_user, db: Session) -> None:
+    """合同没有 organization_id，按 project_id 或创建人兜底校验。"""
+    if getattr(contract, "project_id", None):
+        _get_project_or_403(contract.project_id, current_user, db)
+    else:
+        _assert_standalone_record_access(contract, current_user, "合同")
+
+
+def _scope_lifecycle_records(query, model, current_user):
+    """合同/凭证列表按创建人用户名收敛（这些表无 organization_id）。
+
+    ``apply_data_scope`` 的 OWN 分支用 int ``user.id`` 比较，而这两张表的
+    ``created_by`` 存的是用户名，导致非超管列表恒空。此处按真实存储口径过滤。
+    """
+    if is_superuser(current_user):
+        return query
+    return query.filter(model.created_by == _get_username(current_user))
+
+
 def _assert_standalone_record_access(record, current_user, kind: str = "记录") -> None:
     """project_id 为空时的兜底授权（2026-10-29 审计）。
 
@@ -773,7 +804,7 @@ async def list_transfer_vouchers(
 ):
     """划转凭证列表"""
     query = db.query(FundTransferVoucher)
-    query = apply_data_scope(query, FundTransferVoucher, current_user)
+    query = _scope_lifecycle_records(query, FundTransferVoucher, current_user)
     if project_id:
         query = query.filter(FundTransferVoucher.project_id == project_id)
     if fund_id:
@@ -801,31 +832,33 @@ async def create_transfer_voucher(
         raise HTTPException(status_code=400, detail=f"凭证编号 {data.voucher_no} 已存在")
 
     # R21：同合同创建 —— 关联对象先验存在，避免外键失败升级为 500
-    _require_related_exists(db, data.project_id, Project, "关联项目不存在")
-    _require_related_exists(db, data.fund_id, Fund, "关联经费不存在")
+    if data.project_id:
+        _get_project_or_403(data.project_id, current_user, db)
+    fund = None
+    if data.fund_id:
+        fund = _get_accessible_fund_or_403(data.fund_id, current_user, db)
 
     # 预算余额校验：划转金额 ≤ 预算余额
+    # `_get_accessible_fund_or_403` 在 fund_id 有值时要么返回 Fund，要么抛错，
+    # 因此这里无需再判空（旧 if fund 分支不可达，只会制造覆盖缺口）。
     if data.fund_id:
-        _require_related_exists(db, data.fund_id, Fund, "关联经费不存在")
-        fund = db.query(Fund).filter(Fund.id == data.fund_id).first()
-        if fund:
-            approved = float(fund.approved_amount or fund.planned_amount or fund.amount or 0)
-            used = float(fund.used_amount or 0)
-            # 已有确认状态凭证的划转金额
-            existing_transfers = (
-                db.query(sa_func.coalesce(sa_func.sum(FundTransferVoucher.amount), 0))
-                .filter(
-                    FundTransferVoucher.fund_id == data.fund_id,
-                    FundTransferVoucher.status.in_(["submitted", "confirmed"]),
-                )
-                .scalar()
-            ) or 0
-            available = approved - used - float(existing_transfers)
-            if data.amount > available:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"划转金额 {data.amount:.2f} 超过可用预算余额 {available:.2f} 万元",
-                )
+        approved = float(fund.approved_amount or fund.planned_amount or fund.amount or 0)
+        used = float(fund.used_amount or 0)
+        # 已有确认状态凭证的划转金额
+        existing_transfers = (
+            db.query(sa_func.coalesce(sa_func.sum(FundTransferVoucher.amount), 0))
+            .filter(
+                FundTransferVoucher.fund_id == data.fund_id,
+                FundTransferVoucher.status.in_(["submitted", "confirmed"]),
+            )
+            .scalar()
+        ) or 0
+        available = approved - used - float(existing_transfers)
+        if data.amount > available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"划转金额 {data.amount:.2f} 超过可用预算余额 {available:.2f} 万元",
+            )
 
     voucher = FundTransferVoucher(
         **data.model_dump(),
@@ -1108,7 +1141,7 @@ async def list_contracts(
 ):
     """合同列表"""
     query = db.query(FundContract)
-    query = apply_data_scope(query, FundContract, current_user)
+    query = _scope_lifecycle_records(query, FundContract, current_user)
     if project_id:
         query = query.filter(FundContract.project_id == project_id)
     if status:
@@ -1133,11 +1166,13 @@ async def create_contract(
     if exists:
         raise HTTPException(status_code=400, detail=f"合同编号 {data.contract_no} 已存在")
 
-    # R21：关联对象必须先验存在。此前直接 INSERT，SQLite 外键约束失败会抛
-    # OperationalError → 前端只看到 500「服务器内部错误」（项目/经费 ID 失效或
-    # 传 0/负数时必现），属于把用户输入错误报成服务端故障。
-    _require_related_exists(db, data.project_id, Project, "关联项目不存在")
-    _require_related_exists(db, data.fund_id, Fund, "关联经费不存在")
+    # R21：关联对象必须先验存在且属于调用者数据域。此前直接 INSERT，
+    # SQLite 外键约束失败会抛 OperationalError；同时任意 user 可用他组织
+    # project_id/fund_id 造合同，形成跨组织财务写入。
+    if data.project_id:
+        _get_project_or_403(data.project_id, current_user, db)
+    if data.fund_id:
+        _get_accessible_fund_or_403(data.fund_id, current_user, db)
 
     contract = FundContract(
         **data.model_dump(),
@@ -2497,6 +2532,7 @@ async def upload_contract_attachment(
     contract = db.query(FundContract).filter(FundContract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
+    _ensure_contract_access(contract, current_user, db)
 
     existing = _contract_attachments(contract, db)
     existing.append(
@@ -2531,6 +2567,7 @@ async def list_contract_attachments(
     contract = db.query(FundContract).filter(FundContract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="合同不存在")
+    _ensure_contract_access(contract, current_user, db)
     items = _contract_attachments(contract, db)
     return ok_list(items=items, total=len(items))
 

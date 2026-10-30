@@ -50,10 +50,12 @@ def _export_model(tablename, column_names, **attrs):
 
 
 def _fetchall_result(rows):
-    """mock `db.execute(...).fetchall()` 的返回值（raw SQL 行元组列表）。"""
-    result = MagicMock()
-    result.fetchall.return_value = rows
-    return result
+    """mock `db.execute(...)` 返回的行集。
+
+    生产实现已改为逐行迭代（流式导出，不再 ``fetchall()``），因此直接返回
+    可迭代的行元组列表；保留原函数名避免大范围改测试。
+    """
+    return rows
 
 
 # ── W18：_bulk_upsert_records 用例的真实声明式模型替身 ──
@@ -184,7 +186,7 @@ class TestDataPackageService:
         service.org_service.get_organization = MagicMock(return_value=org)
         service.db.refresh.side_effect = lambda pkg: setattr(pkg, 'id', 1)
 
-        with patch.object(service, "_export_data_type") as mock_export:
+        with patch.object(service, "_iter_export_data_type") as mock_export:
             mock_export.return_value = [{"id": 1, "name": "v1"}]
             with patch.object(service, "_generate_package_code") as mock_code:
                 mock_code.return_value = "EXP-ORG001-20240101000000"
@@ -207,8 +209,8 @@ class TestDataPackageService:
         service.org_service.get_organization = MagicMock(return_value=org)
         service.db.refresh.side_effect = lambda pkg: setattr(pkg, 'id', 1)
 
-        with patch.object(service, "_export_data_type") as mock_export:
-            mock_export.return_value = []
+        with patch.object(service, "_iter_export_data_type") as mock_export:
+            mock_export.return_value = iter([])
             with patch.object(service, "_generate_package_code") as mock_code:
                 mock_code.return_value = "EXP-ORG001-CODE"
                 with patch.object(service, "_create_zip_package"):
@@ -283,7 +285,8 @@ class TestDataPackageService:
             mock_zip.return_value.__enter__ = MagicMock(return_value=m)
             mock_zip.return_value.__exit__ = MagicMock()
             service._create_zip_package("/tmp/test.zip", manifest, {"villages": [{"id": 1}]})
-            assert m.writestr.call_count == 2
+            assert m.writestr.call_count == 1  # manifest.json
+            assert m.open.call_count == 1  # data/villages.json（逐行写入）
 
     # ===================== validate_package =====================
     async def test_validate_package_blocking_io_leaves_event_loop_thread(self, service):

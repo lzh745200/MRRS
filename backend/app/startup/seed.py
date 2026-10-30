@@ -83,6 +83,21 @@ def _seed_default_admin():
             )
         else:
             logger.info("管理员账户已存在，跳过创建")
+
+        # 2026-10-30 安全修复：只要 seed 已确保管理员存在，就必须写入
+        # initialized 标记。历史实现只建号不写标记，而匿名 /system/init/initialize
+        # 以该标记为唯一守卫 → 安装库实际长期暴露“匿名创建超管”入口。
+        from app.services.system_config_service import SystemConfigService
+
+        cfg = SystemConfigService(db)
+        if not cfg.is_initialized():
+            top_org_id = getattr(admin, "organization_id", None)
+            if top_org_id:
+                cfg.set_initialized(top_org_id)
+            else:
+                # 首次启动可能尚未建组织；此时仍要标记已初始化，避免匿名入口。
+                cfg.set("initialized", "true", "系统初始化标记（启动播种）")
+            logger.info("启动播种已补写系统初始化标记")
     except Exception as e:
         db.rollback()
         logger.error("创建默认管理员失败: %s", e)

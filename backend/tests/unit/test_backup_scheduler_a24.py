@@ -50,6 +50,12 @@ def _start_with_fake_now(now):
         def now(cls):
             return now
 
+        @classmethod
+        def combine(cls, day, time_value):
+            # next_backup_run 用 datetime.combine(day, time(...)) 计算 cron 目标；
+            # 只伪装 now() 会让 combine 丢失（AttributeError），必须一并转发。
+            return datetime.combine(day, time_value)
+
     with patch.object(bm, "datetime", FakeDateTime), \
          patch("app.services.backup_scheduler.threading.Timer", FakeTimer):
         bm.start_backup_scheduler()

@@ -324,7 +324,7 @@ class TestApprovalEndpointStandalone:
             id=1, status="approved", current_level=1, title="t", entity_type="fund"
         )
         with patch.object(ap, "ApprovalWorkflowService", return_value=svc), patch.object(
-            ap, "is_admin", return_value=True
+            ap, "is_superuser", return_value=True
         ), patch.object(ap, "_notify_submitter"):
             ap.approve_task(
                 1, ap.ApprovalActionRequest(opinion="ok"), db=MagicMock(),
@@ -340,7 +340,7 @@ class TestApprovalEndpointStandalone:
             id=1, status="approved", current_level=1, title="t", entity_type="fund"
         )
         with patch.object(ap, "ApprovalWorkflowService", return_value=svc), patch.object(
-            ap, "is_admin", return_value=False
+            ap, "is_superuser", return_value=False
         ), patch.object(ap, "_notify_submitter"):
             ap.approve_task(
                 1, ap.ApprovalActionRequest(opinion="ok"), db=MagicMock(),
@@ -356,7 +356,7 @@ class TestApprovalEndpointStandalone:
             id=1, status="rejected", current_level=1, title="t", entity_type="fund"
         )
         with patch.object(ap, "ApprovalWorkflowService", return_value=svc), patch.object(
-            ap, "is_admin", return_value=True
+            ap, "is_superuser", return_value=True
         ), patch.object(ap, "_notify_submitter"):
             ap.reject_task(
                 1, ap.ApprovalActionRequest(opinion="no"), db=MagicMock(),
@@ -372,7 +372,7 @@ class TestApprovalEndpointStandalone:
             id=1, status="rejected", current_level=1, title="t", entity_type="fund"
         )
         with patch.object(ap, "ApprovalWorkflowService", return_value=svc), patch.object(
-            ap, "is_admin", return_value=False
+            ap, "is_superuser", return_value=False
         ), patch.object(ap, "_notify_submitter"):
             ap.reject_task(
                 1, ap.ApprovalActionRequest(opinion="no"), db=MagicMock(),

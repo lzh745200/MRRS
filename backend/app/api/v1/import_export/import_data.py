@@ -20,6 +20,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.core.async_utils import run_in_thread, sync
 from app.core.database import get_db
 from app.core.permission_utils import is_admin, is_superuser
 from app.core.response import ok_list
@@ -288,7 +289,11 @@ async def _import_entities(
         dry_db.commit = lambda: None  # 屏蔽会话内一切提交（含 safe_commit）
         try:
             dry_importer = ExcelImporterService(dry_db, current_user=current_user)
-            result = await dry_importer.import_data_async(
+            # import_data 是同步实现（只接受 file_content/file_name/file_size），
+            # 不能把 async 包装的 filename/content_type 直接传进去；用 sync() 在
+            # 工作线程内驱动 import_data_async，保留原有校验语义（文件类型/大小）。
+            result = await run_in_thread(
+                sync(dry_importer.import_data_async),
                 file_bytes=file_bytes,
                 filename=file.filename or "",
                 content_type=file.content_type or "",
@@ -305,7 +310,8 @@ async def _import_entities(
             dry_db.close()
     else:
         importer = ExcelImporterService(db, current_user=current_user)
-        result = await importer.import_data_async(
+        result = await run_in_thread(
+            sync(importer.import_data_async),
             file_bytes=file_bytes,
             filename=file.filename or "",
             content_type=file.content_type or "",
@@ -433,7 +439,7 @@ async def validate_import_data(
     )
 
     try:
-        rows = _parse_excel_rows(file_content, header_parser, example_markers)
+        rows = await run_in_thread(_parse_excel_rows, file_content, header_parser, example_markers)
     except Exception:
         # R28 §3：面向用户的文案保持泛化（W1 不变量 #6：异常原文不出站），
         # 但真实原因必须进日志——原实现把解析异常静默吞掉，模板/编码类问题
@@ -629,7 +635,9 @@ async def preview_import_data(
 
     try:
         importer = ExcelImporterService(db, current_user=current_user)
-        rows, _headers = importer.parse_excel(file_content, entity_type=entity_type)
+        rows, _headers = await run_in_thread(
+            importer.parse_excel, file_content, entity_type=entity_type
+        )
     except Exception:
         # R28 §3：同 validate 路径——用户看到泛化文案，真实原因进日志（exc_info）。
         logger.error("Excel 预览解析失败（preview）", exc_info=True)

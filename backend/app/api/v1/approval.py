@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.permission_utils import is_admin, require_admin
+from app.core.permission_utils import is_admin, is_superuser, require_admin
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.message import Message
@@ -111,7 +111,7 @@ async def approval_overview(
 
     def _scoped(query):
         """非管理员限定为「提交人=自己 OR 审批人=自己」"""
-        if not is_admin(current_user):
+        if not is_superuser(current_user):
             return query.filter(
                 or_(
                     AT.submitter_id == current_user.id,
@@ -148,7 +148,7 @@ async def approval_overview(
         .scalar()
         or 0
     )
-    if my_pending == 0 and not is_admin(current_user):
+    if my_pending == 0 and not is_superuser(current_user):
         my_pending = (
             db.query(func.count(AT.id))
             .filter(
@@ -494,7 +494,7 @@ def approve_task(
     """
     service = ApprovalWorkflowService(db)
     task = service.approve_task(
-        task_id, current_user.id, data.opinion, standalone=is_admin(current_user)
+        task_id, current_user.id, data.opinion, standalone=is_superuser(current_user)
     )
 
     if not task:
@@ -535,7 +535,7 @@ def reject_task(
         raise HTTPException(status_code=400, detail="驳回必须填写原因")
     service = ApprovalWorkflowService(db)
     task = service.reject_task(
-        task_id, current_user.id, data.opinion, standalone=is_admin(current_user)
+        task_id, current_user.id, data.opinion, standalone=is_superuser(current_user)
     )
 
     if not task:
@@ -560,8 +560,8 @@ def retry_apply_entity_change(
     """
     重试 *_apply_failed 任务的实体回写（管理员可查可修，消除「审批成功但业务状态未变」不一致）
     """
-    if not is_admin(current_user):
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+    if not is_superuser(current_user):
+        raise HTTPException(status_code=403, detail="需要超级管理员权限")
     service = ApprovalWorkflowService(db)
     task = service.retry_apply_entity_change(task_id)
     if not task:
@@ -599,7 +599,7 @@ def transfer_task(
         current_user.id,
         data.transfer_to_id,
         data.reason,
-        standalone=is_admin(current_user),
+        standalone=is_superuser(current_user),
     )
 
     if not task:
@@ -705,7 +705,8 @@ def submit_and_auto_approve(
     自动创建默认审批流程（如果不存在）。
     """
 
-    require_admin(current_user, error_message="仅管理员可执行自动审批")
+    if not is_superuser(current_user):
+        raise HTTPException(status_code=403, detail="仅超级管理员可执行自动审批")
     service = ApprovalWorkflowService(db)
     task = service.submit_and_auto_approve(
         entity_type=data.entity_type,
@@ -739,7 +740,8 @@ def auto_approve_single_task(
     跳过审批人校验，直接通过所有审批级别。
     """
 
-    require_admin(current_user, error_message="仅管理员可执行自动审批")
+    if not is_superuser(current_user):
+        raise HTTPException(status_code=403, detail="仅超级管理员可执行自动审批")
     service = ApprovalWorkflowService(db)
     task = service.get_task(task_id)
     if not task:
@@ -773,7 +775,8 @@ def auto_approve_all(
 
     单机版优化：遍历所有 pending 状态的审批任务并全部通过。
     """
-    require_admin(current_user, error_message="仅管理员可执行自动审批")
+    if not is_superuser(current_user):
+        raise HTTPException(status_code=403, detail="仅超级管理员可执行自动审批")
     service = ApprovalWorkflowService(db)
     results = service.auto_approve_all_pending(current_user.id)
 
@@ -799,8 +802,8 @@ def get_all_tasks(
 
     Requirements: 4.1 - 管理员审批总览
     """
-    if current_user.role not in ("admin", "super_admin"):
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+    if not is_superuser(current_user):
+        raise HTTPException(status_code=403, detail="需要超级管理员权限")
 
     service = ApprovalWorkflowService(db)
     result = service.get_all_tasks_with_count(status=status, entity_type=entity_type, skip=skip, limit=limit)
@@ -852,7 +855,7 @@ def get_pending_tasks(
     - 附带变更数据摘要（change_data），供前端展示经费等业务实体信息
     """
     service = ApprovalWorkflowService(db)
-    include_all = is_admin(current_user)
+    include_all = is_superuser(current_user)
     tasks = service.get_pending_tasks(current_user.id, skip, limit, include_all=include_all)
 
     # 单机版兜底：服务返回空时（如审批人未分配），管理员仍能看到所有 pending 任务
@@ -927,7 +930,7 @@ def batch_approve(
     安全：非管理员仅能批量处理指派给自己的待审批任务（其余任务记入 failed）。
     """
     service = ApprovalWorkflowService(db)
-    if not is_admin(current_user):
+    if not is_superuser(current_user):
         from app.models.approval import ApprovalStatus as _AS
         from app.models.approval import ApprovalTask as _AT
 
@@ -951,7 +954,7 @@ def batch_approve(
         for tid in denied:
             results["failed"].append({"id": tid, "reason": "无权限审批此任务"})
     else:
-        # 管理员批量审批：可处理指派给他人的任务（与单任务端点 standalone=is_admin 一致）
+        # 超级管理员批量审批：可处理指派给他人的任务（与单任务端点 standalone=is_superuser 一致）
         results = service.batch_approve(
             data.task_ids, current_user.id, data.opinion, standalone=True
         )
@@ -1038,7 +1041,7 @@ def get_task_history(
 ):
     """审批任务历史（管理员可见全部；普通用户仅可见自己提交的任务）"""
     service = ApprovalWorkflowService(db)
-    submitter_id = None if is_admin(current_user) else current_user.id
+    submitter_id = None if is_superuser(current_user) else current_user.id
     result = service.get_tasks_with_count(
         entity_type=entity_type,
         status=status,
@@ -1076,7 +1079,7 @@ def get_task_diff(
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
 
-    if not is_admin(current_user):
+    if not is_superuser(current_user):
         viewable_ids = {
             getattr(task, "submitter_id", None),
             getattr(task, "current_approver_id", None),

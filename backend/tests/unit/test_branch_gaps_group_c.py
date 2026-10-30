@@ -426,7 +426,7 @@ class TestDataSyncServiceBranches:
         monkeypatch.setattr("app.utils.paths.get_uploads_path", lambda: uploads)
         svc = DataSyncService()
         svc.sync_dir = tmp_path
-        package_path = await svc._save_export_package({"tables": {}}, "pkgA", include_files=True)
+        package_path = svc._save_export_package({"tables": {}}, "pkgA", include_files=True)
         assert package_path == tmp_path / "pkgA.zip"
         with zipfile.ZipFile(package_path) as zf:
             names = zf.namelist()
@@ -529,7 +529,9 @@ class TestDataPackageServiceBranches:
         W18-D8 raw SQL 取数：无任何过滤条件时 SQL 不带 WHERE，行按列名转 dict。
         """
         db = MagicMock()
-        db.execute.return_value.fetchall.return_value = [(1, "n1")]
+        # 生产实现已从 fetchall() 改为逐行迭代（流式导出），替身必须返回可迭代行集；
+        # 旧写法只配置 fetchall.return_value，循环拿到 MagicMock 迭代 0 次 → 恒空列表。
+        db.execute.return_value = [(1, "n1")]
         svc = DataPackageService(db)
         result = svc._export_data_type(5, _BareTableModel)
         assert result == [{"id": 1, "name": "n1"}]

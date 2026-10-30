@@ -26,6 +26,7 @@ from app.core.data_permission import get_org_scope
 from app.models.fund import Fund
 from app.models.project import Project
 from app.models.supported_village import SupportedVillage, VillagePopulation
+from app.utils.time_utils import to_local
 from sqlalchemy import func
 
 
@@ -426,7 +427,7 @@ class TestFetchActivities:
         assert len(items) == 1
         assert items[0]["id"] == "custom_1"
         assert items[0]["_custom"] is True
-        assert items[0]["time"] == "07-24 09:00"
+        assert items[0]["time"] == to_local(datetime(2026, 7, 24, 9, 0)).strftime("%m-%d %H:%M")
 
     def test_fetch_custom_activities_defaults_and_exception(self):
         act = SimpleNamespace(id=2, type=None, action=None, target=None, user=None, created_at=None)
@@ -635,7 +636,7 @@ class TestActivityCrud:
         data = resp.json()["data"]
         assert data["id"] == "custom_5"
         assert data["user"] == "管理员"
-        assert data["time"] == "07-24 12:00"
+        assert data["time"] == to_local(datetime(2026, 7, 24, 12, 0)).strftime("%m-%d %H:%M")
         db.add.assert_called_once()
         mc.delete.assert_called_once_with("dashboard_recent_activities")
 

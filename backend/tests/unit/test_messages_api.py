@@ -18,6 +18,7 @@ from app.api.v1.messages import (
 )
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.utils.time_utils import to_local
 
 
 @pytest.fixture
@@ -280,7 +281,7 @@ class TestRecentActivities:
         assert item["type"] == "success"
         assert "admin" in item["description"]
         assert "ID: 42" in item["description"]
-        assert item["time"] == "2026-07-24 10:30"
+        assert item["time"] == to_local(datetime(2026, 7, 24, 10, 30)).strftime("%Y-%m-%d %H:%M")
 
     def test_activities_fallbacks(self, authed_client, mock_db):
         """action=None→update、未知资源类型原样、username=None→系统、created_at=None→空时间"""

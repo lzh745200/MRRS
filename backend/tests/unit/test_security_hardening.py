@@ -2,7 +2,7 @@
 """安全加固越权测试: 普通用户访问敏感端点必须 403"""
 import asyncio
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 
 from app.core.permission_utils import require_admin, is_admin
@@ -146,12 +146,46 @@ class TestDataSyncGuard:
 
 
 class TestApprovalGuard:
-    def test_auto_approve_requires_admin(self):
+    def test_auto_approve_requires_superuser(self):
+        """自动审批跳过全部审批人，必须收敛到超级管理员（部门 admin 不够）。"""
         src = _read("backend/app/api/v1/approval.py")
         for ep in ('/submit-auto', '/tasks/auto-approve', '/tasks/auto-approve-all'):
             idx = src.find(ep)
             assert idx > 0, f"端点缺失 {ep}"
-            assert "require_admin" in src[idx : idx + 1800], f"端点缺少权限校验 {ep}"
+            assert "is_superuser" in src[idx : idx + 1800], f"端点缺少超管校验 {ep}"
+
+    def test_auto_approve_endpoints_reject_dept_admin(self):
+        """三个自动审批入口在非超管用户上都必须 403，且不得调用业务服务。"""
+        from app.api.v1 import approval as ap
+
+        dept_admin = _RoleUser("admin")
+        assert dept_admin.is_superuser is False
+        submit_req = ap.SubmitAutoApproveRequest(
+            entity_type="fund", entity_id=1, change_data={"x": 1}
+        )
+        auto_req = ap.AutoApproveRequest()
+
+        with patch("app.api.v1.approval.ApprovalWorkflowService") as svc_cls:
+            with pytest.raises(HTTPException) as ei:
+                ap.submit_and_auto_approve(
+                    data=submit_req, db=MagicMock(), current_user=dept_admin
+                )
+            assert ei.value.status_code == 403
+
+            with pytest.raises(HTTPException) as ei:
+                ap.auto_approve_single_task(
+                    task_id=1, data=auto_req, db=MagicMock(), current_user=dept_admin
+                )
+            assert ei.value.status_code == 403
+
+            with pytest.raises(HTTPException) as ei:
+                ap.auto_approve_all(
+                    data=auto_req, db=MagicMock(), current_user=dept_admin
+                )
+            assert ei.value.status_code == 403
+
+        svc_cls.assert_not_called()
+
 
 
 class TestSystemHealthGuard:

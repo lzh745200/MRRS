@@ -267,6 +267,24 @@ class TestSafeExtractall:
         with zipfile.ZipFile(zip_path, "r") as zf:
             svc._safe_extractall(zf, dest)
 
+    def test_skip_single_member_declared_over_5gb(self, mock_db, tmp_path, caplog):
+        """中央目录声明超大成员：解压前跳过，不得进入文件系统。"""
+        svc = _make_svc(mock_db, "/b", "/d/db", "/u")
+        dest = str(tmp_path / "extract")
+        os.makedirs(dest)
+
+        member = MagicMock()
+        member.filename = "huge.bin"
+        member.file_size = 5 * 1024 * 1024 * 1024 + 1
+        zf = MagicMock()
+        zf.infolist.return_value = [member]
+        with patch("app.utils.upload_helper.ensure_zip_within_limit"):
+            with patch("app.services.backup_service.logger.warning") as warn:
+                svc._safe_extractall(zf, dest)
+
+        warn.assert_any_call("跳过超大的 zip 成员: %s", "huge.bin")
+        zf.extract.assert_not_called()
+
 
 class TestRestoreBackup:
     def test_restore_success(self, mock_db, tmp_path):

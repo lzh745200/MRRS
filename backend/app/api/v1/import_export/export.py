@@ -48,13 +48,22 @@ def _latest_population(v) -> int:
     return latest.total_population or 0
 
 
+def _safe_cell(value):
+    """防 CSV/Excel 公式注入：仅对字符串危险前缀加单引号，数值/日期不变。"""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
+        return "'" + value
+    return value
+
+
 def _to_csv(data: list) -> bytes:
     """将 dict 列表序列化为 CSV（utf-8-sig 供 Excel 正确识别中文）。"""
     buf = io.StringIO()
     if data:
         writer = csv.DictWriter(buf, fieldnames=list(data[0].keys()))
         writer.writeheader()
-        writer.writerows(data)
+        writer.writerows(
+            {key: _safe_cell(value) for key, value in row.items()} for row in data
+        )
     return buf.getvalue().encode("utf-8-sig")
 
 

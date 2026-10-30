@@ -390,7 +390,13 @@ class TestSystemInitialization:
         assert acquired is True
         try:
             with pytest.raises(HTTPException) as ei:
-                await init_mod.initialize_system(request=_init_request(), db=MagicMock())
+                await init_mod.initialize_system(
+                    request=_init_request(),
+                    http_request=SimpleNamespace(
+                        client=SimpleNamespace(host="127.0.0.1"), headers={}
+                    ),
+                    db=MagicMock(),
+                )
             assert ei.value.status_code == 409
         finally:
             init_mod._INIT_LOCK.release()

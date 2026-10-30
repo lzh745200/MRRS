@@ -13,8 +13,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.core.async_utils import run_in_thread
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.permission_utils import require_admin
@@ -110,9 +112,14 @@ async def create_backup(current_user=Depends(get_current_user), db: Session = De
         backup_filename = f"backup_{timestamp}.db"
         backup_path = backup_dir / backup_filename
 
+        # 先 checkpoint 把 WAL 中已提交页合并进主库，再复制；否则只复制主库会
+        # 丢掉最新事务。复制本身仍是一次快照，期间新增写入不保证进入本次备份。
+        db.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+        db.commit()
+
         # 复制数据库文件（直接操作，让异常自然抛出）
         try:
-            shutil.copy2(db_path, backup_path)
+            await run_in_thread(shutil.copy2, str(db_path), str(backup_path))
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail="数据库文件不存在")
 

@@ -154,35 +154,19 @@ async def _jwt_user_from_request(request: Request) -> Any:
 
 
 async def _authenticate_backup_request(request: Request) -> str:
-    """备份创建鉴权：本机内部密钥 或 已登录的写权限账号。
+    """备份创建鉴权：本机内部密钥 或 管理员 JWT。
 
-    R36（2026-10-20）：**普通用户也可发起备份**。安全性依据 —— 备份文件只落在
-    服务器/目标目录，本端点不返回内容；下载（`/download/{filename}`）、恢复
-    （`/restore`、`/upload-restore`）、删除（`DELETE /{filename}`）仍全部由
-    `require_admin` 把关，数据不会因此外流。
-
-    被拒的两类账号（与 `deps.enforce_funds_operator` 的 fail-closed 口径一致）：
-    - `viewer`：只读角色，不应产生写副作用；
-    - 未分配有效角色：空角色被兜底成 `user` 等于白送写权限，故直接 403。
-
-    Returns: 操作人标识（内部通道返回 "internal-backup"）
+    备份包含全库数据，普通用户不得触发全库 copytree/加密打包；此前允许任意
+    非 viewer 用户创建，并可借 ``target_dir`` 写入任意可写目录，形成数据外泄
+    与磁盘放大面。现与下载/恢复/删除统一为管理员门槛。
     """
     if _internal_backup_key_valid(request):
         return "internal-backup"
     user = await _jwt_user_from_request(request)
 
-    from app.core.constants import normalize_role
-    from app.core.permission_utils import is_superuser
+    from app.core.permission_utils import require_admin
 
-    # 显式超管标记放行（历史账号 role 可能不是 super_admin）
-    if is_superuser(user):
-        return getattr(user, "username", "unknown")
-
-    raw_role = getattr(user, "role", None)
-    if not isinstance(raw_role, str) or not raw_role.strip():
-        raise HTTPException(status_code=403, detail="权限不足：账号未分配有效角色")
-    if normalize_role(raw_role) == "viewer":
-        raise HTTPException(status_code=403, detail="只读账号不可创建备份")
+    require_admin(user, error_message="仅管理员可创建备份")
     return getattr(user, "username", "unknown")
 
 
@@ -210,6 +194,41 @@ async def _authenticate_backup_delete_request(request: Request) -> str:
 
 
 # ==================== API 端点 ====================
+
+
+def _is_public_web_dir(path: str) -> bool:
+    """目标目录是否落在静态可下载目录内（防止备份包被匿名直下）。"""
+    from app.core.config import settings
+    from app.utils.paths import get_uploads_path
+
+    real = os.path.realpath(path)
+    roots = {os.path.realpath(settings.UPLOAD_DIR), os.path.realpath(str(get_uploads_path()))}
+    return any(real == root or real.startswith(root + os.sep) for root in roots)
+
+
+def _resolve_backup_target_dir(requested: Optional[str]) -> Optional[str]:
+    """只允许默认目录或服务端已配置目录，拒绝任意客户端路径。
+
+    前端当前不传 ``target_dir``；保留字段仅为兼容旧客户端，但不得让它成为
+    “把全库备份写到任意可写目录”的入口。
+    """
+    from app.services.system_config_service import get_config
+    from app.utils.paths import get_backup_path
+
+    configured = (get_config("backup_target_dir", "") or "").strip()
+    default_dir = str(get_backup_path())
+    target = (requested or "").strip() or configured or None
+    if not target:
+        return None
+    real_target = os.path.realpath(target)
+    allowed = {os.path.realpath(default_dir)}
+    if configured:
+        allowed.add(os.path.realpath(configured))
+    if real_target not in allowed:
+        raise HTTPException(status_code=400, detail="备份目标目录必须使用系统配置的目录")
+    if _is_public_web_dir(real_target):
+        raise HTTPException(status_code=400, detail="备份目标目录不得位于静态下载目录内")
+    return target
 
 
 def _auto_backup_skip_reason(get_config) -> Optional[str]:
@@ -267,12 +286,12 @@ async def create_backup(
                 }
 
         svc = get_backup_service(db)
-        target_dir = body.target_dir or get_config("backup_target_dir", "")
+        target_dir = _resolve_backup_target_dir(body.target_dir)
         if target_dir:
             from app.utils.drive_detect import ensure_target_dir
 
             if not ensure_target_dir(target_dir):
-                raise HTTPException(status_code=400, detail=f"备份目标目录不可写: {target_dir}")
+                raise HTTPException(status_code=400, detail="备份目标目录不可写")
             svc = BackupService(db, backup_dir=target_dir)
         # R18：备份是 CPU/磁盘密集的同步重活（SQLite Backup API 全库拷贝 +
         # shutil.copytree 上传目录 + zip CRC 校验 + integrity_check + 可选
@@ -309,7 +328,6 @@ async def create_backup(
             "data": {
                 "backup_id": record.backup_id,
                 "file_name": record.file_name,
-                "file_path": record.file_path,
                 "file_size": record.file_size,
                 "description": record.description,
                 "created_at": record.created_at.isoformat(),
@@ -498,8 +516,10 @@ async def set_backup_target(
         from app.utils.drive_detect import ensure_target_dir
 
         target = (body.get("target_dir") or "").strip()
+        if target and _is_public_web_dir(target):
+            raise HTTPException(status_code=400, detail="目标目录不得位于静态下载目录内")
         if target and not ensure_target_dir(target):
-            raise HTTPException(status_code=400, detail=f"目标目录不可用或不可写: {target}")
+            raise HTTPException(status_code=400, detail="目标目录不可用或不可写")
         set_config("backup_target_dir", target, "备份目标目录（单机防丢失）")
         return {"success": True, "message": "备份目标已更新", "data": {"target_dir": target}}
     except HTTPException:
@@ -538,8 +558,13 @@ async def get_backup_schedule(
     retention = get_int_config("backup_retention_days", 7, getter=get_config)
     cron = get_config("backup_schedule_cron", "0 2 * * *")
 
-    # 计算下一次运行时间（基于 cron 的每日 02:00 语义）
-    next_run = _next_daily_2am(datetime.now()).isoformat()
+    # 计算下一次运行时间：以真实配置 cron 为准；脏值回退每日 02:00
+    from app.services.backup_scheduler import next_backup_run
+
+    try:
+        next_run = next_backup_run(cron).isoformat()
+    except ValueError:
+        next_run = _next_daily_2am(datetime.now()).isoformat()
 
     return success_response(
         data={
@@ -566,11 +591,26 @@ async def update_backup_schedule(
     频率/保留策略（前端页面自述普通用户只读，但接口未收口）。
     """
     require_admin(current_user, error_message="仅管理员可修改备份计划")
+    if body.schedule is not None:
+        from app.services.backup_scheduler import parse_backup_schedule
+
+        try:
+            parse_backup_schedule(body.schedule)
+        except ValueError:
+            # W1-T8：异常原文不出站（可能含内部解析细节）；给固定可操作提示。
+            raise HTTPException(
+                status_code=400,
+                detail="备份计划 cron 非法：需 5 段「分 时 日 月 周」，例如 0 2 * * *",
+            )
     set_config("auto_backup", "true" if body.enabled else "false", "自动备份开关")
     if body.keep_count is not None:
         set_config("backup_retention_days", str(int(body.keep_count)), "备份保留天数")
     if body.schedule is not None:
         set_config("backup_schedule_cron", body.schedule, "备份调度 Cron")
+    # 配置写入后热重排；调度器未启动时该调用只校验不建 Timer。
+    from app.services.backup_scheduler import reschedule_auto_backup_job
+
+    reschedule_auto_backup_job()
 
     enabled = get_config("auto_backup", "true") == "true"
     retention = get_int_config("backup_retention_days", 7, getter=get_config)

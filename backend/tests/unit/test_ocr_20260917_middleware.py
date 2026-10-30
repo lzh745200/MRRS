@@ -180,12 +180,17 @@ class TestBodySizeLimitStreaming:
         status, _ = await _drive_asgi(mw, scope, [b"a" * 4096])
         assert status == 200
 
-    async def test_batch_json_path_keeps_unlimited_policy(self):
-        """批量 JSON 端点（非 multipart）沿用放行策略，不受 10MB 全局上限限制。"""
+    async def test_batch_json_path_is_bounded_by_global_limit(self):
+        """批量 JSON 端点不再豁免全局上限。
+
+        历史实现把「允许该路径 multipart 走分级上限」误当成「整条路径不限量」，
+        任意登录用户可向 /batch 等写端点灌超大 JSON，在 Starlette 读 body 时
+        直接把进程内存打爆。非 multipart 一律按全局上限判定。
+        """
         mw = BodySizeLimitMiddleware(app=_read_all_body_app, max_body_size=1024)
         scope = _http_scope("/api/v1/batch/operations", {"content-type": "application/json"})
         status, _ = await _drive_asgi(mw, scope, [b"a" * 4096])
-        assert status == 200
+        assert status == 413
 
     async def test_upload_path_multipart_over_multipart_limit_rejected(self):
         """上传路径 multipart 超过分级上限仍拒绝。"""

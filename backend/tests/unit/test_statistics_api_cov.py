@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import app.api.v1.data.data.statistics as st
@@ -185,8 +186,8 @@ class TestOverviewImpl:
         assert result["modules"][0]["healthy"] is True
         assert result["modules"][1]["lastUpdate"] is None
 
-    async def test_audit_failures_degrade(self):
-        """AuditLog 三处查询均异常 → 降级默认值（覆盖 233-234/247-249/270-271）"""
+    async def test_audit_failures_raise_500(self):
+        """AuditLog 查询异常必须 500，不得降级成「0 条操作」的假数据。"""
         call = {"n": 0}
 
         def _query(*args):
@@ -197,10 +198,97 @@ class TestOverviewImpl:
 
         db = MagicMock()
         db.query = MagicMock(side_effect=_query)
-        result = await st._get_overview_impl(db)
-        assert result["today_operations"] == 0
-        assert all(t["operations"] == 0 for t in result["trend"])
-        assert result["recent_logs"] == []
+        with pytest.raises(HTTPException) as ei:
+            await st._get_overview_impl(db)
+        assert ei.value.status_code == 500
+        assert "查询失败" in ei.value.detail
+
+    async def test_today_trend_and_recent_audit_failures_all_raise_500(self):
+        """今日/趋势/最近记录三段审计查询的 500 分支都要覆盖，不能静默降级。"""
+        calls = {"n": 0}
+
+        async def run_with(fail_after):
+            db = _db_with([
+                _q(count=0), _q(count=0), _q(count=0), _q(count=0), _q(count=0),
+                _q(scalar=0.0), _q(scalar=None), _q(scalar=None),
+                _q(scalar=None), _q(scalar=None), _q(scalar=None),
+                _q(scalar=0), _q(scalar=0), _q(scalar=0), _q(scalar=0),
+                _q(scalar=0), _q(scalar=0), _q(scalar=0), _q(count=0),
+            ])
+            calls["n"] = 0
+
+            def _audit(query, *args, **kwargs):
+                calls["n"] += 1
+                if calls["n"] > fail_after:
+                    raise RuntimeError("audit table gone")
+                return query
+
+            with patch.object(st, "_overview_audit_query", side_effect=_audit):
+                await st._get_overview_impl(db)
+
+        with pytest.raises(HTTPException) as ei:
+            await run_with(0)
+        assert "今日操作统计查询失败" in ei.value.detail
+
+        with pytest.raises(HTTPException) as ei:
+            await run_with(1)
+        assert "近7天趋势查询失败" in ei.value.detail
+
+        with pytest.raises(HTTPException) as ei:
+            await run_with(2)
+        assert "最近操作记录查询失败" in ei.value.detail
+
+
+class TestOverviewScopeHelpers:
+    def test_users_query_self_only_and_org_tree(self):
+        db = MagicMock()
+        user = SimpleNamespace(id=7)
+        query = MagicMock()
+        db.query.return_value = query
+
+        self_q = MagicMock()
+        self_q.filter.return_value = self_q
+        query.filter.return_value = self_q
+        result = st._overview_users_query(
+            db, user, SimpleNamespace(is_admin=False, self_only=True, org_ids=[8, 9])
+        )
+        # MagicMock 链式 mock 的对象身份不如调用事实可靠；这里锁定关键分支确实触发
+        assert query.filter.called is True
+        assert self_q.filter.called is True
+        assert result is not None
+
+        org_q = MagicMock()
+        org_q.filter.return_value = org_q
+        query.filter.return_value = org_q
+        result = st._overview_users_query(
+            db, user, SimpleNamespace(is_admin=False, self_only=False, org_ids=[8, 9])
+        )
+        assert org_q.filter.called is True
+        assert result is not None
+
+    def test_audit_query_self_only_and_org_tree(self):
+        db = MagicMock()
+        user = SimpleNamespace(id=7)
+        query = MagicMock()
+
+        self_q = MagicMock()
+        self_q.filter.return_value = self_q
+        query.filter.return_value = self_q
+        result = st._overview_audit_query(
+            query, db, user, SimpleNamespace(is_admin=False, self_only=True, org_ids=[])
+        )
+        assert query.filter.called is True
+        assert result is not None
+
+        org_q = MagicMock()
+        org_q.filter.return_value = org_q
+        query.filter.return_value = org_q
+        result = st._overview_audit_query(
+            query, db, user, SimpleNamespace(is_admin=False, self_only=False, org_ids=[8, 9])
+        )
+        assert query.filter.called is True
+        assert db.query.return_value.filter.called is True
+        assert result is not None
 
 
 # ==================== _get_analysis_data_impl ====================

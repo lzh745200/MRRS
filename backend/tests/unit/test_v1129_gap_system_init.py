@@ -19,6 +19,16 @@ from app.api.v1.system import init as init_api
 from app.models.user import User
 
 
+@pytest.fixture(autouse=True)
+def _skip_first_run_gate():
+    with patch.object(init_api, "_ensure_first_run_bootstrap", lambda *a, **k: None):
+        yield
+
+
+def _http():
+    return SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), headers={})
+
+
 def _request():
     return init_api.InitRequest(
         organization_name="测试帮扶单位",
@@ -50,7 +60,7 @@ class TestInitializeSystemAdminFailure:
         ) as m_policy:
             m_policy.validate.return_value = (True, "")
             with pytest.raises(HTTPException) as ei:
-                await init_api.initialize_system(_request(), db)
+                await init_api.initialize_system(_request(), _http(), db)
 
         assert ei.value.status_code == 500
         assert "超级管理员账号创建失败" in ei.value.detail
@@ -62,7 +72,7 @@ class TestInitializeSystemAdminFailure:
         svc.is_initialized.side_effect = RuntimeError("config table missing")
         with patch.object(init_api, "SystemConfigService", return_value=svc):
             with pytest.raises(HTTPException) as ei:
-                await init_api.initialize_system(_request(), MagicMock())
+                await init_api.initialize_system(_request(), _http(), MagicMock())
         assert ei.value.status_code == 500
         assert ei.value.detail == "系统初始化失败，请稍后重试或联系管理员"
         assert "config table missing" not in ei.value.detail
@@ -72,7 +82,7 @@ class TestInitializeSystemAdminFailure:
         svc.is_initialized.return_value = True
         with patch.object(init_api, "SystemConfigService", return_value=svc):
             with pytest.raises(HTTPException) as ei:
-                await init_api.initialize_system(_request(), MagicMock())
+                await init_api.initialize_system(_request(), _http(), MagicMock())
         assert ei.value.status_code == 400
         svc.set_initialized.assert_not_called()
 
@@ -90,7 +100,7 @@ class TestInitializeSystemSuccess:
             "app.core.security.get_password_hash", return_value="hashed-pw"
         ):
             m_policy.validate.return_value = (True, "")
-            result = await init_api.initialize_system(_request(), db)
+            result = await init_api.initialize_system(_request(), _http(), db)
 
         assert result["success"] is True
         assert result["data"]["admin_username"] == "admin"
@@ -113,7 +123,7 @@ class TestInitializeSystemSuccess:
             "app.core.security.get_password_hash", return_value="hashed-pw"
         ):
             m_policy.validate.return_value = (True, "")
-            result = await init_api.initialize_system(_request(), db)
+            result = await init_api.initialize_system(_request(), _http(), db)
 
         steps = {s["step"]: s["status"] for s in result["data"]["steps"]}
         assert steps["admin_user"] == "skipped"

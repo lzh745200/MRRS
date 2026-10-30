@@ -132,3 +132,10 @@ class TestExcelExportService:
         assert col_b_width is not None
         # The long column should be wider
         assert col_b_width >= col_a_width
+
+
+def test_create_workbook_escapes_formula_prefix(export_svc):
+    """Excel 单元格同样需要防公式注入。"""
+    wb = export_svc._create_workbook("测试", ["名称"], [{"名称": "=1+1"}])
+    values = [cell.value for row in wb.active.iter_rows() for cell in row]
+    assert "'=1+1" in values

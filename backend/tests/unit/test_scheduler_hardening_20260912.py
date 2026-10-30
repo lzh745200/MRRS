@@ -163,7 +163,9 @@ class TestSchedulerTimerLifecycle:
         _expected = (
             _src.count("_schedule_daily(")
             + _src.count("_schedule_interval(")
-            + _src.count("_schedule_weekly(")
+            +             _src.count("_schedule_weekly(")
+            # 自动备份已由每日固定 02:00 改为 cron 热重排（_schedule_auto_backup_cron）
+            + _src.count("_schedule_auto_backup_cron(")
             # R36：启动一次性补跑（backup_catchup）同样必须经统一登记（_register_timer）
             + _src.count("_schedule_backup_catchup(")
         )

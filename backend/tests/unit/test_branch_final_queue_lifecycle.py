@@ -22,6 +22,7 @@ fund_lifecycle.py 目标弧（全量重建口径实测）：
 """
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -42,6 +43,65 @@ from app.models.fund_lifecycle import (
     SettlementStatus,
 )
 from app.models.project import Project
+
+
+# ===========================================================================
+#  fund_lifecycle.py — 记录级权限/外键辅助的直接覆盖
+# ===========================================================================
+class TestFundLifecycleAccessHelpers:
+    def _q(self, first):
+        q = MagicMock()
+        q.filter.return_value = q
+        q.first.return_value = first
+        return q
+
+    def test_require_related_exists_covers_all_branches(self):
+        from fastapi import HTTPException
+
+        from app.api.v1.fund_lifecycle import _require_related_exists
+
+        db = MagicMock()
+        assert _require_related_exists(db, None, Project, "项目不存在") is None
+
+        db.query.return_value = self._q("exists")
+        assert _require_related_exists(db, 1, Project, "项目不存在") is None
+
+        db.query.return_value = self._q(None)
+        with pytest.raises(HTTPException) as ei:
+            _require_related_exists(db, 2, Project, "项目不存在")
+        assert ei.value.status_code == 404
+
+    def test_accessible_fund_rejects_cross_org_record(self):
+        from fastapi import HTTPException
+
+        import app.api.v1.fund_lifecycle as fl
+
+        fund = SimpleNamespace(id=1, project_id=0)
+        db = MagicMock()
+        db.query.return_value = self._q(fund)
+        user = SimpleNamespace(id=9, role="user", is_superuser=False)
+        with patch.object(fl, "check_record_access", return_value=False):
+            with pytest.raises(HTTPException) as ei:
+                fl._get_accessible_fund_or_403(1, user, db)
+        assert ei.value.status_code == 403
+        assert "无权操作该组织的经费" in ei.value.detail
+
+    def test_contract_without_project_uses_standalone_access(self):
+        from app.api.v1.fund_lifecycle import _ensure_contract_access
+
+        contract = SimpleNamespace(project_id=None, created_by="admin")
+        user = SimpleNamespace(id=1, role="admin", is_superuser=False, username="admin")
+        db = MagicMock()
+        assert _ensure_contract_access(contract, user, db) is None
+
+    def test_scope_lifecycle_records_filters_by_username_for_non_superuser(self):
+        from app.api.v1.fund_lifecycle import _scope_lifecycle_records
+
+        query = MagicMock()
+        user = SimpleNamespace(id=2, role="user", is_superuser=False, username="u2")
+        result = _scope_lifecycle_records(query, Project, user)
+        assert result is query.filter.return_value
+        query.filter.assert_called_once()
 
 
 # ===========================================================================
@@ -363,11 +423,11 @@ class TestFundLifecycleFinalBranches:
 
         assert QuotaAdjustRequest.validate_reason("") == ""
 
-    async def test_create_transfer_voucher_fund_missing_at_balance_check(self):
-        """761->780：存在性校验通过后余额校验查不到经费 → 跳过校验仍创建。
+    async def test_create_transfer_voucher_fund_without_project_skips_project_check(self):
+        """经费未关联项目（project_id=0）时跳过项目级权限校验，余额校验仍执行。
 
-        竞态导致"校验时存在、余额查询时已不可见"时不得 500；用直调 + mock db
-        按序注入 4 次查询：凭证编号(无) / Fund 存在 / 后续校验 Fund 存在 / 余额 Fund 缺失。
+        新实现 `_get_accessible_fund_or_403` 会在 fund.project_id 有值时追加项目
+        404/403 校验；替身必须给出真实数值，否则 `Mock <= int` 会 TypeError。
         """
         from app.api.v1.fund_lifecycle import TransferVoucherCreate, create_transfer_voucher
 
@@ -375,9 +435,16 @@ class TestFundLifecycleFinalBranches:
             q = MagicMock()
             q.filter.return_value = q
             q.first.return_value = first
+            q.scalar.return_value = 0
             return q
 
-        fund_stub = Mock()  # 真值即可，仅用于存在性校验
+        fund_stub = SimpleNamespace(
+            project_id=0,
+            approved_amount=100.0,
+            planned_amount=0.0,
+            amount=0.0,
+            used_amount=0.0,
+        )
         db = MagicMock()
         db.query.side_effect = [_q(None), _q(fund_stub), _q(fund_stub), _q(None)]
 
@@ -392,6 +459,7 @@ class TestFundLifecycleFinalBranches:
 
         assert resp["code"] == 200
         assert resp["message"] == "创建成功"
-        assert db.query.call_count == 4  # 余额校验查询已执行但返回 None
+        # 凭证编号查重 / 经费存在性（含权限）/ 已用划转汇总；无项目即不再查 Project
+        assert db.query.call_count == 3
         created = db.add.call_args.args[0]
         assert created.voucher_no == "V-EDGE"

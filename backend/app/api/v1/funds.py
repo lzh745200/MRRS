@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.api.v1.deps import require_funds_operator_role, enforce_admin_include_deleted, build_viewable_because
 from app.core.database import get_db
+from app.core.async_utils import run_in_thread
 from app.core.config import settings
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
@@ -1593,7 +1594,9 @@ async def ocr_voucher(
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="不是有效的图片文件") from exc
     try:
-        result = ocr_service.recognize(content)
+        # OCR 是 CPU/模型推理，必须离开事件循环；否则单次识别会阻塞健康检查、
+        # 登录和其他并发请求（首次加载模型还需 1~2 秒）。
+        result = await run_in_thread(ocr_service.recognize, content)
     except ocr_service.OCRUnavailableError:
         return _ocr_unavailable_response()
     except ValueError as exc:

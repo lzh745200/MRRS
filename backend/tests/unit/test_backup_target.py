@@ -146,7 +146,12 @@ def test_create_backup_with_target_dir(bk_client, monkeypatch):
         )
         with patch(
             "app.api.v1.system.backup.BackupService", return_value=svc
-        ) as mk:
+        ) as mk, patch(
+            # 新安全契约：客户端只能使用“系统已配置”的目标目录；本用例验证的是
+            # target_dir 透传到 BackupService，故把配置口径指向同一个沙箱目录。
+            "app.services.system_config_service.get_config",
+            side_effect=lambda key, default=None: tmp if key == "backup_target_dir" else default,
+        ):
             resp = _authed_post(
                 bk_client,
                 "/api/v1/system/backup",
@@ -193,3 +198,99 @@ def test_create_backup_falls_back_to_config(bk_client, monkeypatch):
         assert resp.status_code == 200
         _, kwargs = mk.call_args
         assert kwargs["backup_dir"] == tmp
+
+
+def test_resolve_target_rejects_public_web_dir():
+    """即使目标在“允许集合”里，也不得落在静态可下载目录内。"""
+    import asyncio
+
+    from app.api.v1.system.backup import _resolve_backup_target_dir
+    from app.utils.paths import get_uploads_path
+
+    uploads = str(get_uploads_path())
+    with patch(
+        "app.services.system_config_service.get_config", return_value=uploads
+    ):
+        with pytest.raises(Exception) as ei:
+            asyncio.run(_resolve_backup_target_dir(uploads))
+    assert "静态下载目录" in str(ei.value)
+
+
+def test_create_backup_target_unwritable_after_allowlist():
+    """目标已配置允许、但真实不可写时，创建备份必须 400。"""
+    import asyncio
+
+    from app.api.v1.system.backup import CreateBackupRequest, create_backup
+
+    svc = MagicMock()
+    with tempfile.TemporaryDirectory() as tmp, patch(
+        "app.api.v1.system.backup.get_backup_service", return_value=svc
+    ), patch(
+        "app.services.system_config_service.get_config", return_value=tmp
+    ), patch(
+        "app.utils.drive_detect.ensure_target_dir", return_value=False
+    ):
+        body = CreateBackupRequest(description="x", target_dir=tmp)
+        with pytest.raises(Exception) as ei:
+            asyncio.run(
+                create_backup(
+                    body=body, request=MagicMock(), db=MagicMock(), operator="root"
+                )
+            )
+    assert "目标目录不可写" in str(ei.value)
+    svc.create_backup.assert_not_called()
+
+
+def test_set_target_rejects_public_web_dir():
+    import asyncio
+
+    from app.api.v1.system.backup import set_backup_target
+
+    with patch("app.api.v1.system.backup._is_public_web_dir", return_value=True), patch(
+        "app.api.v1.system.backup.set_config"
+    ) as set_cfg:
+        with pytest.raises(Exception) as ei:
+            asyncio.run(
+                set_backup_target(
+                    body={"target_dir": "any"}, current_user=_admin(), db=MagicMock()
+                )
+            )
+    assert "静态下载目录" in str(ei.value)
+    set_cfg.assert_not_called()
+
+
+def test_get_schedule_invalid_cron_falls_back_to_daily_2am():
+    import asyncio
+    from datetime import datetime
+
+    from app.api.v1.system.backup import get_backup_schedule, _next_daily_2am
+
+    with patch(
+        "app.api.v1.system.backup.get_config", return_value="not-a-cron"
+    ):
+        result = asyncio.run(get_backup_schedule(db=MagicMock(), current_user=_admin()))
+    assert result["data"]["schedule"] == "not-a-cron"
+    assert result["data"]["nextRun"] == _next_daily_2am(datetime.now()).isoformat()
+
+
+def test_update_schedule_invalid_cron_returns_safe_400():
+    import asyncio
+
+    from app.api.v1.system.backup import BackupScheduleUpdate, update_backup_schedule
+
+    with patch(
+        "app.api.v1.system.backup.set_config"
+    ) as set_cfg, patch(
+        "app.services.backup_scheduler.reschedule_auto_backup_job"
+    ) as reschedule:
+        with pytest.raises(Exception) as ei:
+            asyncio.run(
+                update_backup_schedule(
+                    body=BackupScheduleUpdate(enabled=True, schedule="bad"),
+                    db=MagicMock(),
+                    current_user=_admin(),
+                )
+            )
+    assert "cron 非法" in str(ei.value)
+    set_cfg.assert_not_called()
+    reschedule.assert_not_called()

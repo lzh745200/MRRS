@@ -9,6 +9,7 @@ from typing import List, Optional
 from datetime import datetime
 from pathlib import Path
 
+from app.core.async_utils import run_in_thread, sync
 from app.core.exceptions import AppError, NotFoundException, BusinessError
 from app.core.permission_utils import require_admin
 from app.core.response import ok_list
@@ -125,7 +126,11 @@ async def export_data(
             except ValueError:
                 raise HTTPException(status_code=400, detail="时间格式错误")
 
-        result = await data_sync_service.export_incremental(
+        # 普通导出包含同步 SQL、逐行转换、ZIP 压缩与附件复制；服务方法本身是
+        # 同步实现，直接交给工作线程，避免大导出期间健康检查/登录等请求排队。
+        # 接口参数、返回结构与 DataSyncLog 语义均保持不变。
+        result = await run_in_thread(
+            data_sync_service.export_incremental,
             config=ExportConfig(
                 since=since_time,
                 modules=modules,
@@ -170,7 +175,10 @@ async def export_encrypted_data(
 
         tables_list = modules  # frontend sends "modules" as table list
 
-        result = await data_sync_service.export_encrypted(
+        # 与普通导出一致：取数/序列化/PBKDF2/加密压缩全部在同一个工作线程内完成，
+        # 既不阻塞事件循环，也不把 SQLAlchemy Session 跨线程搬运。
+        result = await run_in_thread(
+            sync(data_sync_service.export_encrypted),
             export_type=export_type,
             tables=tables_list,
             password=password,

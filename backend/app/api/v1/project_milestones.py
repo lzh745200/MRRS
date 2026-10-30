@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -47,6 +47,19 @@ class MilestoneUpdate(BaseModel):
     responsible_person: Optional[str] = Field(None, max_length=50)
     status: Optional[str] = None
     sort_order: Optional[int] = None
+
+    @field_validator("name", "planned_date")
+    @classmethod
+    def _reject_explicit_null(cls, value, info):
+        """显式 null 不是「不更新」，而是把 NOT NULL 列写成 NULL。
+
+        ``model_dump(exclude_unset=True)`` 会保留显式传入的 ``None``，直接
+        setattr 后到 commit 才抛 IntegrityError → 500；入参阶段拒绝为 422，
+        语义更准确，也避免部分字段已被写坏后才失败。
+        """
+        if value is None:
+            raise ValueError(f"{info.field_name} 不能为 null")
+        return value
 
 
 class MilestoneResponse(BaseModel):

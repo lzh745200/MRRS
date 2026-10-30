@@ -6,12 +6,15 @@
 
 # security-audit: exempt data_scope — 系统初始化引导，创建首个管理员，无数据权限主体
 
+import hmac
+import ipaddress
 import logging
+import os
 import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -19,6 +22,7 @@ from app.core.database import get_db
 from app.core.transaction import safe_commit
 from app.core.security import get_current_user, PasswordPolicy
 from app.core.config import settings
+from app.core.permission_utils import is_superuser
 from app.services.system_config_service import SystemConfigService
 
 logger = logging.getLogger(__name__)
@@ -46,6 +50,12 @@ class InitRequest(BaseModel):
     contact_phone: Optional[str] = Field(None, description="联系电话")
 
 
+class ResetInitializationRequest(BaseModel):
+    """重置初始化状态请求（密码必须走请求体，禁止进入 URL/访问日志）"""
+    confirm: str = Field(..., description="输入 RESET 确认")
+    admin_password: str = Field(..., min_length=1, description="当前超级管理员密码")
+
+
 class InitStatusResponse(BaseModel):
     """初始化状态响应"""
     initialized: bool
@@ -63,6 +73,47 @@ class InitStepResponse(BaseModel):
 
 
 # ==================== API 端点 ====================
+
+
+def _is_loopback_request(request: Request) -> bool:
+    """仅允许本机首次引导；代理转发后的地址不被当作回环。"""
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None)
+    if not host:
+        return False
+    try:
+        return ipaddress.ip_address(str(host)).is_loopback
+    except ValueError:
+        return False
+
+
+def _bootstrap_token_valid(request: Request) -> bool:
+    """可选的首次引导令牌；配置后必须提供，未配置时由本机+空库门禁兜底。"""
+    expected = os.getenv("INIT_BOOTSTRAP_TOKEN", "").strip()
+    if not expected:
+        return True
+    supplied = request.headers.get("X-Init-Token", "").strip()
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
+
+
+def _ensure_first_run_bootstrap(request: Request, db: Session, svc: SystemConfigService) -> None:
+    """匿名初始化只能发生在“本机 + 空库 + 未初始化”状态。
+
+    历史缺陷：本接口仅检查 ``initialized`` 标记。实际安装库经常已有 seed 创建的
+    超管但该标记缺失，等于把匿名超管创建入口常开。这里把“存在任何用户/组织”
+    也作为硬拒绝条件；已有数据的系统只能由已登录超管走受控流程。
+    """
+    from app.models.organization import Organization
+    from app.models.user import User
+
+    if svc.is_initialized():
+        raise HTTPException(status_code=409, detail="系统已完成初始化，不能重复执行")
+    if db.query(User.id).first() is not None or db.query(Organization.id).first() is not None:
+        raise HTTPException(status_code=409, detail="系统已存在用户或组织，禁止匿名重新初始化")
+    if not _is_loopback_request(request):
+        raise HTTPException(status_code=403, detail="首次初始化仅允许在本机操作")
+    if not _bootstrap_token_valid(request):
+        raise HTTPException(status_code=403, detail="首次初始化令牌无效")
 
 
 @router.get("/status", summary="检查系统初始化状态")
@@ -103,6 +154,7 @@ async def check_init_status(db: Session = Depends(get_db)):
 @router.post("/initialize", summary="执行系统初始化")
 async def initialize_system(
     request: InitRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
     """系统首次初始化入口（并发 fail-closed 守卫见 _run_initialization）。"""
@@ -110,6 +162,7 @@ async def initialize_system(
     if not _INIT_LOCK.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="系统初始化正在进行中，请稍后重试")
     try:
+        _ensure_first_run_bootstrap(http_request, db, SystemConfigService(db))
         return await _run_initialization(request, db)
     finally:
         _INIT_LOCK.release()
@@ -153,7 +206,10 @@ async def _ensure_root_organization(db, request, steps) -> int:
     """创建或复用根组织单位，返回其 id。
 
     抽成独立函数有两个原因：降低 _run_initialization 的圈复杂度（CI C901=16），
-    以及把"根组织必须是省级编码"的校验与失败语义收敛在一处。
+    以及把根组织编码的校验与失败语义收敛在一处。
+
+    注意：2026-10-27（P2）起**不再强制省级** —— 根组织可为省 / 市州 / 县级任一，
+    由 _resolve_root_code 按代码实际层级判定（旧注释「根组织必须是省级编码」已过时）。
     """
     from app.models.organization import Organization
     from app.schemas.organization import OrganizationCreate
@@ -301,29 +357,28 @@ async def _run_initialization(
 
 @router.post("/reset", summary="重置系统初始化状态（仅超级管理员）")
 async def reset_initialization(
-    confirm: str = Query(..., description="输入 'RESET' 确认重置操作"),
-    admin_password: str = Query("", description="当前管理员密码（二次校验，T047）"),
+    body: ResetInitializationRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """重置系统初始化状态
 
     危险操作：此接口将清除系统初始化标记，允许重新执行初始化流程。
-    需要超级管理员权限，且必须输入确认字符串。
+    仅超级管理员可执行；密码走请求体，避免被访问日志记录。
+    注意：``/initialize`` 还会拒绝“已有用户/组织”的库，因此本接口不能用于
+    对已有数据的系统重新创建超管。
     """
-    from app.core.permission_utils import is_admin
-
-    if not is_admin(current_user):
+    if not is_superuser(current_user):
         raise HTTPException(status_code=403, detail="仅超级管理员可执行此操作")
 
-    if confirm != "RESET":
+    if body.confirm != "RESET":
         raise HTTPException(status_code=400, detail="请输入 'RESET' 确认重置操作")
 
     # T047 加固：confirm 字符串之上增加管理员密码二次校验（fail-closed）
     from app.core.security import verify_password as _verify_pwd
 
-    if not admin_password or not _verify_pwd(
-        admin_password, getattr(current_user, "hashed_password", "") or ""
+    if not body.admin_password or not _verify_pwd(
+        body.admin_password, getattr(current_user, "hashed_password", "") or ""
     ):
         raise HTTPException(status_code=403, detail="管理员密码校验失败")
 

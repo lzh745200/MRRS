@@ -87,9 +87,9 @@ class TestDataSyncService:
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as mock_export:
+            with patch.object(service, "_export_table_data") as mock_export:
                 mock_export.return_value = [{"id": 1, "name": "test"}]
-                with patch.object(service, "_save_export_package", new_callable=AsyncMock) as mock_save:
+                with patch.object(service, "_save_export_package") as mock_save:
                     pkg_path = Path("/tmp/test_sync/export_20240101_120000.zip")
                     mock_save.return_value = pkg_path
                     with patch.object(Path, "exists", return_value=True):
@@ -101,7 +101,7 @@ class TestDataSyncService:
                                 since=datetime(2024, 1, 1, tzinfo=timezone.utc),
                                 modules=["supported_villages"], user_id=1, user_name="admin",
                             )
-                            result = await service.export_incremental(config)
+                            result = service.export_incremental(config)
                             assert result["success"] is True
                             assert "errors" not in result
                             assert result["success"] is True
@@ -112,15 +112,15 @@ class TestDataSyncService:
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as mock_export:
-                with patch.object(service, "_save_export_package", new_callable=AsyncMock) as mock_save:
+            with patch.object(service, "_export_table_data") as mock_export:
+                with patch.object(service, "_save_export_package") as mock_save:
                     mock_save.return_value = Path("/tmp/fake.zip")
                     with patch.object(Path, "exists", return_value=True):
                         with patch.object(Path, "stat") as ms:
                             ms.return_value.st_size = 0
                             from app.services.data_sync_service import ExportConfig
                             config = ExportConfig(modules=["unknown_table"])
-                            result = await service.export_incremental(config)
+                            result = service.export_incremental(config)
                             # W2-T1：未知表被过滤，不产生错误
                             assert mock_export.assert_not_called() is None
                             assert result["success"] is True
@@ -130,9 +130,9 @@ class TestDataSyncService:
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as mock_export:
+            with patch.object(service, "_export_table_data") as mock_export:
                 mock_export.side_effect = Exception("export fail")
-                with patch.object(service, "_save_export_package", new_callable=AsyncMock) as mock_save:
+                with patch.object(service, "_save_export_package") as mock_save:
                     pkg_path = Path("/tmp/test_sync/pkg.zip")
                     mock_save.return_value = pkg_path
                     with patch.object(Path, "exists", return_value=True):
@@ -140,7 +140,7 @@ class TestDataSyncService:
                             ms.return_value.st_size = 100
                             from app.services.data_sync_service import ExportConfig
                             config = ExportConfig(since=None, modules=["supported_villages"])
-                            result = await service.export_incremental(config)
+                            result = service.export_incremental(config)
                             # W2-T1 新契约：异常显式上报
                             assert result["success"] is False
                             assert "supported_villages" in result["errors"]
@@ -161,15 +161,15 @@ class TestDataSyncService:
 
             db.add.side_effect = _capture_add
 
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as mock_export:
+            with patch.object(service, "_export_table_data") as mock_export:
                 mock_export.side_effect = Exception("export fail")
-                with patch.object(service, "_save_export_package", new_callable=AsyncMock) as mock_save:
+                with patch.object(service, "_save_export_package") as mock_save:
                     mock_save.return_value = Path("/tmp/test_sync/pkg_fail.zip")
                     with patch.object(Path, "exists", return_value=True):
                         with patch.object(Path, "stat") as ms:
                             ms.return_value.st_size = 100
                             from app.services.data_sync_service import ExportConfig
-                            result = await service.export_incremental(
+                            result = service.export_incremental(
                                 ExportConfig(since=None, modules=["supported_villages"])
                             )
 
@@ -187,7 +187,7 @@ class TestDataSyncService:
             from app.services.data_sync_service import ExportConfig
             from app.core.error_handler import BusinessLogicError
             with pytest.raises(BusinessLogicError, match="数据导出失败"):
-                await service.export_incremental(ExportConfig())
+                service.export_incremental(ExportConfig())
 
     # ===================== _export_table_data =====================
     @pytest.mark.asyncio
@@ -198,7 +198,7 @@ class TestDataSyncService:
         result_mock.keys.return_value = ["id", "name"]
         db.execute.return_value = result_mock
         from datetime import datetime, timezone
-        records = await service._export_table_data(db, "supported_villages", since=datetime(2024, 1, 1, tzinfo=timezone.utc))
+        records = service._export_table_data(db, "supported_villages", since=datetime(2024, 1, 1, tzinfo=timezone.utc))
         assert len(records) == 1
 
     @pytest.mark.asyncio
@@ -208,7 +208,7 @@ class TestDataSyncService:
         result_mock.fetchall.return_value = [(1, "test")]
         result_mock.keys.return_value = ["id", "name"]
         db.execute.return_value = result_mock
-        records = await service._export_table_data(db, "supported_villages")
+        records = service._export_table_data(db, "supported_villages")
         assert len(records) == 1
 
     @pytest.mark.asyncio
@@ -220,7 +220,7 @@ class TestDataSyncService:
         result_mock.fetchall.return_value = [(1, dt_val)]
         result_mock.keys.return_value = ["id", "created_at"]
         db.execute.return_value = result_mock
-        records = await service._export_table_data(db, "supported_villages")
+        records = service._export_table_data(db, "supported_villages")
         assert records[0]["created_at"] == dt_val.isoformat()
 
     @pytest.mark.asyncio
@@ -230,7 +230,7 @@ class TestDataSyncService:
         result_mock.fetchall.return_value = [(1, b"\x00\x01\x02")]
         result_mock.keys.return_value = ["id", "data"]
         db.execute.return_value = result_mock
-        records = await service._export_table_data(db, "supported_villages")
+        records = service._export_table_data(db, "supported_villages")
         assert records[0]["data"] == b"\x00\x01\x02".hex()
 
     @pytest.mark.asyncio
@@ -239,7 +239,7 @@ class TestDataSyncService:
         db = MagicMock()
         db.execute.side_effect = Exception("query fail")
         with pytest.raises(Exception, match="query fail"):
-            await service._export_table_data(db, "supported_villages")
+            service._export_table_data(db, "supported_villages")
 
     @pytest.mark.asyncio
     async def test_export_table_data_invalid_table_name(self, service):
@@ -247,7 +247,7 @@ class TestDataSyncService:
         db = MagicMock()
         with patch.object(service, "_validate_table_name", side_effect=ValueError("invalid")):
             with pytest.raises(ValueError, match="invalid"):
-                await service._export_table_data(db, "bad table")
+                service._export_table_data(db, "bad table")
 
     # ===================== _save_export_package =====================
     @pytest.mark.asyncio
@@ -256,8 +256,9 @@ class TestDataSyncService:
             m = MagicMock()
             mock_zip.return_value.__enter__ = MagicMock(return_value=m)
             mock_zip.return_value.__exit__ = MagicMock()
-            pkg_path = await service._save_export_package({"key": "val"}, "test_pkg", False)
-            m.writestr.assert_called_once()
+            pkg_path = service._save_export_package({"key": "val"}, "test_pkg", False)
+            m.open.assert_called_once_with("data.json", "w")
+            m.writestr.assert_not_called()
             assert str(pkg_path).endswith(".zip")
 
     @pytest.mark.asyncio
@@ -276,8 +277,9 @@ class TestDataSyncService:
                 file_item.relative_to.return_value = Path("uploads/photo.jpg")
                 up.rglob.return_value = [file_item]
                 mock_uploads.return_value = up
-                pkg_path = await service._save_export_package({"key": "val"}, "test_files", True)
-                m.writestr.assert_called()
+                pkg_path = service._save_export_package({"key": "val"}, "test_files", True)
+                m.open.assert_called_once_with("data.json", "w")
+                m.writestr.assert_not_called()
                 m.write.assert_called_once()
                 assert str(pkg_path).endswith(".zip")
 
@@ -296,7 +298,7 @@ class TestDataSyncService:
                 up.resolve.return_value = up
                 up.rglob.return_value = [unsafe_file]
                 mock_uploads.return_value = up
-                await service._save_export_package({"key": "val"}, "test_unsafe", True)
+                service._save_export_package({"key": "val"}, "test_unsafe", True)
                 m.write.assert_not_called()
                 service.logger.warning.assert_called_once()
 
@@ -310,9 +312,37 @@ class TestDataSyncService:
                 up = MagicMock(spec=Path)
                 up.exists.return_value = False
                 mock_uploads.return_value = up
-                await service._save_export_package({"key": "val"}, "test_noupload", True)
-                m.writestr.assert_called_once()
+                service._save_export_package({"key": "val"}, "test_noupload", True)
+                m.open.assert_called_once_with("data.json", "w")
+                m.writestr.assert_not_called()
                 m.write.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_save_export_package_streams_json_without_whole_payload_dump(self, tmp_path):
+        """真实 ZIP 校验：data.json 分块写入，且不再调用整包 json.dumps。
+
+        旧实现的 ``json.dumps(export_data)`` 会先构造完整 JSON 字符串再复制成
+        bytes，大包时峰值内存≈记录对象+字符串+字节三份。这里用「调用 dumps 即
+        失败」的哨兵证明已改为 JSONEncoder.iterencode 流式写入，同时断言
+        ZIP 成员内容仍可正常解析（包格式兼容）。
+        """
+        import zipfile
+
+        from app.services.data_sync_service import DataSyncService
+
+        svc = object.__new__(DataSyncService)
+        svc.sync_dir = tmp_path
+        svc.logger = MagicMock()
+        payload = {"tables": {"supported_villages": [{"name": "帮扶村·甲"}]}, "n": 1}
+
+        with patch(
+            "app.services.data_sync_service.json.dumps",
+            side_effect=AssertionError("不应整包 json.dumps"),
+        ):
+            pkg_path = svc._save_export_package(payload, "stream_pkg", False)
+
+        with zipfile.ZipFile(pkg_path) as zf:
+            assert json.loads(zf.read("data.json").decode("utf-8")) == payload
 
     # ===================== import_package =====================
     @pytest.mark.asyncio
@@ -749,7 +779,7 @@ class TestDataSyncService:
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
+            with patch.object(service, "_export_table_data") as me:
                 me.return_value = [{"id": 1}]
                 with patch(
                     "app.services.data_sync_service.create_encrypted_package",
@@ -768,7 +798,7 @@ class TestDataSyncService:
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
+            with patch.object(service, "_export_table_data") as me:
                 me.return_value = []
                 with patch(
                     "app.services.data_sync_service.create_encrypted_package",
@@ -789,7 +819,7 @@ class TestDataSyncService:
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
+            with patch.object(service, "_export_table_data") as me:
                 with patch(
                     "app.services.data_sync_service.create_encrypted_package",
                     side_effect=_fake_create,
@@ -810,7 +840,7 @@ class TestDataSyncService:
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
             db = MagicMock()
             mock_get_db.return_value = iter([db])
-            with patch.object(service, "_export_table_data", new_callable=AsyncMock) as me:
+            with patch.object(service, "_export_table_data") as me:
                 me.side_effect = Exception("fail")
                 with patch(
                     "app.services.data_sync_service.create_encrypted_package",
