@@ -81,3 +81,16 @@ export function normalizeTreeNode(node: RawTreeNode): NormalizedTreeNode {
 export function normalizeTreeNodes(nodes: RawTreeNode[]): NormalizedTreeNode[] {
   return nodes.map((node) => normalizeTreeNode(node))
 }
+
+/**
+ * 组织树在 `el-tree-select` 中的字段映射（唯一事实源）。
+ *
+ * Element Plus TreeSelect 默认以节点的 `value` 作为 v-model 值；组织树节点
+ * 归一化后只有 `id`。若不显式映射，节点能显示但点击无法写回，表现为
+ * “无法选择组织”，最终触发“管理员必须指定所属组织”。`node-key` 也必须同步为 `id`。
+ */
+export const ORG_TREE_SELECT_PROPS = {
+  value: 'id',
+  label: 'name',
+  children: 'children',
+} as const

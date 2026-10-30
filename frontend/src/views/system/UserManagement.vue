@@ -191,6 +191,8 @@ import PendingUsersDialog from './components/PendingUsersDialog.vue'
 import ResetPasswordDialog from './components/ResetPasswordDialog.vue'
 import PermissionPackExportDialog from './components/PermissionPackExportDialog.vue'
 import UserFormDialog from './components/UserFormDialog.vue'
+import { roleLabel } from '@/utils/roleAccess'
+import { unwrapList } from '@/utils/unwrapList'
 
 const authStore = useAuthStore()
 const { confirmDanger } = useDangerConfirm()
@@ -301,13 +303,21 @@ function toOrgTreeValue(value: unknown): string | undefined {
   return /^[0-9]/.test(raw) ? `_${raw}` : raw
 }
 
-async function loadOrgTree() {
+async function loadOrgTree(reportError = false) {
   try {
-    const res = await get('/organizations/tree')
-    const raw = res.data || res || []
-    orgTreeOptions.value = Array.isArray(raw) ? normalizeTreeNodes(raw) : []
+    const res: any = await get('/organizations/tree')
+    // 兼容真实信封（res.data / res.items）与测试/旧版直接数组三种形态。
+    // 旧实现只看 res.data，后端若改成 {items: tree} 会静默变空，用户表现为“没有组织可选”。
+    // 统一走 unwrapList：裸数组 / data 数组 / items / data.items 全部兼容，
+    // 且避免手写 `.data.items` 绕过 W5-T5 响应解包门禁。
+    const raw = unwrapList<any>(res).items
+    orgTreeOptions.value = normalizeTreeNodes(raw)
+    return orgTreeOptions.value.length > 0
   } catch {
+    // 保留空态，但不要阻断弹窗；打开弹窗时给出可操作提示，避免只看到空下拉。
     orgTreeOptions.value = []
+    if (reportError) ElMessage.warning('组织列表加载失败，请检查后端服务后重试')
+    return false
   }
 }
 
@@ -358,12 +368,23 @@ const permissionGroups = [
 
 // 角色选项：精简为 4 个实用角色（users.role 体系）
 // 兼容映射：approval_leader/manager→管理员级，operator→普通用户
-const roleOptions = ref<{ value: string; label: string }[]>([
+const ALL_ROLE_OPTIONS = [
   { value: 'super_admin', label: '超级管理员' },
   { value: 'admin', label: '系统管理员' },
   { value: 'user', label: '普通用户' },
   { value: 'viewer', label: '访客' },
-])
+] as const
+
+// 后端 _assert_can_manage_super_admin 只允许超管创建超管；部门级 admin
+// 看到该选项只会得到 403，因此按调用者收敛选项（搜索/表单共用）。
+const canManageSuperAdmin = computed(
+  () => authStore.user?.is_superuser === true || authStore.user?.role === 'super_admin'
+)
+const roleOptions = computed(() =>
+  canManageSuperAdmin.value
+    ? [...ALL_ROLE_OPTIONS]
+    : ALL_ROLE_OPTIONS.filter((role) => role.value !== 'super_admin')
+)
 
 // 角色选项固定使用 users.role 体系（4 个实用角色）。
 // 注意：不再用 /rbac/roles（RbacRole 表）覆盖选项——
@@ -385,7 +406,7 @@ const rules = {
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' },
   ],
-  name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  full_name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   password: [
     // 密码策略统一走 @/utils/passwordPolicy（前端单一事实源，与后端 PasswordPolicy 对齐）。
     // 此前为 min:6 + 各自书写的字符类别规则，用户填 6~11 位或白名单外特殊字符时
@@ -421,18 +442,8 @@ const getRoleTagType = (role: string): 'info' | 'primary' | 'success' | 'warning
   return types[role] || 'info'
 }
 
-const getRoleName = (role: string) => {
-  const names: Record<string, string> = {
-    super_admin: '超级管理员',
-    admin: '系统管理员',
-    approval_leader: '审批领导',
-    manager: '管理人员',
-    operator: '操作员',
-    user: '普通用户',
-    viewer: '访客',
-  }
-  return names[role] || role
-}
+// 与待审核弹窗、四角色契约共用同一展示名（历史角色值在 roleLabel 内归一化）
+const getRoleName = (role: string) => roleLabel(role)
 
 const getDataScopeName = (scope: string) => {
   const names: Record<string, string> = {
@@ -572,7 +583,7 @@ const handlePageChange = () => {
   loadData()
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
   isEdit.value = false
   dialogTitle.value = '新增用户'
   Object.assign(formData, {
@@ -590,9 +601,11 @@ const handleAdd = () => {
     permissions: [],
   })
   dialogVisible.value = true
+  // 组织可能在其它页签刚创建/改名：每次打开都刷新，避免只靠 onMounted 的旧快照。
+  await loadOrgTree(true)
 }
 
-const handleEdit = (row: any) => {
+const handleEdit = async (row: any) => {
   isEdit.value = true
   dialogTitle.value = '编辑用户'
   currentUser.value = row
@@ -602,8 +615,8 @@ const handleEdit = (row: any) => {
     organization_id: toOrgTreeValue(row.organization_id) ?? null,
   })
   dialogVisible.value = true
-  // Load active sessions for this user
-  loadUserSessions(row.id)
+  // 组织可能已变更；与活跃会话并行刷新，不阻塞表单回显。
+  await Promise.all([loadOrgTree(true), loadUserSessions(row.id)])
 }
 
 const handleSubmit = async () => {
@@ -628,7 +641,7 @@ const handleSubmit = async () => {
         })
         ElMessage.success('用户更新成功')
       } else {
-        const res = await post('/users', {
+        await post('/users', {
           username: formData.username,
           full_name: formData.full_name,
           password: formData.password || undefined,
@@ -642,10 +655,12 @@ const handleSubmit = async () => {
           is_active: formData.is_active,
           permissions: formData.permissions?.join(',') || '',
         })
-        const created = res.data?.data
-        if (created?.password) {
+        // 后端出于安全不回传密码；创建成功后展示管理员刚提交/自动生成的密码，
+        // 避免“初始密码”提示分支永远不可达（旧实现读 res.data.data 是错误契约）。
+        const initialPassword = formData.password
+        if (initialPassword) {
           ElMessage.success(
-            `用户创建成功！\n用户名: ${formData.username}\n初始密码: ${created.password}`
+            `用户创建成功！\n用户名: ${formData.username}\n初始密码: ${initialPassword}`
           )
         } else {
           ElMessage.success('用户创建成功')

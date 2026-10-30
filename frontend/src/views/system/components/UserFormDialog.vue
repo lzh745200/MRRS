@@ -74,6 +74,7 @@
           :model-value="form.organization_id"
           :data="orgTreeOptions"
           :props="treeSelectProps"
+          node-key="id"
           placeholder="请选择所属组织"
           check-strictly
           clearable
@@ -203,6 +204,7 @@ import type { FormInstance } from 'element-plus'
 import { DIALOG_MD } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { formatDateTimeLocale } from '@/utils/datetime'
+import { ORG_TREE_SELECT_PROPS } from '@/utils/treeNormalizer'
 
 interface UserFormModel {
   username: string
@@ -218,8 +220,8 @@ interface UserFormModel {
   permissions: string[]
 }
 
-/** el-tree-select 的字段映射（label / children 指向组织树字段名） */
-const treeSelectProps = { label: 'name', children: 'children' } as const
+/** el-tree-select 的字段映射（与组织树常量同源，避免 value 键再次漏配） */
+const treeSelectProps = ORG_TREE_SELECT_PROPS
 
 defineProps<{
   modelValue: boolean

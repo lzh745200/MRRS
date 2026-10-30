@@ -9,7 +9,9 @@
     <el-table v-if="users.length > 0" :data="users" border>
       <el-table-column prop="username" label="用户名" min-width="120" />
       <el-table-column prop="full_name" label="姓名" min-width="100" />
-      <el-table-column prop="role" label="角色" width="110" />
+      <el-table-column prop="role" label="角色" width="110">
+        <template #default="{ row }">{{ roleLabel(row.role) }}</template>
+      </el-table-column>
       <el-table-column prop="organization_name" label="所属组织" min-width="140" />
       <el-table-column label="状态" width="90">
         <template #default>
@@ -29,6 +31,7 @@
 <script setup lang="ts">
 import { DIALOG_MD } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
+import { roleLabel } from '@/utils/roleAccess'
 
 /**
  * 待审核用户对话框（W5-T10 自 UserManagement.vue 拆出）。

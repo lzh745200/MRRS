@@ -714,8 +714,21 @@ class TestRoleOptions:
             mock_req.return_value = None
             response = client.get(f"{self.prefix}/roles/options")
             assert response.status_code == 200
-            assert len(response.json()["data"]["roles"]) == 4
+            roles = response.json()["data"]["roles"]
+            assert [r["value"] for r in roles] == ["super_admin", "admin", "user", "viewer"]
+            assert [r["label"] for r in roles] == ["超级管理员", "系统管理员", "普通用户", "访客"]
         _clear_overrides(client, get_current_user)
+
+    def test_practical_role_contract_is_four(self):
+        """users.role 只允许四个实用角色；历史值只能在入口归一化，不得重新入列。"""
+        from app.core.constants import ALL_ROLES, PRACTICAL_ROLES, normalize_role
+
+        assert PRACTICAL_ROLES == ["super_admin", "admin", "user", "viewer"]
+        assert ALL_ROLES == PRACTICAL_ROLES
+        assert normalize_role("manager") == "admin"
+        assert normalize_role("approval_leader") == "admin"
+        assert normalize_role("operator") == "user"
+        assert normalize_role("unknown_role") == "unknown_role"
 
 
 class TestDataScopeOptions:

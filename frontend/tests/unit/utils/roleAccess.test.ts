@@ -11,6 +11,7 @@ import {
   hasMinRole,
   canAccessMenu,
   getRoleFromLocalStorage,
+  roleLabel,
 } from '@/utils/roleAccess'
 
 /**
@@ -259,5 +260,17 @@ describe('getRoleFromLocalStorage 补充', () => {
     expect(getRoleFromLocalStorage()).toBe('admin')
     setAuthUser({ role: 'operator' })
     expect(getRoleFromLocalStorage()).toBe('user')
+  })
+
+  it('roleLabel：四类固定角色 + 历史值归一化 + 未知值透传 + 空值', () => {
+    expect(roleLabel('super_admin')).toBe('超级管理员')
+    expect(roleLabel('admin')).toBe('系统管理员')
+    expect(roleLabel('user')).toBe('普通用户')
+    expect(roleLabel('viewer')).toBe('访客')
+    expect(roleLabel('manager')).toBe('系统管理员')
+    expect(roleLabel('approval_leader')).toBe('系统管理员')
+    expect(roleLabel('operator')).toBe('普通用户')
+    expect(roleLabel('custom_role')).toBe('custom_role')
+    expect(roleLabel()).toBe('-')
   })
 })

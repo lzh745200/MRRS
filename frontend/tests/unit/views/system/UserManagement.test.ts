@@ -32,7 +32,10 @@ const {
   mockRequestGet,
 } = vi.hoisted(() => {
   return {
-    authState: { isAdmin: true },
+    authState: {
+      isAdmin: true,
+      user: { role: 'super_admin', is_superuser: true },
+    },
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
     confirmMock: vi.fn(),
     alertMock: vi.fn(),
@@ -107,6 +110,7 @@ vi.mock('@/utils/clipboard', () => ({
 
 vi.mock('@/utils/treeNormalizer', () => ({
   normalizeTreeNodes: normalizeMock,
+  ORG_TREE_SELECT_PROPS: { value: 'id', label: 'name', children: 'children' },
 }))
 
 vi.mock('@/views/system/Role.vue', () => ({
@@ -345,6 +349,94 @@ describe('挂载与初始化', () => {
     expect((wrapper.vm as any).orgTreeOptions).toEqual([])
   })
 
+  it('loadOrgTree：兼容 items 形态，组织树不再因响应包装差异静默变空', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/organizations/tree') {
+        return Promise.resolve({ items: [{ id: 7, name: '新组织', children: [] }] })
+      }
+      return defaultGetImpl(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).orgTreeOptions).toHaveLength(1)
+    expect((wrapper.vm as any).orgTreeOptions[0].name).toBe('新组织')
+  })
+
+  it('loadOrgTree：兼容裸数组与 data.items 两种历史形态', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/organizations/tree') {
+        return Promise.resolve([{ id: 8, name: '裸数组组织', children: [] }])
+      }
+      return defaultGetImpl(url)
+    })
+    let wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).orgTreeOptions[0].name).toBe('裸数组组织')
+    wrapper.unmount()
+
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/organizations/tree') {
+        return Promise.resolve({
+          data: { items: [{ id: 10, name: '嵌套 items 组织', children: [] }] },
+        })
+      }
+      return defaultGetImpl(url)
+    })
+    wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).orgTreeOptions[0].name).toBe('嵌套 items 组织')
+  })
+
+  it('handleAdd 每次打开重新拉取组织树（新增组织后立即可选）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockClear()
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/organizations/tree') {
+        return Promise.resolve({ data: [{ id: 9, name: '刚创建的组织', children: [] }] })
+      }
+      return defaultGetImpl(url)
+    })
+
+    await vm.handleAdd()
+    await flushPromises()
+
+    expect(mockGet).toHaveBeenCalledWith('/organizations/tree')
+    expect(vm.orgTreeOptions.some((node: any) => node.name === '刚创建的组织')).toBe(true)
+  })
+
+  it('handleAdd 组织树加载失败 → 空态 + 可操作提示，不静默', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/organizations/tree') return Promise.reject(new Error('net'))
+      return defaultGetImpl(url)
+    })
+
+    await vm.handleAdd()
+    await flushPromises()
+
+    expect(vm.dialogVisible).toBe(true)
+    expect(vm.orgTreeOptions).toEqual([])
+    expect(ElMessage.warning).toHaveBeenCalledWith('组织列表加载失败，请检查后端服务后重试')
+  })
+
+  it('组织树选择器显式映射 value=id（否则节点可见但无法写回 v-model）', async () => {
+    // 本文件的 treeNormalizer 被 mock；必须取真实模块，才能守住生产常量。
+    const actual = await vi.importActual<typeof import('@/utils/treeNormalizer')>(
+      '@/utils/treeNormalizer'
+    )
+    // 与 UserFormDialog 共用同一常量；Element Plus TreeSelect 默认 key 是 value，
+    // 组织树节点只有 id。缺 value 映射 = 点击不写回 = “无法选择组织”。
+    expect(actual.ORG_TREE_SELECT_PROPS).toMatchObject({
+      value: 'id',
+      label: 'name',
+      children: 'children',
+    })
+  })
+
   it('roleOptions：固定 users.role 体系 4 角色，不再请求 /rbac/roles 覆盖', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -357,6 +449,19 @@ describe('挂载与初始化', () => {
       { value: 'user', label: '普通用户' },
       { value: 'viewer', label: '访客' },
     ])
+  })
+
+  it('部门级管理员不展示“超级管理员”选项（后端只允许超管创建超管）', async () => {
+    const original = authState.user
+    authState.user = { role: 'admin', is_superuser: false } as any
+    try {
+      const wrapper = mountComp()
+      await flushPromises()
+      const roles = (wrapper.vm as any).roleOptions as { value: string }[]
+      expect(roles.map((r) => r.value)).toEqual(['admin', 'user', 'viewer'])
+    } finally {
+      authState.user = original
+    }
   })
 
   it('loadData：响应缺 total → 以 items 长度兜底', async () => {
@@ -548,9 +653,9 @@ describe('字典映射函数', () => {
     const vm = wrapper.vm as any
     expect(vm.getRoleName('super_admin')).toBe('超级管理员')
     expect(vm.getRoleName('admin')).toBe('系统管理员')
-    expect(vm.getRoleName('approval_leader')).toBe('审批领导')
-    expect(vm.getRoleName('manager')).toBe('管理人员')
-    expect(vm.getRoleName('operator')).toBe('操作员')
+    expect(vm.getRoleName('approval_leader')).toBe('系统管理员')
+    expect(vm.getRoleName('manager')).toBe('系统管理员')
+    expect(vm.getRoleName('operator')).toBe('普通用户')
     expect(vm.getRoleName('user')).toBe('普通用户')
     expect(vm.getRoleName('viewer')).toBe('访客')
     expect(vm.getRoleName('custom_role')).toBe('custom_role')
@@ -674,6 +779,14 @@ describe('新增表单：管理员必须有组织（与后端守卫对齐）', (
   it('普通用户可不选组织（后端不限制）', async () => {
     expect(await validateOrg(null, 'user')).toBeUndefined()
   })
+
+  it('姓名校验规则挂在 full_name 上（旧键 name 是死规则，导致必填从未生效）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.rules.full_name?.[0]?.required).toBe(true)
+    expect(vm.rules.name).toBeUndefined()
+  })
 })
 
 describe('新增 / 编辑 / 提交', () => {
@@ -748,16 +861,22 @@ describe('新增 / 编辑 / 提交', () => {
     expect(mockPost).not.toHaveBeenCalled()
   })
 
-  it('handleSubmit 新建：返回初始密码 → 密码提示', async () => {
+  it('handleSubmit 新建：展示刚提交的初始密码（后端不回传密码）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleAdd()
     vm.formData.username = 'newbie'
     vm.formData.full_name = '新人'
+    vm.formData.password = 'Init!23456789'
     vm.formData.permissions = ['data:view', 'data:edit']
     vm.userFormRef = { validate: (cb: any) => cb(true) }
-    mockPost.mockResolvedValueOnce({ data: { data: { password: 'Init!234' } } })
+    // 与真实 POST /users 契约一致：只返回用户字段，不含 password
+    mockPost.mockResolvedValueOnce({
+      code: 200,
+      message: '用户创建成功',
+      data: { id: 9, username: 'newbie', role: 'user', organization_id: 3 },
+    })
     mockApiRequest.mockClear()
     await vm.handleSubmit()
     await flushPromises()
@@ -765,23 +884,26 @@ describe('新增 / 编辑 / 提交', () => {
       '/users',
       expect.objectContaining({
         username: 'newbie',
-        password: undefined,
+        password: 'Init!23456789',
         permissions: 'data:view,data:edit',
       })
     )
-    expect(ElMessage.success).toHaveBeenCalledWith(expect.stringContaining('初始密码: Init!234'))
+    expect(ElMessage.success).toHaveBeenCalledWith(
+      expect.stringContaining('初始密码: Init!23456789')
+    )
     expect(vm.dialogVisible).toBe(false)
     expect(mockApiRequest).toHaveBeenCalled() // 提交后刷新列表
     expect(vm.submitting).toBe(false)
   })
 
-  it('handleSubmit 新建：无初始密码 → 普通成功提示', async () => {
+  it('handleSubmit 新建：密码为空（测试绕过表单校验）→ 普通成功提示', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.handleAdd()
+    vm.formData.password = ''
     vm.userFormRef = { validate: (cb: any) => cb(true) }
-    mockPost.mockResolvedValueOnce({ data: { data: {} } })
+    mockPost.mockResolvedValueOnce({ code: 200, data: { id: 9 } })
     await vm.handleSubmit()
     await flushPromises()
     expect(ElMessage.success).toHaveBeenCalledWith('用户创建成功')

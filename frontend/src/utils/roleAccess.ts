@@ -15,6 +15,23 @@ const ROLE_NORMALIZE_MAP: Record<string, string> = {
   operator: 'user',
 }
 
+/** 四类固定角色与历史值的展示名（单一事实源）。 */
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: '超级管理员',
+  admin: '系统管理员',
+  user: '普通用户',
+  viewer: '访客',
+  approval_leader: '系统管理员',
+  manager: '系统管理员',
+  operator: '普通用户',
+}
+
+/** 角色展示名：四类固定角色 + 历史值兼容；未知值原样透传。 */
+export function roleLabel(role?: string | null): string {
+  if (!role) return '-'
+  return ROLE_LABELS[normalizeRole(role)] || role
+}
+
 /** 角色优先级（数字越小权限越高） */
 export const ROLE_PRIORITY: Record<string, number> = {
   super_admin: 0,
