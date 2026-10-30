@@ -122,6 +122,7 @@ import {
 } from '@/api/orgGrants'
 import { getOrganizationTree } from '@/api/organization'
 import { unwrapList } from '@/utils/unwrapList'
+import type { RawTreeNode } from '@/utils/treeNormalizer'
 import { useMenuStore } from '@/stores/menu'
 
 interface MatrixRow {
@@ -136,6 +137,11 @@ const menuStore = useMenuStore()
 interface OrgOption {
   id: number
   label: string
+}
+
+/** 组织树节点：RawTreeNode 的 id/name/children + 本页展示所需的 code */
+interface OrgTreeNode extends RawTreeNode {
+  code?: string | null
 }
 
 const orgIdText = ref('')
@@ -157,7 +163,7 @@ function onOrgIdInput(value: string): void {
 }
 
 /** 把组织树拍平成「缩进名称（编码）」的下拉项；缺失字段做安全兜底 */
-function flattenOrgs(nodes: any[], depth = 0): OrgOption[] {
+function flattenOrgs(nodes: OrgTreeNode[], depth = 0): OrgOption[] {
   const out: OrgOption[] = []
   for (const node of Array.isArray(nodes) ? nodes : []) {
     const id = Number(node?.id)
@@ -181,7 +187,7 @@ async function loadOrgOptions(): Promise<void> {
     // `/organizations/tree` 返回信封 `{code,data:[...],items:[...]}`（`success_response`），
     // 直接 `Array.isArray(tree)` 恒为 false → 下拉恒空、页面恒提示“未能加载单位列表”，
     // 用户只能退回手工输 ID。`unwrapList` 同时兼容裸数组与各种信封形态。
-    orgOptions.value = flattenOrgs(unwrapList(tree).items as any[])
+    orgOptions.value = flattenOrgs(unwrapList<OrgTreeNode>(tree).items)
     orgLoadFailed.value = orgOptions.value.length === 0
   } catch {
     orgOptions.value = []
