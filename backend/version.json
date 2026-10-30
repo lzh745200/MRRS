@@ -1,8 +1,8 @@
 {
-  "version": "1.18.27",
+  "version": "1.18.28",
   "build": "20261030",
   "release_date": "2026-10-30",
-  "description": "迁移落地修复（老库未升级 + 外键迁移误判 + 覆盖率缺口）",
+  "description": "重新打包发布（补上根组织层级修复的安装包）",
   "features": [
     "refresh 令牌补齐 token_version 校验：登出/强退后旧 refresh 不再能换发 access",
     "权限包可选认证复用完整 get_current_user 链路，堵住已吊销令牌改写全库 RBAC 的入口",
