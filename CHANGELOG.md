@@ -1,3 +1,51 @@
+## [1.18.27] - 2026-10-30 — 迁移落地修复（老库未升级 + 外键迁移误判 + 覆盖率缺口）
+
+v1.18.26 的审计收口在**空库演练**里全绿，但实测真实开发库后发现三类问题，本版修掉并补齐回归。
+
+### Fixed
+
+**1. 实际库落后 4 个迁移 —— 审计修复在真实库上一条都没生效**
+
+`backend/data/rural_revitalization.db` 的 `alembic_version` 停在 `r43_prune_dead_columns_001`，
+而 head 是 `fk_machine_codes_created_by_001`。升级前实测：5 个 PII 列仍是 `VARCHAR(20)`、
+重复索引 7 组仍在、`machine_codes.created_by` 仍 `NO ACTION`。
+
+原因是空库由 `001_baseline` 的 `create_all()` 直接按新模型建表，**空库永远是对的**；
+老库必须手动 `alembic upgrade head`。这正是「迁移基线自证」那个 Critical 描述的机制在真实库上报案。
+
+已备份后 `alembic upgrade head`，实测：PII 8 列全部 `VARCHAR(256)`、冗余索引 8 个已删（重复组归零）、
+`created_by` 外键 `SET NULL` 已补、数据零丢失。
+
+**2. 外键迁移被整表 DDL 误判跳过**
+
+`fk_machine_codes_created_by_001.rewrite_fk_ddl` 用 `if "ON DELETE SET NULL" in ddl.upper()`
+判断「已经改过」，但整张 `machine_codes` 的 DDL 里 `user_id` 那条外键**本来就带**该子句 ——
+于是每次都误判跳过（真实库日志：`DDL 里未找到目标外键`）。
+
+改为只匹配 `created_by` **那一条**外键子句，且仅当它自己没有 `ON DELETE` 时才改写。
+新增 `tests/unit/test_fk_machine_codes_ddl_rewrite.py`（3 例），用**真实库的 DDL 片段**做输入，
+锁定「其它外键带 ON DELETE 时 created_by 仍必须被改写」。
+
+**3. Nightly 覆盖率 99.97% < 100**
+
+缺口是 `app/utils/audit_logger.py` 第 51、54-56 行 —— `_json_safe_value` 的两个防御分支
+（`value is None` 提前返回、序列化失败降级）。补 `tests/unit/test_audit_logger_json_safe_r53.py`
+（3 例，用**循环引用**触发 `ValueError` 覆盖 except 分支）。
+
+**4. 学校 Excel 导入静默写入空编码**
+
+`schools.code` 是跨机数据包的匹配键（与 `organizations.code` 同口径），类 `UNIQUE` 但
+SQLite 允许多个 NULL 并存 —— 原导入逻辑 `code=str(row[2]) if row[2] else None` 会**静默**
+产出任意多条「无编码」学校，导出/导入按 code 配对全部落空且**没有任何提示**。
+
+改为：缺编码的行**跳过并计入 errors**（格式与 `_fmt_row_error` 一致），用户可见。
+注意未把列改为 NOT NULL —— API 层 `code` 允许省略是既有兼容契约，贸然收紧会破坏前端调用；
+本次修的是「静默写 None」这个真实缺陷。
+
+### Changed
+
+- 版本号 1.18.26 → **1.18.27**（`node scripts/sync-version.js --write` 同步 22 处目标）。
+
 # 更新日志
 
 所有重要的项目变更都会记录在此文件中。

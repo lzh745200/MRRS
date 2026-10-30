@@ -1,4 +1,4 @@
-﻿"""
+"""
 学校管理API
 支持完整CRUD、导入导出功能
 """
@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
+from app.core.async_utils import run_in_thread
 from app.core.errors import AppError
 from app.core.response import ok_list, success_response
 from ...core.config import settings
@@ -295,7 +296,7 @@ async def import_schools_excel(
         # P2-4 启动优化：openpyxl 惰性导入（import 期约 760ms，含 numpy），仅本端点触发
         from app.services.office_reader import load_workbook_any
 
-        wb = load_workbook_any(content, getattr(file, "filename", None))
+        wb = await run_in_thread(load_workbook_any, content, getattr(file, "filename", None))
         ws = wb.active
 
         status_map = {"帮扶中": "active", "未帮扶": "inactive", "已完成": "completed"}
@@ -309,13 +310,23 @@ async def import_schools_excel(
             if not row or len(row) < 2 or not row[1]:
                 continue
 
+            # 2026-10-30 审计修复：学校编码（row[2]）是跨机数据包的匹配键 ——
+            # `organizations.code` 那套按 6 位行政区划码对齐，学校侧同样要求有编码。
+            # 原实现无编码时静默写 None，而 `code` 列是 UNIQUE ——SQLite 允许多个 NULL
+            # 并存，于是能积累出任意多条「无编码」学校，导出/导入时按 code 配对全部落空，
+            # 且**没有任何提示**。改为跳过并计入 errors，让用户看得见。
+            if not row[2]:
+                # 与 _fmt_row_error 保持同一种字符串格式（该端点 errors 是 list[str]）
+                errors.append(f"第{row_idx}行({row[1]}): 缺少学校编码（第 3 列），已跳过")
+                continue
+
             try:
                 type_val = TYPE_MAP.get(str(row[3]) if row[3] else "小学", "primary")
                 status_val = status_map.get(str(row[10]) if row[10] else "未帮扶", "inactive")
 
                 school = School(
                     name=str(row[1]),
-                    code=str(row[2]) if row[2] else None,
+                    code=str(row[2]).strip(),  # 已保证非空
                     type=SchoolType(type_val),
                     province=str(row[4]) if row[4] else None,
                     city=str(row[5]) if row[5] else None,
@@ -397,7 +408,7 @@ async def import_scholarship_students(
         # P2-4 启动优化：openpyxl 惰性导入（同上）
         from app.services.office_reader import load_workbook_any
 
-        wb = load_workbook_any(content, getattr(file, "filename", None))
+        wb = await run_in_thread(load_workbook_any, content, getattr(file, "filename", None))
         ws = wb.active
         imported = 0
         errors = []
@@ -463,72 +474,76 @@ async def export_schools_excel(
     data_scope: OrgScopeFilter = Depends(get_org_scope),
     db: Session = Depends(get_db),
 ):
-    """导出学校到 Excel"""
-    # P2-4 启动优化：openpyxl 惰性导入（同上）
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    """导出学校到 Excel（openpyxl 全量构建下沉线程池，避免阻塞事件循环）"""
+    from fastapi.responses import Response
 
     query = db.query(School).filter(School.is_active == True)  # noqa: E712
     query = data_scope.filter_by_org_ids(query, School.organization_id, created_by_column=School.created_by)
     schools = query.all()
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "学校列表"
+    def _build_schools_xlsx() -> bytes:
+        # P2-4 启动优化：openpyxl 惰性导入（同上）
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
 
-    headers = [
-        "序号",
-        "学校名称",
-        "学校编码",
-        "学校类型",
-        "所在区域",
-        "学生人数",
-        "教师人数",
-        "帮扶状态",
-        "帮扶单位",
-        "校长",
-        "联系电话",
-    ]
-    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "学校列表"
 
-    for col, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=header)
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+        headers = [
+            "序号",
+            "学校名称",
+            "学校编码",
+            "学校类型",
+            "所在区域",
+            "学生人数",
+            "教师人数",
+            "帮扶状态",
+            "帮扶单位",
+            "校长",
+            "联系电话",
+        ]
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
 
-    status_display = {"active": "帮扶中", "inactive": "未帮扶", "completed": "已完成"}
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    for idx, school in enumerate(schools, 1):
-        region = f"{school.province or ''}{school.city or ''}{school.district or ''}"
-        type_val = school.type.value if school.type else ""
-        status_val = school.support_status.value if school.support_status else ""
-        ws.append(
-            [
-                idx,
-                school.name,
-                school.code or "",
-                TYPE_DISPLAY.get(type_val, type_val),
-                region,
-                school.student_count,
-                school.teacher_count,
-                status_display.get(status_val, status_val),
-                school.support_unit or "",
-                school.principal or "",
-                school.contact_phone or "",
-            ]
-        )
+        status_display = {"active": "帮扶中", "inactive": "未帮扶", "completed": "已完成"}
 
-    widths = [8, 25, 15, 12, 25, 12, 12, 12, 20, 12, 15]
-    for i, width in enumerate(widths, 1):
-        ws.column_dimensions[chr(64 + i)].width = width
+        for idx, school in enumerate(schools, 1):
+            region = f"{school.province or ''}{school.city or ''}{school.district or ''}"
+            type_val = school.type.value if school.type else ""
+            status_val = school.support_status.value if school.support_status else ""
+            ws.append(
+                [
+                    idx,
+                    school.name,
+                    school.code or "",
+                    TYPE_DISPLAY.get(type_val, type_val),
+                    region,
+                    school.student_count,
+                    school.teacher_count,
+                    status_display.get(status_val, status_val),
+                    school.support_unit or "",
+                    school.principal or "",
+                    school.contact_phone or "",
+                ]
+            )
 
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
+        widths = [8, 25, 15, 12, 25, 12, 12, 12, 20, 12, 15]
+        for i, width in enumerate(widths, 1):
+            ws.column_dimensions[chr(64 + i)].width = width
 
-    return StreamingResponse(
-        output,
+        output = io.BytesIO()
+        wb.save(output)
+        return output.getvalue()
+
+    content = await run_in_thread(_build_schools_xlsx)
+    return Response(
+        content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=schools.xlsx"},
     )
@@ -1503,7 +1518,7 @@ async def import_school_scholarship_students(
         # P2-4 启动优化：openpyxl 惰性导入（同上）
         from app.services.office_reader import load_workbook_any
 
-        wb = load_workbook_any(content, getattr(file, "filename", None))
+        wb = await run_in_thread(load_workbook_any, content, getattr(file, "filename", None))
         ws = wb.active
         imported = 0
         errors = []

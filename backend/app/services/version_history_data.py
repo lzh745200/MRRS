@@ -3679,4 +3679,12 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.27",
+        "date": "2026-10-30",
+        "description": "迁移落地修复（老库未升级 + 外键迁移误判 + 覆盖率缺口）",
+        "features": [
+            "版本号 1.18.26 → 1.18.27（node scripts/sync-version.js --write 同步 22 处目标）。",
+        ],
+    },
 ]

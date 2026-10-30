@@ -108,7 +108,9 @@ class TestImportSchoolsExcel:
     async def test_generic_error_row(self):
         good = (0, "学校甲", "CODE1", "小学", "贵州", "黔南", "都匀", "地址",
                 "300", "20", "帮扶中", "单位", "校长", "电话")
-        bad = (0, "学校乙",) + (None,) * 13
+        # 2026-10-30：学校编码改为必填（无编码的行会被提前跳过，见 school.py 导入逻辑），
+        # 本用例要测的是「构造 School 时抛异常」的分支，故 bad 行需带 code。
+        bad = (0, "学校乙", "CODE2") + (None,) * 12
         content = _xlsx_bytes([["h"] * 14, good, bad])
         with (
             patch.object(sch, "safe_commit"),
