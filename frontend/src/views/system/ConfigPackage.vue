@@ -260,12 +260,20 @@ async function resetConfig() {
     await ElMessageBox.confirm('确认恢复为默认配置？此操作不可撤销。', '警告', {
       type: 'warning',
     })
-    const defaults: any = await get('/system/config/defaults')
-    const items = defaults?.data || defaults || {}
-    const entries = Object.entries(items).map(([key, value]) => ({ key, value: String(value) }))
-    if (entries.length > 0) {
-      await put('/system/config', { configs: entries })
+    const res: any = await get('/system/config/defaults')
+    // 后端返回 `{success, data:{defaults:[{key,value,description}], total}}`。
+    // 旧实现把 `data` 整个对象做 Object.entries → 得到 ["defaults", [...]] 与
+    // ["total", N] 两条**垃圾配置**（值被 String() 成 "[object Object],…" / "17"），
+    // 真正的默认项一条都没恢复，还提示“已恢复默认配置”。
+    const raw = res?.data?.defaults ?? res?.defaults
+    const entries = (Array.isArray(raw) ? raw : [])
+      .filter((item: any) => item && typeof item.key === 'string' && item.key)
+      .map((item: any) => ({ key: item.key, value: String(item.value ?? '') }))
+    if (entries.length === 0) {
+      ElMessage.warning('未获取到默认配置，未做任何修改')
+      return
     }
+    await put('/system/config', { configs: entries })
     ElMessage.success('已恢复默认配置')
     loadConfig()
   } catch {

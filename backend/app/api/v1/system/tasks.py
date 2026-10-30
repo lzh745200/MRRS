@@ -155,16 +155,30 @@ def _create_task_record(task_type: str, task_name: str, created_by: str = None, 
 # ==================== API 端点 ====================
 
 
-def _ensure_task_owner(task: dict, current_user) -> None:
-    """M6：任务操作「本人或管理员」校验（统一走 is_admin 判定口径）。
+def _ensure_task_owner(task: dict, current_user, *, action: str = "操作") -> None:
+    """M6：任务「本人或管理员」校验（统一走 is_admin 判定口径）。
 
     任务记录携带 created_by（创建者用户名）；非创建者且非管理员的登录用户
-    一律 403，杜绝任意用户操作他人任务。
+    一律 403，杜绝任意用户查看/操作他人任务。
     """
     if is_admin(current_user):
         return
     if task.get("created_by") != getattr(current_user, "username", None):
-        raise HTTPException(status_code=403, detail="无权操作其他用户的任务")
+        raise HTTPException(status_code=403, detail=f"无权{action}其他用户的任务")
+
+
+def _visible_tasks(tasks: list, current_user) -> list:
+    """按任务归属收敛可见集合（与 _ensure_task_owner 同口径）。
+
+    M6 只补了 cancel/delete 的「本人或管理员」校验，列表与详情仍把全部任务
+    （含 params/result/created_by）返回给任意登录用户 —— role=user/viewer 可
+    读取他人导入导出任务的结果，属跨用户信息泄露。管理员仍看全部（后台任务
+    页本身就是管理端页面），其余用户只看自己创建的任务。
+    """
+    if is_admin(current_user):
+        return tasks
+    username = getattr(current_user, "username", None)
+    return [t for t in tasks if t.get("created_by") == username]
 
 
 @router.get("", summary="获取任务列表")
@@ -182,6 +196,9 @@ async def list_tasks(
     with _tasks_lock:
         _purge_finished_tasks_locked()
         tasks = list(_tasks.values())
+
+    # M6 读取侧同口径：非管理员只能看到自己创建的任务（params/result 不跨用户）
+    tasks = _visible_tasks(tasks, current_user)
 
     if status:
         tasks = [t for t in tasks if t["status"] == status]
@@ -243,6 +260,9 @@ async def get_task(
         task = dict(task) if task else None
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+
+    # M6 读取侧同口径：非创建者且非管理员不得查看他人任务详情
+    _ensure_task_owner(task, current_user, action="查看")
 
     return {"success": True, "data": task}
 

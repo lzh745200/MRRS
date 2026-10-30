@@ -121,6 +121,7 @@ import {
   type OrgGrantMatrix,
 } from '@/api/orgGrants'
 import { getOrganizationTree } from '@/api/organization'
+import { unwrapList } from '@/utils/unwrapList'
 import { useMenuStore } from '@/stores/menu'
 
 interface MatrixRow {
@@ -177,7 +178,10 @@ async function loadOrgOptions(): Promise<void> {
   orgLoading.value = true
   try {
     const tree = await getOrganizationTree()
-    orgOptions.value = flattenOrgs(Array.isArray(tree) ? tree : [])
+    // `/organizations/tree` 返回信封 `{code,data:[...],items:[...]}`（`success_response`），
+    // 直接 `Array.isArray(tree)` 恒为 false → 下拉恒空、页面恒提示“未能加载单位列表”，
+    // 用户只能退回手工输 ID。`unwrapList` 同时兼容裸数组与各种信封形态。
+    orgOptions.value = flattenOrgs(unwrapList(tree).items as any[])
     orgLoadFailed.value = orgOptions.value.length === 0
   } catch {
     orgOptions.value = []

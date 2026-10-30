@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, time
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -109,6 +109,20 @@ class BatchDeleteRequest(BaseModel):
 
 def get_audit_service(db: Session = Depends(get_db)) -> AuditService:
     return AuditService(db)
+
+
+def _inclusive_end_date(end_date: Optional[datetime]) -> Optional[datetime]:
+    """把「日期」粒度的 end_date 归一为当天结束时刻（含当天）。
+
+    前端日期选择器发送 `YYYY-MM-DD`，FastAPI 解析为当天 00:00:00；原实现
+    `created_at <= end_date` 会把结束日当天的记录全部排除（用户选“今天”
+    却看不到今天的日志）。只归一零点的值，显式带时分秒的入参原样保留。
+    """
+    if end_date is None:
+        return None
+    if end_date.time() == time.min:
+        return datetime.combine(end_date.date(), time.max)
+    return end_date
 
 
 def get_security_service(db: Session = Depends(get_db)) -> SecurityEventService:
@@ -319,7 +333,7 @@ async def export_audit_logs(  # noqa: C901
     if start_date:
         query = query.filter(AuditLogModel.created_at >= start_date)
     if end_date:
-        query = query.filter(AuditLogModel.created_at <= end_date)
+        query = query.filter(AuditLogModel.created_at <= _inclusive_end_date(end_date))
 
     logs = query.limit(5000).all()
     items = []
@@ -428,6 +442,7 @@ async def export_audit_logs(  # noqa: C901
 @router.get("/logs")
 async def get_audit_logs(
     user_id: Optional[int] = None,
+    username: Optional[str] = None,
     action: Optional[str] = None,
     resource_type: Optional[str] = None,
     status: Optional[str] = None,
@@ -453,10 +468,11 @@ async def get_audit_logs(
 
     result = audit.query_audit_logs(
         user_id=user_id,
+        username=username.strip() if isinstance(username, str) and username.strip() else None,
         action=action_enum,
         resource_type=resource_type,
         start_date=start_date,
-        end_date=end_date,
+        end_date=_inclusive_end_date(end_date),
         status=status_enum,
         level=level_enum,
         page=page,

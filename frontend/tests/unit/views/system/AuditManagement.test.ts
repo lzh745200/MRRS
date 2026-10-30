@@ -206,8 +206,9 @@ describe('AuditManagement.vue', () => {
     const vm = w.vm as any
     vm.filters.user = 'admin'
     await vm.loadAuditLogs()
+    // 回归：旧实现写 user_id=undefined，用户名筛选被静默丢弃
     expect(auditApi.getLogs).toHaveBeenLastCalledWith(
-      expect.objectContaining({ user_id: undefined })
+      expect.objectContaining({ username: 'admin' })
     )
   })
 
@@ -252,8 +253,8 @@ describe('AuditManagement.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     const select = w.find('.el-select-stub')
-    await select.setValue('data_modify')
-    expect(vm.filters.action).toBe('data_modify')
+    await select.setValue('update')
+    expect(vm.filters.action).toBe('update')
     const input = w.find('.el-input-stub')
     await input.setValue('admin')
     expect(vm.filters.user).toBe('admin')
@@ -375,31 +376,41 @@ describe('AuditManagement.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     expect(vm.actionTagType('login')).toBe('success')
-    expect(vm.actionTagType('data_modify')).toBe('primary')
-    expect(vm.actionTagType('data_import')).toBe('info')
-    expect(vm.actionTagType('data_export')).toBe('success')
+    expect(vm.actionTagType('create')).toBe('primary')
+    expect(vm.actionTagType('update')).toBe('primary')
+    expect(vm.actionTagType('delete')).toBe('danger')
+    expect(vm.actionTagType('import')).toBe('info')
+    expect(vm.actionTagType('export')).toBe('success')
     expect(vm.actionTagType('backup')).toBe('warning')
-    expect(vm.actionTagType('permission')).toBe('danger')
-    expect(vm.actionTagType('create_project')).toBe('primary')
-    expect(vm.actionTagType('update_project')).toBe('primary')
-    expect(vm.actionTagType('delete_project')).toBe('danger')
-    expect(vm.actionTagType('create_organization')).toBe('primary')
-    expect(vm.actionTagType('update_organization')).toBe('primary')
-    expect(vm.actionTagType('delete_organization')).toBe('danger')
-    expect(vm.actionTagType('create_user')).toBe('primary')
-    expect(vm.actionTagType('update_user')).toBe('primary')
-    expect(vm.actionTagType('delete_user')).toBe('danger')
-    expect(vm.actionTagType('system_config')).toBe('warning')
+    expect(vm.actionTagType('restore')).toBe('warning')
+    expect(vm.actionTagType('permission_change')).toBe('danger')
+    expect(vm.actionTagType('config_change')).toBe('warning')
+    expect(vm.actionTagType('login_failed')).toBe('danger')
+    expect(vm.actionTagType('password_change')).toBe('warning')
     expect(vm.actionTagType('file_upload')).toBe('info')
     expect(vm.actionTagType('file_download')).toBe('info')
     expect(vm.actionTagType('unknown')).toBe('info')
     expect(vm.actionName('login')).toBe('登录')
-    expect(vm.actionName('data_modify')).toBe('数据修改')
+    expect(vm.actionName('permission_change')).toBe('权限变更')
     expect(vm.actionName('xyz')).toBe('xyz')
     expect(vm.getLevelText('high')).toBe('高')
     expect(vm.getLevelText('medium')).toBe('中')
     expect(vm.getLevelText('low')).toBe('低')
     expect(vm.getLevelText('other')).toBe('other')
+  })
+
+  it('操作类型下拉只提供后端 AuditAction 枚举内的值（回归：非法枚举导致 400）', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    // 与 backend/app/models/audit.py::AuditAction 逐值一致
+    const backendActions = [
+      'create', 'read', 'update', 'delete', 'login', 'logout', 'login_failed',
+      'password_change', 'permission_change', 'export', 'import', 'api_call',
+      'file_upload', 'file_download', 'config_change', 'backup', 'restore',
+    ]
+    expect(vm.actionOptions.map((o: any) => o.value).sort()).toEqual([...backendActions].sort())
+    const rendered = w.findAll('.el-select-stub option').map((o) => o.attributes('value'))
+    expect(rendered.sort()).toEqual([...backendActions].sort())
   })
 
   it('告警行按钮（处理）点击 → 处理流程', async () => {

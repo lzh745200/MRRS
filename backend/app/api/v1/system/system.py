@@ -146,7 +146,11 @@ async def get_system_status(current_user=Depends(get_current_user)):
         status_info["services"].append({"name": "database", "status": "connected"})
     except Exception as e:
         logger.debug('系统状态：数据库连通性检查失败: %s', e, exc_info=True)
-        status_info["services"].append({"name": "database", "status": "disconnected", "error": str(e)})
+        # 错误细节不出站（W1 不变量 #6）：sqlite3/psycopg 的连接错误原文含数据库
+        # 绝对路径与 SQL 片段，任何登录用户（含 viewer）都能读该端点，只回异常类名。
+        status_info["services"].append(
+            {"name": "database", "status": "disconnected", "error": type(e).__name__}
+        )
 
     # 检查缓存
     try:

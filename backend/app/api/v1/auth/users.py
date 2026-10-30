@@ -865,6 +865,13 @@ async def update_user_permissions(
         org = db.query(Organization).filter(Organization.id == update_fields["organization_id"]).first()
         if not org:
             raise HTTPException(status_code=400, detail=f"组织ID {update_fields['organization_id']} 不存在")
+        # H4 补口（跨组织越权写入）：此处只校验了组织存在性，department 级 admin
+        # 可把用户改到任意他组织（与 update_user:747-753 口径不一致）。
+        from app.core.data_permission import assert_org_reachable
+
+        assert_org_reachable(
+            db, current_user, update_fields["organization_id"], action="把用户移动到该组织"
+        )
 
     # 验证角色有效性（归一化兼容历史角色值）
     if "role" in update_fields:
@@ -1057,6 +1064,11 @@ async def unlock_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise NotFoundException("用户不存在")
+
+    # 提权收敛 + 跨组织守卫：解锁属可中断他人在途登录流程的写操作，
+    # 部门级管理员不得解锁 super_admin 或他组织用户（与重置密码同口径）。
+    _assert_can_manage_super_admin(current_user, target=user)
+    _assert_user_org_reachable(db, current_user, user, action="解锁该用户账号")
 
     from app.services.lockout_service import get_lockout_service
     from app.utils.audit_logger import AuditLogger

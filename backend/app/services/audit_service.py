@@ -284,11 +284,14 @@ class AuditService:
         level: Optional[AuditLevel] = None,
         page: int = 1,
         page_size: int = 50,
+        username: Optional[str] = None,
     ) -> Dict:
         query = self.db.query(AuditLog)
 
         if user_id:
             query = query.filter(AuditLog.user_id == user_id)
+        if username:
+            query = query.filter(AuditLog.username == username)
         if action:
             action_value = action.value if isinstance(action, AuditAction) else action
             query = query.filter(AuditLog.action == action_value)

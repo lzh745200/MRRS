@@ -353,7 +353,7 @@ describe('查询、重置与分页', () => {
     expect(tasksApi.listTasks).toHaveBeenCalled()
 
     const inputs = wrapper.findAllComponents({ name: 'ElInput' })
-    expect(inputs.length).toBe(4) // 筛选 1 + 对话框 3
+    expect(inputs.length).toBe(3) // 筛选 1 + 对话框 2（任务名称/参数；类型为下拉）
     inputs[0].vm.$emit('update:modelValue', 'export')
     expect(vm.filterType).toBe('export')
     tasksApi.listTasks.mockClear()
@@ -519,13 +519,13 @@ describe('创建任务', () => {
     const vm = wrapper.vm as any
     vm.showCreateDialog = true
     vm.createForm.task_name = '导出任务'
-    vm.createForm.task_type = 'export'
+    vm.createForm.task_type = 'data_export'
     vm.createForm.params = '{"key": "value"}'
     vm.createFormRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.handleCreateTask()
     expect(tasksApi.createTask).toHaveBeenCalledWith({
       task_name: '导出任务',
-      task_type: 'export',
+      task_type: 'data_export',
       params: { key: 'value' },
     })
     expect(ElMessage.success).toHaveBeenCalledWith('任务已提交')
@@ -533,7 +533,7 @@ describe('创建任务', () => {
     expect(vm.page).toBe(1)
     expect(vm.createLoading).toBe(false)
 
-    // params 留空 + task_type 留空 → undefined 透传；message 缺失 → 兜底
+    // params 留空 + task_type 留空 → task_type 由组件默认值兜底（后端枚举 "other"）
     tasksApi.createTask.mockResolvedValue({ success: true })
     vm.createForm.params = '   '
     vm.createForm.task_type = ''
@@ -579,7 +579,7 @@ describe('创建任务', () => {
     vm.createFormRef = { resetFields }
     vm.resetCreateForm()
     expect(resetFields).toHaveBeenCalled()
-    expect(vm.createForm).toMatchObject({ task_name: '', task_type: '', params: '' })
+    expect(vm.createForm).toMatchObject({ task_name: '', task_type: 'other', params: '' })
 
     vm.createFormRef = undefined
     vm.resetCreateForm() // 不抛错
@@ -603,11 +603,13 @@ describe('创建任务', () => {
 
     const inputs = wrapper.findAllComponents({ name: 'ElInput' })
     inputs[1].vm.$emit('update:modelValue', '新任务')
-    inputs[2].vm.$emit('update:modelValue', 'sync')
-    inputs[3].vm.$emit('update:modelValue', '{"a":1}')
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    // selects[0] = 列表状态筛选；selects[1] = 创建对话框的任务类型（后端枚举选项）
+    selects[1].vm.$emit('update:modelValue', 'data_sync')
+    inputs[2].vm.$emit('update:modelValue', '{"a":1}')
     expect(vm.createForm).toMatchObject({
       task_name: '新任务',
-      task_type: 'sync',
+      task_type: 'data_sync',
       params: '{"a":1}',
     })
 
@@ -617,7 +619,7 @@ describe('创建任务', () => {
     await flushPromises()
     expect(tasksApi.createTask).toHaveBeenCalledWith({
       task_name: '新任务',
-      task_type: 'sync',
+      task_type: 'data_sync',
       params: { a: 1 },
     })
     expect(vm.showCreateDialog).toBe(false)

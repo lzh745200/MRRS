@@ -31,6 +31,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["系统管理"])
 
 
+def _assert_can_manage_target(db: Session, current_user, target_user, *, action: str) -> None:
+    """系统管理域「管理某个用户」的统一前置守卫（提权收敛 + 跨组织可达性）。
+
+    本模块的会话列表 / 强制登出 / 2FA 重置此前只有角色级 ``require_admin``：
+    role=admin 但只挂某个部门的账号可以遍历 user_id 操作**他组织**用户，
+    也能对 super_admin 账号强制下线或重置第二因子（安全强度降级）。
+
+    复用 ``auth.users`` 的两个既有守卫，保持全系统同一口径：
+    - ``_assert_can_manage_super_admin``：非超管不得管理超管账号；
+    - ``_assert_user_org_reachable``：非超管要求目标用户组织在自身子树内，
+      无组织归属账号 fail-closed（仅超管可管理）。
+    """
+    from app.api.v1.auth.users import _assert_can_manage_super_admin, _assert_user_org_reachable
+
+    _assert_can_manage_super_admin(current_user, target=target_user)
+    _assert_user_org_reachable(db, current_user, target_user, action=action)
+
+
 # ==================== Pydantic 模型 ====================
 
 
@@ -422,6 +440,9 @@ async def list_user_sessions(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    # H4 补口（跨组织越权读取）：会话列表含会话标识（可用于精确吊销）与登录设备信息，
+    # 原实现只有角色级 require_admin —— 部门级管理员可遍历 user_id 检视他组织用户会话。
+    _assert_can_manage_target(db, current_user, user, action="查看该用户会话")
 
     # 安全获取黑名单计数：优先用内存计数，失败时回退到 DB 查询
     try:
@@ -466,6 +487,9 @@ async def revoke_user_session(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    # 提权收敛 + 跨组织守卫：强制登出可中断他人业务，部门级管理员不得对
+    # 超级管理员或他组织用户执行（否则可定向踢下线关键岗位）。
+    _assert_can_manage_target(db, current_user, user, action="强制登出该用户")
 
     from app.services.session_service import get_session, revoke_session
 
@@ -514,6 +538,9 @@ async def reset_user_two_factor(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    # 重置 2FA = 关闭他人第二因子（安全强度降级），必须与 users.py 的
+    # admin-reset-password 同口径：超管账号仅超管可动，且目标须在自身组织子树内。
+    _assert_can_manage_target(db, current_user, user, action="重置该用户双因素认证")
 
     from app.models.two_factor_auth import TwoFactorAuth
 

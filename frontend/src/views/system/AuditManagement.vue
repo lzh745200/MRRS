@@ -45,24 +45,12 @@
                 size="default"
                 class="action-select"
               >
-                <el-option label="登录" value="login" />
-                <el-option label="数据修改" value="data_modify" />
-                <el-option label="数据导入" value="data_import" />
-                <el-option label="数据导出" value="data_export" />
-                <el-option label="备份恢复" value="backup" />
-                <el-option label="权限变更" value="permission" />
-                <el-option label="创建项目" value="create_project" />
-                <el-option label="更新项目" value="update_project" />
-                <el-option label="删除项目" value="delete_project" />
-                <el-option label="创建组织" value="create_organization" />
-                <el-option label="更新组织" value="update_organization" />
-                <el-option label="删除组织" value="delete_organization" />
-                <el-option label="创建用户" value="create_user" />
-                <el-option label="更新用户" value="update_user" />
-                <el-option label="删除用户" value="delete_user" />
-                <el-option label="系统配置" value="system_config" />
-                <el-option label="文件上传" value="file_upload" />
-                <el-option label="文件下载" value="file_download" />
+                <el-option
+                  v-for="opt in actionOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
               </el-select>
             </div>
             <div class="filter-item">
@@ -224,49 +212,62 @@ const stats = reactive({
 /** ISO 时间显示格式化：'2026-08-29T04:59:54' → '2026-08-29 04:59:54' */
 const fmtTime = (t?: string | null): string => format.formatDateTimeFull(t, '')
 
+/**
+ * 审计操作类型 → 中文名（唯一事实源）。
+ *
+ * 必须与后端 `app/models/audit.py::AuditAction` 逐值一致：`/system/audit/logs`
+ * 会用 `AuditAction(action)` 强校验，非法值直接 ValueError → 400（列表被 catch 清空），
+ * 导出则按字符串精确比对 → 恒空表。历史实现有 14 个值不在枚举内
+ * （data_modify / create_project / system_config …），筛选与导出因此长期不可用。
+ */
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  create: '创建',
+  read: '查询',
+  update: '更新',
+  delete: '删除',
+  login: '登录',
+  logout: '登出',
+  login_failed: '登录失败',
+  password_change: '修改密码',
+  permission_change: '权限变更',
+  export: '导出',
+  import: '导入',
+  api_call: '接口调用',
+  file_upload: '文件上传',
+  file_download: '文件下载',
+  config_change: '配置变更',
+  backup: '备份',
+  restore: '恢复',
+}
+
+const actionOptions = Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
+
 const actionTagType = (a: string): 'info' | 'primary' | 'success' | 'warning' | 'danger' => {
   const map: Record<string, 'info' | 'primary' | 'success' | 'warning' | 'danger'> = {
+    create: 'primary',
+    read: 'info',
+    update: 'primary',
+    delete: 'danger',
     login: 'success',
-    data_modify: 'primary',
-    data_import: 'info',
-    data_export: 'success',
-    backup: 'warning',
-    permission: 'danger',
-    create_project: 'primary',
-    update_project: 'primary',
-    delete_project: 'danger',
-    create_organization: 'primary',
-    update_organization: 'primary',
-    delete_organization: 'danger',
-    create_user: 'primary',
-    update_user: 'primary',
-    delete_user: 'danger',
-    system_config: 'warning',
+    logout: 'info',
+    login_failed: 'danger',
+    password_change: 'warning',
+    permission_change: 'danger',
+    export: 'success',
+    import: 'info',
+    api_call: 'info',
     file_upload: 'info',
     file_download: 'info',
+    config_change: 'warning',
+    backup: 'warning',
+    restore: 'warning',
   }
   return map[a] || 'info'
 }
-const actionNameMap: Record<string, string> = {
-  login: '登录',
-  data_modify: '数据修改',
-  data_import: '导入',
-  data_export: '导出',
-  backup: '备份',
-  permission: '权限',
-  create_project: '创建项目',
-  update_project: '更新项目',
-  delete_project: '删除项目',
-  create_organization: '创建组织',
-  update_organization: '更新组织',
-  delete_organization: '删除组织',
-  create_user: '创建用户',
-  update_user: '更新用户',
-  delete_user: '删除用户',
-  system_config: '系统配置',
-  file_upload: '文件上传',
-  file_download: '文件下载',
-}
+const actionNameMap: Record<string, string> = AUDIT_ACTION_LABELS
 
 // 级别文本映射
 const getLevelText = (level: string): string => {
@@ -303,9 +304,13 @@ async function loadAuditLogs() {
   try {
     const params: Record<string, any> = { page: 1, page_size: 50 }
     if (filters.action) params.action = filters.action
-    if (filters.user) params.user_id = undefined // 用户名暂不支持
+    // 用户名筛选：旧实现写 `params.user_id = undefined`（注释“用户名暂不支持”），
+    // 用户输入被静默丢弃 → 列表永远返回全部人的日志。后端 /audit/logs 已支持 username。
+    if (filters.user) params.username = filters.user
     if (filters.dateRange?.length === 2) {
       params.start_date = filters.dateRange[0]
+      // 结束日期按“含当天”处理：后端把 YYYY-MM-DD 解析成 00:00:00，
+      // 由后端统一把零点 end_date 归一到当天 23:59:59.999999。
       params.end_date = filters.dateRange[1]
     }
     const data = await auditApi.getLogs(params)
@@ -332,7 +337,7 @@ async function loadLoginLogs() {
     loginLogs.value = (data.items || []).map((item: any) => ({
       timestamp: item.attempt_time || '',
       user: item.username || '',
-      type: item.success ? 'login' : 'login',
+      type: 'login', // 登录尝试均为「登录」类（成功/失败由状态列呈现），无登出记录
       ip: item.ip_address || '',
       browser: item.user_agent || '',
       success: item.success ?? true,

@@ -461,6 +461,11 @@ async def get_backup_stats(
                 "lastBackup": stats.get("newest_backup"),
                 "oldestBackup": stats.get("oldest_backup"),
                 "scheduleEnabled": schedule_enabled,
+                # W12-T045 磁盘空间感知：BackupService.get_backup_statistics() 已返回
+                # disk_space，但此处字段白名单漏了它 → 前端 `resData?.disk_space`
+                # 恒 undefined，`diskSpaceWarning` 永不触发（盘满时用户仍可点备份，
+                # 直到后端拒绝才发现）。
+                "disk_space": stats.get("disk_space"),
             },
         }
     except Exception as e:

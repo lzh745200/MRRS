@@ -485,3 +485,196 @@ class TestUpdateUserMoveOrgGuard:
         assert result["code"] == 200
         db.refresh(mine)
         assert mine.organization_id == grand.id
+
+
+class TestUpdateUserPermissionsMoveOrgGuard:
+    """H4 补口：`PUT /users/{id}/permissions` 的改组织分支。
+
+    该分支此前只校验「组织存在」，与 ``update_user`` 的 assert_org_reachable
+    口径不一致 —— 部门级管理员可经权限接口把用户移入任意他组织。
+    """
+
+    @pytest.mark.asyncio
+    async def test_move_to_other_org_rejected(self, db):
+        from app.api.v1.auth import users as us
+
+        _root, child, sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        mine = _user(db, "mine", role="user", org=child.id)
+        db.commit()
+
+        with pytest.raises(HTTPException) as ei:
+            await us.update_user_permissions(
+                mine.id, us.UserPermissionsUpdate(organization_id=sibling.id), admin, db
+            )
+        assert ei.value.status_code == 403
+        db.refresh(mine)
+        assert mine.organization_id == child.id  # 越权请求不得落库
+
+    @pytest.mark.asyncio
+    async def test_move_within_own_subtree_allowed(self, db):
+        from app.api.v1.auth import users as us
+        from app.models.organization import Organization
+
+        _root, child, _sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        mine = _user(db, "mine", role="user", org=child.id)
+        grand = Organization(name="TEAM", code="T", parent_id=child.id, is_active=True)
+        db.add(grand)
+        db.commit()
+
+        result = await us.update_user_permissions(
+            mine.id, us.UserPermissionsUpdate(organization_id=grand.id), admin, db
+        )
+        assert result["code"] == 200
+        db.refresh(mine)
+        assert mine.organization_id == grand.id
+
+
+class TestUnlockUserOrgGuard:
+    """H4 补口：`POST /users/{id}/unlock` 的提权收敛 + 跨组织守卫。
+
+    解锁可中断他人在途登录流程（把锁定计数清零，使撞库可继续），
+    此前只有 require_admin：部门级管理员可解锁 super_admin 或他组织用户。
+    """
+
+    @pytest.mark.asyncio
+    async def test_unlock_other_org_rejected(self, db):
+        from app.api.v1.auth import users as us
+
+        _root, child, sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        other = _user(db, "other_user", role="user", org=sibling.id)
+        other.failed_login_count = 5
+        db.commit()
+
+        with pytest.raises(HTTPException) as ei:
+            await us.unlock_user(other.id, admin, db)
+        assert ei.value.status_code == 403
+        db.refresh(other)
+        assert other.failed_login_count == 5  # 越权请求不得改变锁定状态
+
+    @pytest.mark.asyncio
+    async def test_unlock_super_admin_account_rejected(self, db):
+        from app.api.v1.auth import users as us
+
+        _root, child, _sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        root_admin = _user(db, "root", role="super_admin", org=child.id, is_superuser=True)
+        db.commit()
+
+        with pytest.raises(HTTPException) as ei:
+            await us.unlock_user(root_admin.id, admin, db)
+        assert ei.value.status_code == 403
+        assert "超级管理员" in ei.value.detail
+
+    @pytest.mark.asyncio
+    async def test_unlock_own_subtree_allowed(self, db):
+        from app.api.v1.auth import users as us
+
+        _root, child, _sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        mine = _user(db, "mine", role="user", org=child.id)
+        mine.failed_login_count = 5
+        db.commit()
+
+        result = await us.unlock_user(mine.id, admin, db)
+        assert result["code"] == 200
+        db.refresh(mine)
+        assert mine.failed_login_count == 0
+
+
+class TestSystemAdminUserGuards:
+    """系统管理域（会话列表 / 强制登出 / 2FA 重置）的「管理目标用户」守卫。
+
+    三个端点此前只有角色级 ``require_admin``：role=admin 且只挂某个部门的账号
+    可以遍历 user_id 检视他组织用户会话、定向踢人下线、关闭他人第二因子
+    （安全强度降级）。修复后与 ``auth.users`` 同口径：非超管不得动超管账号，
+    且目标用户组织必须在自身组织子树内。
+    """
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_cross_org_rejected(self, db):
+        from app.api.v1.system import admin as sys_admin
+
+        _root, child, sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        other = _user(db, "other_user", role="user", org=sibling.id)
+        db.commit()
+
+        with pytest.raises(HTTPException) as ei:
+            await sys_admin.list_user_sessions(other.id, db, admin)
+        assert ei.value.status_code == 403
+        assert "无权对该组织" in ei.value.detail
+
+    @pytest.mark.asyncio
+    async def test_revoke_session_cross_org_rejected(self, db):
+        from app.api.v1.system import admin as sys_admin
+
+        _root, child, sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        other = _user(db, "other_user", role="user", org=sibling.id)
+        other.token_version = 2
+        db.commit()
+
+        with pytest.raises(HTTPException) as ei:
+            await sys_admin.revoke_user_session(other.id, "sess-1", db, admin)
+        assert ei.value.status_code == 403
+        db.refresh(other)
+        assert other.token_version == 2  # 越权请求不得踢人下线
+
+    @pytest.mark.asyncio
+    async def test_reset_two_factor_cross_org_rejected(self, db):
+        from app.api.v1.system import admin as sys_admin
+        from app.models.two_factor_auth import TwoFactorAuth
+
+        _root, child, sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        other = _user(db, "other_user", role="user", org=sibling.id)
+        db.add(TwoFactorAuth(user_id=other.id, enabled=True, secret_key="SECRET"))
+        db.commit()
+
+        with pytest.raises(HTTPException) as ei:
+            await sys_admin.reset_user_two_factor(other.id, db, admin)
+        assert ei.value.status_code == 403
+        row = db.query(TwoFactorAuth).filter(TwoFactorAuth.user_id == other.id).first()
+        assert row.enabled is True  # 越权请求不得关闭他人第二因子
+
+    @pytest.mark.asyncio
+    async def test_reset_two_factor_super_admin_account_rejected(self, db):
+        from app.api.v1.system import admin as sys_admin
+
+        _root, child, _sibling = _seed_orgs(db)
+        admin = _user(db, "dept_admin", role="admin", org=child.id)
+        root_admin = _user(db, "root", role="super_admin", org=child.id, is_superuser=True)
+        db.commit()
+
+        with pytest.raises(HTTPException) as ei:
+            await sys_admin.reset_user_two_factor(root_admin.id, db, admin)
+        assert ei.value.status_code == 403
+        assert "超级管理员" in ei.value.detail
+
+    @pytest.mark.asyncio
+    async def test_super_admin_can_list_any_org_sessions(self, db):
+        from app.api.v1.system import admin as sys_admin
+
+        _root, _child, sibling = _seed_orgs(db)
+        root_admin = _user(db, "root", role="super_admin", org=None, is_superuser=True)
+        other = _user(db, "other_user", role="user", org=sibling.id)
+        db.commit()
+
+        result = await sys_admin.list_user_sessions(other.id, db, root_admin)
+        assert result["data"]["user_id"] == other.id
+        assert result["data"]["sessions"] == []
+
+    @pytest.mark.asyncio
+    async def test_super_admin_can_reset_any_two_factor(self, db):
+        from app.api.v1.system import admin as sys_admin
+
+        _root, _child, sibling = _seed_orgs(db)
+        root_admin = _user(db, "root", role="super_admin", org=None, is_superuser=True)
+        other = _user(db, "other_user", role="user", org=sibling.id)
+        db.commit()
+
+        result = await sys_admin.reset_user_two_factor(other.id, db, root_admin)
+        assert "未启用" in result["message"]

@@ -135,7 +135,7 @@ class TestGetAuditLogs:
             "page": 1, "page_size": 20,
         })
         as_mock.return_value.query_audit_logs.assert_called_once_with(
-            user_id=1, action=mock.ANY, resource_type="user",
+            user_id=1, username=None, action=mock.ANY, resource_type="user",
             start_date=mock.ANY, end_date=mock.ANY, status=mock.ANY, level=mock.ANY,
             page=1, page_size=20,
         )
@@ -143,6 +143,41 @@ class TestGetAuditLogs:
     def test_invalid_action_returns_400(self, client_with_mocked_auth):
         resp = client_with_mocked_auth.get(self.URL, params={"action": "INVALID_ACTION"})
         assert resp.status_code == 400
+
+    def test_filters_by_username(self, db_client):
+        """用户名筛选（回归：前端曾把该输入丢弃，接口也缺 username 参数）。"""
+        client, session = db_client
+        from app.models.audit import AuditLog
+        session.add(AuditLog(id=1, action="create", username="admin"))
+        session.add(AuditLog(id=2, action="create", username="operator1"))
+        session.commit()
+        resp = client.get(self.URL, params={"username": "admin"})
+        assert resp.status_code == 200
+        # /system/audit/logs 直接返回服务层分页字典（非信封）
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["username"] == "admin"
+
+    def test_blank_username_means_no_filter(self, db_client):
+        client, session = db_client
+        from app.models.audit import AuditLog
+        session.add(AuditLog(id=1, action="create", username="admin"))
+        session.add(AuditLog(id=2, action="create", username="operator1"))
+        session.commit()
+        resp = client.get(self.URL, params={"username": "   "})
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 2
+
+    def test_end_date_date_only_includes_that_day(self, db_client):
+        """`YYYY-MM-DD` 结束日期必须含当天（回归：零点比较会漏掉当天记录）。"""
+        from datetime import datetime
+        client, session = db_client
+        from app.models.audit import AuditLog
+        session.add(AuditLog(id=1, action="create", username="admin"))
+        session.commit()
+        resp = client.get(self.URL, params={"end_date": datetime.now().date().isoformat()})
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 1
 
 
 class TestGetAuditLogDetail:
@@ -445,6 +480,18 @@ class TestExportAuditLogs:
         session.add(AuditLog(id=1, action="create", username="admin"))
         session.commit()
         resp = client.get(self.URL, params={"end_date": "2099-01-01T00:00:00"})
+        assert resp.status_code == 200
+        assert resp.json()["data"]["total"] == 1
+
+    def test_end_date_date_only_includes_that_day(self, db_client):
+        """`YYYY-MM-DD` 结束日期必须含当天（回归：零点比较会漏掉当天记录）。"""
+        from datetime import datetime
+        client, session = db_client
+        from app.models.audit import AuditLog
+        today = datetime.now().date()
+        session.add(AuditLog(id=1, action="create", username="admin"))
+        session.commit()
+        resp = client.get(self.URL, params={"end_date": today.isoformat()})
         assert resp.status_code == 200
         assert resp.json()["data"]["total"] == 1
 

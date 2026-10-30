@@ -203,6 +203,21 @@ class TestGetBackupStats:
             assert data["scheduleEnabled"] is False
             assert data["totalSizeMb"] == 10
 
+    def test_disk_space_passed_through(self, client_with_mocked_auth):
+        """回归：服务层已有 disk_space，端点白名单漏字段 → 前端磁盘告警永不触发。"""
+        disk = {
+            "backup_dir": {"path": "D:/bk", "free_mb": 10, "total_mb": 100, "sufficient": False},
+            "db_dir": {"path": "C:/db", "free_mb": 900, "total_mb": 1000, "sufficient": True},
+            "threshold_mb": 500,
+        }
+        with patch("app.api.v1.system.backup.get_backup_service") as mock_get_svc:
+            mock_svc = MagicMock()
+            mock_svc.get_backup_statistics.return_value = {"total_backups": 1, "disk_space": disk}
+            mock_get_svc.return_value = mock_svc
+            resp = client_with_mocked_auth.get(f"{BASE}/stats")
+            assert resp.status_code == 200
+            assert resp.json()["data"]["disk_space"] == disk
+
     def test_error(self, client_with_mocked_auth):
         with patch("app.api.v1.system.backup.get_backup_service") as mock_get_svc:
             mock_svc = MagicMock()

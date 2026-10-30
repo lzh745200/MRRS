@@ -11,14 +11,13 @@
             {{ encryptionStatus.enabled ? '已启用' : '未启用' }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="加密算法">
-          {{ encryptionStatus.algorithm || 'N/A' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="初始化时间">
-          {{ formatDate(encryptionStatus.initialized_at) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="最后更新">
-          {{ formatDate(encryptionStatus.updated_at) }}
+        <!--
+          后端 `/encryption/status` 只回 `is_enabled` / `has_salt`（R28 §3：不再回吐
+          算法名、KDF 迭代数与时间戳）。旧前端读 `algorithm/initialized_at/updated_at`，
+          三个格子恒为 N/A —— 现按真实字段展示。
+        -->
+        <el-descriptions-item label="密钥盐">
+          {{ encryptionStatus.has_salt ? '已生成' : '未生成' }}
         </el-descriptions-item>
       </el-descriptions>
 
@@ -133,13 +132,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { get, post } from '@/api/request'
 
-import { format } from '@/utils'
 import PageHeader from '@/components/common/PageHeader.vue'
 const encryptionStatus = ref({
+  /** 后端 `is_enabled`（布尔）映射；旧实现直接读 `enabled` → 恒 undefined → 恒“未启用” */
   enabled: false,
-  algorithm: '',
-  initialized_at: '',
-  updated_at: '',
+  has_salt: false,
 })
 
 const initForm = ref({
@@ -215,7 +212,13 @@ const loadStatus = async () => {
   try {
     const response = await get('/encryption/status')
     if (response.success) {
-      encryptionStatus.value = response.data
+      // 后端字段名是 snake_case 的 is_enabled / has_salt，直接整体赋值会让
+      // `encryptionStatus.enabled` 恒为 undefined（页面恒显示“未启用”，
+      // 已启用加密时仍渲染“启用加密”表单，提交后必然失败）。
+      encryptionStatus.value = {
+        enabled: response.data?.is_enabled === true,
+        has_salt: response.data?.has_salt === true,
+      }
     }
   } catch (error: any) {
     ElMessage.error(getErrorMessage(error, '加载状态失败'))
@@ -329,8 +332,6 @@ const handleDisable = async () => {
     disabling.value = false
   }
 }
-
-const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr, 'N/A')
 
 onMounted(() => {
   loadStatus()

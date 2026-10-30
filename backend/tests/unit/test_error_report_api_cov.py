@@ -132,6 +132,42 @@ class TestListErrorReports:
         assert resp.status_code == 200
         assert resp.json()["data"]["total"] == 0
 
+    def test_list_source_filter_is_keyword_match(self, er_client):
+        """前端筛选框承诺「来源关键字」，后端不能再用 == 精确匹配。
+
+        用真实 SQLite 验证（MagicMock 只能证明 filter 被调用过，不能证明
+        LIKE 语义）：输入 front 应命中 frontend，且不命中 backend。
+        """
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+
+        from app.models import Base
+
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=engine)
+        sess = sessionmaker(bind=engine)()
+        sess.add_all(
+            [
+                ErrorReport(source="frontend", error_type="t", message="m", status="open"),
+                ErrorReport(source="backend", error_type="t", message="m", status="open"),
+            ]
+        )
+        sess.commit()
+        try:
+            with _sess_patch(sess):
+                resp = er_client.get(f"{BASE}?source=front")
+            assert resp.status_code == 200
+            data = resp.json()["data"]
+            assert data["total"] == 1
+            assert data["items"][0]["source"] == "frontend"
+        finally:
+            engine.dispose()
+
 
 # ==================== GET /error-reports/stats ====================
 

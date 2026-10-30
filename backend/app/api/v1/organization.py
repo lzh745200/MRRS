@@ -88,6 +88,37 @@ def _assert_org_write_scope(
         assert_org_reachable(db, current_user, org_id, action=action)
 
 
+def _assert_org_read_scope(
+    db: Session,
+    current_user,
+    org_id: int,
+    *,
+    detail: str = "无权查看该组织",
+) -> None:
+    """组织读端点的跨组织越权守卫（R27 同口径，2026-10-31 补口）。
+
+    子组织 / 祖先链 / 扩展详情此前对**所有登录用户**无条件返回：部门级管理员
+    可遍历 org_id 读出他组织架构（名称、编码、联系人、地址）并据此定位目标。
+
+    复用 `apply_scope_filter`（与 GET /organizations/{id}、GET .../members
+    完全同口径）。超管直接放行，既不产生额外查询，也保证既有的 superuser
+    路径（含以查询次数构造副作用的测试）语义不变。
+    """
+    if is_superuser(current_user):
+        return
+    from app.core.data_permission import apply_scope_filter
+
+    visible = (
+        apply_scope_filter(
+            db.query(Organization.id), current_user, Organization, org_id_field="id", db=db
+        )
+        .filter(Organization.id == org_id)
+        .first()
+    )
+    if visible is None:
+        raise HTTPException(status_code=403, detail=detail)
+
+
 def _invalidate_dashboard_cache_safe() -> None:
     """组织写操作后失效工作台统计缓存，保证删除/新增/停用后总数立即更新。"""
     try:
@@ -757,6 +788,11 @@ async def create_organization(
         # （组织编码是跨机匹配标识，可被枚举即信息泄漏）。现在越权一律 403 先返回。
         _assert_org_write_scope(db, current_user, [org_data["parent_id"]], action="创建组织")
 
+    # 根组织不属于任何既有组织子树，部门级管理员创建根组织等于在自己权限范围之外
+    # 新建一棵组织树（创建后自身也无权管理，只会污染全局组织架构）。
+    if parent is None and not is_superuser(current_user):
+        raise HTTPException(status_code=403, detail="仅超级管理员可创建根组织")
+
     existing = db.query(Organization).filter(Organization.code == org_code).first()
     if existing:
         raise HTTPException(status_code=400, detail="组织编码已存在")
@@ -977,6 +1013,8 @@ async def delete_organization(
 @router.get("/{org_id}/children", response_model=List[OrganizationResponse])
 async def get_children(org_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取子组织"""
+    # 读范围收敛：父子组织列表属组织架构信息，跨组织读取一律 403
+    _assert_org_read_scope(db, current_user, org_id)
     return (
         db.query(Organization)
         .filter(Organization.parent_id == org_id)
@@ -991,6 +1029,8 @@ async def get_ancestors(org_id: int, current_user=Depends(get_current_user), db:
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
+    # 读范围收敛：祖先链会暴露上级单位的名称/编码，跨组织读取 403
+    _assert_org_read_scope(db, current_user, org_id)
 
     # 沿父链逐级向上查询（组织层级通常≤5层，最多5次高效索引查询）
     ancestors = []
@@ -1186,6 +1226,9 @@ async def add_organization_members(
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
 
+    # R27 补口：目标组织必须在调用者子树内（否则可向他组织投放成员/接管账号）
+    _assert_org_write_scope(db, current_user, [org_id], action="添加组织成员")
+
     user_ids = data.get("user_ids") or []
     if not user_ids:
         raise HTTPException(status_code=400, detail="请选择要添加的成员")
@@ -1198,6 +1241,17 @@ async def add_organization_members(
             continue  # 非数字 ID 跳过，不导致整接口 500
         user = db.query(User).filter(User.id == uid_int).first()
         if user and user.is_active:
+            # 目标用户已归属其它组织时，把其划入本组织属跨组织写入，同样受子树约束；
+            # 无组织归属账号 fail-closed（仅超管可管理，与 auth.users 同口径）。
+            target_org_id = getattr(user, "organization_id", None)
+            if target_org_id is None:
+                if not is_superuser(current_user):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="目标用户无组织归属，仅超级管理员可管理无组织用户",
+                    )
+            elif target_org_id != org_id:
+                _assert_org_write_scope(db, current_user, [target_org_id], action="把该用户加入本组织")
             user.organization_id = org_id
             added += 1
     safe_commit(db)
@@ -1219,9 +1273,17 @@ async def remove_organization_member(
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
 
+    # R27 补口：目标组织必须在调用者子树内
+    _assert_org_write_scope(db, current_user, [org_id], action="移除组织成员")
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 成员关系校验：不校验就把「任意组织的任意用户」的 organization_id 清空 ——
+    # 部门级管理员可借此把他组织成员移出组织（跨组织写入）。
+    if getattr(user, "organization_id", None) != org_id:
+        raise HTTPException(status_code=400, detail="该用户不属于此组织")
 
     user.organization_id = None
     safe_commit(db)
@@ -1238,6 +1300,9 @@ async def get_organization_detail(
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
+    # 读范围收敛（与 GET /organizations/{id} 同口径）：扩展详情含成员数、
+    # 联系人、地址等敏感字段，跨组织读取一律 403。
+    _assert_org_read_scope(db, current_user, org_id, detail="无权查看该组织详情")
 
     try:
         # 子组织数量
@@ -1336,6 +1401,9 @@ async def activate_organization(
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
 
+    # R27 补口：停用/激活直接改变组织可用性，部门级管理员不得操作他组织
+    _assert_org_write_scope(db, current_user, [org_id], action="激活组织")
+
     org.is_active = True
     safe_commit(db)
     await cache_manager.delete("orgs:list")
@@ -1359,6 +1427,9 @@ async def deactivate_organization(
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="组织不存在")
+
+    # R27 补口：停用/激活直接改变组织可用性，部门级管理员不得操作他组织
+    _assert_org_write_scope(db, current_user, [org_id], action="停用组织")
 
     org.is_active = False
     safe_commit(db)

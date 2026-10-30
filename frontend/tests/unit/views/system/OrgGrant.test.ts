@@ -362,6 +362,17 @@ describe('views/system/OrgGrant —— 单位选择器（v1.16.3）', () => {
     expect(option).toBeTruthy()
     expect(option!.text()).toContain('F05')
   })
+
+  it('后端真实信封 {code,data,items} 也能渲染单位下拉（回归：下拉恒空）', async () => {
+    // `success_response(data=tree)` 的真实形态：数组被拦截器同时展开到 data 与 items。
+    const tree = [{ id: 5, name: '帮扶总站', code: 'F05', children: [] }]
+    mockTree.mockResolvedValue({ code: 200, success: true, message: '成功', data: tree, items: tree })
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.vm.orgOptions).toEqual([{ id: 5, label: '帮扶总站（F05）' }])
+    expect(wrapper.vm.orgLoadFailed).toBe(false)
+    expect(wrapper.findAll('option').some((o) => o.text().includes('帮扶总站'))).toBe(true)
+  })
 })
 
   it('组织树返回非数组 → 空列表并标记加载失败（分支兜底）', async () => {

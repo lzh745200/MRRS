@@ -111,6 +111,9 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="filters.status" placeholder="全部" clearable @change="handleSearch">
+            <!-- 后端默认 status=open（只看待处理），且支持显式 `all`；
+                 旧下拉没有“全部”项，清除后仍回落到 open，用户无法查看全部报告。 -->
+            <el-option label="全部" value="all" />
             <el-option label="待处理" value="open" />
             <el-option label="处理中" value="in_progress" />
             <el-option label="已解决" value="resolved" />
@@ -306,7 +309,9 @@ async function loadStats() {
 // ==================== 筛选 ====================
 const filters = reactive({
   severity: undefined as string | undefined,
-  status: undefined as string | undefined,
+  // 后端 `status` 缺省值是 open；要“全部”必须显式传 all。默认全量，
+  // 否则页面标题“共 N 条”只统计待处理项，与上方总览统计对不上。
+  status: 'all' as string | undefined,
   source: undefined as string | undefined,
 })
 
@@ -329,7 +334,8 @@ async function loadTableData() {
       page_size: pagination.pageSize,
     }
     if (filters.severity) params.severity = filters.severity
-    if (filters.status) params.status = filters.status
+    // 清除下拉（undefined）也要落到“全部”，否则后端按默认 open 过滤
+    params.status = filters.status || 'all'
     if (filters.source) params.source = filters.source
 
     const res = await errorReportApi.listReports(params)
@@ -353,7 +359,7 @@ function handleSearch() {
 
 function handleReset() {
   filters.severity = undefined
-  filters.status = undefined
+  filters.status = 'all'
   filters.source = undefined
   pagination.page = 1
   loadTableData()

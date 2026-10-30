@@ -116,7 +116,7 @@ const typeTagMap: Record<string, TagType> = {
 async function loadData() {
   loading.value = true
   try {
-    const { data } = await apiRequest({
+    const res = await apiRequest({
       method: 'GET',
       url: '/feedback',
       params: {
@@ -125,10 +125,11 @@ async function loadData() {
         type: searchForm.type,
       },
     })
-    if (data?.data) {
-      tableData.value = unwrapList(data).items
-      pagination.total = data.data.total || 0
-    }
+    // `apiRequest` 已解包到信封体 `{code,data:{items,total},items,total}`，
+    // 旧代码再判 `data?.data`（`data` 已是 payload）恒为假 → 列表恒空、总数恒 0。
+    const { items, total } = unwrapList(res)
+    tableData.value = items
+    pagination.total = total
   } catch (e: any) {
     tableData.value = []
     pagination.total = 0

@@ -105,7 +105,11 @@ async def list_error_reports(
     try:
         query = db.query(ErrorReport)
         if source:
-            query = query.filter(ErrorReport.source == source)
+            # 前端筛选框的语义是「来源关键字」（前后端一致，2026-10-31）：
+            # 此前后端用 == 精确匹配，用户输入模块名片段恒返回空列表，
+            # 而完整来源值又无处可查（来源枚举只出现在统计接口里）。
+            # contains() 对完整值仍然命中，向后兼容既有精确筛选用法。
+            query = query.filter(ErrorReport.source.contains(source.strip()))
         if severity:
             query = query.filter(ErrorReport.severity == severity)
         if status and status != "all":

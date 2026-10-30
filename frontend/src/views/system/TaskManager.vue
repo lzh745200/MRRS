@@ -242,11 +242,16 @@
           />
         </el-form-item>
         <el-form-item label="任务类型" prop="task_type">
-          <el-input
-            v-model="createForm.task_type"
-            placeholder="请输入任务类型（可选）"
-            maxlength="50"
-          />
+          <!-- 后端自 M6 起按 TaskType 枚举校验，自由文本必被 400 拒绝；
+               这里改为固定选项，避免"创建任务"默认值（空串）恒失败。 -->
+          <el-select v-model="createForm.task_type" placeholder="请选择任务类型">
+            <el-option
+              v-for="opt in TASK_TYPE_OPTIONS"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="任务参数" prop="params">
           <el-input
@@ -309,9 +314,20 @@ const runningCount = ref<RunningTaskCount>({
 
 const createForm = reactive({
   task_name: '',
-  task_type: '',
+  task_type: 'other',
   params: '',
 })
+
+// 与后端 system/tasks.py::TaskType 枚举一一对应（M6 起后端拒绝枚举外取值）
+const TASK_TYPE_OPTIONS = [
+  { value: 'data_import', label: '数据导入' },
+  { value: 'data_export', label: '数据导出' },
+  { value: 'backup', label: '备份' },
+  { value: 'report_generation', label: '报表生成' },
+  { value: 'data_sync', label: '数据同步' },
+  { value: 'maintenance', label: '系统维护' },
+  { value: 'other', label: '其他' },
+]
 
 const createFormRef = ref()
 
@@ -525,7 +541,7 @@ async function handleCreateTask() {
 
 function resetCreateForm() {
   createForm.task_name = ''
-  createForm.task_type = ''
+  createForm.task_type = 'other'
   createForm.params = ''
   createFormRef.value?.resetFields()
 }

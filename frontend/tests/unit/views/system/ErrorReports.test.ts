@@ -155,7 +155,12 @@ describe('ErrorReports.vue', () => {
     const w = await mountComp()
     const vm = w.vm as any
     expect(errorReportApi.getStats).toHaveBeenCalled()
-    expect(errorReportApi.listReports).toHaveBeenCalledWith({ page: 1, page_size: 20 })
+    // 回归：默认必须显式传 all，否则后端按 status=open 过滤，页面永远只显示待处理项
+    expect(errorReportApi.listReports).toHaveBeenCalledWith({
+      page: 1,
+      page_size: 20,
+      status: 'all',
+    })
     expect(vm.stats.total).toBe(10)
     expect(vm.tableData.length).toBe(2)
     expect(vm.tableTotal).toBe(2)
@@ -216,7 +221,14 @@ describe('ErrorReports.vue', () => {
     )
     await vm.handleReset()
     expect(vm.filters.severity).toBeUndefined()
+    expect(vm.filters.status).toBe('all')
     expect(errorReportApi.listReports).toHaveBeenCalled()
+    // 清除下拉（undefined）也必须请求“全部”，不能回落到后端默认 open
+    vm.filters.status = undefined
+    await vm.handleSearch()
+    expect(errorReportApi.listReports).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'all' })
+    )
     vm.pagination.pageSize = 50
     await vm.handlePageSizeChange()
     expect(vm.pagination.page).toBe(1)

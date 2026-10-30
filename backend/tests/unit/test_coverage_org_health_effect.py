@@ -95,8 +95,8 @@ def _org(id_=1):
     return SimpleNamespace(id=id_, name="测试组织")
 
 
-def _user(id_, active=True):
-    return SimpleNamespace(id=id_, is_active=active)
+def _user(id_, active=True, org_id=None):
+    return SimpleNamespace(id=id_, is_active=active, organization_id=org_id)
 
 
 class TestAddOrganizationMembers:
@@ -143,7 +143,7 @@ class TestAddOrganizationMembers:
 class TestRemoveOrganizationMember:
     def test_remove_member_success(self, client_admin, member_db):
         member_db.org_q.first.return_value = _org(1)
-        member_db.user_q.first.return_value = _user(7, True)
+        member_db.user_q.first.return_value = _user(7, True, org_id=1)
         resp = client_admin.delete("/api/v1/organizations/1/members/7")
         assert resp.status_code == 200
         body = resp.json()

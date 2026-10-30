@@ -34,18 +34,27 @@ vi.mock('element-plus', () => ({
 
 import Feedback from '@/views/system/Feedback.vue'
 
+/** `/feedback` 的真实响应：`ok_list()` 信封，数组 payload 另被拦截器展开到 items/total */
 const listData = {
+  code: 200,
+  success: true,
+  message: '成功',
   data: {
-    data: {
-      items: [
-        { id: 1, type: 'bug', content: '页面报错', username: 'admin', contact: 'a@b.c', created_at: '2024-01-01' },
-        { id: 2, type: 'suggestion', content: '加个按钮', username: '', contact: '', created_at: '2024-01-02' },
-        { id: 3, type: 'other', content: '其他反馈', username: 'op', contact: '13800000000', created_at: '2024-01-03' },
-        { id: 4, type: 'unknown', content: '未知类型' },
-      ],
-      total: 4,
-    },
+    items: [
+      { id: 1, type: 'bug', content: '页面报错', username: 'admin', contact: 'a@b.c', created_at: '2024-01-01' },
+      { id: 2, type: 'suggestion', content: '加个按钮', username: '', contact: '', created_at: '2024-01-02' },
+      { id: 3, type: 'other', content: '其他反馈', username: 'op', contact: '13800000000', created_at: '2024-01-03' },
+      { id: 4, type: 'unknown', content: '未知类型' },
+    ],
+    total: 4,
   },
+  items: [
+    { id: 1, type: 'bug', content: '页面报错', username: 'admin', contact: 'a@b.c', created_at: '2024-01-01' },
+    { id: 2, type: 'suggestion', content: '加个按钮', username: '', contact: '', created_at: '2024-01-02' },
+    { id: 3, type: 'other', content: '其他反馈', username: 'op', contact: '13800000000', created_at: '2024-01-03' },
+    { id: 4, type: 'unknown', content: '未知类型' },
+  ],
+  total: 4,
 }
 
 async function mountComp() {

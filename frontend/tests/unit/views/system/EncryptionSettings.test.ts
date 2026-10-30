@@ -86,13 +86,9 @@ async function mountComp() {
   return w
 }
 
-const statusDisabled = { enabled: false, algorithm: '', initialized_at: '', updated_at: '' }
-const statusEnabled = {
-  enabled: true,
-  algorithm: 'AES-256',
-  initialized_at: '2024-01-01T00:00:00Z',
-  updated_at: '2024-02-01T00:00:00Z',
-}
+/** 后端 `/encryption/status` 的真实返回（仅 is_enabled / has_salt） */
+const statusDisabled = { is_enabled: false, has_salt: false }
+const statusEnabled = { is_enabled: true, has_salt: true }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -108,18 +104,28 @@ describe('EncryptionSettings.vue', () => {
     const vm = w.vm as any
     expect(mockGet).toHaveBeenCalledWith('/encryption/status')
     expect(vm.encryptionStatus.enabled).toBe(false)
+    expect(vm.encryptionStatus.has_salt).toBe(false)
     expect(w.text()).toContain('启用数据库加密')
-    expect(w.text()).toContain('N/A')
+    expect(w.text()).toContain('未生成')
   })
 
   it('渲染已启用状态', async () => {
     mockGet.mockResolvedValue({ success: true, data: statusEnabled })
     const w = await mountComp()
     const vm = w.vm as any
+    // 回归：后端字段是 is_enabled；旧实现读 `enabled` → 恒 undefined → 恒“未启用”
     expect(vm.encryptionStatus.enabled).toBe(true)
-    expect(vm.encryptionStatus.algorithm).toBe('AES-256')
+    expect(vm.encryptionStatus.has_salt).toBe(true)
+    expect(w.text()).toContain('已启用')
+    expect(w.text()).toContain('已生成')
     expect(w.text()).toContain('修改加密密码')
     expect(w.text()).toContain('禁用数据库加密')
+  })
+
+  it('状态字段缺失时按未启用处理（不渲染真值）', async () => {
+    mockGet.mockResolvedValue({ success: true, data: {} })
+    const w = await mountComp()
+    expect((w.vm as any).encryptionStatus.enabled).toBe(false)
   })
 
   it('加载状态失败 → 错误提示', async () => {
@@ -303,13 +309,6 @@ describe('EncryptionSettings.vue', () => {
     vm.disableForm.password = 'pw123456'
     await vm.handleDisable()
     expect(ElMessage.error).toHaveBeenCalledWith('禁用加密失败')
-  })
-
-  it('formatDate 工具函数', async () => {
-    const w = await mountComp()
-    const vm = w.vm as any
-    expect(vm.formatDate('')).toBe('N/A')
-    expect(vm.formatDate('2024-01-01T00:00:00Z')).toContain('2024')
   })
 
   it('启用表单 v-model（密码/确认密码）', async () => {

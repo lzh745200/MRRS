@@ -278,12 +278,23 @@ describe('ConfigPackage.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('导入失败，请检查文件格式')
   })
 
-  it('resetConfig：确认成功（有默认配置）→ 批量写入', async () => {
-    mockGet.mockResolvedValue({ data: { A: 1, B: 'x' } })
+  it('resetConfig：确认成功（有默认配置）→ 批量写入真实默认项', async () => {
+    // 后端真实形态：data.defaults 是 [{key,value,description}] 数组
+    mockGet.mockResolvedValue({
+      success: true,
+      data: {
+        defaults: [
+          { key: 'A', value: 1, description: 'a' },
+          { key: 'B', value: 'x', description: 'b' },
+        ],
+        total: 2,
+      },
+    })
     const w = await mountComp()
     const vm = w.vm as any
     await vm.resetConfig()
     expect(ElMessageBox.confirm).toHaveBeenCalled()
+    // 回归：不能把 defaults/total 当成配置键写库
     expect(mockPut).toHaveBeenCalledWith('/system/config', {
       configs: [
         { key: 'A', value: '1' },
@@ -293,13 +304,32 @@ describe('ConfigPackage.vue', () => {
     expect(ElMessage.success).toHaveBeenCalledWith('已恢复默认配置')
   })
 
-  it('resetConfig：无默认配置 → 跳过写入仍提示', async () => {
-    mockGet.mockResolvedValue({ code: 200, data: {} })
+  it('resetConfig：无默认配置 → 跳过写入并提示', async () => {
+    mockGet.mockResolvedValue({ code: 200, success: true, data: { defaults: [], total: 0 } })
     const w = await mountComp()
     const vm = w.vm as any
     await vm.resetConfig()
     expect(mockPut).not.toHaveBeenCalled()
-    expect(ElMessage.success).toHaveBeenCalledWith('已恢复默认配置')
+    expect(ElMessage.warning).toHaveBeenCalledWith('未获取到默认配置，未做任何修改')
+    expect(ElMessage.success).not.toHaveBeenCalledWith('已恢复默认配置')
+  })
+
+  it('resetConfig：响应无 data 包裹时读顶层 defaults（裸响应兼容分支）', async () => {
+    mockGet.mockResolvedValue({ defaults: [{ key: 'C', value: 'y' }] })
+    const w = await mountComp()
+    await (w.vm as any).resetConfig()
+    expect(mockPut).toHaveBeenCalledWith('/system/config', {
+      configs: [{ key: 'C', value: 'y' }],
+    })
+  })
+
+  it('resetConfig：默认项缺 value → 写空串而不是 "undefined"', async () => {
+    mockGet.mockResolvedValue({ data: { defaults: [{ key: 'D' }] } })
+    const w = await mountComp()
+    await (w.vm as any).resetConfig()
+    expect(mockPut).toHaveBeenCalledWith('/system/config', {
+      configs: [{ key: 'D', value: '' }],
+    })
   })
 
   it('编辑对话框：敏感/非敏感输入 + 保存/取消按钮', async () => {
@@ -356,7 +386,7 @@ describe('ConfigPackage.vue', () => {
     const vm = w.vm as any
     await vm.resetConfig()
     expect(mockPut).not.toHaveBeenCalled()
-    expect(ElMessage.success).toHaveBeenCalledWith('已恢复默认配置')
+    expect(ElMessage.warning).toHaveBeenCalledWith('未获取到默认配置，未做任何修改')
   })
 
   it('resetConfig：用户取消 → 无操作', async () => {

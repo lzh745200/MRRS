@@ -309,6 +309,57 @@ class TestM6TasksOwnershipAndAuth:
         assert resp.status_code == 200
         assert resp.json()["data"]["task_id"]
 
+    # ---- 读取侧：列表/详情同样按「本人或管理员」收敛（2026-10-31 补口）----
+
+    def test_list_hides_other_users_tasks(self, app_overrides):
+        """M6 只补了写操作：任意登录用户仍可列出他人任务的 params/result。"""
+        self._seed("l1", created_by="alice")
+        self._seed("l2", created_by="bob")
+        client = self._client(app_overrides, _plain_user())
+        resp = client.get(self.BASE)
+        data = resp.json()["data"]
+        assert [i["task_id"] for i in data["items"]] == ["l2"]
+        assert data["total"] == 1
+
+    def test_list_admin_sees_all_tasks(self, app_overrides):
+        self._seed("l3", created_by="alice")
+        self._seed("l4", created_by="bob")
+        client = self._client(app_overrides, _admin_user())
+        resp = client.get(self.BASE)
+        assert resp.json()["data"]["total"] == 2
+
+    def test_get_other_user_task_forbidden(self, app_overrides):
+        self._seed("d9", created_by="alice")
+        client = self._client(app_overrides, _plain_user())
+        resp = client.get(f"{self.BASE}/d9")
+        assert resp.status_code == 403
+        assert "无权查看" in resp.json()["detail"]
+
+    def test_get_own_task_ok(self, app_overrides):
+        self._seed("d8", created_by="bob")
+        client = self._client(app_overrides, _plain_user())
+        assert client.get(f"{self.BASE}/d8").status_code == 200
+
+
+# ==================== W1-6: /system/status 错误细节不出站 ====================
+
+
+class TestSystemStatusNoErrorLeak:
+    def test_database_error_only_exposes_class_name(self):
+        """/system/status 的 error 字段曾内插 str(e)（可含数据库绝对路径）。"""
+        from app.api.v1.system.system import router
+
+        client = _mini_client(router, _plain_user())
+        broken_engine = MagicMock()
+        broken_engine.connect.side_effect = RuntimeError("C:/secret/rural.db is locked")
+        with patch("app.core.database.engine", broken_engine):
+            resp = client.get("/status")
+        assert resp.status_code == 200
+        service = [s for s in resp.json()["data"]["services"] if s["name"] == "database"][0]
+        assert service["status"] == "disconnected"
+        assert service["error"] == "RuntimeError"
+        assert "C:/secret/rural.db" not in resp.text
+
 
 # ==================== M7: system/metrics ====================
 

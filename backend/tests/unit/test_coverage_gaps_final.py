@@ -140,7 +140,9 @@ class TestOrganizationEndpoints:
     async def test_create_org_write_log_fails(self):
         from app.api.v1.organization import create_organization, OrganizationCreate
         db = _mock_db()
-        user = _make_user()
+        # 2026-10-31 安全收口：根组织只能由超管创建；本用例验证的是
+        # “工作日志写失败不阻断主流程”，因此用超管到达目标分支。
+        user = _make_user(role="super_admin", is_superuser=True)
         data = OrganizationCreate(name="NewOrg", code="520000")
         mock_query = MagicMock()
         mock_query.filter.return_value.first.return_value = None
@@ -527,7 +529,9 @@ class TestAdminEndpoints:
     async def test_reset_user_two_factor_with_tfa(self):
         from app.api.v1.system.admin import reset_user_two_factor
         db = _mock_db()
-        user = _make_user()
+        # 超管调用：目标用户守卫（提权收敛 + 组织可达性）会直接放行，
+        # 不额外消耗组织子树查询，下方按 query 调用序构造的副作用保持有效。
+        user = _make_user(is_superuser=True)
         target = _make_user(uid=5, username="target")
         mock_tfa = MagicMock()
         mock_tfa.enabled = True
@@ -550,7 +554,7 @@ class TestAdminEndpoints:
     async def test_reset_user_two_factor_no_tfa(self):
         from app.api.v1.system.admin import reset_user_two_factor
         db = _mock_db()
-        user = _make_user()
+        user = _make_user(is_superuser=True)
         target = _make_user(uid=5, username="target")
         call_count = [0]
 

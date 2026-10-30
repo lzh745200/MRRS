@@ -253,7 +253,7 @@ describe('AuditManagement.vue', () => {
     const vm = w.vm as any
     if (vm.actionTagType) {
       expect(vm.actionTagType('login')).toBe('success')
-      expect(vm.actionTagType('delete_project')).toBe('danger')
+      expect(vm.actionTagType('delete')).toBe('danger')
       expect(vm.actionTagType('unknown')).toBe('info')
     }
   })
