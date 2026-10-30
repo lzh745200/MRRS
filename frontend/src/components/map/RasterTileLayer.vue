@@ -52,14 +52,32 @@ import {
   convertMarkersForTiles,
   isGcj02,
   isTileMapUsable,
+  nearestNativeZoom,
   selectVisibleLabels,
   shouldFallbackToVector,
   tileAttribution,
   tileCoverageBbox,
   tileCoverageBounds,
   tileInfoHint,
+  tileZoomLimits,
   toDisplayCoord,
 } from '@/utils/mapTiles'
+
+/**
+ * 支持「稀疏原生层级」的瓦片层。
+ * Leaflet 默认只会在 minNativeZoom~maxNativeZoom 连续区间内取图；
+ * 本子类改为始终取最接近的可用户层级，补齐 z12/z13 这类空洞。
+ */
+type NativeZoomTileLayerOptions = L.TileLayerOptions & { nativeZooms?: number[] }
+type TileLayerConstructor = new (url: string, options?: NativeZoomTileLayerOptions) => L.TileLayer
+type ExtendableTileLayer = {
+  extend(props: Record<string, unknown>): TileLayerConstructor
+}
+const NearestNativeTileLayer = (L.TileLayer as unknown as ExtendableTileLayer).extend({
+  _clampZoom(this: { options: NativeZoomTileLayerOptions }, zoom: number): number {
+    return nearestNativeZoom(this.options.nativeZooms, zoom)
+  },
+})
 
 /** 瓦片底图上叠加的标注点（与 ECharts 矢量视图使用同一批数据） */
 interface TileMapMarker {
@@ -223,11 +241,13 @@ function expandBounds(
   ]
 }
 
-/** 用瓦片信息创建地图（仅在 tileInfo 可用时调用，缩放级别必然非空） */
+/** 用瓦片信息创建地图（仅在 tileInfo 可用时调用） */
 function initMap(info: TileInfo) {
   const bounds = tileCoverageBounds(info)
-  const minZoom = info.zoomLevels[0]
-  const maxZoom = info.zoomLevels[info.zoomLevels.length - 1]
+  // 修复缩放失效：显示层级不得等于瓦片原生层级。单层 z14 包的原始
+  // minZoom=maxZoom=14 会让滚轮/双击/按钮全部无效；这里改为可交互区间 +
+  // 原生层级分离，由 Leaflet 自动降采样/超采样。
+  const { minZoom, maxZoom, minNativeZoom, maxNativeZoom } = tileZoomLimits(info)
 
   map = L.map(containerRef.value as HTMLDivElement, {
     center: displayCenter(),
@@ -239,11 +259,22 @@ function initMap(info: TileInfo) {
     maxBoundsViscosity: 1.0,
     worldCopyJump: false,
     attributionControl: true,
+    // 显式声明全部缩放交互，避免容器/全局样式或未来配置改动静默禁用
+    zoomControl: true,
+    scrollWheelZoom: true,
+    doubleClickZoom: true,
+    touchZoom: true,
+    boxZoom: true,
+    keyboard: true,
   })
-  tileLayer = L.tileLayer(TILE_URL_TEMPLATE, {
+  tileLayer = new NearestNativeTileLayer(TILE_URL_TEMPLATE, {
     minZoom,
     maxZoom,
-    maxNativeZoom: maxZoom,
+    // 瓦片真实层级：显示层级超出此范围时由 Leaflet 缩放边缘瓦片
+    minNativeZoom,
+    maxNativeZoom,
+    // 稀疏层级支持：缺层时取最近的已有瓦片，而不是向空目录发请求
+    nativeZooms: [...info.zoomLevels],
     noWrap: true,
     // 只在覆盖范围内请求瓦片，边缘不再向无瓦片区要图
     bounds,

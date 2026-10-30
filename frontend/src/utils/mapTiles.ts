@@ -40,6 +40,88 @@ export const TILE_BOUNDS_PADDING_DEGREES = 0.05
 /** 初始 fitBounds 的最大缩放：小范围/单点时不把视野放到过高层级 */
 export const TILE_FIT_MAX_ZOOM = 9
 
+/**
+ * 地图可交互的最小缩放（显示层）。
+ * 与瓦片真实层级解耦：单层瓦片包（如市州 z14）若把 minZoom 直接设成 14，
+ * 会得到 minZoom === maxZoom，滚轮/双击/缩放按钮全部失效。
+ */
+export const TILE_MAP_MIN_ZOOM = 4
+
+/** 地图可交互的最大缩放（显示层）；超过瓦片真实层级时由 Leaflet 放大瓦片 */
+export const TILE_MAP_MAX_ZOOM = 18
+
+/**
+ * 允许的「降采样/超采样」档数。
+ * - 向下最多 2 档：例如仅含 z14 的包可缩到 z12（每张 z14 覆盖 4×4 个 z12 视图），
+ *   既保证能缩小，又不会一次把全省降采样到 z6 造成数万瓦片请求；
+ * - 向上最多 2 档：无更高清瓦片时仍可继续放大（像素放大），交互不中断。
+ */
+export const TILE_MAX_UNDERZOOM = 2
+export const TILE_MAX_OVERZOOM = 2
+
+/**
+ * 在瓦片实际拥有的层级中，选择离显示层级最近的一级。
+ *
+ * 为什么需要：Leaflet 的 `minNativeZoom/maxNativeZoom` 只能描述连续区间。
+ * 同时导入 z5-11 全省包与 z14 市州包后，实际层级是 `[5..11, 14]`；
+ * 显示在 z12/z13 时 Leaflet 会直接请求不存在的 z12/z13 瓦片 → 整屏 404 →
+ * 被看门狗误判为底图不可用并切回矢量视图。此处按最近层级取图：
+ * - z12 → z11（放大 2 倍显示）
+ * - z13 → z14（缩小 2 倍显示）
+ * 距离相同时取较低级（请求量更小）。
+ */
+export function nearestNativeZoom(levels: number[] | undefined, zoom: number): number {
+  const candidates = (levels ?? []).filter((level) => Number.isFinite(level))
+  if (candidates.length === 0) return zoom
+
+  let best = candidates[0]
+  let bestDistance = Math.abs(best - zoom)
+  for (const level of candidates.slice(1)) {
+    const distance = Math.abs(level - zoom)
+    if (distance < bestDistance) {
+      best = level
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
+/** 地图像素显示层级与瓦片原生层级 */
+export interface TileZoomLimits {
+  /** 显示层最小缩放 */
+  minZoom: number
+  /** 显示层最大缩放 */
+  maxZoom: number
+  /** 瓦片真实最小层级（TileLayer.minNativeZoom） */
+  minNativeZoom: number
+  /** 瓦片真实最大层级（TileLayer.maxNativeZoom） */
+  maxNativeZoom: number
+}
+
+/**
+ * 计算地图显示层级与瓦片原生层级。
+ *
+ * **根因修复（2026-10-30）**：原先直接把 `zoomLevels[0]` / `zoomLevels[last]`
+ * 同时赋给地图与瓦片层的 minZoom/maxZoom。导入单层瓦片包（交付的
+ * `guizhou-*_z14.zip` 的 `zoomLevels` 就是 `[14]`）后得到 14/14，地图无法缩放。
+ *
+ * 现拆成两组值：
+ * - 显示层：至少 4~18 的一段区间，单层包按其原生层级上下各留 2 档；
+ * - 瓦片层：保持真实层级，Leaflet 在显示层级低于/高于原生层级时自动缩放瓦片。
+ */
+export function tileZoomLimits(info: TileInfo | null | undefined): TileZoomLimits {
+  const levels = (info?.zoomLevels ?? []).filter((level) => Number.isFinite(level))
+  const fallbackLevel = TILE_MAP_MIN_ZOOM
+  const minNativeZoom = levels.length > 0 ? Math.min(...levels) : fallbackLevel
+  const maxNativeZoom = levels.length > 0 ? Math.max(...levels) : fallbackLevel
+
+  const minZoom = Math.max(TILE_MAP_MIN_ZOOM, minNativeZoom - TILE_MAX_UNDERZOOM)
+  // 至少保留一档可缩放区间；极端脏数据（层级 0）也不返回 maxZoom < minZoom
+  const maxZoom = Math.max(minZoom, Math.min(TILE_MAP_MAX_ZOOM, maxNativeZoom + TILE_MAX_OVERZOOM))
+
+  return { minZoom, maxZoom, minNativeZoom, maxNativeZoom }
+}
+
 /** 全 404 看门狗时长（毫秒）：窗口内一张未成功且失败数达阈值 → 判定底图不可用 */
 export const TILE_FALLBACK_WATCHDOG_MS = 5000
 

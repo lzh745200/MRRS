@@ -563,6 +563,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import * as XLSX from '@e965/xlsx'
 import {
   Search,
   Plus,
@@ -1008,27 +1009,19 @@ const saveTask = async () => {
       try {
         await updateRuralWork(Number(currentTask.value.id), apiPayload)
         ElMessage.success('任务更新成功')
-      } catch {
-        // API不可用，回退到本地
-        const index = tasks.value.findIndex((t) => t.id === currentTask.value.id)
-        if (index !== -1) {
-          tasks.value[index] = { ...currentTask.value }
-        }
-        ElMessage.success('任务更新成功（本地）')
+      } catch (error) {
+        // 写接口失败必须显式报错并保留弹窗，禁止用“本地成功”掩盖未落库。
+        ElMessage.error(getErrorMessage(error, '任务更新失败，请稍后重试'))
+        return
       }
     } else {
       try {
         const result = await createRuralWork(apiPayload)
         currentTask.value.id = String(result?.id || Date.now())
         ElMessage.success('任务创建成功')
-      } catch {
-        // API不可用，回退到本地
-        const newTask = {
-          ...currentTask.value,
-          id: `T${String(tasks.value.length + 1).padStart(3, '0')}`,
-        }
-        tasks.value.unshift(newTask)
-        ElMessage.success('任务创建成功（本地）')
+      } catch (error) {
+        ElMessage.error(getErrorMessage(error, '任务创建失败，请稍后重试'))
+        return
       }
     }
 
@@ -1054,24 +1047,31 @@ const confirmAssign = async () => {
 
   try {
     await assignFormRef.value.validate()
+  } catch {
+    return
+  }
 
-    // 更新任务负责人
-    const index = tasks.value.findIndex((t) => t.id === currentTask.value.id)
-    if (index !== -1) {
-      const assignee = staff.value.find((s) => s.id === assignForm.value.assigneeId)
-      if (assignee) {
-        tasks.value[index].assigneeId = assignForm.value.assigneeId
-        tasks.value[index].assigneeName = assignee.name
-        tasks.value[index].status = 'in_progress' // 分配后自动设置为进行中
-      }
-    }
-
+  const assignee = staff.value.find((s) => s.id === assignForm.value.assigneeId)
+  if (!assignee) {
+    ElMessage.error('未找到所选负责人，请刷新后重试')
+    return
+  }
+  const taskId = Number(currentTask.value.id)
+  if (!Number.isFinite(taskId)) {
+    ElMessage.error('任务编号无效，无法分配')
+    return
+  }
+  try {
+    await updateRuralWork(taskId, {
+      responsible_person: assignee.name,
+      status: 'in_progress',
+    })
     ElMessage.success('任务分配成功')
     assignDialogVisible.value = false
-    currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
+    currentPage.value = 1
     loadData()
   } catch (error) {
-    // 表单验证失败
+    ElMessage.error(getErrorMessage(error, '任务分配失败，请稍后重试'))
   }
 }
 
@@ -1093,28 +1093,37 @@ const confirmBatchAssign = async () => {
 
   try {
     await batchAssignFormRef.value.validate()
+  } catch {
+    return
+  }
 
-    // 批量更新任务负责人
-    const assignee = staff.value.find((s) => s.id === batchAssignForm.value.assigneeId)
-    if (assignee) {
-      selectedTasks.value.forEach((selectedTask) => {
-        const index = tasks.value.findIndex((t) => t.id === selectedTask.id)
-        if (index !== -1) {
-          tasks.value[index].assigneeId = batchAssignForm.value.assigneeId
-          tasks.value[index].assigneeName = assignee.name
-          tasks.value[index].status = 'in_progress' // 分配后自动设置为进行中
-        }
+  const assignee = staff.value.find((s) => s.id === batchAssignForm.value.assigneeId)
+  if (!assignee) {
+    ElMessage.error('未找到所选负责人，请刷新后重试')
+    return
+  }
+  const results = await Promise.allSettled(
+    selectedTasks.value.map((task) =>
+      updateRuralWork(Number(task.id), {
+        responsible_person: assignee.name,
+        status: 'in_progress',
       })
-    }
-
-    ElMessage.success(`成功分配 ${selectedTasks.value.length} 个任务`)
+    )
+  )
+  const successCount = results.filter((r) => r.status === 'fulfilled').length
+  const failedCount = results.length - successCount
+  if (successCount > 0) {
+    ElMessage.success(`成功分配 ${successCount} 个任务`)
+  }
+  if (failedCount > 0) {
+    ElMessage.error(`${failedCount} 个任务分配失败，请稍后重试`)
+  }
+  if (successCount > 0) {
     selectedTasks.value = []
     batchAssignDialogVisible.value = false
-    currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
-    loadData()
-  } catch (error) {
-    // 表单验证失败
+    currentPage.value = 1
   }
+  loadData()
 }
 
 const viewTaskProgress = (task: Task) => {
@@ -1192,16 +1201,12 @@ const deleteTask = (taskId: string) => {
       try {
         await deleteRuralWork(Number(taskId))
         ElMessage.success('任务删除成功')
-      } catch {
-        // API不可用，回退到本地
-        const index = tasks.value.findIndex((t) => t.id === taskId)
-        if (index !== -1) {
-          tasks.value.splice(index, 1)
-        }
-        ElMessage.success('任务删除成功（本地）')
+        currentPage.value = 1 // 重置到第1页，确保删除后的列表可见
+        loadData()
+      } catch (error) {
+        // 删除失败必须保留服务端记录；禁止本地 splice + “成功”提示掩盖失败。
+        ElMessage.error(getErrorMessage(error, '任务删除失败，请稍后重试'))
       }
-      currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
-      loadData()
     })
     .catch(() => {
       // 取消删除
@@ -1212,49 +1217,84 @@ const importTasks = () => {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.csv,.xlsx,.xls'
-  input.onchange = (e: any) => {
+  input.onchange = async (e: any) => {
     const file = e.target?.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string
-        const lines = text.split('\n').filter((line) => line.trim())
-        if (lines.length < 2) {
-          ElMessage.warning('文件内容为空或格式不正确')
-          return
-        }
-
-        let importCount = 0
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(',').map((c) => c.replace(/^"|"$/g, '').trim())
-          if (cols.length >= 2 && cols[1]) {
-            const newTask: Task = {
-              id: `T${String(tasks.value.length + importCount + 1).padStart(3, '0')}`,
-              name: cols[1],
-              projectId: '',
-              projectName: cols[3] || '',
-              assigneeId: '',
-              assigneeName: cols[4] || '',
-              status: 'pending',
-              priority: 'medium',
-              progress: 0,
-              startDate: cols[7] || '',
-              deadline: cols[8] || '',
-              createdDate: new Date().toISOString().split('T')[0],
-              description: cols[9] || '',
-            }
-            tasks.value.push(newTask)
-            importCount++
-          }
-        }
-        ElMessage.success(`成功导入 ${importCount} 个任务`)
-      } catch {
-        ElMessage.error('文件解析失败，请检查文件格式')
+    try {
+      // CSV 与 XLSX 都用现有 xlsx 解析器处理：旧实现 readAsText 会把 xlsx 二进制
+      // 当文本 split，既解析不出数据，又只 push 到内存、从未调用创建接口。
+      const buffer = await file.arrayBuffer()
+      const workbook = XLSX.read(buffer, { type: 'array' })
+      const sheetName = workbook.SheetNames[0]
+      const sheet = sheetName ? workbook.Sheets[sheetName] : undefined
+      if (!sheet) {
+        ElMessage.warning('文件内容为空或格式不正确')
+        return
       }
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        defval: '',
+        raw: false,
+      })
+      if (rows.length < 2) {
+        ElMessage.warning('文件内容为空或格式不正确')
+        return
+      }
+
+      // 按表头定位列，兼容历史 CSV（列数/空列位置不同）；找不到时回退旧位置。
+      const header = (rows[0] as unknown[]).map((cell) => String(cell ?? '').trim())
+      const findColumn = (labels: string[], fallback: number): number => {
+        const found = header.findIndex((h) => labels.includes(h))
+        return found >= 0 ? found : fallback
+      }
+      const nameIndex = findColumn(['任务名称', '名称'], 1)
+      const assigneeIndex = findColumn(['负责人', '责任人'], 4)
+      const startIndex = findColumn(['开始日期', '开始'], 7)
+      const endIndex = findColumn(['截止日期', '截止'], 8)
+      const descriptionIndex = findColumn(['描述', '说明'], 9)
+
+      let successCount = 0
+      let failedCount = 0
+      for (let i = 1; i < rows.length; i++) {
+        const cols = (rows[i] as unknown[]).map((cell) => String(cell ?? '').trim())
+        const name = cols[nameIndex]
+        if (!name) continue
+
+        const payload: Record<string, unknown> = {
+          name,
+          type: 'infrastructure',
+          status: 'planned',
+          responsible_person: cols[assigneeIndex] || '',
+          description: cols[descriptionIndex] || '',
+          progress: 0,
+        }
+        if (cols[startIndex]) payload.start_date = cols[startIndex]
+        if (cols[endIndex]) payload.end_date = cols[endIndex]
+
+        try {
+          await createRuralWork(payload)
+          successCount++
+        } catch {
+          failedCount++
+        }
+      }
+
+      if (successCount > 0) {
+        ElMessage.success(
+          failedCount > 0
+            ? `成功导入 ${successCount} 个任务，${failedCount} 个失败`
+            : `成功导入 ${successCount} 个任务`
+        )
+        currentPage.value = 1
+        loadData()
+      } else {
+        ElMessage.error(failedCount > 0 ? '任务导入失败，请检查文件内容' : '未找到可导入的任务')
+      }
+    } catch (error) {
+      logger.warn('[Task] 导入文件解析失败:', error)
+      ElMessage.error('文件解析失败，请检查文件格式')
     }
-    reader.readAsText(file, 'UTF-8')
   }
   input.click()
 }

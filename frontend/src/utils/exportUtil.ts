@@ -118,7 +118,23 @@ function exportToPDF(
     w.document.write(html)
     w.document.close()
     w.print()
+    return
   }
+  // Electron 主进程对非应用 origin 的 window.open 一律 deny（about:blank 也不例外），
+  // 桌面端 window.open 会返回 null。这里退化为同源隐藏 iframe 打印，保持原调用方式与
+  // 可见结果不变；浏览器端仍优先走上面的新窗口路径。
+  const frame = document.createElement('iframe')
+  frame.setAttribute('aria-hidden', 'true')
+  frame.style.cssText =
+    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;'
+  document.body.appendChild(frame)
+  const frameDoc = frame.contentDocument!
+  frameDoc.open()
+  frameDoc.write(html)
+  frameDoc.close()
+  frame.contentWindow!.focus()
+  frame.contentWindow!.print()
+  window.setTimeout(() => frame.remove(), 1000)
 }
 
 /** 导出工具对象 */

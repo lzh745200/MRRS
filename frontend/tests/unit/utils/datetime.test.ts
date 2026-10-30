@@ -61,6 +61,29 @@ describe('utils/datetime 具名导出与 format 聚合对象同源', () => {
   })
 })
 
+describe('localDateKey / isBeforeToday（纯日期按本地日历比较）', () => {
+  it('纯日期串按字面返回，不落入 UTC 解析', () => {
+    expect(dt.localDateKey('2026-10-30')).toBe('2026-10-30')
+    expect(dt.localDateKey('')).toBeNull()
+    expect(dt.localDateKey(null)).toBeNull()
+  })
+
+  it('到期当天不算逾期，次日才算', () => {
+    const now = new Date(2026, 9, 30, 8, 30, 0) // 本地 10-30 上午
+    expect(dt.isBeforeToday('2026-10-30', now)).toBe(false)
+    expect(dt.isBeforeToday('2026-10-29', now)).toBe(true)
+    expect(dt.isBeforeToday('2026-10-31', now)).toBe(false)
+    expect(dt.isBeforeToday('', now)).toBe(false)
+    expect(dt.isBeforeToday('not-a-date', now)).toBe(false)
+  })
+
+  it('Date 输入取本地日历日（跨时区不漂移）', () => {
+    const now = new Date(2026, 9, 30, 0, 5, 0)
+    expect(dt.localDateKey(new Date(2026, 9, 29, 23, 59, 0))).toBe('2026-10-29')
+    expect(dt.isBeforeToday(new Date(2026, 9, 29, 23, 59, 0), now)).toBe(true)
+  })
+})
+
 describe('formatRelativeTime 相对时间分档（拆分后行为不变）', () => {
   afterEach(() => {
     vi.useRealTimers()

@@ -1,7 +1,7 @@
 /**
  * views/ruralWorks/Task.vue 覆盖率攻坚（四指标 100%）
  * 覆盖：onMounted 三路加载全分支、筛选/分页 computed、CRUD 保存全路径（API/本地回退）、
- * 单个/批量分配、进度更新与历史、导入 CSV（FileReader 桩）、导出 CSV、
+ * 单个/批量分配、进度更新与历史、导入 CSV/XLSX（现有 xlsx 解析器）、导出 CSV、
  * 辅助函数（标签/状态/截止/过期/格式化）、deadline 校验器，
  * 以及模板 v-model 箭头、内联 @click 赋值、el-dropdown command 箭头、el-progress format 箭头、
  * 表格三样本行覆盖优先级/进度三元与 v-if 两侧。
@@ -21,6 +21,7 @@ const {
   mockUpdateRuralWork,
   mockDeleteRuralWork,
   logWarn,
+  xlsxState,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   confirmMock: vi.fn(),
@@ -30,6 +31,7 @@ const {
   mockUpdateRuralWork: vi.fn(),
   mockDeleteRuralWork: vi.fn(),
   logWarn: vi.fn(),
+  xlsxState: { rows: [] as any[], fail: false, noSheet: false },
 }))
 
 vi.mock('element-plus', () => ({
@@ -43,7 +45,8 @@ vi.mock('@/api/request', () => ({
   put: vi.fn(),
   del: vi.fn(),
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/api/ruralWork', () => ({
   getRuralWorks: mockGetRuralWorks,
@@ -54,6 +57,15 @@ vi.mock('@/api/ruralWork', () => ({
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: vi.fn(), warn: logWarn, info: vi.fn(), debug: vi.fn() },
+}))
+
+vi.mock('@e965/xlsx', () => ({
+  read: vi.fn(() => {
+    if (xlsxState.fail) throw new Error('bad workbook')
+    if (xlsxState.noSheet) return { SheetNames: [], Sheets: {} }
+    return { SheetNames: ['Sheet1'], Sheets: { Sheet1: {} } }
+  }),
+  utils: { sheet_to_json: vi.fn(() => xlsxState.rows) },
 }))
 
 import Task from '@/views/ruralWorks/Task.vue'
@@ -223,13 +235,14 @@ function captureInputs() {
   return { inputs, spy }
 }
 
-/** FileReader 桩：readAsText 同步回凋 onload，result 由 holder 控制 */
-let fileReaderResult: any = ''
-class MockFileReader {
-  onload: ((e: any) => void) | null = null
-  readAsText() {
-    if (this.onload) this.onload({ target: { result: fileReaderResult } })
-  }
+function makeImportFile(): File {
+  const file = new File(['x'], 't.csv', { type: 'text/csv' })
+  // jsdom 的 File 不一定实现 arrayBuffer；生产环境真实 File 有。
+  Object.defineProperty(file, 'arrayBuffer', {
+    value: () => Promise.resolve(new ArrayBuffer(8)),
+    configurable: true,
+  })
+  return file
 }
 
 beforeEach(() => {
@@ -240,8 +253,9 @@ beforeEach(() => {
   mockUpdateRuralWork.mockResolvedValue({})
   mockDeleteRuralWork.mockResolvedValue({})
   confirmMock.mockResolvedValue(undefined)
-  fileReaderResult = ''
-  vi.stubGlobal('FileReader', MockFileReader)
+  xlsxState.rows = []
+  xlsxState.fail = false
+  xlsxState.noSheet = false
 })
 
 afterEach(() => {
@@ -711,17 +725,15 @@ describe('新建/编辑/保存任务', () => {
     expect(vm.currentTask.assigneeName).toBe('') // assigneeId 空 → else 臂
   })
 
-  it('saveTask 创建失败 → 本地 unshift 回退；status 其他 → completed', async () => {
+  it('saveTask 创建失败 → 显式报错且不写本地假数据', async () => {
     mockCreateRuralWork.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const before = vm.tasks.length
-    // saveTask 末尾会重新 loadData；让重载返回空以保留本地回退结果
-    mockGetRuralWorks.mockResolvedValue({ items: [] })
     vm.currentTask = {
       ...vm.currentTask,
-      name: '本地任务',
+      name: '未落库任务',
       status: 'cancelled',
       projectId: '',
       assigneeId: '',
@@ -732,9 +744,9 @@ describe('新建/编辑/保存任务', () => {
     expect(mockCreateRuralWork).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'completed' })
     )
-    expect(vm.tasks.length).toBe(before + 1)
-    expect(vm.tasks[0].name).toBe('本地任务')
-    expect(ElMessage.success).toHaveBeenCalledWith('任务创建成功（本地）')
+    expect(vm.tasks.length).toBe(before)
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalledWith('任务创建成功（本地）')
   })
 
   it('saveTask 编辑成功：projectId 找不到时保留原项目名', async () => {
@@ -749,21 +761,21 @@ describe('新建/编辑/保存任务', () => {
     expect(ElMessage.success).toHaveBeenCalledWith('任务更新成功')
   })
 
-  it('saveTask 编辑失败 → 本地替换（index 命中）', async () => {
+  it('saveTask 编辑失败 → 报错且不改本地列表', async () => {
     mockUpdateRuralWork.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    // saveTask 末尾会重新 loadData；让重载返回空以保留本地回退结果
-    mockGetRuralWorks.mockResolvedValue({ items: [] })
+    const originalName = vm.tasks[0].name
     vm.editTask({ ...vm.tasks[0], name: '改后名' })
     vm.taskFormRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.saveTask()
-    expect(vm.tasks[0].name).toBe('改后名')
-    expect(ElMessage.success).toHaveBeenCalledWith('任务更新成功（本地）')
+    expect(vm.tasks[0].name).toBe(originalName)
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalledWith('任务更新成功（本地）')
   })
 
-  it('saveTask 编辑失败 → index 未命中不替换；assigneeId 找不到保留原名', async () => {
+  it('saveTask 编辑失败：无效 id / 负责人找不到也不写本地假数据', async () => {
     mockUpdateRuralWork.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
@@ -779,8 +791,8 @@ describe('新建/编辑/保存任务', () => {
     vm.taskFormRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.saveTask()
     expect(vm.tasks.some((t: any) => t.name === '幽灵')).toBe(false)
-    expect(vm.currentTask.assigneeName).toBe('原人') // find 未命中 → 不覆盖
-    expect(ElMessage.success).toHaveBeenCalledWith('任务更新成功（本地）')
+    expect(vm.currentTask.assigneeName).toBe('原人')
+    expect(ElMessage.error).toHaveBeenCalled()
   })
 })
 
@@ -815,41 +827,70 @@ describe('任务分配（单个/批量）', () => {
     expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
-  it('confirmAssign 成功：更新负责人并置为进行中', async () => {
+  it('confirmAssign 成功：调用真实更新接口并重载', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    // confirmAssign 末尾会重新 loadData；让重载返回空以保留本地修改
-    mockGetRuralWorks.mockResolvedValue({ items: [] })
+    mockGetRuralWorks.mockResolvedValue({
+      items: [{ ...apiItem1, responsible_person: '李四', status: 'in_progress' }],
+    })
     vm.assignTask(vm.tasks[0])
     vm.assignForm.assigneeId = '2'
     vm.assignFormRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.confirmAssign()
-    expect(vm.tasks[0].assigneeId).toBe('2')
-    expect(vm.tasks[0].assigneeName).toBe('李四')
-    expect(vm.tasks[0].status).toBe('in_progress')
+    expect(mockUpdateRuralWork).toHaveBeenCalledWith(101, {
+      responsible_person: '李四',
+      status: 'in_progress',
+    })
     expect(ElMessage.success).toHaveBeenCalledWith('任务分配成功')
     expect(vm.assignDialogVisible).toBe(false)
   })
 
-  it('confirmAssign：任务不在列表 / 负责人找不到 → 不更新但仍提示成功', async () => {
+  it('confirmAssign：负责人找不到 / 无效任务 id → 报错且不调用接口', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    // 负责人找不到（index 命中但 assignee undefined）
     vm.assignTask(vm.tasks[0])
     vm.assignForm.assigneeId = '999'
     vm.assignFormRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.confirmAssign()
-    expect(vm.tasks[0].assigneeId).toBe('')
-    expect(ElMessage.success).toHaveBeenCalledWith('任务分配成功')
+    expect(mockUpdateRuralWork).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
 
-    // 任务不在列表（index -1）
     vm.currentTask = { ...rowA, id: 'NOT-EXIST' }
     vm.assignForm.assigneeId = '1'
     vm.assignFormRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.confirmAssign()
-    expect(ElMessage.success).toHaveBeenCalledWith('任务分配成功')
+    expect(mockUpdateRuralWork).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
+  })
+
+  it('confirmAssign 失败：接口报错时保留弹窗并提示错误', async () => {
+    mockUpdateRuralWork.mockRejectedValue(new Error('server error'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.assignTask(vm.tasks[0])
+    vm.assignForm.assigneeId = '2'
+    vm.assignFormRef = { validate: vi.fn().mockResolvedValue(true) }
+    await vm.confirmAssign()
+    expect(mockUpdateRuralWork).toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect(vm.assignDialogVisible).toBe(true)
+  })
+
+  it('confirmBatchAssign 全部失败：提示失败数且不关闭弹窗', async () => {
+    mockUpdateRuralWork.mockRejectedValue(new Error('server error'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedTasks = [vm.tasks[0], vm.tasks[1]]
+    vm.batchAssignForm.assigneeId = '1'
+    vm.batchAssignFormRef = { validate: vi.fn().mockResolvedValue(true) }
+    vm.batchAssignDialogVisible = true
+    await vm.confirmBatchAssign()
+    expect(ElMessage.error).toHaveBeenCalledWith('2 个任务分配失败，请稍后重试')
+    expect(vm.batchAssignDialogVisible).toBe(true)
   })
 
   it('batchAssignTasks：未选择 → 警告；已选择 → 打开对话框', async () => {
@@ -879,26 +920,26 @@ describe('任务分配（单个/批量）', () => {
     expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
-  it('confirmBatchAssign 成功：含不在列表中的选中项（index -1 臂）', async () => {
+  it('confirmBatchAssign 成功：逐条调用真实更新接口', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    // confirmBatchAssign 末尾会重新 loadData；让重载返回空以保留本地修改
-    mockGetRuralWorks.mockResolvedValue({ items: [] })
-    vm.selectedTasks = [vm.tasks[0], vm.tasks[1], { ...rowA, id: 'NOT-EXIST' }]
+    vm.selectedTasks = [vm.tasks[0], vm.tasks[1]]
     vm.batchAssignForm.assigneeId = '1'
     vm.batchAssignFormRef = { validate: vi.fn().mockResolvedValue(true) }
     vm.batchAssignDialogVisible = true
     await vm.confirmBatchAssign()
-    expect(vm.tasks[0].assigneeName).toBe('张三')
-    expect(vm.tasks[0].status).toBe('in_progress')
-    expect(vm.tasks[1].assigneeName).toBe('张三')
-    expect(ElMessage.success).toHaveBeenCalledWith('成功分配 3 个任务')
+    expect(mockUpdateRuralWork).toHaveBeenCalledTimes(2)
+    expect(mockUpdateRuralWork).toHaveBeenCalledWith(101, {
+      responsible_person: '张三',
+      status: 'in_progress',
+    })
+    expect(ElMessage.success).toHaveBeenCalledWith('成功分配 2 个任务')
     expect(vm.selectedTasks).toEqual([])
     expect(vm.batchAssignDialogVisible).toBe(false)
   })
 
-  it('confirmBatchAssign：负责人找不到 → 不更新但仍提示', async () => {
+  it('confirmBatchAssign：负责人找不到 → 报错且不调用接口', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -906,8 +947,8 @@ describe('任务分配（单个/批量）', () => {
     vm.batchAssignForm.assigneeId = '999'
     vm.batchAssignFormRef = { validate: vi.fn().mockResolvedValue(true) }
     await vm.confirmBatchAssign()
-    expect(vm.tasks[0].assigneeId).toBe('')
-    expect(ElMessage.success).toHaveBeenCalledWith('成功分配 1 个任务')
+    expect(mockUpdateRuralWork).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
   })
 })
 
@@ -1106,22 +1147,19 @@ describe('删除任务与 dropdown 命令', () => {
     dropdowns[2].vm.$emit('command', 'unknown') // 无匹配 case → 不报错
   })
 
-  it('deleteTask：API 失败 → 本地删除（index 命中 / 未命中两臂）', async () => {
+  it('deleteTask：API 失败 → 保留服务端记录并提示错误', async () => {
     mockDeleteRuralWork.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const before = vm.tasks.length
-    // deleteTask 末尾会重新 loadData；让重载返回空以保留本地删除结果
-    mockGetRuralWorks.mockResolvedValue({ items: [] })
+    // API 失败后绝不能本地 splice；列表应保持服务端数据。
+    mockGetRuralWorks.mockResolvedValue({ items: [apiItem1, apiItem2, apiItem3] })
     vm.deleteTask(vm.tasks[0].id)
     await flushPromises()
-    expect(vm.tasks.length).toBe(before - 1)
-    expect(ElMessage.success).toHaveBeenCalledWith('任务删除成功（本地）')
-
-    vm.deleteTask('NOT-EXIST') // index -1 → 不 splice
-    await flushPromises()
-    expect(ElMessage.success).toHaveBeenCalledWith('任务删除成功（本地）')
+    expect(vm.tasks.length).toBe(before)
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalledWith('任务删除成功（本地）')
   })
 
   it('deleteTask：取消确认 → 静默返回', async () => {
@@ -1154,15 +1192,30 @@ describe('导入/导出任务', () => {
     spy.mockRestore()
   })
 
+  it('importTasks：工作簿无 Sheet → 警告', async () => {
+    xlsxState.noSheet = true
+    const { inputs, spy } = captureInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importTasks()
+    const file = makeImportFile()
+    Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
+    inputs[0].dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(ElMessage.warning).toHaveBeenCalledWith('文件内容为空或格式不正确')
+    spy.mockRestore()
+  })
+
   it('importTasks：内容不足两行 → 警告', async () => {
-    fileReaderResult = '任务编号,任务名称'
+    xlsxState.rows = [['任务编号', '任务名称']]
     const { inputs, spy } = captureInputs()
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const before = vm.tasks.length
     vm.importTasks()
-    const file = new File(['x'], 't.csv', { type: 'text/csv' })
+    const file = makeImportFile()
     Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
     inputs[0].dispatchEvent(new Event('change'))
     await flushPromises()
@@ -1171,45 +1224,129 @@ describe('导入/导出任务', () => {
     spy.mockRestore()
   })
 
-  it('importTasks 成功：跳过短行/空名称行，去引号，提示导入数', async () => {
-    fileReaderResult =
-      '编号,名称,,项目,负责人,,,,开始,截止,描述\n' +
-      '"1","灌溉工程",,"项目甲","张三",,,,"2024-01-01","2024-03-01","说明"\n' +
-      'short\n' +
-      '2,\n' +
-      '"3","道路硬化",,"项目乙","李四"\n' +
-      '"5","缺列任务"' // 仅两列 → cols[3]/cols[4] 等 || '' 兜底臂
+  it('importTasks 成功：逐行调用创建 API，跳过空名称行', async () => {
+    xlsxState.rows = [
+      ['编号', '名称', '', '项目', '负责人', '', '', '', '开始', '截止', '描述'],
+      ['1', '灌溉工程', '', '项目甲', '张三', '', '', '', '2024-01-01', '2024-03-01', '说明'],
+      ['2', ''],
+      ['3', '道路硬化', '', '项目乙', '李四'],
+      ['5', '缺列任务'],
+    ]
     const { inputs, spy } = captureInputs()
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const before = vm.tasks.length
     vm.importTasks()
-    const file = new File(['x'], 't.csv', { type: 'text/csv' })
+    const file = makeImportFile()
     Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
     inputs[0].dispatchEvent(new Event('change'))
     await flushPromises()
-    expect(vm.tasks.length).toBe(before + 3)
-    const imported = vm.tasks.slice(-3)
-    expect(imported[0]).toMatchObject({
-      name: '灌溉工程',
-      projectName: '项目甲',
-      assigneeName: '张三',
-    })
-    expect(imported[1]).toMatchObject({ name: '道路硬化', projectName: '项目乙' })
-    expect(imported[2]).toMatchObject({ name: '缺列任务', projectName: '', assigneeName: '' })
+    expect(mockCreateRuralWork).toHaveBeenCalledTimes(3)
+    expect(mockCreateRuralWork).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        name: '灌溉工程',
+        responsible_person: '张三',
+        start_date: '2024-01-01',
+        end_date: '2024-03-01',
+        description: '说明',
+      })
+    )
+    expect(mockCreateRuralWork).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ name: '缺列任务', responsible_person: '', description: '' })
+    )
     expect(ElMessage.success).toHaveBeenCalledWith('成功导入 3 个任务')
     spy.mockRestore()
   })
 
-  it('importTasks：解析异常 → 错误提示', async () => {
-    fileReaderResult = null // result 为 null → text.split 抛 TypeError 进 catch
+  it('importTasks：部分行创建失败 → 汇总成功/失败数', async () => {
+    xlsxState.rows = [
+      ['编号', '名称', '', '项目', '负责人', '', '', '', '开始', '截止', '描述'],
+      ['1', '成功任务', '', '', '', '', '', '', '', '', ''],
+      ['2', '失败任务', '', '', '', '', '', '', '', '', ''],
+    ]
+    mockCreateRuralWork
+      .mockResolvedValueOnce({ id: 1 })
+      .mockRejectedValueOnce(new Error('server error'))
     const { inputs, spy } = captureInputs()
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.importTasks()
-    const file = new File(['x'], 't.csv', { type: 'text/csv' })
+    const file = makeImportFile()
+    Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
+    inputs[0].dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(mockCreateRuralWork).toHaveBeenCalledTimes(2)
+    expect(ElMessage.success).toHaveBeenCalledWith('成功导入 1 个任务，1 个失败')
+    spy.mockRestore()
+  })
+
+  it('importTasks：空单元格（null）按空串处理', async () => {
+    xlsxState.rows = [
+      [null, '名称'],
+      ['1', null],
+    ]
+    const { inputs, spy } = captureInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importTasks()
+    const file = makeImportFile()
+    Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
+    inputs[0].dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('未找到可导入的任务')
+    spy.mockRestore()
+  })
+
+  it('importTasks：没有有效名称 → 提示未找到可导入任务', async () => {
+    xlsxState.rows = [
+      ['编号', '名称'],
+      ['1', ''],
+    ]
+    const { inputs, spy } = captureInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importTasks()
+    const file = makeImportFile()
+    Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
+    inputs[0].dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('未找到可导入的任务')
+    spy.mockRestore()
+  })
+
+  it('importTasks：全部失败 → 不提示成功', async () => {
+    xlsxState.rows = [
+      ['编号', '名称'],
+      ['1', '失败任务'],
+    ]
+    mockCreateRuralWork.mockRejectedValue(new Error('server error'))
+    const { inputs, spy } = captureInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importTasks()
+    const file = makeImportFile()
+    Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
+    inputs[0].dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalledWith('任务导入失败，请检查文件内容')
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('importTasks：解析异常 → 错误提示', async () => {
+    xlsxState.fail = true
+    const { inputs, spy } = captureInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.importTasks()
+    const file = makeImportFile()
     Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
     inputs[0].dispatchEvent(new Event('change'))
     await flushPromises()

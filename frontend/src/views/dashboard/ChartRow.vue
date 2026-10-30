@@ -73,7 +73,7 @@ async function loadData() {
       // W8-018：params 曾携带 /projects 后端列表接口不存在的 summary 幽灵参数
       // （FastAPI 会静默忽略），已移除。
       apiRequest({ method: 'GET', url: '/projects', params: { page_size: 5 } }),
-      get('/dashboard/stats', { refresh: true }),
+      get('/dashboard/stats', { refresh: true }, { skipDedup: true }),
     ])
     const unwrappedProjects = unwrapList(projRes).items
     projects.value = unwrappedProjects.length

@@ -191,6 +191,7 @@ import { Plus, Edit, Delete, Loading, Calendar } from '@element-plus/icons-vue'
 import { listTodos, createTodo, updateTodo, deleteTodo, toggleTodo } from '@/api/todos'
 
 import { format } from '@/utils'
+import { isBeforeToday } from '@/utils/datetime'
 import PageHeader from '@/components/common/PageHeader.vue'
 const addForm = reactive({
   title: '',
@@ -237,7 +238,9 @@ const formatDate = (d?: string | null): string => format.formatDate(d)
 
 function isOverdue(todo: { deadline?: string; completed?: boolean }) {
   if (!todo.deadline || todo.completed) return false
-  return new Date(todo.deadline) < new Date()
+  // deadline 是后端的纯日期串（YYYY-MM-DD）；直接 new Date() 会按 UTC 解析，
+  // UTC+8 下「今天到期」会在上午 8 点后误判为逾期。按本地日历日比较。
+  return isBeforeToday(todo.deadline)
 }
 
 function scrollToAdd() {

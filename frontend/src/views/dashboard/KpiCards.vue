@@ -210,7 +210,8 @@ async function loadStats() {
   loading.value = true
   error.value = false
   try {
-    const res = await get('/dashboard/stats', { refresh: true })
+    // 与 ChartRow 共享同一统计端点，不能被同 key GET 去重取消。
+    const res = await get('/dashboard/stats', { refresh: true }, { skipDedup: true })
     const d = (res || {}) as Record<string, number>
     if (d) {
       stats.value = {

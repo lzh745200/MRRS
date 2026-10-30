@@ -368,8 +368,14 @@ async function checkBackup(item: CheckItem): Promise<void> {
       item.detail = '从未执行过备份，数据安全存在风险'
       return
     }
-    const timeStr = formatDateTime(new Date(last))
-    const days = (Date.now() - new Date(last).getTime()) / 86400000
+    const lastTs = new Date(last).getTime()
+    if (!Number.isFinite(lastTs)) {
+      item.status = 'error'
+      item.detail = '上次备份时间无效，无法判断备份是否新鲜'
+      return
+    }
+    const timeStr = formatDateTime(new Date(lastTs))
+    const days = (Date.now() - lastTs) / 86400000
     if (days > BACKUP_STALE_DAYS) {
       item.status = 'warning'
       item.detail = `上次备份：${timeStr}（已超过 ${BACKUP_STALE_DAYS} 天），共 ${total} 份备份`

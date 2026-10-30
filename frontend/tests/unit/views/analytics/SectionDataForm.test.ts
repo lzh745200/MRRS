@@ -12,6 +12,7 @@ enableAutoUnmount(afterEach)
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +31,10 @@ const mocks = vi.hoisted(() => ({
   uploadSectionAttachment: vi.fn(),
   getSectionAttachments: vi.fn(),
   deleteSectionAttachment: vi.fn(),
+  requestGet: vi.fn(),
+  downloadBlob: vi.fn(),
+  createObjectURL: vi.fn(() => 'blob:preview-url'),
+  revokeObjectURL: vi.fn(),
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), log: vi.fn() },
 }))
 
@@ -54,6 +59,12 @@ vi.mock('@/api/supportedVillage', () => ({
 }))
 
 vi.mock('@/utils/logger', () => ({ logger: mocks.logger }))
+vi.mock('@/api/request', () => ({
+  default: { get: (...a: any[]) => mocks.requestGet(...a) },
+}))
+vi.mock('@/api/helpers/blobDownload', () => ({
+  downloadBlobAsFile: (...a: any[]) => mocks.downloadBlob(...a),
+}))
 
 import SectionDataForm from '@/views/analytics/supported-villages/components/SectionDataForm.vue'
 
@@ -93,6 +104,13 @@ beforeEach(() => {
   mocks.savePopulationData.mockResolvedValue({ success: true })
   mocks.uploadSectionAttachment.mockResolvedValue(attachment)
   mocks.deleteSectionAttachment.mockResolvedValue({ success: true })
+  mocks.requestGet.mockResolvedValue({ data: new Blob(['x'], { type: 'application/pdf' }) })
+  mocks.downloadBlob.mockResolvedValue(undefined)
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: mocks.createObjectURL,
+    revokeObjectURL: mocks.revokeObjectURL,
+  })
 })
 
 describe('SectionDataForm.vue 保存/取消', () => {
@@ -323,11 +341,31 @@ describe('SectionDataForm.vue 初始化与年份切换', () => {
     expect(st.committeeMembers[0]).toEqual({ name: '', position: '', phone: '', isVeteran: false, remark: '' })
   })
 
-  it('年度数据加载失败 → 使用默认值（catch 分支）', async () => {
+  it('年度数据加载失败 → 标记错误并禁止保存（不再静默用默认值）', async () => {
     mocks.getYearlyData.mockRejectedValue(new Error('net'))
     const wrapper = mountForm()
     await flushPromises()
-    expect(state(wrapper).formData.totalHouseholds).toBe(0)
+    const st = state(wrapper)
+    expect(st.formData.totalHouseholds).toBe(0)
+    expect(st.loadError).toContain('数据加载失败')
+    await st.handleSave()
+    expect(mocks.savePopulationData).not.toHaveBeenCalled()
+  })
+
+  it('快速切年：旧年份响应晚到不得覆盖当前年份表单', async () => {
+    let resolveOld: (v: any) => void = () => {}
+    mocks.getYearlyData.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveOld = resolve))
+    )
+    const wrapper = mountForm()
+    const st = state(wrapper)
+    // 当前请求（旧年）挂起时切换到新年，并让新年立即返回
+    mocks.getYearlyData.mockResolvedValueOnce({ population: { totalHouseholds: 99 } })
+    st.selectedYear = 2025
+    await st.handleYearChange()
+    resolveOld({ population: { totalHouseholds: 11 } })
+    await flushPromises()
+    expect(st.formData.totalHouseholds).toBe(99)
   })
 
   it('population 表单校验：总人数≤0 被拒绝（validator error 分支）', async () => {
@@ -491,16 +529,19 @@ describe('SectionDataForm.vue 附件管理', () => {
     expect(errSpy).toHaveBeenCalledWith('删除失败')
   })
 
-  it('预览：设置预览状态并打开弹窗', async () => {
+  it('预览：带认证请求 Blob 后设置预览状态并打开弹窗', async () => {
     const wrapper = mountForm()
     await flushPromises()
     const st = state(wrapper)
-    st.handlePreview(attachment)
+    await st.handlePreview(attachment)
+    expect(mocks.requestGet).toHaveBeenCalledWith(attachment.fileUrl, { responseType: 'blob' })
     expect(st.previewAttachment).toEqual(attachment)
     expect(st.previewTitle).toBe('证明.pdf')
-    expect(st.previewUrl).toBe('http://x/file.pdf')
+    expect(st.previewUrl).toBe('blob:preview-url')
     expect(st.previewType).toBe('pdf')
     expect(st.previewVisible).toBe(true)
+    st.releasePreviewUrl()
+    expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:preview-url')
   })
 
   it('预览弹窗关闭：触发 v-model 更新函数', async () => {
@@ -515,13 +556,47 @@ describe('SectionDataForm.vue 附件管理', () => {
     expect(st.previewVisible).toBe(false)
   })
 
-  it('下载：创建 a 标签并触发点击', async () => {
+  it('下载：走带认证的 Blob 下载工具', async () => {
     const wrapper = mountForm()
     await flushPromises()
     const st = state(wrapper)
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    st.handleDownload(attachment)
-    expect(clickSpy).toHaveBeenCalled()
+    // downloadBlobAsFile 已被 mock，不会自动执行 requestFn；此处让其执行闭包，
+    // 才能同时断言“调用工具”与“带 Authorization 的 request.get 配置”。
+    mocks.downloadBlob.mockImplementation(async (requestFn: () => Promise<unknown>) => {
+      await requestFn()
+    })
+    await st.handleDownload(attachment)
+    expect(mocks.downloadBlob).toHaveBeenCalledTimes(1)
+    expect(mocks.requestGet).toHaveBeenCalledWith(attachment.fileUrl, { responseType: 'blob' })
+  })
+
+  it('预览失败：提示可读错误，不打开弹窗', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    const errSpy = vi.spyOn(ElMessage, 'error')
+    mocks.requestGet.mockRejectedValueOnce(new Error('preview boom'))
+
+    await st.handlePreview(attachment)
+
+    expect(errSpy).toHaveBeenCalledWith('preview boom')
+    expect(st.previewVisible).toBe(false)
+    expect(st.previewUrl).toBe('')
+  })
+
+  it('下载失败：提示可读错误', async () => {
+    const wrapper = mountForm()
+    await flushPromises()
+    const st = state(wrapper)
+    const errSpy = vi.spyOn(ElMessage, 'error')
+    mocks.requestGet.mockRejectedValueOnce(new Error('download boom'))
+    mocks.downloadBlob.mockImplementation(async (requestFn: () => Promise<unknown>) => {
+      await requestFn()
+    })
+
+    await st.handleDownload(attachment)
+
+    expect(errSpy).toHaveBeenCalledWith('download boom')
   })
 
   it('formatFileSize：B / KB / MB 三分支', async () => {

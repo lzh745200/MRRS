@@ -125,6 +125,32 @@ export function formatDate(date?: DateInput, fallback = '-'): string {
   return formatDateTime(date, 'YYYY-MM-DD', fallback)
 }
 
+/**
+ * 取「本地日历日」键（YYYY-MM-DD）。
+ *
+ * 纯日期串（后端 Date/String(20) 字段，如待办 deadline）**按字面日期**返回，
+ * 不经过 `new Date()` —— `new Date('2026-10-30')` 按 UTC 零点解析，在 UTC+8
+ * 是当天 08:00、在 UTC-5 则是前一天 19:00，用它做「是否逾期」会随部署时区漂移。
+ */
+export function localDateKey(value: DateInput): string | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const d = toDate(value)
+  if (!d) return null
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+/**
+ * 纯日期是否早于「今天」（本地日历语义）。
+ *
+ * 到期当天不算逾期：截止日期表示当天有效，次日 00:00 才进入逾期。
+ */
+export function isBeforeToday(value: DateInput, now: Date = new Date()): boolean {
+  const key = localDateKey(value)
+  if (!key) return false
+  return key < `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
+}
+
 /** 格式化日期时间（`YYYY-MM-DD HH:mm:ss`，本地时区） */
 export function formatDateTimeFull(date?: DateInput, fallback = '-'): string {
   if (!date) return fallback

@@ -42,6 +42,7 @@ vi.mock('@/api/request', () => ({
 }))
 
 import ComprehensiveEntry from '@/views/dataEntry/ComprehensiveEntry.vue'
+import { AuthStorage } from '@/utils/authStorage'
 
 const DRAFT_KEY = 'comprehensive_entry_draft'
 const currentYear = new Date().getFullYear()
@@ -397,6 +398,37 @@ describe('草稿本地存取', () => {
     await nextTick()
     expect(vm.formData.populationData.length).toBe(3)
     expect(vm.formData.investmentData.length).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('已登录用户草稿按用户 id 隔离，并清理旧全局 key', async () => {
+    vi.spyOn(AuthStorage, 'getUser').mockReturnValue({
+      id: '7',
+      username: 'user7',
+      role: 'user',
+    } as any)
+    localStorage.setItem(`${DRAFT_KEY}:7`, JSON.stringify(makeFullDraft()))
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(makeFullDraft()))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(ElMessage.info).toHaveBeenCalledWith(expect.stringContaining('已恢复上次草稿'))
+    expect(vm.formData.basicInfo.department).toBe('草稿部门')
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('已登录用户缺少 id 时回退 username 作为草稿隔离键', async () => {
+    vi.spyOn(AuthStorage, 'getUser').mockReturnValue({
+      id: '',
+      username: 'fallback-user',
+      role: 'user',
+    } as any)
+    localStorage.setItem(`${DRAFT_KEY}:fallback-user`, JSON.stringify(makeFullDraft()))
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(ElMessage.info).toHaveBeenCalledWith(expect.stringContaining('已恢复上次草稿'))
+    expect((wrapper.vm as any).formData.basicInfo.department).toBe('草稿部门')
     wrapper.unmount()
   })
 

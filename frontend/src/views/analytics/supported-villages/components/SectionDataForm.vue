@@ -1,5 +1,13 @@
 <template>
   <div class="section-data-form">
+    <el-alert
+      v-if="loadError"
+      type="error"
+      :closable="false"
+      show-icon
+      :title="loadError"
+      class="section-load-error"
+    />
     <!-- 年份选择 -->
     <el-form
       ref="formRef"
@@ -738,7 +746,14 @@
 
       <!-- 操作按钮 -->
       <el-form-item class="form-item-actions">
-        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+        <el-button
+          type="primary"
+          :loading="saving || loading"
+          :disabled="loading || !!loadError"
+          @click="handleSave"
+        >
+          保存
+        </el-button>
         <el-button @click="handleClose">取消</el-button>
       </el-form-item>
     </el-form>
@@ -750,6 +765,7 @@
       :title="previewTitle"
       :width="DIALOG_LG"
       destroy-on-close
+      @closed="releasePreviewUrl"
     >
       <div class="preview-container">
         <img v-if="previewType === 'image'" :src="previewUrl" alt="预览" class="preview-image" />
@@ -771,7 +787,7 @@ import { DIALOG_LG } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 import { getYearOptions } from '@/utils/yearOptions'
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
 import type { UploadFile, UploadRequestOptions, UploadRawFile } from 'element-plus'
@@ -794,6 +810,8 @@ import {
   resolveSectionApiKey,
 } from '@/api/supportedVillage'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import request from '@/api/request'
+import { downloadBlobAsFile } from '@/api/helpers/blobDownload'
 interface SectionAttachment {
   id: number
   fileName: string
@@ -963,6 +981,9 @@ const formRules = computed(() => {
   return rules
 })
 const saving = ref(false)
+const loading = ref(false)
+const loadError = ref('')
+let loadSeq = 0
 const selectedYear = ref(props.initialYear || new Date().getFullYear())
 // 可选年份：2017 ~ 当前年+10（滚动窗口，见 utils/yearOptions）
 const availableYears = getYearOptions({ start: 2017 })
@@ -1105,13 +1126,17 @@ function resetFormData() {
 
 // 加载年度数据
 async function loadSectionData() {
+  const seq = ++loadSeq
+  const year = selectedYear.value
   resetFormData()
   committeeMembers.value = []
+  loading.value = true
+  loadError.value = ''
   try {
-    const data = await getYearlyData(props.villageId, selectedYear.value)
+    const data = await getYearlyData(props.villageId, year)
+    // 年份已切换或已有更新请求：丢弃过期响应，禁止把 A 年数据写进 B 年表单。
+    if (seq !== loadSeq || year !== selectedYear.value) return
     const apiKey = resolveApiKey(props.sectionKey)
-    // 年度数据用索引签名承载各板块（字段名由 resolveApiKey 决定），取到后按对象收窄。
-    // resolveSectionApiKey 对未知 key 原样返回，恒为非空字符串，故不需要再判空。
     const sectionRaw = data[apiKey]
     if (sectionRaw && typeof sectionRaw === 'object') {
       const sectionData = sectionRaw as Record<string, unknown>
@@ -1120,9 +1145,7 @@ async function loadSectionData() {
           formData[k] = sectionData[k] as never
         }
       })
-      // 村委会板块加载成员列表
       if (props.sectionKey === 'committee' && Array.isArray(sectionData.members)) {
-        // 后端可能返回布尔/数字/字符串 "0"/"1"，Boolean("0") 会误判为 true，故用显式判断
         const toBool = (v: unknown) => v === true || v === 1 || v === '1'
         const members = sectionData.members as Array<Record<string, unknown>>
         committeeMembers.value = members.map((m) => ({
@@ -1134,8 +1157,12 @@ async function loadSectionData() {
         }))
       }
     }
-  } catch {
-    // 无数据时使用默认值
+  } catch (error) {
+    if (seq !== loadSeq || year !== selectedYear.value) return
+    logger.error('年度板块数据加载失败:', error)
+    loadError.value = `${year}年数据加载失败，禁止保存以免覆盖已有数据；请重试或联系管理员`
+  } finally {
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -1148,9 +1175,8 @@ async function loadAttachments() {
   }
 }
 
-function handleYearChange() {
-  loadSectionData()
-  loadAttachments()
+async function handleYearChange() {
+  await Promise.all([loadSectionData(), loadAttachments()])
 }
 
 // 保存数据 — 只保存当前板块
@@ -1174,6 +1200,10 @@ const saveFnMap: Record<string, (villageId: number, year: number, data: any) => 
 }
 
 async function handleSave() {
+  if (loading.value || loadError.value) {
+    ElMessage.error('年度数据尚未成功加载，禁止保存')
+    return
+  }
   // Validate form before saving
   if (formRef.value) {
     try {
@@ -1273,22 +1303,36 @@ function getPreviewType(fileType?: string): 'image' | 'pdf' | 'other' {
   return 'other'
 }
 
-function handlePreview(att: SectionAttachment) {
-  previewAttachment.value = att
-  previewTitle.value = att.fileName
-  previewUrl.value = att.fileUrl
-  previewType.value = getPreviewType(att.fileType)
-  previewVisible.value = true
+function releasePreviewUrl() {
+  if (previewUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
+  previewUrl.value = ''
 }
 
-function handleDownload(att: SectionAttachment) {
-  const link = document.createElement('a')
-  link.href = att.fileUrl
-  link.setAttribute('download', att.fileName)
-  link.target = '_blank'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+async function handlePreview(att: SectionAttachment) {
+  try {
+    // 附件端点只认 Authorization 头；直接把 URL 交给 img/iframe 必然 401。
+    const res = await request.get(att.fileUrl, { responseType: 'blob' })
+    releasePreviewUrl()
+    previewAttachment.value = att
+    previewTitle.value = att.fileName
+    previewUrl.value = URL.createObjectURL(res.data as Blob)
+    previewType.value = getPreviewType(att.fileType)
+    previewVisible.value = true
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '附件预览失败，请稍后重试'))
+  }
+}
+
+async function handleDownload(att: SectionAttachment) {
+  try {
+    await downloadBlobAsFile(() => request.get(att.fileUrl, { responseType: 'blob' }), {
+      fallbackFileName: att.fileName,
+    })
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '附件下载失败，请稍后重试'))
+  }
 }
 
 function formatFileSize(bytes: number): string {
@@ -1298,6 +1342,10 @@ function formatFileSize(bytes: number): string {
 }
 
 // ==================== 初始化 ====================
+
+onUnmounted(() => {
+  releasePreviewUrl()
+})
 
 onMounted(() => {
   resetFormData()

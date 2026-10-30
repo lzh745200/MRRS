@@ -26,7 +26,10 @@ const request = axios.create({
   withCredentials: true,
 })
 
-export type RequestConfig = AxiosRequestConfig
+export type RequestConfig = AxiosRequestConfig & {
+  /** 同一 GET 可被多个组件共享时跳过“后发取消前发”，避免取消态被当成空数据 */
+  skipDedup?: boolean
+}
 
 /**
  * 拦截器内部扩展标记（不进对外契约）：
@@ -36,6 +39,7 @@ export type RequestConfig = AxiosRequestConfig
 type InternalRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
   silent?: boolean
+  skipDedup?: boolean
 }
 
 // 跟踪待处理请求
@@ -222,7 +226,11 @@ request.interceptors.request.use(async (config) => {
   // 调用方自带 cancelToken 时（createCancelableRequest / requestWithTimeout 等）
   // 绝不覆盖：覆盖会让调用方的 cancel() 变成空操作、requestWithTimeout 的超时也
   // 不再中止请求（原实现无条件覆盖）。此时跳过去重注册，取消权完全交给调用方。
-  if ((config.method || 'get').toLowerCase() === 'get' && !config.cancelToken) {
+  if (
+    (config.method || 'get').toLowerCase() === 'get' &&
+    !config.cancelToken &&
+    !(config as InternalRequestConfig).skipDedup
+  ) {
     const requestKey = _makeRequestKey(config.method, config.url, config.params)
     if (pendingRequests.has(requestKey)) {
       pendingRequests.get(requestKey)!()
@@ -514,8 +522,15 @@ request.interceptors.response.use(
           return Promise.resolve(mockData)
         }
       }
-      // 自动重试：后端可能正在短暂重启（Electron 自动重启机制），延迟 2 秒后重试一次
-      if (error.config && !error.config._networkRetried && !_isTestEnv) {
+      // 自动重试：仅幂等 GET/HEAD。POST 在“服务端已提交但响应中断”时重发
+      // 会产生重复合同/审批/上报等业务记录。
+      const retryMethod = String(error.config?.method || 'get').toLowerCase()
+      if (
+        error.config &&
+        !error.config._networkRetried &&
+        !_isTestEnv &&
+        (retryMethod === 'get' || retryMethod === 'head')
+      ) {
         error.config._networkRetried = true
         return new Promise((resolve) => setTimeout(resolve, 2000)).then(() => {
           return request.request(error.config)
@@ -581,15 +596,15 @@ export async function getCsrfToken(): Promise<string | null> {
  *   const res = await request.get<Item[]>("/items");
  *   res.data[0].name  // correct (.data needed on AxiosResponse)
  */
-export async function apiRequest<T = any>(config: AxiosRequestConfig): Promise<T> {
+export async function apiRequest<T = any>(config: RequestConfig): Promise<T> {
   const res = await request.request<T>(config)
   return res.data
 }
 
 // ── 便捷方法别名 ──
 
-export async function get<T = any>(url: string, params?: any): Promise<T> {
-  return apiRequest<T>({ method: 'GET', url, params })
+export async function get<T = any>(url: string, params?: any, extra?: RequestConfig): Promise<T> {
+  return apiRequest<T>({ method: 'GET', url, params, ...(extra || {}) })
 }
 
 export async function post<T = any>(

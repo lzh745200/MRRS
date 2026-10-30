@@ -21,7 +21,7 @@
           <img src="/images/badges/badge.png" alt="徽章" class="badge-image" />
         </div>
         <h1 class="brand-title">帮扶管理信息系统</h1>
-        <p class="brand-subtitle">地方所需 群众所盼 帮扶所能</p>
+        <p class="brand-subtitle">地方所需 群众所盼 部队所能</p>
       </div>
 
       <!-- 右侧登录卡片 -->

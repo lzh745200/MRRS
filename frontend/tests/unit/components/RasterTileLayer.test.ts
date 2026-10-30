@@ -61,6 +61,8 @@ const hoisted = vi.hoisted(() => {
     const instance: any = {
       url,
       opts,
+      // Leaflet 实例属性名为 options（与构造参数 opts 对应），供子类方法读取
+      options: opts,
       handlers,
       on: vi.fn((event: string, handler: Function) => {
         addHandler(handlers, event, handler)
@@ -101,12 +103,22 @@ const hoisted = vi.hoisted(() => {
     return instance
   }
 
-  return { state, map, tileLayer, layerGroup, circleMarker }
+  /** 模拟 L.TileLayer.extend：生成可 new 的子类工厂，并把子类方法混入实例 */
+  const TileLayer = {
+    extend(props: Record<string, Function>) {
+      return function (url: string, opts: any) {
+        return Object.assign(tileLayer(url, opts), props)
+      }
+    },
+  }
+
+  return { state, map, tileLayer, TileLayer, layerGroup, circleMarker }
 })
 
 vi.mock('leaflet', () => ({
   map: hoisted.map,
   tileLayer: hoisted.tileLayer,
+  TileLayer: hoisted.TileLayer,
   layerGroup: hoisted.layerGroup,
   circleMarker: hoisted.circleMarker,
 }))
@@ -174,9 +186,16 @@ describe('RasterTileLayer.vue — 建图与覆盖范围', () => {
     expect(state.maps[0].opts).toMatchObject({
       zoom: 7,
       minZoom: 4,
-      maxZoom: 8,
+      // 原生最大 8 → 允许 2 档超采样，缩放交互不能被数据层级锁死
+      maxZoom: 10,
       maxBoundsViscosity: 1.0,
       worldCopyJump: false,
+      zoomControl: true,
+      scrollWheelZoom: true,
+      doubleClickZoom: true,
+      touchZoom: true,
+      boxZoom: true,
+      keyboard: true,
     })
     // 未指定 center → 停在覆盖范围中心
     expect(state.maps[0].opts.center[0]).toBeCloseTo(26.9)
@@ -191,7 +210,8 @@ describe('RasterTileLayer.vue — 建图与覆盖范围', () => {
     expect(layer.url).toBe('/api/v1/map/tiles/{z}/{x}/{y}.png')
     expect(layer.opts).toMatchObject({
       minZoom: 4,
-      maxZoom: 8,
+      maxZoom: 10,
+      minNativeZoom: 4,
       maxNativeZoom: 8,
       noWrap: true,
       bounds: GUIZHOU_BOUNDS,
@@ -211,6 +231,40 @@ describe('RasterTileLayer.vue — 建图与覆盖范围', () => {
     expect(wrapper.find('.map-raster-notice').exists()).toBe(false)
     expect(wrapper.find('.map-raster-partial').exists()).toBe(false)
     expect(wrapper.find('.map-raster-gcj02').exists()).toBe(false)
+  })
+
+  it('单层 z14 瓦片包：地图仍可放大/缩小（回归：minZoom=maxZoom=14 锁死交互）', async () => {
+    const wrapper = await mountLayer({ tileInfo: makeInfo({ zoomLevels: [14] }) })
+
+    const map = state.maps[0]
+    const layer = state.tileLayers[0]
+    expect(map.opts.minZoom).toBe(12)
+    expect(map.opts.maxZoom).toBe(16)
+    expect(map.opts.maxZoom).toBeGreaterThan(map.opts.minZoom)
+    expect(layer.opts).toMatchObject({
+      minZoom: 12,
+      maxZoom: 16,
+      minNativeZoom: 14,
+      maxNativeZoom: 14,
+    })
+    // 原生层级 >= 显示下限，Leaflet 才能用 z14 瓦片渲染 z12~16 的显示层级
+    expect(layer.opts.minNativeZoom).toBeGreaterThanOrEqual(map.opts.minZoom)
+
+    // 程序化缩放路径同样可用（父组件可通过 :zoom 控制）
+    await wrapper.setProps({ zoom: 15 })
+    expect(map.setView).toHaveBeenLastCalledWith([expect.closeTo(26.9), expect.closeTo(106.6)], 15)
+  })
+
+  it('合并 z5-11 全省包与 z14 市州包（层级有空洞）：z12/z13 取最近已有瓦片', async () => {
+    await mountLayer({ tileInfo: makeInfo({ zoomLevels: [5, 11, 14] }) })
+    const layer = state.tileLayers[0]
+
+    expect(layer.opts.nativeZooms).toEqual([5, 11, 14])
+    // Leaflet 默认会按连续区间请求不存在的 z12/z13；自定义层必须回落到最近层级
+    expect(layer._clampZoom(12)).toBe(11) // 距 11/14 同为 1 → 取较低级，请求量更小
+    expect(layer._clampZoom(13)).toBe(14)
+    expect(layer._clampZoom(9)).toBe(11)
+    expect(layer._clampZoom(16)).toBe(14)
   })
 
   it('后端下发 bbox → fitBounds / tileLayer.bounds 都用后端覆盖范围', async () => {

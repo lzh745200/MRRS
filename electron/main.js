@@ -1335,12 +1335,25 @@ app.whenReady().then(async () => {
   startAutoBackup();
 });
 
-app.on('before-quit', () => {
+let quitAfterBackendStop = false;
+app.on('before-quit', (event) => {
   isQuitting = true;
   // 清理后端自动重启定时器，避免退出后残留后端进程
   if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null; }
   cancelBackendRestartCountReset();
-  stopBackend();
+  if (quitAfterBackendStop || !backendProcess) return;
+
+  // stopBackend() 是异步 Promise；直接调用后 Electron 会继续退出，优雅 shutdown
+  // 请求来不及完成，可能留下孤儿 backend 占用端口/SQLite。阻止本次退出，等待
+  // 停止完成（stopBackend 内部已有 5s 强杀兜底）后再真正退出。
+  event.preventDefault();
+  quitAfterBackendStop = true;
+  Promise.race([
+    stopBackend(),
+    new Promise((resolve) => setTimeout(resolve, 6000)),
+  ]).finally(() => {
+    app.exit(0);
+  });
 });
 app.on('activate', () => { if (!mainWindow) createMainWindow(); else mainWindow.show(); });
 

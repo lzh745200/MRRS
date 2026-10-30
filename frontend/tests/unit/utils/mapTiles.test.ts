@@ -21,6 +21,10 @@ import {
   TILE_FALLBACK_WATCHDOG_MS,
   TILE_FIT_MAX_ZOOM,
   TILE_LOAD_FAILED_HINT,
+  TILE_MAP_MAX_ZOOM,
+  TILE_MAP_MIN_ZOOM,
+  TILE_MAX_OVERZOOM,
+  TILE_MAX_UNDERZOOM,
   TILE_PACKAGE_MAX_BYTES,
   TILE_URL_TEMPLATE,
   TRANSPARENT_TILE_DATA_URI,
@@ -33,6 +37,7 @@ import {
   isTileMapUsable,
   labelZoomForType,
   normalizeTileImportResult,
+  nearestNativeZoom,
   normalizeTileInfo,
   parseTileBbox,
   selectVisibleLabels,
@@ -41,6 +46,7 @@ import {
   tileCoverageBbox,
   tileCoverageBounds,
   tileInfoHint,
+  tileZoomLimits,
   toDisplayCoord,
   toFiniteNumber,
   validateTilePackage,
@@ -169,6 +175,74 @@ describe('normalizeTileInfo', () => {
     expect(info.tileCount).toBe(3)
     expect(info.zoomLevels).toEqual([8, 9])
     expect(info.manifest).toEqual({ provider: 'osm', zRange: [8, 9] })
+  })
+})
+
+describe('tileZoomLimits — 显示层级与瓦片原生层级解耦', () => {
+  it('单层 z14 交付包：仍保留可交互缩放区间（旧实现 14/14 导致完全无法缩放）', () => {
+    const limits = tileZoomLimits({ ...usable, zoomLevels: [14] })
+
+    expect(limits).toEqual({
+      minZoom: 14 - TILE_MAX_UNDERZOOM,
+      maxZoom: 14 + TILE_MAX_OVERZOOM,
+      minNativeZoom: 14,
+      maxNativeZoom: 14,
+    })
+    expect(limits.maxZoom).toBeGreaterThan(limits.minZoom)
+  })
+
+  it('多级省级包：显示下限不低于 4，上限允许 2 档超采样', () => {
+    const limits = tileZoomLimits(usable)
+
+    expect(limits).toEqual({
+      minZoom: TILE_MAP_MIN_ZOOM,
+      maxZoom: 11 + TILE_MAX_OVERZOOM,
+      minNativeZoom: 5,
+      maxNativeZoom: 11,
+    })
+  })
+
+  it('乱序层级取真实最小/最大；上限不超过全局 18', () => {
+    const limits = tileZoomLimits({ ...usable, zoomLevels: [12, 5, 8] })
+    expect(limits.minNativeZoom).toBe(5)
+    expect(limits.maxNativeZoom).toBe(12)
+    expect(limits.maxZoom).toBe(12 + TILE_MAX_OVERZOOM)
+
+    const high = tileZoomLimits({ ...usable, zoomLevels: [17, 22] })
+    expect(high.maxNativeZoom).toBe(22)
+    expect(high.maxZoom).toBe(TILE_MAP_MAX_ZOOM)
+  })
+
+  it('空层级/异常低层级：minZoom 不高于 maxZoom，避免 Leaflet 建图直接抛错', () => {
+    const empty = tileZoomLimits({ ...usable, zoomLevels: [] })
+    expect(empty.minZoom).toBe(TILE_MAP_MIN_ZOOM)
+    expect(empty.maxZoom).toBeGreaterThanOrEqual(empty.minZoom)
+
+    const zero = tileZoomLimits({ ...usable, zoomLevels: [0] })
+    expect(zero.minZoom).toBe(TILE_MAP_MIN_ZOOM)
+    expect(zero.maxZoom).toBeGreaterThanOrEqual(zero.minZoom)
+
+    const nullInfo = tileZoomLimits(null)
+    expect(nullInfo.maxZoom).toBeGreaterThanOrEqual(nullInfo.minZoom)
+  })
+})
+
+describe('nearestNativeZoom — 稀疏层级回退', () => {
+  it('存在精确层级时直接使用', () => {
+    expect(nearestNativeZoom([5, 6, 7, 8], 7)).toBe(7)
+  })
+
+  it('层级空洞取最近一级；距离相同取较低级', () => {
+    expect(nearestNativeZoom([5, 11, 14], 12)).toBe(11)
+    expect(nearestNativeZoom([5, 11, 14], 13)).toBe(14)
+    expect(nearestNativeZoom([5, 11, 14], 9)).toBe(11)
+    expect(nearestNativeZoom([5, 11, 14], 16)).toBe(14)
+  })
+
+  it('无层级/非法层级时原样返回，避免除零或 NaN 层级', () => {
+    expect(nearestNativeZoom([], 9)).toBe(9)
+    expect(nearestNativeZoom(undefined, 9)).toBe(9)
+    expect(nearestNativeZoom([Number.NaN, 8], 9)).toBe(8)
   })
 })
 

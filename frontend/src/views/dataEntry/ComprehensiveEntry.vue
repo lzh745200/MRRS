@@ -781,8 +781,29 @@ import type {
 } from '@/types/helpProject'
 import PageHeader from '@/components/common/PageHeader.vue'
 import { safeGetItem, safeSetItem, safeRemoveItem } from '@/utils/safeStorage'
+import { AuthStorage } from '@/utils/authStorage'
 
 const DRAFT_STORAGE_KEY = 'comprehensive_entry_draft'
+
+/**
+ * 草稿必须按当前登录用户隔离。
+ *
+ * 历史实现使用全局 key `comprehensive_entry_draft`：共用电脑上 A 保存草稿后
+ * B 登录会直接恢复 A 的村户/人口/联系人数据（PII 串号）。这里在 key 后追加
+ * 用户 id（缺失时退回 username，再退回 anonymous），并清理历史全局 key。
+ */
+function draftStorageKey(): string {
+  const user = AuthStorage.getUser()
+  const identity = user?.id || user?.username
+  // 未登录/测试上下文没有身份可隔离，保留旧 key 以兼容既有草稿与测试；
+  // 真实登录用户必须使用带用户 id 的 key。
+  return identity ? `${DRAFT_STORAGE_KEY}:${identity}` : DRAFT_STORAGE_KEY
+}
+
+function removeLegacyDraft(): void {
+  safeRemoveItem(DRAFT_STORAGE_KEY, 'local')
+}
+
 const AUTO_SAVE_INTERVAL = 30_000 // 30秒自动保存
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
 const lastSavedAt = ref('')
@@ -1004,14 +1025,18 @@ function saveDraftToLocal() {
     relatedFundText: relatedFundText.value,
     savedAt: new Date().toISOString(),
   }
-  if (safeSetItem(DRAFT_STORAGE_KEY, JSON.stringify(draft), 'local')) {
+  if (safeSetItem(draftStorageKey(), JSON.stringify(draft), 'local')) {
     lastSavedAt.value = new Date().toLocaleTimeString()
   }
 }
 
 function loadDraftFromLocal() {
   try {
-    const raw = safeGetItem(DRAFT_STORAGE_KEY, 'local')
+    const key = draftStorageKey()
+    // 只有真实登录用户使用带身份的 key 时，才清理旧全局 key；匿名/测试上下文
+    // 仍读写旧 key，保证既有草稿和既有测试不回归。
+    if (key !== DRAFT_STORAGE_KEY) removeLegacyDraft()
+    const raw = safeGetItem(key, 'local')
     if (!raw) return
     const draft = JSON.parse(raw)
     if (!draft?.formData?.basicInfo) return
@@ -1021,7 +1046,7 @@ function loadDraftFromLocal() {
       const savedDate = new Date(draft.savedAt)
       const diffDays = (Date.now() - savedDate.getTime()) / (1000 * 60 * 60 * 24)
       if (diffDays > 7) {
-        safeRemoveItem(DRAFT_STORAGE_KEY, 'local')
+        safeRemoveItem(key, 'local')
         return
       }
     }
@@ -1055,7 +1080,7 @@ function loadDraftFromLocal() {
 }
 
 function clearDraft() {
-  safeRemoveItem(DRAFT_STORAGE_KEY, 'local')
+  safeRemoveItem(draftStorageKey(), 'local')
   lastSavedAt.value = ''
 }
 
