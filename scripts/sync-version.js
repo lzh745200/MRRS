@@ -87,6 +87,20 @@ const TARGETS = [
     },
   },
   {
+    name: ".env (PROJECT_VERSION，本机覆盖)",
+    // .env 被 gitignore，CI 中不存在；但本机存在时它会覆盖 config.py 默认值，
+    // 必须纳入 check/write，否则 /health 会报旧版本而门禁全绿。
+    file: ".env",
+    optional: true,
+    describe(c) {
+      const m = c.match(/^PROJECT_VERSION=(\S+)$/m);
+      return m ? m[1] : null;
+    },
+    apply(c, v) {
+      return c.replace(/^PROJECT_VERSION=\S+$/m, `PROJECT_VERSION=${v}`);
+    },
+  },
+  {
     name: "backend/version.txt",
     file: "backend/version.txt",
     optional: true,
