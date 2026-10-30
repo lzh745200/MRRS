@@ -81,7 +81,13 @@ def _check_org_codes(db: Session) -> Dict[str, Any]:
 
 
 def _check_org_hierarchy(db: Session) -> Dict[str, Any]:
-    """检查组织层级：跨级挂接（子级必须恰为父级 +1）与根组织非省级。"""
+    """检查组织层级：仅校验跨级挂接（子级必须恰为父级 +1）。
+
+    2026-10-30 修复：不再把「根组织非省级」记为问题。v1.18.14 起省 / 市州 / 县级
+    都可作为根组织（市州级单位如黔南州 522700 应能直接首启或新建）；旧规则下这类
+    合规部署会被自检**误报**成「根组织非省级」，与「系统自检只报真问题」的定位冲突。
+    「县级根不得再建下级」仍由下方的相邻校验自然覆盖（3 + 1 != 4）。
+    """
     orgs = db.query(Organization).filter(Organization.is_active.is_(True)).all()
     by_id = {org.id: org for org in orgs}
     problems: List[str] = []
@@ -92,8 +98,8 @@ def _check_org_hierarchy(db: Session) -> Dict[str, Any]:
         if child_level is None:
             continue
         if parent_id is None:
-            if child_level != 1:
-                problems.append(str(org.name) + "(根组织非省级)")
+            # 根组织可为任一层级（省/市州/县市），此处不做层级限制。
+            # 县级根不允许再建下级，由下方相邻校验自然拦住。
             continue
         parent = by_id.get(parent_id)
         if parent is None:

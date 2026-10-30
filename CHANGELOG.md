@@ -1,5 +1,37 @@
 ## [1.18.27] - 2026-10-30 — 迁移落地修复（老库未升级 + 外键迁移误判 + 覆盖率缺口）
 
+### Fixed（根组织层级误判 —— 市州级单位无法建根/被自检误报）
+
+**用户实测**：组织管理里输入黔南州行政区划代码 `522700`（市州级）新建根组织，返回
+`422 层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）`。
+
+**共同根因**：v1.18.14 已改为「省 / 市州 / 县级都可作为根组织」，但旧规则「根必须是省级」
+残留在两处实现里：
+
+| 位置 | 旧行为 | 影响 |
+|---|---|---|
+| `api/v1/organization.py::_resolve_create_code` | `parent is None` 时把 `parent_order` 当 0，仍要求 `child_order == 0 + 1` | **422 拒绝建根**（用户症状）|
+| `services/self_check_service.py::_check_org_hierarchy` | 根 `level != 1` 记入 problems | 自检**误报**「根组织非省级」|
+
+两处都与 `organization_service.create_organization`（只在 `parent is not None` 时校验）不一致，
+也与函数自身注释「无父级即根，可为任一层级」矛盾。
+
+**修复**：
+- `_resolve_create_code`：仅当 `parent is not None` 时做相邻校验；
+- `_check_org_hierarchy`：根组织不再校验层级（`县级根不得再建下级` 由相邻校验自然覆盖）；
+- 同步修正两处过时断言（`test_root_must_be_province_code` → `test_root_may_be_any_level`、
+  `test_root_not_province_warns` → `test_root_not_province_is_ok`）；
+- 清理 `init.py` 里「根组织必须是省级编码」的过时 docstring。
+
+**回归（red → green 全程留痕）**：
+- `test_org_root_level_r54.py`（5 例）：市州级/县市级/省级根都必须能建；有父级时跨级仍拒、
+  相邻仍过。**RED 时 2 failed（正是用户症状），修复后 5 passed**。
+- `test_org_root_level_selfcheck_r55.py`（5 例）：根为市州/县级时自检 `ok`；省级根不回归；
+  真正跨级仍 `warn`；正常链 `ok`。**RED 时 2 failed，修复后 5 passed**。
+
+**验证**：flake8 0 · 组织/区划/自检相关域 **733 passed**（其余 6 例失败为并行会话正在改的
+`system/init.py` 签名问题，与本次改动无关）。
+
 v1.18.26 的审计收口在**空库演练**里全绿，但实测真实开发库后发现三类问题，本版修掉并补齐回归。
 
 ### Fixed

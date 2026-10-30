@@ -3684,6 +3684,21 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-30",
         "description": "迁移落地修复（老库未升级 + 外键迁移误判 + 覆盖率缺口）",
         "features": [
+            "_resolve_create_code：仅当 parent is not None 时做相邻校验；",
+            "_check_org_hierarchy：根组织不再校验层级（县级根不得再建下级 由相邻校验自然覆盖）；",
+            (
+                "同步修正两处过时断言（test_root_must_be_province_code → test_root_may_be_any_level、test_root_not_province"
+                "_warns → test_root_not_province_is_ok）；"
+            ),
+            "清理 init.py 里「根组织必须是省级编码」的过时 docstring。",
+            (
+                "test_org_root_level_r54.py（5 例）：市州级/县市级/省级根都必须能建；有父级时跨级仍拒、相邻仍过。RED 时 2 failed（正是用户症状），修复后 5 pa"
+                "ssed。"
+            ),
+            (
+                "test_org_root_level_selfcheck_r55.py（5 例）：根为市州/县级时自检 ok；省级根不回归；真正跨级仍 warn；正常链 ok。RED 时 2 faile"
+                "d，修复后 5 passed。"
+            ),
             "版本号 1.18.26 → 1.18.27（node scripts/sync-version.js --write 同步 22 处目标）。",
         ],
     },

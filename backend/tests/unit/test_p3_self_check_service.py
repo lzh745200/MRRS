@@ -96,12 +96,18 @@ class TestHierarchyCheck:
         check = next(c for c in result["checks"] if c["name"] == "组织层级")
         assert check["level"] == LEVEL_OK
 
-    def test_root_not_province_warns(self):
+    def test_root_not_province_is_ok(self):
+        """根组织非省级不再报警（2026-10-30 修正本用例）。
+
+        原用例 test_root_not_province_warns 断言「根非省级 → WARN」，
+        与 v1.18.14「省 / 市州 / 县级都可作为根组织」冲突。
+        自检只应报**真问题**（跨级挂接），否则市州级单位的合规部署会天天红。
+        """
         db = _db_with(orgs=[_org(1, "某市", "520100", "2")])
         result = collect_self_check(db)
         check = next(c for c in result["checks"] if c["name"] == "组织层级")
-        assert check["level"] == LEVEL_WARN
-        assert "根组织非省级" in check["detail"]
+        assert check["level"] == LEVEL_OK
+        assert "根组织非省级" not in check["detail"]
 
     def test_cross_level_parent_warns(self):
         # 县级直接挂省级（跨级）

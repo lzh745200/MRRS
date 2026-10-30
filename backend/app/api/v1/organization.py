@@ -682,14 +682,21 @@ def _resolve_create_code(db: Session, org_code: str, parent, declared_level) -> 
             detail="组织层级与行政区划代码不一致：省级 XX0000 / 市州级 XXYY00 / 县市级 XXYYZZ",
         )
     child_order = OrganizationCodeService.level_order(inferred_level) or 0
-    parent_order = (
-        OrganizationCodeService.level_order(parent.level) if parent is not None else 0
-    )
-    if child_order != parent_order + 1:
-        raise HTTPException(
-            status_code=422,
-            detail="层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）",
-        )
+    # 2026-10-30 修复：原实现无论有没有父级都要求 child_order == parent_order + 1，
+    # 而 parent 为 None 时 parent_order 被当成 0 —— 于是**根组织只能是省级**。
+    # 这与代码上方注释「无父级即根，可为任一层级」自相矛盾，也与
+    # organization_service.create_organization（只在 parent 存在时校验）不一致，
+    # 更违反 v1.18.14 的「首启单位不限于省级：省 / 市州 / 县级都可作为根组织」。
+    #
+    # 真实症状：空库或只有省级根时，输入 522700（黔南州市州级）新建根组织，
+    # 被判 422「层级必须逐级挂接…（当前上级层级不匹配）」。
+    if parent is not None:
+        parent_order = OrganizationCodeService.level_order(parent.level) or 0
+        if child_order != parent_order + 1:
+            raise HTTPException(
+                status_code=422,
+                detail="层级必须逐级挂接：省级 → 市州级 → 县市级（当前上级层级不匹配）",
+            )
     try:
         resolved_code = OrganizationCodeService.validate_admin_code(
             org_code, parent.code if parent is not None else None

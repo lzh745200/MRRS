@@ -6,7 +6,6 @@
 """
 
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -105,10 +104,17 @@ def client(p1_db):
 
 
 class TestOrganizationCodeRules:
-    def test_root_must_be_province_code(self, client):
-        resp = client.post("/api/v1/organizations", json={"name": "根", "code": "520100"})
-        assert resp.status_code == 422
-        assert "逐级" in resp.text or "层级" in resp.text
+    def test_root_may_be_any_level(self, client):
+        """根组织可为任一层级（v1.18.14 起；2026-10-30 修正本用例）。
+
+        原用例名 test_root_must_be_province_code 断言「根必须是省级」，
+        与 v1.18.14「首启单位不限于省级：省 / 市州 / 县级都可作为根组织」冲突；
+        _resolve_create_code 曾据此把市州级根（如 522700 黔南州）判 422 ——
+        用户实测报「层级必须逐级挂接…（当前上级层级不匹配）」。
+        """
+        # 市州级根（520100 贵阳市）必须允许创建
+        resp = client.post("/api/v1/organizations", json={"name": "贵阳市", "code": "520100"})
+        assert resp.status_code in (200, 201), resp.text
 
     def test_child_level_must_follow_parent(self, client):
         parent = client.post("/api/v1/organizations", json={"name": "贵州省", "code": "520000"})
