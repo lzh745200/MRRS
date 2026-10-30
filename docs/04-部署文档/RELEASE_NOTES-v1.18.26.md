@@ -1,6 +1,6 @@
 # Release Notes — v1.18.26（2026-10-29）
 
-> 上一正式发布是 **v1.18.25**；本版覆盖 v1.18.25 之后 main 上的 44 个提交，
+> 上一正式发布是 **v1.18.25**；本版覆盖 v1.18.25 之后 main 上的 46 个提交，
 > 以全库审计的认证/权限 Critical 修复为主。逐项账本见仓库根目录 `CHANGELOG.md`。
 
 ## 一、下载与校验
@@ -115,19 +115,34 @@ Get-FileHash .\MRRS-Setup-1.18.26-x64.exe -Algorithm SHA256
 
 ## 八、本机构建与冒烟记录
 
-- **源码候选冻结点**：`be8dee31`（含全库审计第 1~18 批，44 个提交；后续并行改动不再纳入）。
-- **Windows x64 安装包**：本地早先构建的
-  `dist/electron/MRRS-Setup-1.18.26-x64.exe`（223 MB，SHA256 `dcbed2…`）对应 `34bf9d9f`，
-  **仅作构建链验证，不是本候选的最终产物**；最终安装包以 `v1.18.26` tag 触发 CI 产出的
-  `MRRS-Setup-1.18.26-x64.exe` 与 `SHA256SUMS-windows-x64.txt` 为准。
-- **构建链验证**：`cd frontend && npm run build` → `npm run build`
+- **源码冻结点**：`f1886787`（含全库审计第 1~18 批，46 个提交）；annotated tag `v1.18.26` 已推送。
+- **PR Checks**：run `40879854796`，9/9 作业 success（含 12 段后端测试、前端覆盖率、E2E、
+  Windows smoke、静态与安全门禁）。链接：
+  `https://github.com/lzh745200/MRRS/actions/runs/40879854796`。
+- **Windows x64 tag 构建**：run `40886337208` success。
+- **ARM64 tag 构建**：run `40886337330` success。
+- **Release**：`https://github.com/lzh745200/MRRS/releases/tag/v1.18.26`，共 8 个资产，
+  校验和文件与 GitHub digest 已逐项核对一致。
+
+| 最终 CI 资产 | 大小（bytes） | SHA256 |
+|---|---:|---|
+| `MRRS-Setup-1.18.26-x64.exe` | 283,481,338 | `d4f01ff82913b3819e03e015ce5a20d34dcbdd20090c59c4e0200aacee452fd0` |
+| `MRRS-Setup-1.18.26-arm64.deb` | 280,226,764 | `052ddc4ef5016f1fa4049d9931ef6181f8ab7a45c4511b7a1da6a40ef5204069` |
+| `assistance-management-system_1.18.26_arm64.deb` | 103,301,672 | `44a3e2d9ff89a34c444d1c714fb641f39583e1086597e2c73c1639ef386c5050` |
+
+- **本地构建复核**：`cd frontend && npm run build` → `npm run build`
   （PyInstaller onedir + electron-builder 24.13.3）成功；前端 version.json = 1.18.26；
   `app.asar` package version = 1.18.26；未打包 `tests/`、`conftest.py`、`pytest.ini`。
-- **运行时冒烟（34bf 包）**：payload 解包 3,093 项 → 内置后端（隔离 APPDATA、端口 18026）
-  `/health` 200：`version=1.18.26`、`git_hash=34bf9d9f`、`migration.at_head=true`、
-  `journal_mode=wal`、`clock.status=ok`。证据：`deliverables/smoke-health-1.18.26.json`。
+  本地安装包路径 `dist/electron/MRRS-Setup-1.18.26-x64.exe`，SHA256
+  `d11f3704bbe391ac9a95a2538f61e77d5c66a9371e5f2306879ef967ee4d1e2b`（与 CI 产物哈希不同属正常）。
+- **最终 payload 冒烟**：最终安装包解包 3,099 项 → 内置后端（隔离 APPDATA、端口 18026）
+  `/health` 200：`version=1.18.26`、`migration.at_head=true`
+  （`fk_machine_codes_created_by_001`）、`journal_mode=wal`、`clock.status=ok`。
+  本地包 git_hash 为 `dev`（无 CI 构建元数据环境变量），证据：
+  `deliverables/smoke-health-1.18.26.json`。
 - **NSIS 安装器限制（未完成）**：本执行环境禁止跨目录写文件（工作区内/外均 0 files；
   7-Zip 解包到 `C:\` 直接 `Cannot create folder`），安装器静默执行返回 0/2 且未落盘；
   验证期间检测到旧 v1.18.17 安装已被升级逻辑移除（用户数据未删）。
-  **发布前需在普通 Windows 桌面手工执行一次 `MRRS-Setup-1.18.26-x64.exe` 安装/卸载冒烟**；
+  **发布验收仍需在普通 Windows 桌面手工执行一次 `MRRS-Setup-1.18.26-x64.exe`
+  安装/卸载冒烟**；ARM64 也需要在真实麒麟/统信 ARM64 环境安装验证。
   在该项完成前，本版状态为“有条件发布”。
