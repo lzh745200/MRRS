@@ -430,7 +430,11 @@ jobs:
       # 不 pin 的话上游发新版换个检查规则就能让计数整体漂移 —— 要么假红、要么假绿。
       # 1.19.1 与 backend/requirements-dev.txt 及本地基线测量口径一致；
       # 升级 mypy 必须同步 `python scripts/check_type_debt.py --update` 并说明理由。
-      - run: pip install flake8 "mypy==1.19.1" bandit
+      #
+      # SQLAlchemy 必须与后端同版本：mypy.ini 启用 sqlalchemy.ext.mypy.plugin，
+      # 只装 mypy 会在加载配置阶段报 "No module named 'sqlalchemy'" → 棘轮门禁
+      # 拿不到汇总行而 exit 2（2026-10-31 实测）。
+      - run: pip install flake8 "mypy==1.19.1" bandit "SQLAlchemy==2.0.50"
       # flake8 零错误门禁
       - run: cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
       # 运维脚本同一口径零错误门禁。复杂度阈值放宽到 40：scripts/ 下多为一次性
