@@ -368,6 +368,25 @@ describe('SectionDataForm.vue 初始化与年份切换', () => {
     expect(st.formData.totalHouseholds).toBe(99)
   })
 
+  it('快速切年：旧年份请求失败晚到也不得污染新年状态', async () => {
+    let rejectOld: (e: Error) => void = () => {}
+    mocks.getYearlyData.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => (rejectOld = reject))
+    )
+    const wrapper = mountForm()
+    const st = state(wrapper)
+    mocks.getYearlyData.mockResolvedValueOnce({ population: { totalHouseholds: 88 } })
+    st.selectedYear = 2025
+    await st.handleYearChange()
+
+    rejectOld(new Error('late network boom'))
+    await flushPromises()
+
+    expect(st.loadError).toBe('')
+    expect(st.loading).toBe(false)
+    expect(st.formData.totalHouseholds).toBe(88)
+  })
+
   it('population 表单校验：总人数≤0 被拒绝（validator error 分支）', async () => {
     const wrapper = mountForm()
     await flushPromises()

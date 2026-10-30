@@ -261,4 +261,26 @@ describe('api/request — 非测试环境网络自动重试', () => {
     expect(error.userMessage).toBe('网络连接失败，请检查服务是否启动')
     expect(mockElMessage.error).not.toHaveBeenCalled()
   })
+
+  it('HEAD 网络错误同样允许一次幂等重试', async () => {
+    vi.useFakeTimers()
+    mockInst.request.mockResolvedValueOnce('head-retried')
+    const config = makeConfig({ method: 'HEAD', url: '/head-flaky' })
+    const error = { code: 'ERR_NETWORK', message: 'NetworkError', config }
+    const promise = handlers.responseR(error)
+    const assertion = expect(promise).resolves.toBe('head-retried')
+    await vi.advanceTimersByTimeAsync(2000)
+    await assertion
+    expect(config._networkRetried).toBe(true)
+    expect(mockInst.request).toHaveBeenCalledWith(config)
+  })
+
+  it('POST 网络错误绝不自动重发，避免服务端已提交但响应中断时重复写入', async () => {
+    const config = makeConfig({ method: 'POST', url: '/create-something' })
+    const error = { code: 'ERR_NETWORK', message: 'NetworkError', config }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(error.userMessage).toBe('网络连接失败，请检查服务是否启动')
+    expect(config._networkRetried).toBeUndefined()
+    expect(mockInst.request).not.toHaveBeenCalled()
+  })
 })
