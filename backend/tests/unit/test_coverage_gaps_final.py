@@ -220,7 +220,8 @@ class TestOrganizationEndpoints:
             result = await delete_organization(
                 1, force=False, confirm_password="pass123", current_user=user, db=db
             )
-            assert result["data"]["type"] == "soft_delete"
+            # 13acd413 起「删除组织」改硬删除（物理删 + 单位码释放），返回 type 也随之变更
+            assert result["data"]["type"] == "hard_delete"
 
     async def test_get_organization_statistics(self):
         from app.api.v1.organization import get_organization_statistics
