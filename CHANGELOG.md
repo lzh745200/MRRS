@@ -24,6 +24,13 @@ SystemExit 退出 1，于是整个 Electron DEB 构建失败。
 确保读取器真的可用再进后续步骤。ubuntu-latest 是 PEP 668 externally-managed 环境，
 故用 `--break-system-packages`。
 
+
+**后续更正（同一问题，最终态）**：`e56859bf`（并行会话）给出了更合适的解法 ——
+该门禁在 `standalone-deb` 的 Docker 构建阶段已对**同一份**后端产物跑过（Electron DEB 复用该产物），
+in Electron 打包机上再跑属**重复检查**，且该 runner 未装 PyInstaller 必然误报。
+因此最终改为**移除重复调用**，而不是装 PyInstaller；本提交随之清掉先前基于旧文本添加的
+冗余 `pip install pyinstaller`（保留一条注释说明：若将来重新加回门禁，必须同时装 PyInstaller）。
+
 > 说明：v1.18.30 的 tag 已指向 `e20b0631`，本修复不影响已发布的 Windows 包；
 > ARM64 Electron DEB 需下一次 tag 或 workflow_dispatch 才会补产出。
 
