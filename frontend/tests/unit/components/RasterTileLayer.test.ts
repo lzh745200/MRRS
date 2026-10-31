@@ -781,6 +781,15 @@ describe('RasterTileLayer.vue — 看全省与图例（2026-10-31）', () => {
     expect(wrapper.find('.legend-items').exists()).toBe(false)
   })
 
+  it('图例统计在瓦片信息缺失时降级为 0 张 / 无层级（后端字段缺失也不炸）', async () => {
+    const wrapper = await mountLayer({ tileInfo: null, markers: [] })
+    // 图例本身只在“瓦片可用”时渲染（v-if=isTileMapUsable），
+    // 因此这里直接取计算属性，验证其缺字段兜底分支。
+    const vm = wrapper.vm as any
+    expect(vm.coverageSummary).toContain('0 张')
+    expect(vm.zoomSummary).toBe('—')
+  })
+
   it('有 z5–8 概览时不提示补装；只有 z13/z14 时提示导入 guizhou-overview_z5-8.zip', async () => {
     const withOverview = await mountLayer({
       tileInfo: makeInfo({ zoomLevels: [5, 6, 7, 8, 14] }),
@@ -801,5 +810,43 @@ describe('RasterTileLayer.vue — 看全省与图例（2026-10-31）', () => {
     expect(hoisted.scaleControl).toHaveBeenCalledWith(
       expect.objectContaining({ position: 'bottomleft', imperial: false })
     )
+  })
+
+  it('图例「来源」：四种 source 取值都给中文说明（env/meipass/dev/其它）', async () => {
+    const cases: Array<[string, string]> = [
+      ['env', '安装包内置 / 环境指定'],
+      ['meipass', '程序内置'],
+      ['dev', '开发目录'],
+      ['local', '本机瓦片目录'],
+    ]
+    const seen: string[] = []
+    for (const [source, label] of cases) {
+      const wrapper = await mountLayer({ tileInfo: makeInfo({ source }) })
+      const meta = wrapper.find('.legend-meta').text()
+      expect(meta).toContain(label)
+      seen.push(source)
+    }
+    expect(seen).toHaveLength(4)
+  })
+
+  it('图例「层级」：缩放级别只含非法值时显示占位符「—」（不渲染 NaN）', async () => {
+    // isTileMapUsable 只判 zoomLevels.length > 0：后端下发 [null] 归一化后的 [NaN]
+    // 仍算可用，此时过滤掉非法值后列表为空，必须退化为占位符而不是空白/NaN。
+    const wrapper = await mountLayer({
+      tileInfo: makeInfo({ zoomLevels: [Number.NaN], tileCount: 5 }),
+    })
+    const meta = wrapper.find('.legend-meta').text()
+    expect(meta).toContain('—')
+    expect(meta).not.toContain('NaN')
+  })
+
+  it('图层不可见（尚未建图）时点「全省视图」安全忽略，不抛错', async () => {
+    const wrapper = await mountLayer({ visible: false })
+    expect(state.maps).toHaveLength(0)
+    const button = wrapper.find('.map-raster-province')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    expect(state.maps).toHaveLength(0)
+    expect(hoisted.state.maps).toHaveLength(0)
   })
 })
