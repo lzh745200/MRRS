@@ -7,7 +7,7 @@ API 错误处理辅助函数
 import functools
 import logging
 import os
-from typing import Callable, Optional, ParamSpec, TypeVar
+from typing import Any, Callable, NoReturn, Optional, ParamSpec, TypeVar, cast
 
 from fastapi import HTTPException, status
 
@@ -32,7 +32,7 @@ def raise_api_error(
     error: Optional[Exception] = None,
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
     log_error: bool = True,
-) -> None:
+) -> NoReturn:
     """
     统一的 API 错误处理函数
 
@@ -56,7 +56,7 @@ def handle_service_error(
     operation: str,
     error: Exception,
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
-) -> None:
+) -> NoReturn:
     """
     处理服务层错误
 
@@ -82,7 +82,7 @@ def safe_api_call(operation: str, status_code: int = status.HTTP_500_INTERNAL_SE
         @functools.wraps(func)
         async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             try:
-                return await func(*args, **kwargs)
+                return await cast(Any, func)(*args, **kwargs)
             except HTTPException:
                 raise
             except Exception as e:
@@ -102,7 +102,7 @@ def safe_api_call(operation: str, status_code: int = status.HTTP_500_INTERNAL_SE
         import asyncio
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
+            return cast(Callable[P, T], async_wrapper)
         return sync_wrapper
 
     return decorator

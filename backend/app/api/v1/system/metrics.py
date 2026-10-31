@@ -9,7 +9,7 @@ import os
 import platform
 import sys
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -227,7 +227,7 @@ async def get_database_metrics(
     包含数据库大小、表数量、连接状态等关键指标。
     """
 
-    metrics = {}
+    metrics: Dict[str, Any] = {}
 
     # 数据库文件大小
     try:
@@ -261,7 +261,7 @@ async def get_database_metrics(
             {"users", "organizations", "villages", "projects", "funds", "schools"}
         )
         key_tables = ["users", "organizations", "villages", "projects", "funds", "schools"]
-        row_counts = {}
+        row_counts: Dict[str, Any] = {}
         for table in key_tables:
             if table not in _SAFE_TABLE_NAMES:  # pragma: no cover - 防御性分支，key_tables 恒在白名单内
                 row_counts[table] = "N/A"

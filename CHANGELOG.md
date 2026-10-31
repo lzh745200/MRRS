@@ -116,6 +116,21 @@
   共 **46 个用例文件 824 项通过**（含新增回归 1 项），`flake8 --max-line-length=120 --max-complexity=16` rc=0；
   全量 `mypy app` **306 → 242 条 / 97 → 85 个文件**。
 
+- `backend/app/api/v1/system/metrics.py`, `backend/app/api/v1/data/data/dashboard.py`、
+  `backend/app/services/zero_trust/device_fingerprint.py`、`backend/app/services/alert_service.py`、
+  `backend/app/services/validation_engine_service.py`、`backend/app/utils/api_error.py` 类型收敛（mypy **27 → 0**）：
+  指标端点与设备风险结果字典显式标 `Dict[str, Any]`（空/字面量容器被首个赋值定型，"无法读取数据库文件信息"
+  一类错误文案与 `dict[str, str]` 无处可放）；仪表盘两处 `.filter(False)` 改用 SQLAlchemy `false()`
+  （裸 `bool` 不是 `ColumnElement[bool]`），审批动态的状态标签与提交人用户名先收窄再取值
+  （`a.status` 是 `str | None`、ORM 关系属性静态类型是 `Mapped[Any]`，改走 `a.status or ""` 与 `getattr(...)`）；
+  告警服务在 `all([...])` 守卫之后把 4 个 SMTP 配置显式 `cast(str, ...)` 再交给 `asyncio.to_thread`
+  （`getattr(settings, ...)` 的静态类型是 `Any | None`，取值不变）；校验引擎的注册表/错误缓冲补容器注解，
+  `rule.field` 与 `rule.rule_type` 收窄为 `str`；`api_error` 的 `raise_api_error` / `handle_service_error`
+  返回注解改 `NoReturn`（两者恒抛 `HTTPException`，此前 mypy 认定包装器缺 `return`），异步包装器改
+  `await cast(Any, func)(...)，装饰器返回 `cast(Callable[P, T], async_wrapper)`。运行期行为零变化。
+  回归：指标/仪表盘/零信任/告警/错误处理/校验引擎 **21 个用例文件 327 项通过**，
+  `flake8 --max-line-length=120 --max-complexity=16` rc=0；全量 `mypy app` **242 → 215 条 / 85 → 79 个文件**。
+
 ### 验证
 
 - `verify_tiles.py` 支持 **MANIFEST 声明的稀疏层级**（`[5,6,7,8,13]` / `[5,6,7,8,14]`），

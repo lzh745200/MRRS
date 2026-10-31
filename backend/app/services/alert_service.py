@@ -15,7 +15,7 @@ import ssl
 from datetime import timezone, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import List
+from typing import List, cast
 
 import httpx
 
@@ -94,6 +94,13 @@ class AlertService:
             if not all([smtp_host, smtp_user, smtp_password, smtp_from]):
                 logger.warning("SMTP配置不完整,跳过邮件发送")
                 return False
+
+            # all() 只证明四个配置"非空"，静态类型仍是 Any | None；这里显式收窄到
+            # _send_email_sync 的 str 契约（取值不变，纯静态信息）。
+            smtp_host = cast(str, smtp_host)
+            smtp_user = cast(str, smtp_user)
+            smtp_password = cast(str, smtp_password)
+            smtp_from = cast(str, smtp_from)
 
             # 创建邮件
             msg = MIMEMultipart()

@@ -8,7 +8,7 @@ import json
 import re
 from dataclasses import dataclass
 import logging
-from typing import Optional, Any, Dict, List, Callable
+from typing import Any, Callable, Dict, List, Optional, cast
 from sqlalchemy.orm import Session
 
 from app.utils.input_validator import InputValidator
@@ -52,8 +52,9 @@ class ValidationEngineService:
 
     def __init__(self, db: Optional[Session] = None):
         self.db = db
-        self._validators = {}
-        self._errors = []
+        # 空字面量无法推断元素类型：注册表是 name -> 校验函数，错误缓冲是字符串列表。
+        self._validators: Dict[str, Callable[..., Any]] = {}
+        self._errors: List[str] = []
 
     def validate(self, data: Dict[str, Any], rules: Dict[str, Any]) -> List[str]:
         """
@@ -124,7 +125,7 @@ class ValidationEngineService:
 
             errors = []
             for rule in db_rules:
-                field = rule.field
+                field = cast(str, rule.field)
                 value = data.get(field)
                 params = _load_rule_params(rule.params)
 
@@ -132,7 +133,7 @@ class ValidationEngineService:
                     if value is None or (isinstance(value, str) and value.strip() == ""):
                         errors.append(f"{field}: {rule.error_message or '为必填项'}")
                 elif value is not None:
-                    failed = self._check_typed_rule(rule.rule_type, value, params)
+                    failed = self._check_typed_rule(cast(str, rule.rule_type), value, params)
                     if failed:
                         errors.append(f"{field}: {rule.error_message or '校验失败'}")
 

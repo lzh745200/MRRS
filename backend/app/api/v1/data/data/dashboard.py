@@ -18,7 +18,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, case, func, or_
+from sqlalchemy import and_, case, false, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.data_permission import OrgScopeFilter, get_org_scope
@@ -361,7 +361,7 @@ def _query_project_approval_stats(db: Session, data_scope: OrgScopeFilter, user_
         if data_scope.org_ids:
             users_query = users_query.filter(User.organization_id.in_(data_scope.org_ids))
         else:
-            users_query = users_query.filter(False)
+            users_query = users_query.filter(false())
     total_users = users_query.scalar() or 0
 
     # 数据完整性：帮扶村已填报年份数 / 应填报年份数
@@ -932,7 +932,7 @@ def _fetch_approval_activities(data_scope: OrgScopeFilter) -> list:
         if not data_scope.has_full_access():
             uid = data_scope.user_id
             if uid is None:
-                approval_query = approval_query.filter(False)
+                approval_query = approval_query.filter(false())
             else:
                 approval_query = approval_query.filter(
                     or_(
@@ -947,9 +947,9 @@ def _fetch_approval_activities(data_scope: OrgScopeFilter) -> list:
         ):
             items.append({
                 "id": f"approval_{a.id}", "type": "approval",
-                "action": status_label_map.get(a.status, a.status),
+                "action": status_label_map.get(a.status or "", a.status or ""),
                 "target": a.title or f"{a.entity_type}#{a.entity_id}",
-                "user": (a.submitter.username if a.submitter else None) or "系统",
+                "user": (getattr(a.submitter, "username", None) if a.submitter else None) or "系统",
                 "time": _format_activity_time(a.updated_at or a.created_at),
             }
             )

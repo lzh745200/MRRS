@@ -5,7 +5,7 @@
 """
 
 import hashlib
-from typing import Dict, Optional, List
+from typing import Any, Dict, List, Optional
 from datetime import timezone, datetime
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -331,7 +331,7 @@ class DeviceFingerprintService:
         Returns:
             验证结果字典
         """
-        result = {
+        result: Dict[str, Any] = {
             "verified": False,
             "requires_mfa": False,
             "requires_challenge": False,
