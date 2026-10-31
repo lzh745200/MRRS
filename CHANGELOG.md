@@ -1,5 +1,21 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
 
+### Fixed（CI 两处测试未跟上安全守卫 —— 修复后 backend-test 应转绿）
+
+`85637fc5`（系统管理域审计收口）加了两个守卫，配套测试未同步，导致 backend-test 段 2 例失败：
+
+1. **`create_organization` 要求超管才能建根组织**（organization.py:793）——
+   `test_cov_final_organization.py::test_is_active_defaulted_when_absent` 仍用
+   `is_superuser=False` 的用户建根（520000），被 403 拦截。
+   该用例意图是验证 `is_active` 默认值而非建根权限 → 用户改为超管，守卫另测。
+
+2. **M6 任务列表按归属过滤**（tasks.py `_visible_tasks`）——
+   `test_r12_low_risk_batch_20260913.py::test_list_endpoint_purges_expired` 传
+   `current_user=None`（非管理员），`created_by="root"` 的 live 记录被滤掉 → total 0≠1。
+   该用例意图是「列表端点触发过期清理」而非权限过滤 → 传管理员 user，过滤另测。
+
+**验证**：flake8 0 · 两个文件 19 例全过 · organization/task 相关域 **417 passed**。
+
 ### Fixed（安装包可安装但无法启动）
 
 **根因**：`backend/backend_linux_arm64_standalone.spec` 把标准库 `difflib`

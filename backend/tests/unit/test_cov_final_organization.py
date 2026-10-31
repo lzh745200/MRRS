@@ -57,7 +57,9 @@ class TestCreateOrganization:
 
         db = MagicMock(name="db")
         db.query.return_value.filter.return_value.first.return_value = None
-        user = SimpleNamespace(id=1, username="admin", role="admin", is_superuser=False)
+        # 2026-10-31：创建根组织已要求超管（85637fc5 引入的守卫）。本用例
+        # 验证的是 is_active 默认值，不是建根权限，用超管用户避开该守卫。
+        user = SimpleNamespace(id=1, username="admin", role="super_admin", is_superuser=True)
 
         with patch("app.api.v1.organization.safe_commit"):
             with patch("app.api.v1.organization.write_work_log"):

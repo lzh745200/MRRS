@@ -12,6 +12,7 @@
 
 import threading
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -192,7 +193,11 @@ class TestTaskRetention:
         t = clean_tasks
         t._tasks["stale"] = _record("stale", "completed", hours=2)
         t._tasks["live"] = _record("live", "running")
-        out = await t.list_tasks(None, None, 1, 20, None)
+        # 2026-10-31：M6 之后 list_tasks 走 _visible_tasks —— 非管理员只看自己的任务
+        # （按 created_by=username 过滤），本用例的意图是「列表端点触发过期清理」，
+        # 传管理员绕过归属过滤。
+        admin = SimpleNamespace(username="admin", role="admin", is_superuser=True)
+        out = await t.list_tasks(None, None, 1, 20, admin)
         assert out["data"]["total"] == 1
         assert out["data"]["items"][0]["task_id"] == "live"
 
