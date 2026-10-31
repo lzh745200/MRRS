@@ -768,6 +768,11 @@ class TestOrganizationService:
         mock_org.created_by = 1
         mock_org.updated_at = None
         mock_org.updated_by = None
+        # _build_tree 现按 ORM 原值透传这三个字段（树节点此前恒为空）；
+        # MagicMock 未显式赋值会返回 mock 对象并触发 pydantic str 校验失败
+        mock_org.type = None
+        mock_org.org_type = None
+        mock_org.contact_email = None
         db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [mock_org]
         result = svc.get_organization_tree(include_inactive=True)
         assert len(result) == 1
@@ -791,6 +796,9 @@ class TestOrganizationService:
         root.created_by = 1
         root.updated_at = None
         root.updated_by = None
+        root.type = None
+        root.org_type = None
+        root.contact_email = None
         child = MagicMock()
         child.id = 2
         child.parent_id = 1
@@ -807,6 +815,9 @@ class TestOrganizationService:
         child.created_by = 1
         child.updated_at = None
         child.updated_by = None
+        child.type = None
+        child.org_type = None
+        child.contact_email = None
         db.query.return_value.filter.return_value.first.return_value = root
         db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [root, child]
         result = svc.get_organization_tree(root_id=1, include_inactive=True)

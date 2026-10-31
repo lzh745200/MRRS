@@ -15,7 +15,9 @@
 
 import asyncio
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -277,23 +279,39 @@ class TestMergeLockReentry:
 class TestCoverageStatFailure:
     @pytest.mark.asyncio
     async def test_stat_failure_skips_file(self, tmp_path):
-        svc = OfflineMapService(cache_dir=tmp_path)
-        z_dir = tmp_path / "9"
-        x_dir = z_dir / "1"
-        x_dir.mkdir(parents=True)
-        good = x_dir / "1.png"
-        bad = x_dir / "9.png"
-        good.write_bytes(b"a" * 10)
-        bad.write_bytes(b"b" * 20)
+        """扫描中单个瓦片 stat() 抛 OSError 应跳过，不中断整次统计。"""
+        from app.services import offline_map_service as oms
 
-        real_stat = type(bad).stat
+        class _Entry:
+            """最小 DirEntry 替身：_iter_png_entries 只用到 name/is_file/stat。"""
 
-        def flaky_stat(self, *a, **kw):
-            if self.name == "9.png":
-                raise OSError("vanished")
-            return real_stat(self, *a, **kw)
+            def __init__(self, name, size=0, error=None):
+                self.name = name
+                self._size = size
+                self._error = error
 
-        with patch.object(type(bad), "stat", flaky_stat):
+            def is_file(self):
+                return True
+
+            def stat(self):
+                if self._error is not None:
+                    raise self._error
+                return SimpleNamespace(st_size=self._size)
+
+        entries = [
+            _Entry("9.png", error=OSError("vanished")),
+            _Entry("1.png", size=10),
+        ]
+
+        @contextmanager
+        def fake_scandir(_path):
+            yield iter(entries)
+
+        svc = oms.OfflineMapService(cache_dir=tmp_path)
+        (tmp_path / "9" / "1").mkdir(parents=True)
+        # d55598f1 起扫描走 os.scandir（复用目录枚举元数据），单条 stat 失败
+        # 只能在 _scandir 注入；patch Path.stat 已拦不到真实调用点
+        with patch.object(oms, "_scandir", fake_scandir):
             coverage = await svc.get_coverage()
 
         # 坏文件被跳过，好文件仍计入（不因单文件失败中断统计）
