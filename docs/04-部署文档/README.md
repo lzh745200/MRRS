@@ -1,4 +1,4 @@
-# 部署文档 v1.18.26
+# 部署文档 v1.18.31
 
 ## 快速链接
 
@@ -10,7 +10,8 @@
 | **Docker** | 任意 | 镜像 | [Docker 快速开始](03-Docker部署/DOCKER_QUICK_START.md) |
 | **Docker E2E** | 任意 | compose | `make test-e2e-docker` (E2E 测试专用配置) |
 | **升级/回滚（全平台）** | — | — | [离线升级与回滚指南](OFFLINE_UPGRADE.md) |
-| **本版发布说明** | — | — | [RELEASE_NOTES-v1.18.26](RELEASE_NOTES-v1.18.26.md)（安装包清单 + SHA256 / 升级必读 / 发布门禁） |
+| **安装后起不来 / 打包态排障** | — | — | [打包态启动排障与离线包验证](06-打包态启动排障与离线包验证.md)（环境变量清单 / difflib 事故 / 冻结模块自检 / 冒烟命令） |
+| **本版发布说明** | — | — | [RELEASE_NOTES-v1.18.31](RELEASE_NOTES-v1.18.31.md)（安装包清单 + SHA256 / 升级必读 / 发布门禁） |
 
 ## 部署前置检查（安全红线，v1.15.12 起，v1.15.15 复核）
 
@@ -78,20 +79,25 @@
   不要直接把默认值改为 enforce（会把存量权限配置问题一次性暴露成 403）。
 - 切换只需改环境变量并重启后端，无需改代码。
 
-## 本版发布物（v1.15.15，2026-10-20）
+## 本版发布物（v1.18.31，2026-10-31）
 
-GitHub Release [v1.15.15](https://github.com/lzh745200/MRRS/releases) 产出（双平台）：
+GitHub Release [v1.18.31](https://github.com/lzh745200/MRRS/releases/tag/v1.18.31) 产出（Windows x64 + 麒麟 ARM64）：
 
 | 平台 | 产物 | 体积 |
 |---|---|---|
-| Windows 10/11 x64 | `MRRS-Setup-1.15.15-x64.exe`（NSIS，自包含） | 286,035,588 B ≈ 272.8 MB |
-| Windows（增量更新元数据） | `MRRS-Setup-1.15.15-x64.exe.blockmap`、`latest.yml` | — |
-| 麒麟 V10 ARM64 | `MRRS-Setup-1.15.15-arm64.deb`（Electron 桌面版） | 205,545,106 B ≈ 196 MB |
-| 麒麟 V10 ARM64 | `assistance-management-system_1.15.15_arm64.deb`（standalone 纯 Web 版） | 60,786,460 B ≈ 58 MB |
+| Windows 10/11 x64 | `MRRS-Setup-1.18.31-x64.exe`（NSIS，自包含 Electron + 冻结后端） | 283,524,134 B ≈ 270.4 MB |
+| Windows（增量更新元数据） | `MRRS-Setup-1.18.31-x64.exe.blockmap`、`latest.yml` | — |
+| 麒麟 V10 ARM64 | `MRRS-Setup-1.18.31-arm64.deb`（Electron 桌面版） | 281,990,840 B ≈ 268.9 MB |
+| 麒麟 V10 ARM64 | `assistance-management-system_1.18.31_arm64.deb`（standalone 纯 Web 版，systemd 托管） | 105,041,660 B ≈ 100.2 MB |
 | 全部 | `SHA256SUMS-windows-x64.txt`、`SHA256SUMS-electron-deb-arm64.txt`、`SHA256SUMS-standalone-deb-arm64.txt` | 分发前务必 `sha256sum -c` 校验 |
 
-> 发布验证：PR Checks success（后端 12 段独立进程 + 覆盖率 100%）、Build Windows Installer success、
-> Build ARM64 Deb success。升级前必读项见 [RELEASE_NOTES-v1.15.15](RELEASE_NOTES-v1.15.15.md)。
+> 本版 P0：ARM64 安装包补齐 `difflib`（v1.18.29 起启动即崩），并在四条打包链路接入
+> 冻结模块自检。现场升级前请先读
+> [打包态启动排障与离线包验证](06-打包态启动排障与离线包验证.md) 的 §2.1。
+>
+> 发布验证：tag 触发的 `Build Windows Installer (x64)` 与
+> `Build Self-Contained ARM64 Debian Package` 均 success。main 的 PR Checks 在
+> 2026-10-31 当天多次受 runner 出网故障影响，属 CI 基础设施问题（见 CHANGELOG）。
 
 ## 一键构建 .deb
 
@@ -107,7 +113,7 @@ make build-deb-standalone-amd64
 
 # 或直接用 buildx（等价，产物落 dist/deb/kylin/）
 docker buildx build --platform linux/arm64 \
-  --build-arg VERSION=1.15.15 \
+  --build-arg VERSION=1.18.31 \
   -f docker/Dockerfile.kylin-standalone \
   --output type=local,dest=dist/deb .
 ```
@@ -118,6 +124,6 @@ docker buildx build --platform linux/arm64 \
 ## 一键安装
 
 ```bash
-sudo dpkg -i assistance-management-system_1.15.15_arm64.deb
+sudo dpkg -i assistance-management-system_1.18.31_arm64.deb
 # 浏览器访问 http://localhost:8000
 ```

@@ -388,6 +388,12 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 > **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
+>
+> **装完起不来先看**：[打包态启动排障与离线包验证](docs/04-部署文档/06-打包态启动排障与离线包验证.md)。
+> v1.18.29 的 ARM64 安装包曾因 `difflib` 被 PyInstaller spec 排除而在启动时
+> `ModuleNotFoundError` 崩溃（源码运行不复现），v1.18.31 已修复，并在四条打包链路接入
+> `scripts/verify_frozen_modules.py` 构建期门禁。该文档含：环境变量清单、冻结模块自检命令、
+> 打包后端冷启动冒烟步骤、日志位置与症状速查表。
 
 > **安装包目前未做代码签名**（证书未采购；签名管线已就绪，见
 > [代码签名接入指南](docs/04-部署文档/01-Windows部署/代码签名.md)）。首次运行会遇到：
@@ -402,6 +408,29 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 >   （与 `SHA256SUMS-windows-x64.txt` 一致）。
 
 ## 近期修复记录
+
+### 2026-11-01（v1.18.31）打包态启动崩溃 + 权限面 10 项收敛
+
+- 🧱 **打包态启动崩溃（P0）**：ARM64 standalone spec 把标准库 `difflib` 放进了 `excludes`，
+  而 `backend/app/services/data_cleaning_service.py` 顶层 `from difflib import SequenceMatcher`
+  → 安装后后端 `ModuleNotFoundError`、Electron 重启 3 次退出（源码运行不复现）。
+  已修 spec 并在 Windows / ARM64 Electron / standalone / deb 四条链路接入
+  `scripts/verify_frozen_modules.py` 构建期门禁，`start.py` 增 `BACKEND_IMPORT_CHECK` 自检入口。
+- 🔒 **权限包导入提权（阻断）**：`/permission-packages/import|confirm` 曾把 loopback 当免认证通道，
+  已登录 viewer 可导入自造包把自己改成 `super_admin`/`data_scope=all`。现在非管理员一律 403，
+  匿名仅允许「回环 + 空库」首装，非特权导入自动降级 `super_admin→admin`、`all→org`。
+- 🔒 **「仅超级管理员」端点实际只校验 `is_admin`**：新增 `require_superuser`，把备份创建/下载/
+  预览/校验/恢复、PII 主密钥导出导入、关机/重启、`PUT /system/config`、配置包导入共 15 处收紧。
+- 🔒 **组织通行码跨组织越权**：校验码、通行码列表/导出、删除全部按 `assert_org_reachable` +
+  组织子树过滤（无组织归属 fail-closed 空集）。
+- 🔒 **审计日志可被部门级 admin 批量删除**（且删除留痕可被再次删除以闭合证据链）：删除/改写改仅超管。
+- 🔒 **前端**：自动锁屏标记改落 localStorage（新标签页不再绕过）；登出先吊销再冻结请求
+  （原先 `/auth/logout` 被拦截器取消、服务端不吊销）；导入失败明细逐项 `escapeHtml`；登出清表单草稿。
+- 🛡 **媒体链路**：`resolve_upload_file` 增加越界断言（符号链接逃逸）、5000 万像素上限、
+  对比图单元格宽度上限（超宽图不再撑爆内存）。
+- 🧪 验证：后端 18 个相关文件 449 passed、flake8 rc=0；前端 6 个测试文件 159 passed、`vue-tsc` exit 0；
+  打包后端冷启动 18s 内 `/health/liveness` 200。详见
+  [打包态启动排障与离线包验证](docs/04-部署文档/06-打包态启动排障与离线包验证.md)。
 
 ### 2026-10-29（v1.18.26）全库审计收口 + 认证/权限 Critical 修复
 
