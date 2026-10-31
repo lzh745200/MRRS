@@ -809,6 +809,34 @@ describe('LoginEnhanced.vue', () => {
       expect(mockPushSafe).toHaveBeenCalledWith('/register')
     })
 
+    it('未开启自助注册：步骤 3 标题改为「账号由管理员开通」，步骤 1 说明注明与建号无关（P1 矛盾修复）', async () => {
+      mockGet.mockResolvedValue({ data: { self_register_enabled: false } })
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.canSelfRegister).toBe(false)
+      expect(vm.machineCodeStepNote).toContain('账号由管理员在后台开通')
+      vm.firstUseOpen = true
+      await nextTick()
+      const text = w.text()
+      expect(text).toContain('账号由管理员开通')
+      expect(text).not.toContain('用通行码注册账号')
+      expect(text).toContain('本机未开启自助注册，请联系管理员开通账号')
+      expect(text).toContain('用于设备绑定与换机重置')
+    })
+
+    it('开启自助注册：步骤 3 标题为「用通行码注册账号」，步骤 1 说明提示会生成通行码', async () => {
+      mockGet.mockResolvedValue({ data: { self_register_enabled: true } })
+      const w = await mountComp()
+      const vm = w.vm as any
+      expect(vm.canSelfRegister).toBe(true)
+      expect(vm.machineCodeStepNote).toContain('注册通行码')
+      vm.firstUseOpen = true
+      await nextTick()
+      const text = w.text()
+      expect(text).toContain('用通行码注册账号')
+      expect(text).not.toContain('账号由管理员开通')
+    })
+
     it('配置请求失败 → fail-closed：隐藏注册入口且不阻塞登录', async () => {
       mockGet.mockRejectedValue(new Error('backend down'))
       const w = await mountComp()
