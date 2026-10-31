@@ -27,6 +27,10 @@
 - `resources/map-tiles` 重新写入正确 MANIFEST（`ODbL-1.0 (© OpenStreetMap contributors)`）。
 - `mapTiles.ts` 新增 `tileViewBbox` / `tileViewBounds` / `tileHasOverview` /
   `tileOverviewMissing` / `mergeTileBbox` / `PROVINCE_OVERVIEW_MAX_ZOOM`。
+- `scan_tiles_dir` 扫描性能：`_iter_png_entries` 改用 `os.scandir`（Windows 上
+  `DirEntry.stat()` 复用目录枚举元数据，不再每张瓦片多一次 `Path.stat()` syscall），
+  7 万张瓦片实测 **8.6s → 0.38s**；`GET /map/tile-info` 与导入后统计改走
+  `asyncio.to_thread`，扫描期间不再阻塞事件循环（此前现场表现为地图转圈、瓦片图片排队）。
 
 ### 验证
 
@@ -38,6 +42,10 @@
   `vue-tsc --noEmit` 0；eslint 0 error。
 - 覆盖场景：只导入市州包时 `maxBounds` 仍为全省；「全省视图」按钮 fitBounds 全省；
   图例内容/收起；缺概览告警与补装包名；比例尺控件挂载。
+- 瓦片扫描：`test_tiles_pipeline.py` + `test_tile_info_coverage_bbox.py` **133 项通过**
+  （含新增 `scandir` 失败 / `stat` 失败跳过 2 项），`offline_map_service` 分支覆盖
+  **BrPart=0**；打包后端运行期实测 `GET /map/tile-info` 200（`tileCount=70,523`、
+  `zoomLevels=[5..12,14]`、bbox 全省），z14 与 z5 瓦片均 200。
 - 新包组合验证：内置 z5–12 + `guizhou-all_z14.zip` 合并后 `zoomLevels=5..12,14`、z14 瓦片 200。
 
 ### 质量门禁

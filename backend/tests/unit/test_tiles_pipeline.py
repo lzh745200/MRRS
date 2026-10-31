@@ -15,6 +15,7 @@ import json
 import os
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -124,14 +125,46 @@ class TestScanTilesDir:
 
     def test_stat_failure_skips_file(self, tmp_path):
         _write_tile(tmp_path, 5, 1, 2, b"ok")
-        real_stat = Path.stat
 
-        def flaky_stat(self, *args, **kwargs):
-            if self.name == "2.png":
-                raise OSError("vanished")
-            return real_stat(self, *args, **kwargs)
+        class _Entry:
+            def __init__(self, name, size, *, fail_stat=False, is_file=True):
+                self.name = name
+                self._size = size
+                self._fail_stat = fail_stat
+                self._is_file = is_file
 
-        with patch.object(Path, "stat", flaky_stat):
+            def is_file(self):
+                return self._is_file
+
+            def stat(self):
+                if self._fail_stat:
+                    raise OSError("vanished")
+                return SimpleNamespace(st_size=self._size)
+
+        class _Scandir:
+            def __enter__(self):
+                return iter([
+                    _Entry("2.png", 2, fail_stat=True),  # stat 失败 → 跳过
+                    _Entry("3.png", 3, is_file=False),  # 非普通文件 → 跳过
+                    _Entry("notes.txt", 9),  # 非 png → 跳过
+                ])
+
+            def __exit__(self, *exc):
+                return False
+
+        # 替换模块内的 scandir 间接入口，而不是全局 os.scandir：
+        # 后者会连带影响 pathlib.Path.iterdir，把外层 z/x 目录遍历也打坏。
+        with patch("app.services.offline_map_service._scandir", return_value=_Scandir()):
+            stats = scan_tiles_dir(tmp_path)
+        assert stats["total_tiles"] == 0
+        assert stats["zoom_levels"] == [5]
+
+    def test_scandir_failure_skips_directory(self, tmp_path):
+        _write_tile(tmp_path, 5, 1, 2, b"ok")
+        with patch(
+            "app.services.offline_map_service._scandir",
+            side_effect=OSError("locked"),
+        ):
             stats = scan_tiles_dir(tmp_path)
         assert stats["total_tiles"] == 0
         assert stats["zoom_levels"] == [5]

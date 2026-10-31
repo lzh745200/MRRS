@@ -3,6 +3,7 @@
 提供帮扶村和学校的地图标注数据，以及离线地图瓦片服务
 """
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -744,7 +745,9 @@ async def get_tile_info():
             "bbox": list(PROVINCE_BBOX),
         })
 
-    stats = scan_tiles_dir(TILES_DIR)
+    # 7 万张瓦片的目录扫描在本机实测 ~8.6s：必须走线程池，否则会阻塞事件循环，
+    # 同一时刻的瓦片图片请求/其它 API 全部排队（现场表现为"地图转圈卡住"）。
+    stats = await asyncio.to_thread(scan_tiles_dir, TILES_DIR)
     zoom_levels = stats["zoom_levels"]
     tile_count = stats["total_tiles"]
     manifest = read_manifest_file(TILES_DIR / "MANIFEST.json")
@@ -811,7 +814,7 @@ async def import_tiles(
         logger.error("瓦片包处理失败: %s", exc, exc_info=True)
         raise HTTPException(status_code=400, detail="瓦片包解析失败，请确认文件完整且格式正确")
 
-    stats = scan_tiles_dir(dest)
+    stats = await asyncio.to_thread(scan_tiles_dir, dest)
     try:
         AuditLogger.log(
             action=AuditAction.IMPORT,
