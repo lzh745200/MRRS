@@ -6,7 +6,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -86,7 +86,7 @@ def _record_security_event(
     """
     from app.models.audit import SecurityEvent
 
-    event_dict = {
+    event_dict: Dict[str, Any] = {
         "id": None,
         "event_type": event_type,
         "source": source,
@@ -257,7 +257,7 @@ async def get_trust_assessment(
     评估结果用于动态调整访问权限策略。
     """
     # 收集评估因子
-    factors = []
+    factors: List[Dict[str, Any]] = []
 
     # 认证因子：已认证用户得分
     if current_user:

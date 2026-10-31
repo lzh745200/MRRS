@@ -448,7 +448,7 @@ def _calculate_village_score_batch(
     vid = village.id
 
     # 1. 经济效益 (0-100): 基于人均收入增长率
-    economic_score = 50  # 默认
+    economic_score: float = 50  # 默认（增长率参与计算后为 float）
     incomes = incomes_by_village.get(vid, [])[:2]  # 取最近两年
     if len(incomes) >= 2:
         cur = float(incomes[0].per_capita_income or 0)

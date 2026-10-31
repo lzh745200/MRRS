@@ -851,7 +851,7 @@ def _generate_module_template(module: str, include_example: bool, year: Optional
 
         # 设置列宽
         col_letter = get_column_letter(col_idx)
-        ws_data.column_dimensions[col_letter].width = max(len(label) * 2, 15)
+        ws_data.column_dimensions[col_letter].width = max(len(str(label)) * 2, 15)
 
     # 写入示例数据
     if include_example:
@@ -890,7 +890,7 @@ def _generate_module_template(module: str, include_example: bool, year: Optional
     for row_idx, field in enumerate(fields, 4):
         ws_help.cell(row=row_idx, column=1).value = field["label"]
         ws_help.cell(row=row_idx, column=2).value = "是" if field["required"] else "否"
-        ws_help.cell(row=row_idx, column=3).value = type_map.get(field["type"], "文本")
+        ws_help.cell(row=row_idx, column=3).value = type_map.get(str(field["type"]), "文本")
         ws_help.cell(row=row_idx, column=4).value = field["description"]
 
         for col_idx in range(1, 5):

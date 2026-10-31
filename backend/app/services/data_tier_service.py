@@ -101,7 +101,8 @@ class DataTierService:
         else:
             return DataTier.COLD
 
-    def get_archive_stats(self, db: Session) -> Dict[str, Any]:
+    # db 参数历史上未参与统计（只读磁盘路径），放宽为 Optional 以支持无会话的监控端点
+    def get_archive_stats(self, db: Optional[Session] = None) -> Dict[str, Any]:
         """
         获取归档统计信息
 

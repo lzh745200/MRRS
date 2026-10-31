@@ -6,7 +6,7 @@
 import logging
 import re
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ class DataCleaningService:
         if not values:
             return
         try:
-            mean_value = sum(values) / len(values)
+            mean_value = sum(cast(List[float], values)) / len(values)
             for record in records:
                 if record.get(field_name) is None:
                     record[field_name] = mean_value

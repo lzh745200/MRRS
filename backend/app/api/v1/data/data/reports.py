@@ -8,7 +8,7 @@ import io
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, cast
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -659,7 +659,7 @@ def _subscription_to_response(subscription: ReportSubscription) -> dict:
     if subscription.is_active and base is not None:
         try:
             next_send_at = next_send_at_utc(
-                subscription.frequency,
+                cast(str, subscription.frequency),
                 subscription.send_day,
                 subscription.send_time,
                 base,

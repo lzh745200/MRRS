@@ -79,8 +79,9 @@ async def list_rural_works(
         type=type,
         village_id=village_id,
         search=search,
-        start_date=_parse_query_date(start_date),
-        end_date=_parse_query_date(end_date),
+        # 服务层自行解析 ISO 字符串（datetime 传进 fromisoformat 会抛 TypeError），这里保持原始查询串
+        start_date=start_date,
+        end_date=end_date,
         year=year,
         order_by=order_by,
         order_desc=order_desc,

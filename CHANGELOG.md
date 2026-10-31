@@ -208,6 +208,21 @@
   **129 → 103 条 / 48 → 33 个文件**，技术债基线 `mypy_errors` 同步由 540 收紧至 **140**。
   定向回归：数据权限/移交/分片上传/年度沿用/异常检测/提醒/成效评估/认证/审计日志
   **32 个用例文件 640 项通过**，`flake8` 对 16 个改动文件 rc=0。
+- **类型债第十四批（可选值 / 容器收窄 + 两处真实缺陷）**：24 个模块 27 处 mypy **103 → 74 条 / 33 → 10 个文件**
+  （剩余 74 条全在他人未提交在途文件中），技术债基线 `mypy_errors` 由 140 收紧至 **90**：
+  - **GET /rural-works 带日期筛选必 500**：端点先用 `_parse_query_date()` 把 `start_date` / `end_date` 转成 `datetime`，
+    而 `RuralWorkService.get_rural_works()` 声明 `Optional[str]` 并在内部 `datetime.fromisoformat()` 解析
+    （实测传 `datetime` 抛 `TypeError`，该处只 catch `ValueError`）——现在端点改传原始 ISO 字符串，
+    `/report/generate` 仍走 `_parse_query_date`（服务侧 `_coerce_datetime` 兼容）；用例追加「服务层必须收到原始字符串」断言。
+  - **`_read_excel_fallback` 返回注解与实现相反**：注解 `Tuple[List[str], List[Dict[str, Any]]]`，函数体 `return rows, headers`，
+    全部调用方（6 处用例）都是 `rows, headers = ...` —— 注解改为 `Tuple[List[Dict[str, Any]], List[str]]`，运行期零变化。
+  - 其余：`zero_trust` 的事件字典 / 因子列表、`village_templates` 的字段标签、`validation` 的 `SQLEnum(RuleType)` 收窄、
+    `message_service` 聚合列改 `row._mapping["count"]`（mypy 按 typeshed 把 `Row.count` 当 `tuple.count` 方法，运行期就是列值）、
+    `data_tier_service.get_archive_stats(db)` 标 `Optional`（函数体不读 db）、`update_logs` 两处 `updated_by` 收窄等 20 余处，运行期零变化。
+  - 顺带修正两处过期用例：`test_cov_final_rural_work_service.py` 仍 patch 已不再导入的 `rural_work_service.is_admin`
+    （改 patch `is_superuser`）；`test_message_service.py` 的聚合 MagicMock 行补 `_mapping`。
+  - 定向回归：评估 / 零信任 / 数据分级 / 数据同步 / 数据上报 / 校验 / 乡村工作 / 系统监控与更新日志 / 消息 / 通知 /
+    NLP / 导出 **45 个用例文件 1,059 项通过**；`flake8 --max-line-length=120 --max-complexity=16` 对 24 个改动源文件 rc=0。
 
 
 

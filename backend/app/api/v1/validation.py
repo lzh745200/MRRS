@@ -4,7 +4,7 @@
 """
 
 import json
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -236,7 +236,7 @@ async def validate_data(
                 {
                     "field": rule.field,
                     "field_label": field_label,
-                    "rule_type": rule.rule_type.value,
+                    "rule_type": cast(RuleType, rule.rule_type).value,
                     "message": message,
                 }
             )
@@ -249,7 +249,7 @@ def _check_rule(rule: ValidationRule, value, params: dict, full_data: dict) -> b
         return value is None or (isinstance(value, str) and value.strip() == "")
     if value is None:
         return False
-    handler = _RULE_HANDLERS.get(rule.rule_type)
+    handler = _RULE_HANDLERS.get(cast(RuleType, rule.rule_type))
     return handler(value, params, full_data) if handler else False
 
 

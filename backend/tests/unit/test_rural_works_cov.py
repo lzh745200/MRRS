@@ -49,6 +49,11 @@ class TestEndpoints:
             order_by="created_at", order_desc=True, db=MagicMock(), current_user=_user(),
         )
         assert result["data"]["total"] == 1
+        # 端点必须把原始 ISO 字符串交给服务层（服务内部用 datetime.fromisoformat 解析；
+        # 若端点先转成 datetime 再传，会抛 TypeError 使列表接口 500）
+        kwargs = svc.get_rural_works.call_args.kwargs
+        assert kwargs["start_date"] == "2026-01-01"
+        assert kwargs["end_date"] == "bad"
 
     async def test_statistics(self, svc):
         svc.get_statistics.return_value = SimpleNamespace(model_dump=lambda: {"a": 1})

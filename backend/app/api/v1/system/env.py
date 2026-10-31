@@ -19,7 +19,7 @@
 import os
 import platform
 import sys
-from typing import Dict
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -52,7 +52,7 @@ def _get_installed_packages() -> dict:
     return {dist.metadata["Name"].lower(): dist.version for dist in distributions()}
 
 
-def _collect_system_info() -> Dict[str, Dict[str, str] | str]:
+def _collect_system_info() -> Dict[str, Any]:
     """收集系统信息
 
     收集当前系统的Python版本、平台信息和相关环境变量。

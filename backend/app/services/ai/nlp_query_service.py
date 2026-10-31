@@ -115,7 +115,7 @@ class NLPQueryService:
                 match = re.search(pattern, query)
                 if match:
                     # 提取参数
-                    params = {}
+                    params: Dict[str, Any] = {}
                     if match.groups():
                         if "province" in template["sql"]:
                             # 库口径：supported_villages.province 存的是**不带"省"字**的

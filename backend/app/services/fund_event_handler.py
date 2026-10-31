@@ -5,6 +5,7 @@
 """
 
 import logging
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -47,7 +48,7 @@ def on_project_status_change(db: Session, project_id: int, old_status: str, new_
 
     # 将目标阶段之前的阶段全部标记完成
     for p in phases:
-        if p.phase < target_phase:
+        if cast(int, p.phase) < target_phase:
             if p.status != PhaseStatus.COMPLETED.value:
                 p.status = PhaseStatus.COMPLETED.value
                 p.completed_at = p.completed_at or now

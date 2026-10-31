@@ -63,7 +63,7 @@ def _patch_envelope(data: Any) -> Dict[str, Any]:
         return data
     if 'success' in data or 'code' in data:
         return data
-    patch = {"code": 200, "success": True}
+    patch: Dict[str, Any] = {"code": 200, "success": True}
     if 'message' not in data:
         patch["message"] = "success"
     # 保持键顺序: 元数据在前,原数据在后

@@ -9,7 +9,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -93,7 +93,7 @@ def _purge_finished_tasks_locked(now: Optional[datetime] = None) -> int:
             continue
         finished_raw = record.get("completed_at") or record.get("created_at")
         try:
-            finished = datetime.fromisoformat(finished_raw)
+            finished = datetime.fromisoformat(cast(str, finished_raw))
         except (TypeError, ValueError):
             # 时间戳缺失/异常：保守保留（宁可占内存也不误删可见记录）
             continue

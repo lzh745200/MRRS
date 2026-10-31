@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 from datetime import datetime
 from pathlib import Path
 
@@ -397,7 +397,7 @@ async def get_sync_logs(
                     "success_records": log.success_records,
                     "failed_records": log.failed_records,
                     "conflicts_count": log.conflicts_count,
-                    "created_at": log.created_at.isoformat(),
+                    "created_at": cast(Any, log.created_at).isoformat(),
                     "completed_at": (log.completed_at.isoformat() if log.completed_at else None),
                     "user_name": log.user_name,
                 }

@@ -50,5 +50,5 @@ class BaseResponse(ResponseModel, Generic[T]):
 # 类体外赋值不参与模型构建，字段与工厂方法可以共存：
 #   BaseResponse.success(data=...)  → 工厂（类属性）
 #   BaseResponse(...).success       → 字段值（实例 __dict__）
-BaseResponse.success = classmethod(_base_response_success)  # type: ignore[attr-defined]
-BaseResponse.error = classmethod(_base_response_error)  # type: ignore[attr-defined]
+BaseResponse.success = classmethod(_base_response_success)  # type: ignore[attr-defined,assignment]
+BaseResponse.error = classmethod(_base_response_error)  # type: ignore[attr-defined,assignment]

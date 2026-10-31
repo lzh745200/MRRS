@@ -71,12 +71,16 @@ class TestUnreadCount:
         assert result == 0
 
     def test_get_unread_count_by_type(self, msg_svc, mock_db):
+        # 服务改用 row._mapping["count"] 取聚合列（mypy 把 Row.count 当 tuple.count 方法），
+        # MagicMock 需同时补 _mapping，否则取到的是 MagicMock 本身的属性
         row1 = MagicMock()
         row1.message_type = "system"
         row1.count = 3
+        row1._mapping = {"count": 3}
         row2 = MagicMock()
         row2.message_type = "approval"
         row2.count = 2
+        row2._mapping = {"count": 2}
         mock_db.query.return_value.filter.return_value \
             .group_by.return_value.all.return_value = [row1, row2]
 

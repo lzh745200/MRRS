@@ -41,7 +41,7 @@ class OrganizationCodeService:
 
     def __init__(self, db: Optional[Session] = None):
         self.db = db
-        self._codes = {}
+        self._codes: Dict[str, Any] = {}
 
     def generate_code(
         self,

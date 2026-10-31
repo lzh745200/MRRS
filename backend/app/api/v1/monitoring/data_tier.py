@@ -5,7 +5,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Any, Dict, Optional
 from datetime import timezone, datetime
 
 from app.core.database import get_db
@@ -137,7 +137,7 @@ async def list_archives(
     from pathlib import Path
 
     config = data_tier_service.config
-    result = {"cold_archives": [], "warm_archives": []}
+    result: Dict[str, Any] = {"cold_archives": [], "warm_archives": []}
 
     # 冷数据归档
     cold_path = Path(config.COLD_ARCHIVE_PATH)

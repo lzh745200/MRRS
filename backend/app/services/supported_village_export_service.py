@@ -276,7 +276,7 @@ class SupportedVillageExportService:
 
     def _generate_statistics(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """生成导出统计信息。"""
-        stats = {
+        stats: Dict[str, Any] = {
             "total_villages": 0,
             "modules_exported": list(data.keys()),
             "generated_at": datetime.now().isoformat(),

@@ -7,7 +7,7 @@
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -300,7 +300,7 @@ async def get_alert_history(
                 "message": record.message,
                 "metric_value": record.metric_value,
                 "status": record.status,
-                "created_at": record.created_at.isoformat() if record.created_at else None,
+                "created_at": cast(Any, record.created_at).isoformat() if record.created_at else None,
             })
     except Exception as e:
         logger.warning("获取告警历史失败: %s", e, exc_info=True)

@@ -264,7 +264,7 @@ def dict_keys_to_camel(d: dict) -> dict:
     """将字典所有键名从 snake_case 转为 camelCase（递归）"""
     if not isinstance(d, dict):
         return d
-    result = {}
+    result: Dict[Any, Any] = {}
     for k, v in d.items():
         if isinstance(k, str):
             new_key = StringHelper.to_camel_case(k)

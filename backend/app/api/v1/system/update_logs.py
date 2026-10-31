@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Optional
+from typing import Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -138,7 +138,7 @@ async def create_update_log(
         raise HTTPException(status_code=403, detail="仅超级管理员可创建更新日志")
 
     svc = UpdateLogService(db)
-    updated_by = body.updated_by or getattr(current_user, "username", "system")
+    updated_by = body.updated_by or cast(str, getattr(current_user, "username", None) or "system")
 
     try:
         record = svc.record_update(
@@ -171,7 +171,7 @@ async def initialize_version_history(
         raise HTTPException(status_code=403, detail="仅超级管理员可执行初始化操作")
 
     svc = UpdateLogService(db)
-    updated_by = body.updated_by or getattr(current_user, "username", "system")
+    updated_by = body.updated_by or cast(str, getattr(current_user, "username", None) or "system")
 
     try:
         result = svc.initialize_version_history(updated_by=updated_by, force=body.force)

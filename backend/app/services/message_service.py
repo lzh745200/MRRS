@@ -174,7 +174,8 @@ class MessageService:
             MessageType.BACKUP.value: 0,
         }
         for row in result:
-            counts[row.message_type] = row.count
+            # 聚合列标签为 count；mypy 按 typeshed 把 Row.count 当 tuple.count 方法，走 _mapping 取列值
+            counts[row.message_type] = int(row._mapping["count"])
 
         return counts
 

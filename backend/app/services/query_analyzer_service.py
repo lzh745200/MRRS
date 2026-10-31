@@ -20,7 +20,7 @@ class QueryAnalyzer:
     def __init__(self):
         self._slow_queries: List[Dict[str, Any]] = []
         self._max_slow_queries = 1000  # 最多保存1000条慢查询
-        self._n_plus_one_cache: Dict[str, int] = {}  # N+1查询检测缓存
+        self._n_plus_one_cache: Dict[str, Any] = {}  # N+1查询检测缓存（时间戳与计数混存）
 
     def log_slow_query(
         self,

@@ -32,8 +32,8 @@ def read_excel_raw(file_content: bytes) -> List[List[Any]]:
     return read_rows(file_content)
 
 
-def _read_excel_fallback(file_content: bytes) -> Tuple[List[str], List[Dict[str, Any]]]:
-    """表头+数据行回退读取（pandas 不可用时；.xlsx/.xls/WPS .et 均支持）"""
+def _read_excel_fallback(file_content: bytes) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """数据行+表头回退读取（pandas 不可用时；.xlsx/.xls/WPS .et 均支持）"""
     raw = read_rows(file_content)
     if not raw:
         return [], []
