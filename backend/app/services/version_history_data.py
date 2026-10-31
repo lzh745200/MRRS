@@ -3723,6 +3723,8 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-30",
         "description": "全库并发收口：导出线程化/权限边界/初始化门禁/调度器与桌面退出",
         "features": [
+            "check_doc_numbers --update：前端测试文件 348→349、后端用例 15060→15103。",
+            "check_type_debt：mypy 错误 847（基线 851，改善 4），as any / except Exception 持平。",
             (
                 "数据同步/Excel 导入：普通与加密导出整体移入线程池，ZIP 内 data.json 分块流式写入，不再在事件循环上做同步 SQL、序列化、压缩与 PBKDF2；SQLAlchemy "
                 "Session 不再跨线程复用。Excel 导入恢复 import_data_async 语义后在后台线程执行，避免把异步包装参数误传同步实现。"
@@ -3739,11 +3741,6 @@ VERSION_HISTORY_DATA = [
                 "前端：网络重试只保留幂等 GET/HEAD，避免 POST 中断重发造成重复业务记录；同一统计端点可跳过去重取消；Electron 退出等待后端优雅停止，减少孤儿进程；Excel/PDF "
                 "导出在桌面端退化为同源 iframe 打印。"
             ),
-            (
-                "前端数据与日期：综合录入草稿按登录用户隔离；待办截止日期按本地日历日比较；健康检查对无效备份时间 fail-closed；帮扶村附件预览/下载改走带认证 Blob；地图瓦片修复单层包锁缩放"
-                "与层级空洞。"
-            ),
-            "版本号 1.18.28 → 1.18.29（node scripts/sync-version.js --write 同步目标）。",
         ],
     },
 ]

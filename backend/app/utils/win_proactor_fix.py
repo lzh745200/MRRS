@@ -93,7 +93,8 @@ def _patch_proactor_transport() -> None:
     if getattr(_ProactorBasePipeTransport, "_mrrms_patched", False):
         return
 
-    _original = _ProactorBasePipeTransport._call_connection_lost
+    # CPython 私有属性：mypy 存根里没有，这是有意的 monkey-patch 目标
+    _original = _ProactorBasePipeTransport._call_connection_lost  # type: ignore[attr-defined]
 
     def _safe_call_connection_lost(self: _ProactorBasePipeTransport, exc: BaseException | None) -> None:
         """包裹原始方法，在最外层兜底捕获连接重置异常。"""
@@ -104,7 +105,7 @@ def _patch_proactor_transport() -> None:
             _silent_close(self, e)
 
     _safe_call_connection_lost._mrrms_original = _original  # type: ignore[attr-defined]
-    _ProactorBasePipeTransport._call_connection_lost = _safe_call_connection_lost  # type: ignore[assignment]
+    _ProactorBasePipeTransport._call_connection_lost = _safe_call_connection_lost  # type: ignore[attr-defined]
     _ProactorBasePipeTransport._mrrms_patched = True  # type: ignore[attr-defined]
 
     logger.debug("ProactorBasePipeTransport._call_connection_lost 已包装 (Layer 1)")

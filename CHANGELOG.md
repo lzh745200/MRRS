@@ -1,5 +1,38 @@
 ## [1.18.29] - 2026-10-30 — 全库并发收口：导出线程化/权限边界/初始化门禁/调度器与桌面退出
 
+### Fixed（类型契约与 mypy 收口 —— 系统体检第 1 批）
+
+**1. `utils/drive_detect.py` 返回类型与实现不一致（真缺陷）**
+
+`list_backup_dirs()` / `_list_linux_mounts()` 标注 `List[Dict[str, str]]`，但每项的
+`available` 实际写的是 **bool**（`os.access(...)` 的返回值），前端也按 bool 消费。
+注解声称 str、实现是 bool —— 下游若按字符串处理（拼接/排序/正则）会直接崩。
+改为 `List[Dict[str, Any]]`，并补 `tests/unit/test_drive_detect_contract_r56.py`（2 例）
+锁定「path/type 是 str、available 是 bool、键集合固定」。
+
+**2. `utils/win_proactor_fix.py` 两处 mypy attr-defined**
+
+monkey-patch 目标是 CPython 私有属性 `_ProactorBasePipeTransport._call_connection_lost`，
+mypy 存根里没有。原 `# type: ignore[assignment]` 的错误码不对（mypy 报的是 attr-defined，
+注释未覆盖）→ 两处统一为 `[attr-defined]` 并补注释说明。修后 `mypy` 该文件 **Success**，
+35 例既有测试全过。
+
+**3. 文档数字与基线同步**
+
+- `check_doc_numbers --update`：前端测试文件 348→**349**、后端用例 15060→**15103**。
+- `check_type_debt`：mypy 错误 **847**（基线 851，改善 4），as any / except Exception 持平。
+
+**验证（20 道门禁全绿）**：migrations / migration_self_evidence / stack_alignment /
+doc_numbers / changelog / update_log / menu_alignment / console_tab_mapping / route_auth /
+mojibake / os_exit / unbounded_read / upload_endpoints / subprocess_encoding / dir_replace /
+scheduler_registration / hardcoded_styles / pragma_reasons / type_debt / backend_flake8
+**全部 EXIT=0**。
+
+> 备注：`route_auth` 一度报 `ModuleNotFoundError: app`，排查后确认**不是 bug** ——
+> 该脚本设计上要求从 `backend/` 目录运行（`sys.path.insert(0, ".")`，CI 也是
+> `working-directory: backend`），是我在仓库根跑错了。按正确 cwd 跑：849 路由 /
+> 58 无认证均在白名单内，EXIT=0。
+
 ### Fixed
 
 - **数据同步/Excel 导入**：普通与加密导出整体移入线程池，ZIP 内 `data.json` 分块流式写入，不再在事件循环上做同步 SQL、序列化、压缩与 PBKDF2；SQLAlchemy Session 不再跨线程复用。Excel 导入恢复 `import_data_async` 语义后在后台线程执行，避免把异步包装参数误传同步实现。
@@ -14,6 +47,18 @@
 - **前端**：网络重试只保留幂等 GET/HEAD，避免 POST 中断重发造成重复业务记录；同一统计端点可跳过去重取消；Electron 退出等待后端优雅停止，减少孤儿进程；Excel/PDF 导出在桌面端退化为同源 iframe 打印。
 - **前端数据与日期**：综合录入草稿按登录用户隔离；待办截止日期按本地日历日比较；健康检查对无效备份时间 fail-closed；帮扶村附件预览/下载改走带认证 Blob；地图瓦片修复单层包锁缩放与层级空洞。
 - **版本号** `1.18.28` → **1.18.29**（`node scripts/sync-version.js --write` 同步目标）。
+
+### Fixed（系统管理域审计收口 — 2026-10-31 补记）
+
+- **新增组织后新增用户选不到组织（现场报障）**：`el-tree-select` 默认按节点 `value` 取值，而组织树经 `normalizeTreeNodes` 后只有 `id`，模板又未设 `node-key` —— 每个节点取值恒为 `undefined`，点击节点 v-model 写不回，表单被判“未选择组织”，最终弹出“管理员必须指定所属组织”。修复：`utils/treeNormalizer.ts` 新增 `ORG_TREE_SELECT_PROPS`（`value:'id'`）作为唯一字段映射源，`components/UserFormDialog.vue` 显式 `node-key="id"`。**根因为什么长期漏出**：`src/test/setup.ts` 把 `el-tree-select`/`el-select`/`el-tree` 全部打桩，桩不参与取值，既有单测因此全绿；补真实组件回归 `tests/unit/views/system/organizationSelectWiring.test.ts`（按需关桩，直测取值链路）。
+- **组织树响应包装差异**：`UserManagement.loadOrgTree` 原只认 `res.data` 数组，响应一旦是 `{items}` / `{data:{items}}` 就静默变成空下拉，用户侧表现同样是“没有组织可选”；改用 `unwrapList` 兼容四种形态，加载失败给出可操作提示而非静默空态。
+- **组织树只在 `onMounted` 拉取**：新增/编辑用户弹窗改为每次打开重新拉取，新增组织后立即可选（此前整页不刷新就只能看到旧快照）。
+- **姓名必填校验从未生效**：规则键写成 `name`，表单项却是 `prop="full_name"`，必填规则匹不上任何字段（后端也不拦）；改为 `full_name`。
+- **创建成功提示读错契约**：原读 `res.data.data.password`，而后端出于安全不回传密码，该分支永不可达；改为展示本次提交/自动生成的初始密码。
+- **角色口径**：部门级 admin 不再看到无法创建的“超级管理员”选项（后端仅超管可建超管）；角色展示名收敛到 `utils/roleAccess.ts` 的 `roleLabel`。**系统仍为且仅为 4 个角色**：`super_admin`（超级管理员）/ `admin`（系统管理员）/ `user`（普通用户）/ `viewer`（访客）；历史值 `approval_leader`/`manager`→系统管理员、`operator`→普通用户 仅作归一化兼容，不再作为候选项暴露。
+- **系统管理域越权收口**：用户会话列表/强制登出/2FA 重置补超管与跨组织守卫；解锁账号补提权收敛；`PUT /users/{id}/permissions` 补组织可达性校验（此前只校验组织是否存在）；组织子级/祖先/详情与成员增删补读/写范围守卫；根组织仅超级管理员可建；错误详情不再外泄数据库异常原文。
+- **审计/任务/配置/反馈/OrgGrant**：审计筛选改用后端枚举并支持用户名与“结束日期含当天”；任务列表与详情按创建者收敛（非管理员不可读他人 `params/result`）；配置包恢复按真实 `defaults` 数组写入，避免恢复出垃圾键；加密状态按 `is_enabled`/`has_salt` 展示；错误报告支持全部状态与来源模糊筛选；反馈列表与 OrgGrant 组织树改用 `unwrapList` 解包。
+- **验证**：受影响后端用例 274 项、前端用例 357 项 + 新增真实组件回归 1 项全绿；`check_stack_alignment` / `check_menu_alignment` / `check_console_tab_mapping` / `check_changelog` 全过；`vue-tsc --noEmit` 无错误。
 
 ## [1.18.28] - 2026-10-30 — 重新打包发布（补上根组织层级修复的安装包）
 

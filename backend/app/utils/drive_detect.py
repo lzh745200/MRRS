@@ -10,7 +10,7 @@ import logging
 import os
 import platform
 import string
-from typing import Dict, List
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +40,9 @@ def _drive_type_windows(drive_letter: str) -> str:
         return "unknown"
 
 
-def _list_linux_mounts() -> List[Dict[str, str]]:
+def _list_linux_mounts() -> List[Dict[str, Any]]:
     """Linux/macOS 常见挂载点枚举"""
-    results: List[Dict[str, str]] = []
+    results: List[Dict[str, Any]] = []
     for base in _LINUX_MOUNT_BASES:
         if not os.path.isdir(base):
             continue
@@ -59,7 +59,7 @@ def _list_linux_mounts() -> List[Dict[str, str]]:
     return results
 
 
-def list_backup_dirs() -> List[Dict[str, str]]:
+def list_backup_dirs() -> List[Dict[str, Any]]:
     """
     枚举可用的备份目标目录。
 
@@ -67,7 +67,7 @@ def list_backup_dirs() -> List[Dict[str, str]]:
         [{path, type, available}] type: removable(可移动)/fixed(固定盘)/network(网络)/other
         available: 目录当前是否存在且可写
     """
-    results: List[Dict[str, str]] = []
+    results: List[Dict[str, Any]] = []
     system = platform.system()
 
     if system == "Windows":
