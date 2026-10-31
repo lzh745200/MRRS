@@ -129,7 +129,7 @@ GATES: List[Gate] = [
     _gate("endpoint_500", "scripts/check_endpoint_500.py", backend=True, slow=True,
           why="隔离库双登录态 GET 巡检：293 无参 + 138 带路径参数（431 条）任一端点 5xx（或带令牌仍 401）即红（--slow 启用）"),
     _gate("crud_smoke", "scripts/check_crud_smoke.py", backend=True, slow=True,
-          why="隔离库真实 HTTP 端到端 CRUD 冒烟：登录/设置保存/增删改查/上传下载/导出/备份/登出任一步不符预期即红（--slow 启用）"),
+          why="隔离库真实 HTTP 端到端冒烟：登录/设置保存/增删改查/上传下载/导出/数据包导入导出/上报接收/备份/登出任一步不符预期即红（--slow 启用）"),
     _gate("frozen_smoke", "scripts/check_frozen_smoke.py", backend=True, slow=True,
           requires=BACKEND / "dist" / "assistance-backend" / "assistance-backend.exe",
           why="冻结后端产物冒烟：导入自检 + 真实起服务"),

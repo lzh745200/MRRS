@@ -295,21 +295,33 @@
   且**不过滤 `is_active`，所以上一场景软删的村子也会进包，导入按业务键去重后正好 `imported=1
   skipped=1`。
 
+- **`crud_smoke` 增「上报接收」场景（两级组织 + 上报闭环）**：上报链路要求真实的上下级关系 ——
+  服务层 `create_report` 用 `get_ancestors` 校验「目标组织必须是来源组织的上级」（自身上级不算），
+  接收列表按 `target_org_id` 过滤，审批端点再校验「当前用户组织 == 目标组织」，否则 403
+  「只有上级单位可以审批」。因此组织场景改为两级：先建省级根 `520000`（上级单位），再以它为父建
+  市州级 `522700`（下级单位），管理员绑定下级；并抽出 `bind_admin_organization()` 供场景间切换
+  身份复用。上报场景：下级创建上报（携带上一场景导出的数据包）→ 提交（`submitted`）→ 管理员切到上级
+  → `GET /data-reports/received` 能看到该条 → `POST /{id}/review` 审批通过（`approved`）→ 详情回读
+  → 切回下级。两个端点契约记在门禁里：`/data-reports` 的创建/提交/审批同样是 `response_model` 直出
+  （无 `{code,data}` 信封，用 `payload_of` 取状态），只有 `received` 是 `ok_list` 信封。
+
+
 ### 验证
 
 - 门禁实跑：`modes=anon+auth, probed 431 GET endpoints (293 literal + 138 with path params) x 2, exemptions 0` → **0 处违规**（862 次真实探测），进程正常退出且 `.scratch/endpoint500-*` 残留计数归 0。
 - 判定语义回归：`backend/tests/unit/test_endpoint_500_gate.py` **17 项通过**
   （5xx 双态判红、匿名 401 放行/带令牌 401 必红、503 白名单、三元组豁免不跨态顶替、隔离库绝对 URL；
   新增：路径参数代入样例值、400 仅在带参扫描放行且不影响 5xx 判定、catch-all 不代入、清理重试成功）。
-- **`crud_smoke` 门禁实跑通过**：`[gate:crud_smoke] OK (isolation DB, modes=admin, 34 steps)` ——
-  登录 / CSRF / 组织创建与管理员绑定 / 设置保存 / 三类增删改查 / 上传下载（字节一致）/ 报表导出
+- **`crud_smoke` 门禁实跑通过**：`[gate:crud_smoke] OK (isolation DB, modes=admin, 40 steps)` ——
+  登录 / CSRF / 两级组织创建与管理员绑定 / 设置保存 / 三类增删改查 / 上传下载（字节一致）/ 报表导出
   （xlsx `PK` 魔数与体积）/ **数据包导出 → 下载 → 导入 → 确认闭环**（`imported={'villages': 1}
-  skipped={'villages': 1}`）/ 备份（创建 → 列表 → `database_verified` → 删除）/ 登出令牌失效，
-  **34 步全绿**；临时目录退出即删。
-- 门禁自测：`backend/tests/unit/test_crud_smoke_gate.py` **23 项通过**（信封解包三形态、状态断言文案、
+  skipped={'villages': 1}`）/ **上报创建 → 提交 → 上级接收列表 → 审批通过 → 详情回读** / 备份
+  （创建 → 列表 → `database_verified` → 删除）/ 登出令牌失效，**40 步全绿**；临时目录退出即删。
+- 门禁自测：`backend/tests/unit/test_crud_smoke_gate.py` **27 项通过**（信封解包三形态、状态断言文案、
   CSRF 头与 Cookie 绑定、multipart 构造、失败不中断后续场景、隔离库绝对 URL、`--verbose` 输出格式、
-  场景清单必须最后一项是「登出」；新增：组织场景必须拿到一次性库路径、绑定 SQL 落库校验、数据包场景
-  未绑定组织时 fail-fast、场景顺序「组织 → 数据包 → 备份 → 登出」）。
+  场景清单必须最后一项是「登出」；组织场景必须拿到一次性库路径、绑定 SQL 落库校验、数据包场景
+  未绑定组织时 fail-fast、场景顺序「组织 → 数据包 → 上报 → 备份 → 登出」；新增：绑定助手缺库路径
+  抛错 / 落库校验、上报场景缺组织 / 上级 / 数据包时逐条 fail-fast）。
 
 ### Fixed（组织删除改硬删后 2 个越权用例断言过期）
 

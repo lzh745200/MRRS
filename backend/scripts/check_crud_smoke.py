@@ -18,7 +18,8 @@ check_endpoint_500.py 只发 GET，且大量端点在鉴权通过后就立刻返
 - 报表导出（真实 xlsx，校验 ZIP 魔数）；
 - 备份 创建 → 列表可见 → 完整性校验（database_verified）→ 删除 → 列表消失；
 - 组织 创建（行政区划编码校验）→ 管理员绑定组织（数据包按组织隔离的前提）；
-- 数据包 导出 → 下载 zip（PK 魔数）→ 回传导入（校验通过）→ 确认导入（导入导出闭环）。
+- 数据包 导出 → 下载 zip（PK 魔数）→ 回传导入（校验通过）→ 确认导入（导入导出闭环）；
+- 上报 创建（携带数据包）→ 提交 → 上级单位接收列表 → 审批通过 → 状态回读（上报接收闭环）。
 
 任何一步不符预期即红。全部操作都在 .scratch/crud-smoke-* 的一次性库里，
 进程退出即删除，绝不触碰真实数据。
@@ -163,6 +164,8 @@ class HttpClient:
         self.csrf_token: Optional[str] = None
         self.cookies: Dict[str, str] = {}
         self.org_id: Optional[int] = None
+        self.parent_org_id: Optional[int] = None
+        self.package_id: Optional[int] = None
         self.db_path: Optional[str] = None
 
     def _cookie_header(self) -> str:
@@ -308,30 +311,12 @@ def scenario_login(client: HttpClient, steps: List[Step]) -> None:
     record(steps, "CSRF 令牌获取（GET /auth/csrf-token）")
 
 
-def scenario_organization(client: HttpClient, steps: List[Step]) -> None:
-    """组织：创建（行政区划编码）→ 详情读回 → 把播种管理员绑定到该组织。
+def bind_admin_organization(client: HttpClient, org_id: int) -> None:
+    """把播种管理员绑定到指定组织（直接改一次性库，走生产同款 users.organization_id）。
 
-    为什么必须绑定：数据包导出/接收都以组织为隔离单位，而播种管理员默认没有组织
-    （空库首启就是这样），不绑定则导出直接 400「当前用户未绑定组织」。这里直接改
-    一次性库里的 users.organization_id（与生产「管理员属于某组织」一致），
-    不引入额外的用户管理流程。
+    上报链路要求「来源单位成员提交、上级单位成员审批」，同一个 admin 账号需要在两个
+    组织身份之间切换，所以抽成助手供组织场景与上报场景复用。
     """
-    code = "522700"  # 黔南州：权威区划表内的市州级编码，可作为根组织
-    name = "冒烟组织-" + stamp()
-    created = expect_status(
-        client.post("/api/v1/organizations", {"name": name, "code": code}),
-        (200, 201),
-        "创建组织",
-    )
-    org_id = created_id(created, "组织")
-    detail = expect_status(client.get("/api/v1/organizations/%d" % org_id), (200,), "组织详情")
-    detail_data = data_of(detail)
-    expect(
-        isinstance(detail_data, dict) and detail_data.get("code") == code,
-        "组织详情编码不符：%s" % detail.text[:200],
-    )
-    record(steps, "组织创建（行政区划编码校验）", "id=%d code=%s" % (org_id, code))
-
     expect(isinstance(client.db_path, str) and client.db_path, "缺少一次性库路径，无法绑定管理员组织")
     conn = sqlite3.connect(str(client.db_path))
     try:
@@ -343,6 +328,51 @@ def scenario_organization(client: HttpClient, steps: List[Step]) -> None:
     finally:
         conn.close()
 
+
+def scenario_organization(client: HttpClient, steps: List[Step]) -> None:
+    """组织：省级根（上级单位）→ 市州级下级 → 详情读回 → 管理员绑定下级。
+
+    为什么必须绑定：数据包导出/接收都以组织为隔离单位，而播种管理员默认没有组织
+    （空库首启就是这样），不绑定则导出直接 400「当前用户未绑定组织」。这里直接改
+    一次性库里的 users.organization_id（与生产「管理员属于某组织」一致），
+    不引入额外的用户管理流程。
+    """
+    # 两级组织：省级根作为「上级单位」，市州级作为「下级单位」。上报接收场景需要真实的
+    # 上下级关系（服务层 create_report 用 get_ancestors 校验目标组织必须是来源组织的上级）。
+    parent_code = "520000"  # 贵州省：省级根组织（可作为根，任意层级都可作首启根）
+    parent_created = expect_status(
+        client.post("/api/v1/organizations", {"name": "冒烟上级单位-" + stamp(), "code": parent_code}),
+        (200, 201),
+        "创建上级组织",
+    )
+    parent_org_id = created_id(parent_created, "上级组织")
+    record(steps, "上级组织创建（省级根组织）", "id=%d code=%s" % (parent_org_id, parent_code))
+
+    code = "522700"  # 黔南州：权威区划表内的市州级编码，挂在贵州省下
+    name = "冒烟组织-" + stamp()
+    created = expect_status(
+        client.post(
+            "/api/v1/organizations",
+            {"name": name, "code": code, "parent_id": parent_org_id},
+        ),
+        (200, 201),
+        "创建组织",
+    )
+    org_id = created_id(created, "组织")
+    detail = expect_status(client.get("/api/v1/organizations/%d" % org_id), (200,), "组织详情")
+    detail_data = data_of(detail)
+    expect(
+        isinstance(detail_data, dict) and detail_data.get("code") == code,
+        "组织详情编码不符：%s" % detail.text[:200],
+    )
+    expect(
+        isinstance(detail_data, dict) and detail_data.get("parent_id") == parent_org_id,
+        "组织详情父级不符：%s" % detail.text[:200],
+    )
+    record(steps, "组织创建（行政区划编码校验）", "id=%d code=%s" % (org_id, code))
+
+    bind_admin_organization(client, org_id)
+
     me = expect_status(client.get("/api/v1/auth/me"), (200,), "组织绑定后身份读取")
     me_data = data_of(me)
     expect(
@@ -350,7 +380,8 @@ def scenario_organization(client: HttpClient, steps: List[Step]) -> None:
         "管理员未绑定到新组织：%s" % me.text[:200],
     )
     client.org_id = org_id
-    record(steps, "管理员绑定组织（数据包按组织隔离的前提）")
+    client.parent_org_id = parent_org_id
+    record(steps, "管理员绑定组织（数据包与上报按组织隔离的前提）")
 
 
 def scenario_settings(client: HttpClient, steps: List[Step]) -> None:
@@ -563,6 +594,7 @@ def scenario_data_package(client: HttpClient, steps: List[Step]) -> None:
     export_data = payload_of(exported)
     package_id = export_data.get("package_id")
     expect(isinstance(package_id, int), "导出响应缺少 package_id：%s" % exported.text[:200])
+    client.package_id = int(package_id)
     expect(int(export_data.get("file_size") or 0) > 0, "导出包大小为 0：%r" % export_data.get("file_size"))
     manifest = export_data.get("manifest") or {}
     counts = manifest.get("record_counts") or {}
@@ -621,6 +653,77 @@ def scenario_data_package(client: HttpClient, steps: List[Step]) -> None:
         "确认导入（冲突策略生效）",
         "imported=%r skipped=%r" % (imported_counts, skipped_counts),
     )
+
+
+def scenario_report(client: HttpClient, steps: List[Step]) -> None:
+    """上报接收：下级创建上报（携带数据包）→ 提交 → 上级接收列表 → 审批通过 → 状态回读。
+
+    真实链路：来源单位成员提交、上级单位成员审批。这里用同一个 admin 账号在两个组织
+    身份间切换（bind_admin_organization），专门验证两条权限口径 —— 接收列表按目标组织
+    过滤、只有目标组织（上级单位）可以审批。
+    """
+    org_id = client.org_id
+    parent_org_id = client.parent_org_id
+    package_id = client.package_id
+    expect(isinstance(org_id, int), "上报场景前置：管理员尚未绑定下级组织（见「组织」场景）")
+    expect(isinstance(parent_org_id, int), "上报场景前置：缺少上级组织 ID（见「组织」场景）")
+    expect(isinstance(package_id, int), "上报场景前置：缺少数据包 ID（见「数据包导入导出」场景）")
+
+    created = expect_status(
+        client.post(
+            "/api/v1/data-reports",
+            {
+                "title": "冒烟上报-" + stamp(),
+                "report_type": "data",
+                "package_id": int(package_id),
+                "target_org_id": int(parent_org_id),
+                "description": "端到端冒烟上报",
+            },
+        ),
+        (200, 201),
+        "创建上报",
+    )
+    report = payload_of(created)
+    report_id = report.get("id")
+    expect(isinstance(report_id, int), "上报响应缺少 id：%s" % created.text[:200])
+    expect(report.get("source_org_id") == org_id, "上报来源组织不符：%r" % report.get("source_org_id"))
+    expect(report.get("target_org_id") == parent_org_id, "上报目标组织不符：%r" % report.get("target_org_id"))
+    record(steps, "上报创建", "id=%d package_id=%d" % (int(report_id), int(package_id)))
+
+    submitted = expect_status(
+        client.post("/api/v1/data-reports/%d/submit" % int(report_id)),
+        (200,),
+        "提交上报",
+    )
+    expect(payload_of(submitted).get("status") == "submitted", "上报提交后状态不符：%s" % submitted.text[:200])
+    record(steps, "上报提交", "status=submitted")
+
+    bind_admin_organization(client, int(parent_org_id))
+    received = expect_status(
+        client.get("/api/v1/data-reports/received?status=submitted&page=1&page_size=100"),
+        (200,),
+        "上级接收列表",
+    )
+    received_ids = ids_of(items_of(received))
+    expect(int(report_id) in received_ids, "接收列表查不到刚提交的上报：%s" % sorted(received_ids)[:20])
+    record(steps, "上报接收（GET /data-reports/received）")
+
+    reviewed = expect_status(
+        client.post(
+            "/api/v1/data-reports/%d/review" % int(report_id),
+            {"action": "approve", "comment": "冒烟审批通过"},
+        ),
+        (200,),
+        "审批上报",
+    )
+    expect(payload_of(reviewed).get("status") == "approved", "审批后状态不符：%s" % reviewed.text[:300])
+    record(steps, "上报审批通过", "status=approved")
+
+    detail = expect_status(client.get("/api/v1/data-reports/%d" % int(report_id)), (200,), "上报详情")
+    expect(payload_of(detail).get("status") == "approved", "上报详情状态不符：%s" % detail.text[:300])
+    record(steps, "上报详情回读", "status=approved")
+
+    bind_admin_organization(client, int(org_id))
 
 
 def scenario_backup(client: HttpClient, steps: List[Step]) -> None:
@@ -686,6 +789,7 @@ SCENARIOS: List[Tuple[str, Any]] = [
     ("上传下载", scenario_upload_download),
     ("报表导出", scenario_export),
     ("数据包导入导出", scenario_data_package),
+    ("上报接收", scenario_report),
     ("备份", scenario_backup),
     ("登出", scenario_logout),
 ]
