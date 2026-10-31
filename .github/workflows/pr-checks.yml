@@ -431,10 +431,12 @@ jobs:
       # 1.19.1 与 backend/requirements-dev.txt 及本地基线测量口径一致；
       # 升级 mypy 必须同步 `python scripts/check_type_debt.py --update` 并说明理由。
       #
-      # SQLAlchemy 必须与后端同版本：mypy.ini 启用 sqlalchemy.ext.mypy.plugin，
-      # 只装 mypy 会在加载配置阶段报 "No module named 'sqlalchemy'" → 棘轮门禁
-      # 拿不到汇总行而 exit 2（2026-10-31 实测）。
-      - run: pip install flake8 "mypy==1.19.1" bandit "SQLAlchemy==2.0.50"
+      # SQLAlchemy / pydantic 必须与后端同版本：mypy.ini 启用了 sqlalchemy.ext.mypy.plugin
+      # 与 pydantic.mypy 两个插件，只装 mypy 时会在加载配置阶段报
+      # "No module named 'sqlalchemy'" / "No module named 'pydantic'" → 棘轮门禁
+      # 拿不到汇总行而 exit 2（2026-10-31 实测 SQLAlchemy；pydantic 插件模块就住在
+      # pydantic 包里，版本与 backend/requirements.txt 对齐）。
+      - run: pip install flake8 "mypy==1.19.1" bandit "SQLAlchemy==2.0.50" "pydantic==2.13.4"
       # flake8 零错误门禁
       - run: cd backend && python -m flake8 app/ --max-line-length=120 --count --max-complexity=16
       # 运维脚本同一口径零错误门禁。复杂度阈值放宽到 40：scripts/ 下多为一次性

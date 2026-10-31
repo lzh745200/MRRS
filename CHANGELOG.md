@@ -77,7 +77,12 @@
   **BrPart=0**；打包后端运行期实测 `GET /map/tile-info` 200（`tileCount=70,523`、
   `zoomLevels=[5..12,14]`、bbox 全省），z14 与 z5 瓦片均 200。
 - 新包组合验证：内置 z5–12 + `guizhou-all_z14.zip` 合并后 `zoomLevels=5..12,14`、z14 瓦片 200。
-- 类型门禁：全量 `mypy app`（384 个源文件）**563 → 515 条**（pydantic 插件消掉 28 条虚报，本轮再清 12 条）；
+- 类型门禁：全量 `mypy app`（384 个源文件）**563 → 512 条 / 115 → 111 个文件**（pydantic 插件消掉 28 条
+  虚报，导出签名与 `async_export` 再清 23 条）；
+- CI 接线：`.github/workflows/pr-checks.yml` 的 `lint` 作业补装 `pydantic==2.13.4` —— 插件模块就住在
+  pydantic 包里，只装 mypy + SQLAlchemy 会在加载配置阶段报 `No module named 'pydantic'`，
+  让棘轮门禁拿不到汇总行而 exit 2；`.type-debt-baseline.json` 的 `mypy_errors` 同步 **848 → 540**
+  （当前 512 条，留 28 条余量给在途改动）。
   `pytest tests -k "async_export or report_export or export_report"` **143 项通过**；
   `flake8 --max-line-length=120 --max-complexity=16` 对 3 个改动文件 rc=0。
 
