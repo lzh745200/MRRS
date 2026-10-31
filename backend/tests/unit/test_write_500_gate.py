@@ -163,7 +163,10 @@ def test_isolated_env_points_at_throwaway_database(tmp_path):
     env = gate.isolated_env(tmp_path)
     expected = "sqlite:///" + (tmp_path / "data" / "write500.db").as_posix()
     assert env["DATABASE_URL"] == expected
-    assert ":" in env["DATABASE_URL"][len("sqlite:///"):]
+    db_path = env["DATABASE_URL"][len("sqlite:///"):]
+    # 跨平台：Windows 是 C:/... 带盘符冒号，Linux 是 /tmp/... 无冒号，只校验绝对路径与库名
+    assert Path(db_path).is_absolute()
+    assert Path(db_path).name == "write500.db"
     assert Path(env["DATA_DIR"]).is_dir()
     assert Path(env["CACHE_DIR"]).is_dir()
 
