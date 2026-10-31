@@ -628,16 +628,11 @@ jobs:
       # 前端 API 使用率棘轮（2026-10-31 巡检）：src/api 里「定义了但产品从不调用」的具名
       # 导出只被测试调用 —— 会让前端覆盖率虚高（覆盖 100% ≠ 已接入）。基线 70 项只许减少，
       # 新增未使用导出即红：要么接入页面，要么删除函数与对应测试。
-      # 外键索引棘轮（2026-10-31 巡检）：SQLite 不为外键自动建索引，缺索引会让
-      # WHERE fk=? / JOIN / 级联删除全表扫描。基线 44 处只许减少（均为零查询
-      # 审计列，不做猜测性 schema 变更），新增外键时必须同时加索引。
       # 宽泛异常捕获理由（2026-10-31 巡检）：对齐 check_pragma_reasons 的口径，
       # noqa: BLE001 必须同行写明「为什么不能收窄到具体异常类型」；理由已全部
       # 补齐（15 处），故零容忍而非棘轮。
       - name: Broad except reason check
         run: python scripts/check_broad_except_reasons.py
-      - name: FK index ratchet
-        run: python scripts/check_fk_indexes.py
       - name: Frontend API usage ratchet
         run: python scripts/check_frontend_api_usage.py
       # 应用内更新日志一致性门禁：backend/app/services/version_history_data.py 必须由
@@ -694,6 +689,13 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
       - run: pip install -r backend/requirements.txt
+      # 外键索引棘轮（2026-10-31 巡检）：SQLite 不为外键自动建索引，缺索引会让
+      # WHERE fk=? / JOIN / 级联删除全表扫描。基线 44 处只许减少（均为零查询审计列，
+      # 不做猜测性 schema 变更），新增外键时必须同时加索引。
+      # 本门禁 import app.models（sqlalchemy），故必须放本作业；放在 static-analysis
+      # 会因缺依赖报 ModuleNotFoundError 恒红（2026-10-31 实际踩到）。
+      - name: FK index ratchet
+        run: python scripts/check_fk_indexes.py
       - name: Stack alignment check (frontend/backend/database)
         working-directory: backend
         run: python ../scripts/check_stack_alignment.py

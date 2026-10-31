@@ -1,4 +1,32 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Fixed（CI 两处失败 —— 新增门禁的作业归属与统一入口登记）
+
+`d4288cc9` 的 PR Checks 有两个作业失败，**都是新增门禁的接线问题**，由仓库自身的
+「门禁的元门禁」当场抓住：
+
+**① `static-analysis` → `FK index ratchet` 报 `ModuleNotFoundError: No module named 'sqlalchemy'`**
+
+`check_fk_indexes.py` 需要 `import app.models`（sqlalchemy），而 `static-analysis` 作业只装了
+alembic 与几个 lint 工具 —— 这一点 `pr-checks.yml` 里早有明文注释（"static-analysis 只装了
+alembic 与 lint 工具，放在那里会因 ModuleNotFoundError 恒红"），我仍放错了位置。
+**修复**：移到专门承载「需后端运行期依赖」门禁的 `stack-alignment` 作业（该作业会
+`pip install -r backend/requirements.txt`）。
+
+**② `backend-test` → `test_gate_entrypoints.py::test_ci_check_scripts_are_all_registered`**
+
+```
+这些 CI 门禁没有进统一入口: ['scripts/check_broad_except_reasons.py',
+                            'scripts/check_fk_indexes.py',
+                            'scripts/check_frontend_api_usage.py']
+```
+
+仓库有契约测试要求：**CI 里出现的每个 `check_*.py` 必须登记在 `scripts/run_gates.py` 的
+`GATES` 注册表**（防"门禁在 CI 跑了但本地一键入口漏了"，也防反向漏接线）。
+**修复**：三个新门禁登记进 `GATES`（`broad_except` / `frontend_api_usage` / `fk_indexes`）。
+
+**验证**：`pr-checks.yml` 用 js-yaml 实际解析通过 —— 9 个作业齐全，
+`stack-alignment` 步骤序列含 `FK index ratchet`，`static-analysis` 已不含它。
+
 - **P1-U3：系统自检「去处理」直达落点**：`SelfCheckCard.vue` 给每个自检项锚到它该被修的页面
   （组织单位码/组织层级 → `org?tab=organizations`；待审核账号/账号锁定 → `org?tab=users-orgs`；
   PII 密钥 → `security?tab=secrets`；介质导入近况 → `/data-package`）。仅**非正常**项显示入口，
