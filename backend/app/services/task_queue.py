@@ -10,7 +10,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -83,8 +83,9 @@ class Task:
         self.error = None
         self.progress = TaskProgress()
         self.created_at = time.time()
-        self.started_at = None
-        self.completed_at = None
+        # 任务耗时统计：开始/结束时间都在运行时以 float 秒写入，先给 Optional 注解
+        self.started_at: Optional[float] = None
+        self.completed_at: Optional[float] = None
         self._cancelled = False
 
     @property
@@ -126,7 +127,7 @@ class LocalTaskQueue:
 
     def __init__(self, max_workers: int = 3):
         self._tasks: Dict[str, Task] = {}
-        self._queue: asyncio.PriorityQueue = None
+        self._queue: Optional[asyncio.PriorityQueue] = None
         self._max_workers = max_workers
         self._running = False
         self._worker_tasks: List[asyncio.Task] = []
@@ -260,7 +261,9 @@ class LocalTaskQueue:
         loop = asyncio.get_running_loop()
         while self._running:
             try:
-                task = await asyncio.wait_for(self._queue.get(), timeout=1.0)
+                # _queue 在 start() 内创建、stop() 内复位为 None；stop() 后取队列会
+                # 抛 AttributeError 由下方兜底 break，故只做静态 cast、不改变运行期行为。
+                task = await asyncio.wait_for(cast(Any, self._queue).get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue
             except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕

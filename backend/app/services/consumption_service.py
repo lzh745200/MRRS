@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Query, Session
@@ -65,7 +65,7 @@ def apply_consumption_filters(
 def attach_village_names(db: Session, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """为台账行补充帮扶村名称（批量查询，避免 N+1；软删村不再解析名称）。"""
     village_ids = {r.get("supported_village_id") for r in rows if r.get("supported_village_id")}
-    names: Dict[int, str] = {}
+    names: Dict[Any, Any] = {}
     if village_ids:
         name_rows = (
             db.query(SupportedVillage.id, SupportedVillage.village_name)
@@ -242,9 +242,9 @@ def build_export_table(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[List
         for key, _label in EXPORT_COLUMNS:
             value = row.get(key)
             if key == "category":
-                value = CATEGORY_LABELS.get(value, value)
+                value = CATEGORY_LABELS.get(cast(str, value), value)
             elif key == "seller_type":
-                value = SELLER_TYPE_LABELS.get(value, value)
+                value = SELLER_TYPE_LABELS.get(cast(str, value), value)
             if isinstance(value, str) and value.startswith("="):
                 # 防公式注入：Excel 中以 = 开头的文本按字面量输出
                 value = "'" + value

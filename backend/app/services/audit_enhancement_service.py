@@ -6,7 +6,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -188,11 +188,11 @@ class AuditEnhancementService:
         all_changes = db.query(AuditChange).filter(AuditChange.audit_log_id.in_(log_ids)).all()
         changes_by_log: Dict[int, List[AuditChange]] = {}
         for change in all_changes:
-            changes_by_log.setdefault(change.audit_log_id, []).append(change)
+            changes_by_log.setdefault(cast(int, change.audit_log_id), []).append(change)
 
         history = []
         for log in audit_logs:
-            changes = changes_by_log.get(log.id, [])
+            changes = changes_by_log.get(cast(int, log.id), [])
             history.append(
                 {
                     "timestamp": (log.created_at.isoformat() if log.created_at else None),

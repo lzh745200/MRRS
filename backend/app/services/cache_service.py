@@ -459,12 +459,14 @@ class EntityCacheManager:
         return value
 
     def set(self, suffix: str, value: Any, ttl: Optional[int] = None) -> bool:
-        """Synchronous cache set."""
-        return self._cache._b.set(self._key(suffix), value, ttl=ttl or self.ttl)
+        """Synchronous cache set（底层写入不返回成功标志，这里统一返回 True）。"""
+        self._cache._b.set(self._key(suffix), value, ttl=ttl or self.ttl)
+        return True
 
     def invalidate(self, suffix: str) -> bool:
-        """Delete a specific cache entry."""
-        return self._cache._b.delete(self._key(suffix))
+        """Delete a specific cache entry（同上，删除后即视为成功）。"""
+        self._cache._b.delete(self._key(suffix))
+        return True
 
     def invalidate_all(self) -> None:
         """Invalidate all entries for this entity (list + stats)."""

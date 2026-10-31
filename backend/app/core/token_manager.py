@@ -7,7 +7,7 @@ revoking JWT access/refresh tokens, wrapping the low-level JOSE calls.
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, cast
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +245,8 @@ def refresh_access_token(refresh_token: str) -> Tuple[bool, Optional[Dict[str, A
     if not valid:
         return False, None, err
 
+    # validate_token 在 valid=True 时必然带回 payload（契约见其实现），静态类型是 Optional
+    payload = cast(Dict[str, Any], payload)
     subject = payload.get("sub")
     if not subject:
         return False, None, "Refresh token 缺少 subject"

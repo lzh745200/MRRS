@@ -177,6 +177,19 @@
   `system/cache.py` 换 superuser 门而红，与本批无关），`flake8 --max-line-length=120 --max-complexity=16` rc=0；
   全量 `mypy app` **175 → 164 条 / 69 → 63 个文件**。
 
+- **类型债第十二批（服务层容器 / 可选值收窄）**：15 个模块 mypy **35 → 0 条**（全量 `mypy app` **164 → 129 条 / 63 → 48 个文件**）：
+  `task_queue.py`（`_queue` / `started_at` / `completed_at` 三处 `Optional` 注解 + worker 取队列 `cast(Any)`——stop 后取队列仍抛 `AttributeError` 由兜底 `break`，运行期不变）、
+  `effective_grant_service.py`（授权矩阵键值 `cast(str)`）、`upload_helper.py`（内容去重复用路径 `cast(str)`）、
+  `cascade_purge_service.py`（3 处 `Result.rowcount` 收窄）、`audit_enhancement_service.py`（变更关联 id 收窄）、
+  `notification_preference_service.py`（两处 `bool(...)` 归一 `bool | None`）、`package_record_validator.py`（声明式模型表元数据 `cast(Any)`）、
+  `token_manager.py`（刷新令牌 `payload` 在 `valid` 守卫后收窄）、`work_logs.py`（2 处 `log_date` 收窄）、
+  `system_health.py`（行数累计 `count or 0`、WAL 大小补 `float` 注解）、`fund_service.py`（编号取 id / `rowcount` 收窄）、
+  `consumption_service.py`（村名映射键值 + 品类 / 销售方标签键收窄）、`subscription_dispatch_service.py`（2 处 `to_utc` 结果收窄）、
+  `cache_service.py`（`SimpleCache.set/invalidate` 底层只写不返回，改为显式 `return True`，与 `EntityCacheManager` 既有 `bool` 契约一致）、
+  `schemas/fund.py`（导入兜底类补 `no-redef` ignore）。
+  定向回归 **32 个用例文件 731 项通过**；`flake8 --max-line-length=120 --max-complexity=16` 对 15 个改动文件 rc=0。
+
+
 ### 验证
 
 - `verify_tiles.py` 支持 **MANIFEST 声明的稀疏层级**（`[5,6,7,8,13]` / `[5,6,7,8,14]`），

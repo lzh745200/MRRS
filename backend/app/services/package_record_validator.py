@@ -36,7 +36,7 @@
 
 import re
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import Float, Integer, Numeric
 
@@ -234,8 +234,10 @@ def validate_records(data_type: str, records: List[Dict]) -> Dict[str, list]:  #
     numeric_fields = _numeric_fields(model)
     phone_fields = _PHONE_FIELDS.get(data_type, [])
     enum_fields = _ENUM_FIELDS.get(data_type, {})
-    valid_columns = {c.name for c in model.__table__.columns}
-    nullable_map = {c.name: c.nullable for c in model.__table__.columns}
+    # 模型由 data_type 映射得到（DeclarativeMeta），表元数据静态上不可见
+    table = cast(Any, model).__table__
+    valid_columns = {c.name for c in table.columns}
+    nullable_map = {c.name: c.nullable for c in table.columns}
 
     for i, record in enumerate(records or []):
         if not isinstance(record, dict):

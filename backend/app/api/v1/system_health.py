@@ -221,7 +221,7 @@ async def get_table_stats(
         try:
             count = db.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar()  # nosec B608 — sqlite_master 系统表名
             stats.append({"table": table_name, "rows": count})
-            total_rows += count
+            total_rows += count or 0
         except Exception:
             stats.append({"table": table_name, "rows": -1, "error": True})
 
@@ -336,7 +336,7 @@ def _check_wal_status(db: Session) -> dict:
         if journal_mode == "wal":
             db_path_row = db.execute(text("PRAGMA database_list")).fetchone()
             wal_path = f"{db_path_row[2]}-wal" if db_path_row and len(db_path_row) >= 3 else None
-            wal_size = 0
+            wal_size: float = 0
             if wal_path and os.path.exists(wal_path):
                 wal_size = round(os.path.getsize(wal_path) / (1024 * 1024), 2)
 

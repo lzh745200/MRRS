@@ -214,7 +214,7 @@ class NotificationPreferenceService:
             "report": True,
         }
 
-        return type_mapping.get(notification_type, True)
+        return bool(type_mapping.get(notification_type, True))
 
     def should_send_email(self, user_id: int, notification_type: str) -> bool:
         """
@@ -237,7 +237,7 @@ class NotificationPreferenceService:
             "report": False,
         }
 
-        return type_mapping.get(notification_type, False)
+        return bool(type_mapping.get(notification_type, False))
 
     def _is_in_quiet_hours(self, preference: NotificationPreference) -> bool:
         """检查当前是否在免打扰时段（模型无对应列时恒为 False）"""

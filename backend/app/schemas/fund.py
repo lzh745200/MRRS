@@ -17,7 +17,7 @@ try:  # pragma: no cover - 项目内模块必然可导入，此防御回退不�
 except Exception as exc:  # noqa: BLE001  # pragma: no cover —— app.models.fund 为项目内模块必然可导入，防御回退不可达
     logger.warning("模块导入兜底失败（已降级）: %s", exc, exc_info=True)
 
-    class FundType(str, Enum):  # type: ignore[override]
+    class FundType(str, Enum):  # type: ignore[override,no-redef]
         PROJECT = "project"
         OPERATION = "operation"
         EDUCATION = "education"
@@ -25,14 +25,14 @@ except Exception as exc:  # noqa: BLE001  # pragma: no cover —— app.models.f
         EMERGENCY = "emergency"
         OTHER = "other"
 
-    class FundSource(str, Enum):  # type: ignore[override]
+    class FundSource(str, Enum):  # type: ignore[override,no-redef]
         MILITARY = "military"
         GOVERNMENT = "government"
         DONATION = "donation"
         ENTERPRISE = "enterprise"
         OTHER = "other"
 
-    class FundStatus(str, Enum):  # type: ignore[override]
+    class FundStatus(str, Enum):  # type: ignore[override,no-redef]
         PENDING = "pending"
         PLANNED = "planned"
         APPROVED = "approved"

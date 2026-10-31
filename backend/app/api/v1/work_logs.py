@@ -2,7 +2,7 @@
 
 import logging
 from datetime import date, datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -248,7 +248,7 @@ async def create_work_log(
     # 返回时添加兼容字段
     result = WorkLogResponse.model_construct(
         **log.__dict__,
-        work_date=log.log_date.isoformat(),
+        work_date=cast(date, log.log_date).isoformat(),
         title=log.content[:100] if log.content else "",
         log_type=log.category or "daily"
     )
@@ -305,7 +305,7 @@ async def update_work_log(
     # 返回时添加兼容字段
     result = WorkLogResponse.model_construct(
         **log.__dict__,
-        work_date=log.log_date.isoformat(),
+        work_date=cast(date, log.log_date).isoformat(),
         title=log.content[:100] if log.content else "",
         log_type=log.category or "daily"
     )

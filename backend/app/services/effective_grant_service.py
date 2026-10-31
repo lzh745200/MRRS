@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -62,8 +62,9 @@ def _cached_org_grants(db: Session, org: Organization) -> Dict[str, str]:
         return hit
 
     rows = db.query(OrgGrant).filter(OrgGrant.organization_id == org.id).all()
+    # 授权矩阵的键值在 ORM 里是 String 列（静态 str | None），业务上恒有值
     levels = {
-        row.module_key: row.level
+        cast(str, row.module_key): cast(str, row.level)
         for row in rows
         if row.level in VALID_GRANT_LEVELS
     }

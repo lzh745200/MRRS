@@ -15,7 +15,7 @@
 """
 
 import logging
-from typing import List
+from typing import Any, List, cast
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -56,7 +56,7 @@ class CascadePurgeService:
             text(f"DELETE FROM {table} WHERE {col} = :rid"),  # nosec B608 - 表/列名来自模型元数据
             {"rid": rid},
         )
-        return res.rowcount or 0
+        return cast(Any, res).rowcount or 0
 
     # ------------------------------------------------------------------
     def preview(self, root_table: str, row_id: int) -> dict:
@@ -151,7 +151,8 @@ class CascadePurgeService:
         # 最深先行：保证外键先于被引用行删除
         for i in range(len(shallow_to_deep) - 1, -1, -1):
             sql = f"DELETE FROM {shallow_to_deep[i][0]} WHERE id IN ({subs[i]})"  # nosec B608
-            total += self.db.execute(text(sql), {"rid": rid}).rowcount or 0
+            deleted_rows = cast(Any, self.db.execute(text(sql), {"rid": rid})).rowcount or 0
+            total += deleted_rows
         return total
 
     # ------------------------------------------------------------------
@@ -188,7 +189,7 @@ class CascadePurgeService:
             text(f"DELETE FROM {root_table} WHERE id = :rid"),  # nosec B608 - 表名来自模型元数据
             {"rid": row_id},
         )
-        if (res.rowcount or 0) == 0:
+        if (cast(Any, res).rowcount or 0) == 0:
             self.db.rollback()
             return {"success": False, "message": "记录不存在"}
 

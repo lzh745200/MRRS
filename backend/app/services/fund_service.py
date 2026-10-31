@@ -11,7 +11,7 @@ Fund 业务服务层 (优化版)
 
 import logging
 
-from typing import Optional, List, Dict, TYPE_CHECKING
+from typing import Any, Optional, List, Dict, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from app.schemas.fund import FundCreate  # noqa: F401 — type hint only
@@ -202,7 +202,7 @@ class FundService:
         # （一台 UTC+X 的机器在 23:30 新建的经费会拿到次年的号，验收时与账面年度对不上）。
         year = datetime.now(timezone.utc).year
         try:
-            fund.code = f"ZJ{year}{int(fund.id):06d}"
+            fund.code = f"ZJ{year}{int(cast(Any, fund.id)):06d}"
         except (TypeError, ValueError):
             return
 
@@ -294,7 +294,7 @@ class FundService:
         else:
             self.db.flush()
 
-        return result.rowcount
+        return cast(Any, result).rowcount
 
 
 # ============================================================================

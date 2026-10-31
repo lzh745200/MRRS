@@ -11,7 +11,7 @@ next_run_at 为纯函数（无 IO、无墙钟读取）：CI#84 墙钟黑洞教�
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from app.utils.time_utils import (
     as_utc_naive,
@@ -243,7 +243,8 @@ class SubscriptionDispatchService:
 
         # now 语义：aware（任意时区）或 naive 本地（datetime.now()），统一换算为 UTC。
         # 统一为 UTC 后再落库，避免与 created_at（naive UTC）混用两种基准。
-        now_utc = to_utc(now)
+        # to_utc 只在入参完全非法时返回 None；此处 now 恒为 datetime，收窄后供下方复用。
+        now_utc = cast(datetime, to_utc(now))
         local_now = to_local(now_utc) or now_utc
         file_name = f"subscription-{sub.id}-{local_now.strftime('%Y%m%d%H%M%S')}.{ext}"
         file_path = out_dir / file_name
@@ -289,7 +290,7 @@ class SubscriptionDispatchService:
         from app.models.supported_village import ReportSubscription
         from app.models.user import User
 
-        now_utc = to_utc(now)
+        now_utc = cast(datetime, to_utc(now))
         stats = {"dispatched": 0, "skipped": 0, "failed": 0}
         subs = (
             db.query(ReportSubscription)

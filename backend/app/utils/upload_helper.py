@@ -44,7 +44,7 @@ import hashlib
 import logging
 import os
 import uuid
-from typing import Callable, Iterable, Optional, Set
+from typing import Callable, Iterable, Optional, Set, cast
 
 from fastapi import HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
@@ -418,10 +418,10 @@ async def save_upload_file(
     # 6. 内容去重（仅在提供 DB 会话时启用）
     if db is not None:
         reused = _register_or_reuse_blob(db, sha256, file_path, written)
-        if reused is not None and _normalize_path(reused.path) != _normalize_path(file_path):
+        if reused is not None and _normalize_path(cast(str, reused.path)) != _normalize_path(file_path):
             # 命中已有内容：丢弃本次写入的副本，复用既有物理文件
             _remove_quietly(file_path)
-            file_path = reused.path
+            file_path = cast(str, reused.path)
             written = reused.size if reused.size is not None else written
 
     # 7. 相对 URL（静态挂载在 /uploads 下）
