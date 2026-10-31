@@ -3822,6 +3822,15 @@ VERSION_HISTORY_DATA = [
                 "间不再阻塞事件循环（此前现场表现为地图转圈、瓦片图片排队）。"
             ),
             (
+                "backend/app/api/v1/fund_lifecycle.py 类型注解纠正：tx_by_fund 误标为list[FundTransferVoucher]（实际存的是 Fund"
+                "Transaction）、fund 在 fund_id 分支内显式 cast，该文件 mypy 67 → 58 条，运行期行为零变化（219 项经费用例全绿）。"
+            ),
+            (
+                "backend/app/api/v1/{todos,pairing,permission_packs,machine_code}.py、backend/app/api/v1/system/"
+                "help.py、 backend/app/api/v1/map.py、backend/app/services/machine_code_permission_service.py 类型注"
+                "解收敛： 待办/配对/权限包/机器码响应构造统一走显式 cast…"
+            ),
+            (
                 "endpoint_500 门禁硬化（隔离库 + 双登录态）：backend/scripts/check_endpoint_500.py 原先只做匿名扫描、且复用本机开发库。实测匿名态 29"
                 "3 个 GET 里有 277 个死在 401（鉴权中间件直接短路，处理函数体一行没跑），门禁深度近乎为零；复用开发库还让结果随本机脏数据漂移、CI 跑不了。"
             ),
@@ -3829,15 +3838,6 @@ VERSION_HISTORY_DATA = [
                 "13acd413 把组织 DELETE 从软删改为物理删除（OrganizationService.delete_organization三重守卫后 db.delete + safe_co"
                 "mmit，响应 type=hard_delete），但backend/tests/unit/test_org_write_scope_r27.py 的两个用例仍断言旧软删语义is_acti"
                 "ve is False…"
-            ),
-            (
-                "两个用例（TestR27DeptAdminOwnSubtreeAllowed::test_delete_own_leaf_ok、TestR27SuperuserUnchanged::tes"
-                "t_delete_cross_branch_ok）改为断言 200 +data.type == \"hard_delete\" + expire_all() 后记录从 organizati"
-                "ons 表消失（is None），越权/放行的判定部分一字未动。"
-            ),
-            (
-                "验证：pytest tests/unit/test_org_write_scope_r27.py -q 17 项通过；pytest tests/unit/test_org_write_sc"
-                "ope_r27.py tests/unit/test_organization_api.py -q86 项通过。"
             ),
         ],
     },
