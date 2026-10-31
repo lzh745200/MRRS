@@ -12,7 +12,7 @@ import secrets
 import subprocess
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
@@ -63,7 +63,7 @@ class MachineCodeService:
             (["wmic", "baseboard", "get", "SerialNumber"], "To be filled by O.E.M."),
             (["wmic", "diskdrive", "get", "SerialNumber"], None),
         ]
-        procs = []
+        procs: list = []
         for cmd, _ in wmic_queries:
             try:
                 procs.append(
@@ -221,7 +221,7 @@ class MachineCodeService:
         Returns:
             机器信息字典
         """
-        info = {
+        info: dict[str, Any] = {
             "system": platform.system(),
             "release": platform.release(),
             "version": platform.version(),
@@ -565,9 +565,11 @@ class MachineCodeService:
         大小写：pass_code 入参已在 verify_pass_code 转小写；此处对库内列
         统一 func.lower 后比较（hex 通行码不区分大小写，接受用户大写输入）。
         """
+        db = self.db
+        assert db is not None  # 调用方 verify_pass_code 已保证（无会话时提前返回）
         from sqlalchemy import or_, func as sa_func
 
-        stored_raw = MachineCode.pass_code
+        stored_raw: Any = MachineCode.pass_code
         if normalize:
             stored_raw = sa_func.replace(stored_raw, "-", "")
         stored_pc = sa_func.lower(stored_raw)
@@ -578,7 +580,7 @@ class MachineCodeService:
 
         # 1. 优先匹配机器特定通行码
         record = (
-            self.db.query(MachineCode)
+            db.query(MachineCode)
             .filter(
                 and_(
                     stored_pc == pass_code,
@@ -593,13 +595,13 @@ class MachineCodeService:
             # 重置 active(未绑定) 为 pending
             if record.status == "active" and record.user_id is None:
                 record.status = "pending"
-                safe_commit(self.db)
+                safe_commit(db)
             logger.info("机器通行码验证成功: pass_code=%s...", pass_code[:16])
             return record
 
         # 2. 回退：匹配组织通行码（不绑定特定机器码）
         record = (
-            self.db.query(MachineCode)
+            db.query(MachineCode)
             .filter(
                 and_(
                     stored_pc == pass_code,
@@ -613,7 +615,7 @@ class MachineCodeService:
         if record:
             if record.status == "active" and record.user_id is None:
                 record.status = "pending"
-                safe_commit(self.db)
+                safe_commit(db)
             logger.info("组织通行码验证成功: pass_code=%s...", pass_code[:16])
             return record
 
@@ -621,7 +623,7 @@ class MachineCodeService:
         #    处理场景：wmic 输出不稳定 / 进程重启后机器码重新计算导致不一致
         #    安全性：限 status=pending 且 organization_id 为空（机器通行码）
         record = (
-            self.db.query(MachineCode)
+            db.query(MachineCode)
             .filter(
                 and_(
                     stored_pc == pass_code,
@@ -634,16 +636,16 @@ class MachineCodeService:
 
         if record:
             # 自动更新机器码绑定到当前机器，后续登录走第一优先级
-            old_machine_code = record.machine_code[:16] if record.machine_code else "None"
+            old_machine_code = cast(str, record.machine_code)[:16] if record.machine_code else "None"
             record.machine_code = machine_code
             try:
-                safe_commit(self.db)
+                safe_commit(db)
             except IntegrityError:
                 # 目标机器码已被另一条记录占用（machine_code UNIQUE 冲突）。
                 # 历史缺陷：未捕获 → 冒泡为未处理 500，注册页只显示“服务器错误”。
                 # 现回滚改绑并按验证失败处理（调用方得到干净的 400，可提示联系管理员）。
                 # 改绑未发生，故不写改绑审计。
-                self.db.rollback()
+                db.rollback()
                 logger.warning(
                     "通行码回退改绑失败：机器码 %s... 已被其他记录占用，放弃改绑（返回验证失败）",
                     machine_code[:16],
@@ -654,7 +656,7 @@ class MachineCodeService:
                 from app.services.work_log_service import write_work_log
 
                 write_work_log(
-                    self.db, "machine_code", "passcode_fallback_rebind",
+                    db, "machine_code", "passcode_fallback_rebind",
                     getattr(record, "id", None),
                     f"通行码回退验证改绑机器码: {old_machine_code}... -> {machine_code[:16]}...",
                 )
@@ -678,7 +680,7 @@ class MachineCodeService:
                 # 避免 INSERT 冲突导致 self-service 注册失败。
                 record_machine_code = machine_code
                 owner = (
-                    self.db.query(MachineCode)
+                    db.query(MachineCode)
                     .filter(MachineCode.machine_code == machine_code)
                     .first()
                 )
@@ -691,9 +693,9 @@ class MachineCodeService:
                     created_by=None,
                     description="跨机器通行码验证（HMAC 自验证）",
                 )
-                self.db.add(record)
-                safe_commit(self.db)
-                self.db.refresh(record)
+                db.add(record)
+                safe_commit(db)
+                db.refresh(record)
                 logger.info(
                     "通行码 HMAC 自验证成功（跨机器）: machine_code=%s..., "
                     "已在本机创建绑定记录 id=%s, record_machine_code=%s...",
@@ -789,7 +791,7 @@ class MachineCodeService:
             safe_commit(self.db)
             self.db.expire(record)
             logger.info(
-                f"机器码已激活: machine_code={record.machine_code[:16]}..., "
+                f"机器码已激活: machine_code={cast(str, record.machine_code)[:16]}..., "
                 f"user_id={user_id}, 改绑={bool(current_machine_code)}"
             )
         else:
@@ -823,7 +825,7 @@ class MachineCodeService:
 
         safe_commit(self.db)
 
-        logger.info(f"机器码已撤销: id={machine_code_id}, machine_code={record.machine_code[:16]}...")
+        logger.info(f"机器码已撤销: id={machine_code_id}, machine_code={cast(str, record.machine_code)[:16]}...")
         return True
 
     def get_machine_code_by_user(self, user_id: int) -> Optional[MachineCode]:
@@ -894,7 +896,7 @@ class MachineCodeService:
         if not is_authorized:
             logger.warning(
                 f"用户尝试在未授权的机器上登录: user_id={user_id}, "
-                f"expected={record.machine_code[:16]}..., "
+                f"expected={cast(str, record.machine_code)[:16]}..., "
                 f"actual={current_machine_code[:16]}..."
             )
 
@@ -1135,6 +1137,7 @@ class MachineCodeService:
         status: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
+        organization_ids: Optional[list[int]] = None,
     ) -> tuple[list[MachineCode], int]:
         """查询组织通行码列表
 
@@ -1143,6 +1146,9 @@ class MachineCodeService:
             status: 状态筛选（pending/active/revoked）
             skip: 跳过记录数
             limit: 返回记录数
+            organization_ids: 调用者可访问的组织 ID 列表（SEC-3，2026-10-31）。
+                ``None`` = 不限制（仅超级管理员）；空列表 = 无可达组织，fail-closed
+                返回空集（历史缺陷：不传参即查全表，部门级 admin 可读跨组织通行码）。
 
         Returns:
             tuple[list[MachineCode], int]: (通行码列表, 总数)
@@ -1155,6 +1161,9 @@ class MachineCodeService:
 
         # 查询组织通行码（organization_id 不为空）
         query = self.db.query(MachineCode).filter(MachineCode.organization_id.isnot(None))
+
+        if organization_ids is not None:
+            query = query.filter(MachineCode.organization_id.in_(organization_ids))
 
         if organization_id:
             query = query.filter(MachineCode.organization_id == organization_id)

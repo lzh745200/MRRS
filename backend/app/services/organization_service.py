@@ -5,7 +5,7 @@ Organization Service
 
 import logging
 from datetime import timezone, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
@@ -77,7 +77,8 @@ class OrganizationService:
         if db is None:
             raise ValueError("OrganizationService requires a valid database session")
         self.db = db
-        self.code_service = OrganizationCodeService(db) if db else None
+        # db 已在上面 fail-fast 校验过；此处恒为可用会话（此前写成三元表达式，静态检查因此把 code_service 推断成 Optional）。
+        self.code_service = OrganizationCodeService(db)
 
     async def create_organization(self, data: OrganizationCreate, created_by: int) -> Organization:
         """
@@ -203,7 +204,7 @@ class OrganizationService:
             expected_level = len([seg for seg in expected_path.split("/") if seg])
             if org.path != expected_path or str(org.level) != str(expected_level):
                 org.path = expected_path
-                org.level = expected_level
+                org.level = cast(Any, expected_level)  # level 列声明为 String，历史契约按深度整数写入（level_order 两种都认）
                 repaired += 1
         if repaired:
             safe_commit(self.db)
@@ -274,7 +275,7 @@ class OrganizationService:
             expected_level = len([seg for seg in expected_path.split("/") if seg])
             if node.path != expected_path or str(node.level) != str(expected_level):
                 node.path = expected_path
-                node.level = expected_level
+                node.level = cast(Any, expected_level)  # level 列声明为 String，历史契约按深度整数写入（level_order 两种都认）
                 changed += 1
 
             children = self.db.query(Organization).filter(Organization.parent_id == node.id).all()
@@ -347,16 +348,21 @@ class OrganizationService:
             if org.parent_id == parent_id:
                 children = self._build_tree(organizations, org.id)
                 node = OrganizationTreeNode(
-                    id=org.id,
+                    id=cast(int, org.id),
                     code=org.code,
-                    name=org.name,
+                    name=cast(str, org.name),
                     parent_id=org.parent_id,
                     level=org.level,
+                    # type / org_type / contact_email 原先漏传（树节点这三个字段恒为空），
+                    # 模型与 Schema 都有该列，这里按 ORM 原值透传。
+                    type=org.type,
+                    org_type=org.org_type,
                     path=org.path,
-                    is_active=org.is_active,
+                    is_active=cast(bool, org.is_active),
                     description=org.description,
                     contact_person=org.contact_person,
                     contact_phone=org.contact_phone,
+                    contact_email=org.contact_email,
                     address=org.address,
                     created_at=org.created_at,
                     created_by=org.created_by,
@@ -417,7 +423,7 @@ class OrganizationService:
             下级组织ID列表
         """
         orgs = self.get_subordinate_organizations(org_id, include_self)
-        return [org.id for org in orgs]
+        return [cast(int, org.id) for org in orgs]
 
     def get_ancestors(self, org_id: int) -> List[Organization]:
         """
@@ -572,13 +578,15 @@ class OrganizationService:
         for org in organizations:
             level_key = str(org.level)
             by_level[level_key] = by_level.get(level_key, 0) + 1
-            max_level = max(max_level, org.level)
+            # level 可能是 level_2 或 2，两类都归一成序号再比大小（None/非法值按 0）
+            max_level = max(max_level, self.code_service.level_order(org.level) or 0)
 
         return OrganizationStatistics(
             total=total,
             active=active,
             inactive=inactive,
-            by_level=by_level,
+            # 构造参数名即字段别名（populate_by_name=True 两种都收；mypy 只认别名）
+            level_distribution=by_level,
             max_level=max_level,
         )
 

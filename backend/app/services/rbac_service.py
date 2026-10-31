@@ -9,7 +9,7 @@ import re
 from contextvars import ContextVar
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, cast
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -360,6 +360,7 @@ class RBACService:
         返回 {"success": True, "newly_granted": bool}——
         newly_granted 为 True 表示新建分配，False 表示角色已存在。
         """
+        db = cast(Session, db)  # 静态收窄：调用方必须提供会话（同 create_role）
         # 检查角色是否存在且激活
         role = db.query(RbacRole).filter(RbacRole.id == role_id, RbacRole.is_active == True).first()  # noqa: E712
         if not role:
@@ -392,6 +393,7 @@ class RBACService:
 
     async def revoke_role(self, user_id: str, role_id: str, db: Session = None) -> bool:
         """撤销用户角色"""
+        db = cast(Session, db)  # 静态收窄：调用方必须提供会话（同 create_role）
         rows = (
             db.query(UserRole)
             .filter(UserRole.user_id == int(user_id), UserRole.role_id == role_id)
@@ -409,6 +411,7 @@ class RBACService:
         db: Session = None,
     ) -> bool:
         """直接授予权限给用户"""
+        db = cast(Session, db)  # 静态收窄：调用方必须提供会话（同 create_role）
         now = _utcnow()
         existing = (
             db.query(UserPermission)
@@ -446,6 +449,7 @@ class RBACService:
         返回 {"granted": [...], "skipped": [...], "failed": []}——
         skipped 为已存在的权限，failed 当前始终为空（为未来校验预留）。
         """
+        db = cast(Session, db)  # 静态收窄：调用方必须提供会话（同 create_role）
         uid = int(user_id)
         now = _utcnow()
         granted_by_int = int(granted_by) if granted_by else None
@@ -494,6 +498,7 @@ class RBACService:
             调用方负责通过 TransactionManager.transaction(db) 包裹事务边界——
             此方法仅调用 db.flush()，不提交。
         """
+        db = cast(Session, db)  # 静态收窄：调用方必须提供会话（同 create_role）
         import warnings
         warnings.warn(
             "RBACService.revoke_permission 已弃用，请使用 revoke_permissions_batch",
@@ -522,6 +527,7 @@ class RBACService:
         使用预查询确定哪些权限实际存在，然后单条 DELETE 批量删除。
         调用方拥有事务边界（通过 TransactionManager.transaction）。
         """
+        db = cast(Session, db)  # 静态收窄：调用方必须提供会话（同 create_role）
         uid = int(user_id)
 
         # 第 1 步：预查询哪些权限对用户实际存在
@@ -562,6 +568,7 @@ class RBACService:
 
         返回 {"revoked": [...], "granted": [...], "skipped": [...], "failed": []}。
         """
+        db = cast(Session, db)  # 静态收窄：调用方必须提供会话（同 create_role）
         uid = int(user_id)
         granted_by_int = int(granted_by) if granted_by else None
         expires = _safe_parse_expires(expires_at)
@@ -621,7 +628,7 @@ class RBACService:
         is_system: bool = False,
         db: Session = None,
         code: Optional[str] = None,
-    ) -> str:
+    ) -> int:
         """创建角色
 
         code 为可空唯一编码：不传时按名称派生一次（大写、非字母数字转下划线），
@@ -644,7 +651,7 @@ class RBACService:
             db.add(rp)
 
         db.flush()  # flush 而非 commit — 由外层 TransactionManager 统一提交
-        return role.id
+        return cast(int, role.id)
 
     async def get_user_roles(self, user_id: str, db: Session) -> List[Dict[str, Any]]:
         """获取用户角色列表"""

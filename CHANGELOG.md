@@ -38,6 +38,16 @@
 - 认证主体取值收缩：`backend/app/api/v1/deps.py` 新增 `authenticated_user_id()` / `authenticated_username()`（登录态已知的 ORM legacy `Column` 让静态检查把 `User.id` 看成 `int | None`；真出现非法认证对象就在入口 401 封口），`approval.py` / `funds.py` 共 43 处 `current_user.id` / `current_user.username` 改走该入口；两个文件的 mypy 分别 **28 → 0**、**26 → 0** 条（审批 auto-approve 循环改用 `current: Any` 变量收敛、费用 `_fund_to_dict` 的关联对象从直接访问改为 `getattr` 取值以保留模拟对象用例兼容性），运行期行为零变化。
 - `backend/app/api/v1/data/data/data_packages.py` 类型注解收敛（mypy **32 → 0**）：资料包权限校验 / 历史记录的 `package.org_id`、`_safe_write_work_log` 的包名与 `DataPackageResponse` 字段均显式 `cast`；导入校验结果 `result.validation` 取一次局部引用（避免 Optional 属性报错，运行期不变）；`DATA_TYPE_MODELS` 查出的模型与 `history_service.db` 分别标 `Any`/`Session`。回归：资料包相关 8 个用例文件 **243 项通过**。
 
+- `backend/app/services/{rbac_service,machine_code_service,organization_service}.py` 类型注解收敛（mypy **57 → 0**）：
+  RBAC 7 个 `db: Session = None` 方法补 `db = cast(Session, db)`（调用方必须传会话，零运行期变化），
+  `create_role` 返回注解 `-> str` 纠正为 `-> int`（DB 主键实为整数）；机器码服务的 `wmic` 采集结果、
+  机器信息字典与 `pass_code` 正则替换结果显式标 `Any`，`record.machine_code` 截断前 `cast(str, ...)`；
+  组织服务顺带修一处**真实缺陷** —— `_build_tree` 构造树节点时漏传 `type` / `org_type` / `contact_email`
+  （模型与 Schema 都有该列），这三个字段在树接口恒为空，现按 ORM 原值透传；
+  `get_statistics` 的 `max_level` 改走 `level_order()` 归一（原先直接 `max(level)` 会因 `level` 存
+  `level_2` 与整数两种口径而抛 `TypeError`），`OrganizationStatistics` 用字段别名 `level_distribution=` 构造
+  （`populate_by_name=True` 两种都收，运行期等价）。
+
 ### 验证
 
 - `verify_tiles.py` 支持 **MANIFEST 声明的稀疏层级**（`[5,6,7,8,13]` / `[5,6,7,8,14]`），
