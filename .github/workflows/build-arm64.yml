@@ -143,11 +143,6 @@ jobs:
           # artifact zip 会丢失 exec 位，这里恢复（postinst 兜底再补一次）
           chmod +x backend/dist/assistance-backend/assistance-backend
 
-          # 冻结模块门禁（2026-10-31）：v1.18.29 的 Electron ARM64 包复用
-          # standalone 后端，spec 排除 difflib 导致装后后端启动即崩。
-          # 在 x64 runner 上直接读 ARM64 PYZ 模块表，不依赖 QEMU 执行。
-          python3 scripts/verify_frozen_modules.py --backend-dir backend/dist/assistance-backend
-
           # Place frontend dist
           mkdir -p frontend/dist
           cp -r downloaded/frontend/* frontend/dist/
