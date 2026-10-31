@@ -15,8 +15,6 @@ R28 探针实测：`POST /data-packages/export` 把 `json.dumps(data_types)` 写
 
 import json
 
-import pytest
-
 from app.api.v1.data.data.data_packages import _normalize_data_types, _package_version_changes
 from app.models.data_package import DataPackage
 
@@ -107,9 +105,12 @@ class TestExportServiceStoresList:
 
     def test_import_path_passes_list_to_model(self):
         import inspect
+        import re
 
         from app.services import data_package_service as mod
 
         src = inspect.getsource(mod.DataPackageService.import_package)
         assert "data_types=json.dumps(" not in src
-        assert "data_types=validation.manifest.data_types," in src
+        # 来源仍是校验结果里的 manifest.data_types（Optional 收窄后为局部 manifest
+        # 引用，语义不变），且必须直接传列表
+        assert re.search(r"data_types=(?:validation\.)?manifest\.data_types,", src) is not None

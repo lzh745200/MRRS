@@ -18,7 +18,7 @@ import uuid
 import zipfile
 from datetime import timezone, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import inspect
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -169,6 +169,16 @@ def _local_pii_key_fingerprint() -> str:
         return ""
 
 
+def _package_status(value: str) -> PackageStatus:
+    """把枚举的字符串值还原成列声明的 PackageStatus 类型。
+
+    DataPackage.status 是 SQLEnum(PackageStatus, native_enum=False)，SQLAlchemy
+    既接受枚举成员也接受同名字符串；这里保持既有的 .value 字符串写法，
+    只给静态检查一个明确类型（运行期对象与改前完全一致）。
+    """
+    return cast(PackageStatus, value)
+
+
 class PackageValidationError(BusinessError):
     """数据包验证错误"""
     def __init__(self, errors: List[str]):
@@ -229,7 +239,8 @@ class DataPackageService:
         if not org:
             raise BusinessError(f"组织不存在: {org_id}")
 
-        package_code = self._generate_package_code(org.code, "EXP")
+        # 组织编码在导出链路上必存；真为 None 时 _generate_package_code 自有 UNKNOWN 兜底
+        package_code = self._generate_package_code(cast(str, org.code), "EXP")
 
         data_iterators = {}
         for data_type in data_types:
@@ -276,7 +287,7 @@ class DataPackageService:
         package = DataPackage(
             package_code=package_code, org_id=org_id, file_path=file_path,
             file_name=file_name, file_size=file_size, manifest=manifest_dict,
-            status=PackageStatus.validated.value, type=package_type.value,
+            status=_package_status(PackageStatus.validated.value), type=package_type.value,
             version=CURRENT_VERSION, checksum=checksum,
             # `DataPackage.data_types` 是 JSON 列，**必须直接存列表**。
             # R28 修复：这里曾 `json.dumps(...)` 双重编码，列里落的是 JSON *字符串*，
@@ -290,7 +301,7 @@ class DataPackageService:
         self.db.refresh(package)
 
         return DataPackageExportResult(
-            package_id=package.id, package_code=package_code, file_path=file_path,
+            package_id=cast(int, package.id), package_code=package_code, file_path=file_path,
             file_name=file_name, file_size=file_size, manifest=manifest,
             download_url=f"/api/v1/data-packages/{package.id}/download",
         )
@@ -335,7 +346,7 @@ class DataPackageService:
         col_list = ", ".join(col_names)
         # 本行的表名/列名全部来自模型元数据（非用户输入），过滤值一律走 text() 绑定参数
         sql = "SELECT %s FROM %s" % (col_list, table)  # nosec B608 - 表名/列名取自 model.__table__ 元数据，无用户输入拼接
-        params = {}
+        params: Dict[str, Any] = {}
         conditions = []
         if hasattr(model, "org_id"):
             conditions.append("org_id = :org_id")
@@ -421,7 +432,7 @@ class DataPackageService:
                 error_message="; ".join([e.message for e in validation.errors]),
             )
             return DataPackageImportResult(
-                package_id=package.id, package_code=package.package_code,
+                package_id=cast(int, package.id), package_code=cast(str, package.package_code),
                 # R9 顺带修复：PackageStatusEnum 成员为**大写** FAILED，
                 # 原 `PackageStatusEnum.failed` 必抛 AttributeError → 校验失败
                 # 分支被端点兜底成 500「导入失败」，用户看不到真实校验原因
@@ -430,7 +441,9 @@ class DataPackageService:
                 preview=[], validation=validation,
             )
 
-        package_code = self._generate_package_code(validation.manifest.org_code or "UNKNOWN", "IMP")
+        # ORM/manifest 字段声明为 Optional，但校验通过的包必带 manifest；取一次局部引用供下方使用。
+        manifest = cast(DataPackageManifest, validation.manifest)
+        package_code = self._generate_package_code(manifest.org_code or "UNKNOWN", "IMP")
         permanent_path = os.path.join(self.upload_dir, f"{package_code}.zip")
         shutil.copy(file_path, permanent_path)
 
@@ -438,25 +451,25 @@ class DataPackageService:
 
         manifest_dict = None
         if validation.manifest:
-            manifest_dict = json.loads(json.dumps(validation.manifest.model_dump(), cls=CustomJSONEncoder))
+            manifest_dict = json.loads(json.dumps(manifest.model_dump(), cls=CustomJSONEncoder))
             # 校验摘要随包记录落库（additive），供 /received 接收记录展示
             manifest_dict["validation_summary"] = validation.warnings
 
         package = DataPackage(
             package_code=package_code, org_id=org_id, file_path=permanent_path,
             file_name=file_name, file_size=os.path.getsize(permanent_path),
-            manifest=manifest_dict, status=PackageStatus.validated.value,
-            version=validation.manifest.version, checksum=self._calculate_checksum(permanent_path),
+            manifest=manifest_dict, status=_package_status(PackageStatus.validated.value),
+            version=manifest.version, checksum=self._calculate_checksum(permanent_path),
             # JSON 列直接存列表（R28 修复双重编码，同 export_package）
-            data_types=validation.manifest.data_types,
-            record_count=sum(validation.manifest.record_counts.values()), created_by=imported_by,
+            data_types=manifest.data_types,
+            record_count=sum(manifest.record_counts.values()), created_by=imported_by,
         )
         self.db.add(package)
         safe_commit(self.db)
         self.db.refresh(package)
 
         return DataPackageImportResult(
-            package_id=package.id, package_code=package_code,
+            package_id=cast(int, package.id), package_code=package_code,
             status=PackageStatusEnum.VALIDATED, manifest=validation.manifest,
             preview=preview, validation=validation,
         )
@@ -643,7 +656,7 @@ class DataPackageService:
             # 配合独占写锁防止 SQLITE_BUSY
             self.db.begin_nested()
             with db_coordinator.exclusive_write(timeout=120.0):
-                with zipfile.ZipFile(package.file_path, "r") as zf:
+                with zipfile.ZipFile(cast(str, package.file_path), "r") as zf:
                     ensure_zip_within_limit(zf)  # R2 第三层：确认导入前先卡解压后总量
                     manifest_content = read_zip_member(zf, "manifest.json").decode("utf-8")
                     manifest_dict = json.loads(manifest_content)
@@ -654,7 +667,7 @@ class DataPackageService:
                     # （实证 org=B 导入落库 org=A）。
                     # 现改为：包内 org_code 只作**择一提示**，最终必须落在调用者有权写入的
                     # 组织集合内；不可达则沿用调用者指定的 package.org_id（端点已校验可达）。
-                    resolved_org_id = package.org_id
+                    resolved_org_id: int = cast(int, package.org_id)
                     source_org_code = manifest_dict.get("org_code", "")
                     if source_org_code:
                         from app.models.organization import Organization
@@ -662,7 +675,8 @@ class DataPackageService:
                             Organization.code == source_org_code
                         ).first()
                         if local_org and local_org.id == package.org_id:
-                            resolved_org_id = local_org.id
+                            # local_org.id 在关联列上是 Optional，但能查出来就已落库；取值与改前一致
+                            resolved_org_id = cast(int, local_org.id)
                         elif local_org:
                             logger.warning(
                                 "W18-D3: 数据包 %s 的 manifest.org_code=%s 指向组织 %s，"
@@ -705,7 +719,7 @@ class DataPackageService:
                         error_counts[data_type] = len(errs)
                         errors.extend(errs)
 
-                package.status = PackageStatus.imported.value
+                package.status = _package_status(PackageStatus.imported.value)
                 package.imported_at = datetime.now(timezone.utc)
                 package.imported_by = confirmed_by
                 safe_commit(self.db)
@@ -717,7 +731,7 @@ class DataPackageService:
         except Exception as e:
             logger.warning('confirm_import 兜底失败（已降级）: %s', e, exc_info=True)
             self.db.rollback()
-            package.status = PackageStatus.failed.value
+            package.status = _package_status(PackageStatus.failed.value)
             package.error_message = str(e)
             safe_commit(self.db)
             return DataPackageConfirmResult(
@@ -736,7 +750,7 @@ class DataPackageService:
             if isinstance(getattr(c.type, "impl", None), type) and "DateTime" in type(c.type).__name__
             or (c.type is not None and "DateTime" in type(c.type).__name__)
         }
-        clean_data = {}
+        clean_data: Dict[str, Any] = {}
         for k, v in record.items():
             if k not in valid_columns:
                 continue
@@ -973,14 +987,14 @@ class DataPackageService:
         export_result = await self.export_package(org_id, data_types, export_by, description, package_type)
 
         if password:
-            original_file_path = export_result.file_path
+            original_file_path = cast(str, export_result.file_path)
             encrypted_file_path = original_file_path + ".enc"
 
             salt_hex, iterations = PasswordEncryptionService.encrypt_file(
                 original_file_path, password, encrypted_file_path
             )
 
-            manifest_dict = export_result.manifest.model_dump()
+            manifest_dict = cast(DataPackageManifest, export_result.manifest).model_dump()
             manifest_dict["encryption"] = {
                 "enabled": True, "algorithm": "aes256-fernet-pbkdf2",
                 "salt": salt_hex, "iterations": iterations,
@@ -1034,8 +1048,13 @@ class DataPackageService:
 
                 temp_decrypted_path = file_path + ".decrypted_temp"
                 try:
-                    # 假设 PasswordEncryptionService 支持从文件头读取 salt 自动解密
-                    PasswordEncryptionService.decrypt_file_auto(file_path, password, temp_decrypted_path)
+                    # 旧版加密组件才提供 decrypt_file_auto；本仓库实现没有该方法，
+                    # 直接调用会 AttributeError 并被下方分支转成明确提示。
+                    # 这里以探测式取属性，避免静态检查把「可选能力」当硬依赖。
+                    decrypt_auto = getattr(PasswordEncryptionService, "decrypt_file_auto", None)
+                    if decrypt_auto is None:
+                        raise AttributeError("decrypt_file_auto 不可用（加密组件无自动解密能力）")
+                    decrypt_auto(file_path, password, temp_decrypted_path)
                     decrypted_file_path = temp_decrypted_path
                 except InvalidPasswordError:
                     raise BusinessError("密码错误，请检查后重试")
@@ -1061,13 +1080,13 @@ class DataPackageService:
         if not package.is_encrypted:
             raise BusinessError("该数据包未加密，无需解密")
 
-        encrypted_file_path = package.file_path
+        encrypted_file_path = cast(str, package.file_path)
         temp_decrypted_path = encrypted_file_path + ".decrypted"
 
         try:
             PasswordEncryptionService.decrypt_file(
-                encrypted_file_path, password, package.encryption_salt,
-                package.encryption_iterations, temp_decrypted_path,
+                encrypted_file_path, password, cast(str, package.encryption_salt),
+                cast(int, package.encryption_iterations), temp_decrypted_path,
             )
             validation_result = await self.validate_package(temp_decrypted_path)
             if not validation_result.is_valid:
@@ -1076,11 +1095,11 @@ class DataPackageService:
             # 三步链路（upload-encrypted → decrypt-preview → confirm-import）要求
             # 解密预览通过后把包推进到 validated：confirm 只接受 validated 状态，
             # 历史实现不落状态使确认导入恒失败（前端表现为"导入"永远报错）。
-            package.status = PackageStatus.validated.value
+            package.status = _package_status(PackageStatus.validated.value)
             self.db.commit()
 
             return DataPackageImportResult(
-                package_id=package.id, package_code=package.package_code,
+                package_id=cast(int, package.id), package_code=cast(str, package.package_code),
                 status=PackageStatusEnum.VALIDATED, manifest=validation_result.manifest,
             )
         except InvalidPasswordError:
@@ -1105,7 +1124,7 @@ class DataPackageService:
         if package.status != PackageStatus.validated.value:
             raise BusinessError(f"数据包状态不正确: {package.status}")
 
-        file_path = package.file_path
+        file_path = cast(str, package.file_path)
         temp_decrypted_path = None
 
         try:
@@ -1115,8 +1134,8 @@ class DataPackageService:
                 temp_decrypted_path = file_path + ".temp_decrypted"
                 try:
                     PasswordEncryptionService.decrypt_file(
-                        file_path, password, package.encryption_salt,
-                        package.encryption_iterations, temp_decrypted_path,
+                        file_path, password, cast(str, package.encryption_salt),
+                        cast(int, package.encryption_iterations), temp_decrypted_path,
                     )
                     file_path = temp_decrypted_path
                 except InvalidPasswordError:
@@ -1148,7 +1167,7 @@ class DataPackageService:
                     if data_dict:
                         resolver.import_with_id_mapping(data_dict, conflict_strategy)
 
-                package.status = PackageStatus.imported.value
+                package.status = _package_status(PackageStatus.imported.value)
                 package.imported_at = datetime.now(timezone.utc)
                 safe_commit(self.db)
 
@@ -1157,7 +1176,7 @@ class DataPackageService:
         except Exception as e:
             logger.warning('confirm_import_with_conflict_resolution 兜底失败（已降级）: %s', e, exc_info=True)
             self.db.rollback()
-            package.status = PackageStatus.failed.value
+            package.status = _package_status(PackageStatus.failed.value)
             package.error_message = str(e)
             safe_commit(self.db)
             return {"success": False, "message": str(e)}
@@ -1200,7 +1219,7 @@ class DataPackageService:
                 if file_path and os.path.exists(file_path)
                 else 0
             ),
-            status=status.value, version=CURRENT_VERSION,
+            status=_package_status(status.value), version=CURRENT_VERSION,
             error_message=error_message, created_by=created_by,
         )
         self.db.add(package)
