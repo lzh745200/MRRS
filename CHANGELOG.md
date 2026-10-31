@@ -1,4 +1,41 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Added（AsyncSession 服务棘轮 —— 发现"无法被注入的服务"）
+
+**巡检发现**：本项目主链路是**同步 SQLAlchemy**（`get_db` 产出同步 `Session`，
+路由全是 `db: Session = Depends(get_db)`，`app/api/` 下**没有任何** `AsyncSession`），
+但有 **4 个 service 仍以 `AsyncSession` 为构造参数**：
+
+| 文件 | async 方法数 |
+|---|---|
+| `services/supported_village_service.py` | 9 |
+| `services/fund_health_service.py` | 1（其余已同步） |
+| `services/funding/phase_budget_service.py` | 3 |
+| `services/funding/phase_init_service.py` | 3 |
+
+**核查结论：它们无法被生产链路使用**——
+
+- 项目**没有 async 版 `get_db`**，路由拿不到 `AsyncSession`；
+- 全仓除**自身定义**与 `funding/__init__.py` 的 **re-export** 外，**无任何调用点**；
+- 只被测试调用（用 `AsyncMock`），因此覆盖率达 100% —— **又一个覆盖率虚高来源**。
+
+`services/fund_service.py` 的 docstring 明确记载过一次架构回退：
+「**将 AsyncSession 修正为同步 Session**，与 database.py 和 API 层保持一致」——
+这 4 个文件正是那次回退的**遗漏**。
+
+**新增门禁 `scripts/check_async_service_usage.py`**（棘轮）：识别「import AsyncSession
+且构造参数标注 `db: AsyncSession`」的文件，基线登记现有 4 个**只许减少**，新增即红
+（提示"无法被路由注入，只会虚高覆盖率"）。
+
+**为什么不在本批强制重构**：改为同步需同步修改 **13 个测试文件**的 mock，而它们
+**当前无生产调用、不产生运行时故障** —— 属架构清理专项，不适合与当前批次混做。
+门禁先止住"继续增加"。
+
+**单测** `test_async_service_gate.py`（7 例，含负向）：识别 async 服务、同步服务不计、
+**docstring 里提及不算**（针对 `fund_service.py` 这类历史说明）、基线外新增必失败、
+基线内通过、`--json` 可解析、真实仓库基线与实测一致。
+
+**验证**：门禁 EXIT=0 · flake8 0 · 新增 7 passed · `test_gate_entrypoints` 10 passed（含统一入口登记）。
+
 ### Fixed（CI 两处失败 —— 新增门禁的作业归属与统一入口登记）
 
 `d4288cc9` 的 PR Checks 有两个作业失败，**都是新增门禁的接线问题**，由仓库自身的

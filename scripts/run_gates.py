@@ -93,6 +93,8 @@ GATES: List[Gate] = [
           why="前端 API 使用率棘轮（防覆盖率虚高）"),
     _gate("fk_indexes", "scripts/check_fk_indexes.py",
           why="外键索引棘轮（需 app.models/sqlalchemy，本地请用 backend venv 的 python 跑）"),
+    _gate("async_service", "scripts/check_async_service_usage.py",
+          why="禁止新增 AsyncSession 服务（主链路是同步 Session）"),
     _gate("constants_sync", "scripts/check_constants_sync.py", why="常量漂移"),
     _gate("css_vars", "scripts/check_css_vars.py", why="CSS 变量引用"),
     _gate("tokens_sync", "scripts/check_tokens_sync.py", why="设计 Token 同步"),

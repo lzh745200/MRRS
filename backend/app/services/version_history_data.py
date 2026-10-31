@@ -3748,6 +3748,9 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-31",
         "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
         "features": [
+            "项目没有 async 版 get_db，路由拿不到 AsyncSession；",
+            "全仓除自身定义与 funding/init.py 的 re-export 外，无任何调用点；",
+            "只被测试调用（用 AsyncMock），因此覆盖率达 100% —— 又一个覆盖率虚高来源。",
             (
                 "P1-U3：系统自检「去处理」直达落点：SelfCheckCard.vue 给每个自检项锚到它该被修的页面（组织单位码/组织层级 → org?tab=organizations；待审核账号"
                 "/账号锁定 → org?tab=users-orgs；PII 密钥 → security?tab=secrets；介质导入近况 → /data-package）。仅非正常项显示入口，ok "
@@ -3778,16 +3781,10 @@ VERSION_HISTORY_DATA = [
             ),
             "预查一次 (student_name, grade) 对，按 school_id 过滤；",
             "循环内改查内存集合（O(1)），插入后把新行加入集合。",
-            "12 处把异常降级为 error_type 返回给调用方（体检/预检单项失败不中断整轮），是可观测的降级而非吞掉；",
             (
-                "3 处（diagnostics.py:366 / backup_service.py / village_cascade_delete_service.py）本身就有 logger.err"
-                "or/warning，只是注释没写理由。"
-            ),
-            "后端全量 GET 巡检：432 个路由 → 发现并修复 1 个真缺陷（/menus/accessible 的 user 形态健壮性，见上一条）；修复后 0 个 5xx。",
-            (
-                "后端写端点巡检：255 个 POST/PUT/PATCH（排除危险操作）→ 0 个 5xx。test_cov_final_organization.py::test_is_active_d"
-                "efaulted_when_absent 仍用is_superuser=False 的用户建根（520000），被 403 拦截。该用例意图是验证 is_active 默认值而非建根权限 "
-                "→ 用户改为超管，守卫另测。"
+                "12 处把异常降级为 error_type 返回给调用方（体检/预检单项失败不中断整轮），是可观测的降级而非吞掉；本身就有 logger.error/warning，只是注释没写理由。te"
+                "st_cov_final_organization.py::test_is_active_defaulted_when_absent 仍用is_superuser=False 的用户建根（"
+                "520000），被 403 拦截。"
             ),
         ],
     },

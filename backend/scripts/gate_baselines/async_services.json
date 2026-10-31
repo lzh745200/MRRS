@@ -1,0 +1,8 @@
+{
+  "known": [
+    "backend/app/services/fund_health_service.py",
+    "backend/app/services/funding/phase_budget_service.py",
+    "backend/app/services/funding/phase_init_service.py",
+    "backend/app/services/supported_village_service.py"
+  ]
+}
