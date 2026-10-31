@@ -43,25 +43,46 @@ router = APIRouter(prefix="/dashboard", tags=["仪表盘"])
 _DATA_START_YEAR = 2021
 
 # ==================== diskcache 缓存 ====================
-try:
-    import diskcache
+_CACHE_TTL_SECONDS = 120  # 2 分钟
 
-    _cache_dir = settings.CACHE_DIR
-    os.makedirs(_cache_dir, exist_ok=True)
-    _cache = diskcache.Cache(
-        os.path.join(_cache_dir, "dashboard"),
-        size_limit=50 * 1024 * 1024,  # 50MB
-        # 用 JSON 序列化替代默认的 pickle（CVE-2025-69872 / PYSEC-2026-2447：
-        # diskcache ≤5.6.3 默认 pickle，能写缓存目录者即可在读取时执行任意代码，
-        # 上游暂无修复版本）。此处缓存内容均为 JSON 可序列化的统计结果，
-        # 换 JSONDisk 行为等价而彻底消除反序列化执行面。
-        disk=diskcache.JSONDisk,
-    )
-    _CACHE_TTL = 120  # 2 分钟
-except ImportError:  # pragma: no cover —— diskcache 为项目已安装依赖，导入失败分支在当前环境不可执行
-    _cache = None
-    _CACHE_TTL = 0
-    logger.warning("diskcache 未安装，仪表盘缓存已禁用")
+
+def _init_cache():
+    """创建仪表盘磁盘缓存，返回 `(cache, ttl)`。
+
+    缓存只是加速层，**初始化失败必须降级而不能抛出**：本模块处于
+    `app.api.v1.__init__` 的导入链上，异常穿透就是**整个后端启动失败**（端口永不监听）。
+    2026-10-31 打包实测：已存在的 `cache.db` / 残留 `-wal`、`-shm` 使
+    `diskcache.Cache(...)` 抛 `sqlite3.OperationalError`
+    （`attempt to write a readonly database` / `unable to open database file`），
+    原实现只捕 `ImportError` → 按下即崩。
+
+    出错时返回 `(None, 0)`；调用方（`_get_cached` / `_set_cached` /
+    `invalidate_dashboard_cache`）都已处理 `None`，行为退化为直查。
+    """
+    try:
+        import diskcache
+
+        _cache_dir = settings.CACHE_DIR
+        os.makedirs(_cache_dir, exist_ok=True)
+        cache = diskcache.Cache(
+            os.path.join(_cache_dir, "dashboard"),
+            size_limit=50 * 1024 * 1024,  # 50MB
+            # 用 JSON 序列化替代默认的 pickle（CVE-2025-69872 / PYSEC-2026-2447：
+            # diskcache ≤5.6.3 默认 pickle，能写缓存目录者即可在读取时执行任意代码，
+            # 上游暂无修复版本）。此处缓存内容均为 JSON 可序列化的统计结果，
+            # 换 JSONDisk 行为等价而彻底消除反序列化执行面。
+            disk=diskcache.JSONDisk,
+        )
+        return cache, _CACHE_TTL_SECONDS
+    except ImportError:  # pragma: no cover —— diskcache 为项目已安装依赖，导入失败分支在当前环境不可执行
+        logger.warning("diskcache 未安装，仪表盘缓存已禁用")
+        return None, 0
+    except Exception as exc:  # noqa: BLE001 - 缓存不可用必须降级，绝不能拖垮后端启动
+        logger.warning("仪表盘缓存初始化失败（已降级为直查）: %s", exc)
+        return None, 0
+
+
+_cache, _CACHE_TTL = _init_cache()
 
 
 def _get_cached(key: str):

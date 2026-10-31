@@ -6,6 +6,8 @@ import pytest
 from unittest.mock import patch
 import tempfile
 from pathlib import Path
+from contextlib import contextmanager
+from types import SimpleNamespace
 
 class TestOfflineMapService:
     """测试 OfflineMapService 类"""
@@ -181,33 +183,45 @@ class TestCoverageRobustness:
     @pytest.mark.asyncio
     async def test_get_coverage_survives_stat_failure(self):
         """扫描中某瓦片 stat() 抛 OSError（并发删除/占用）应跳过而非中断。"""
-        from app.services.offline_map_service import OfflineMapService
+        from app.services import offline_map_service as oms
+
+        class _Entry:
+            """最小 DirEntry 替身：_iter_png_entries 只用到 name/is_file/stat。"""
+
+            def __init__(self, name, size=0, error=None):
+                self.name = name
+                self._size = size
+                self._error = error
+
+            def is_file(self):
+                return True
+
+            def stat(self):
+                if self._error is not None:
+                    raise self._error
+                return SimpleNamespace(st_size=self._size)
+
+        # 坏瓦片排在最前：若 stat 失败会中断整次枚举，后面的好瓦片就统计不到
+        entries = [
+            _Entry("9.png", error=OSError("vanished")),
+            _Entry("1.png", size=3),
+            _Entry("readme.txt", size=1),
+        ]
+
+        @contextmanager
+        def fake_scandir(_path):
+            yield iter(entries)
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            service = OfflineMapService(cache_dir=Path(tmpdir))
+            service = oms.OfflineMapService(cache_dir=Path(tmpdir))
             (Path(tmpdir) / "10" / "1").mkdir(parents=True)
-            bad = Path(tmpdir) / "10" / "1" / "9.png"
-            bad.write_bytes(b"tile")
-
-            # 同时放一个好瓦片与一个非 png 文件：
-            # 坏瓦片被跳过、非 png 被跳过、好瓦片仍被统计
-            (Path(tmpdir) / "10" / "1" / "1.png").write_bytes(b"ok")
-            (Path(tmpdir) / "10" / "1" / "readme.txt").write_bytes(b"x")
-
-            real_stat = Path.stat
-
-            def flaky_stat(self, *a, **kw):
-                # 只让目标瓦片的 stat 失败；目录枚举（is_dir/iterdir 内部也走 stat）
-                # 与好瓦片不受影响
-                if self.name == "9.png":
-                    raise OSError("vanished")
-                return real_stat(self, *a, **kw)
-
-            with patch.object(Path, "stat", flaky_stat):
+            # d55598f1 起扫描走 os.scandir（复用目录枚举元数据），单条 stat 失败
+            # 只能在 _scandir 注入；patch Path.stat 已拦不到真实调用点
+            with patch.object(oms, "_scandir", fake_scandir):
                 result = await service.get_coverage()
 
-            # 坏瓦片被跳过（不中断统计），好瓦片仍计入
-            assert result["total_tiles"] == 1
-            assert result["zoom_levels"] == [10]
+        assert result["total_tiles"] == 1  # 坏瓦片与非 png 都被跳过，只剩 1.png
+        assert result["zoom_levels"] == [10]
 
 class TestGlobalInstance:
     """测试全局实例"""
