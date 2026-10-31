@@ -21,7 +21,7 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -268,7 +268,9 @@ class BackupService:
         """解析当前会话实际绑定的 SQLite 文件路径；无法解析时走路径工具兜底。"""
         try:
             bind = self.db.get_bind()
-            url = str(bind.url)
+            # get_bind() 静态类型是 Engine | Connection；Connection 没有 .url，
+            # 取它的 .engine.url（Engine 自身有 .url，取值口径与改前完全一致）。
+            url = str(getattr(bind, "url", None) or getattr(getattr(bind, "engine", None), "url", ""))
         except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
             logger.warning('_resolve_database_path 兜底失败（已降级）: %s', exc, exc_info=True)
             url = ""
@@ -629,7 +631,7 @@ class BackupService:
         safe_commit(self.db)
 
         return BackupRecord(
-            backup_id=config.id,
+            backup_id=cast(int, config.id),
             file_name=backup_file_name,
             file_path=backup_file_path,
             file_size=file_size,
@@ -769,12 +771,15 @@ class BackupService:
             self.db.close()
         except Exception:  # pragma: no cover - 会话已关闭/为 Mock 时忽略
             logger.debug("恢复前关闭服务会话失败", exc_info=True)
+        # 静态收窄：释放失败时下方不再走互斥写，coordinator 保持 None；
+        # 导入本身失败时也必须保持 None（不能是未绑定变量）。
+        coordinator: Any = None
         try:
-            from app.core.database import engine, db_coordinator
+            from app.core.database import engine, db_coordinator as _db_coordinator
             engine.dispose()
+            coordinator = _db_coordinator
         except Exception as _dispose_err:
             logger.warning("释放连接池失败（不影响恢复）: %s", _dispose_err)
-            db_coordinator = None
         try:
             # 删除残留的 WAL/SHM 文件，避免旧日志污染恢复后的数据库
             for suffix in ("-wal", "-shm"):
@@ -786,7 +791,7 @@ class BackupService:
                         logger.warning("残留 %s 文件清理失败: %s", suffix, stale_path)
             # R10-F1：覆盖复制带 3 次退避重试——Windows 上目标文件可能被
             # 杀软/资源管理器/在途请求短暂占用，瞬态占用不该让恢复整体失败
-            _copy_database_with_retry(backup_db_path, self.database_path, db_coordinator)
+            _copy_database_with_retry(backup_db_path, self.database_path, coordinator)
         finally:
             # copy 后再次 dispose: 清理恢复窗口期间新建的池连接,
             # 使后续请求重新打开已替换的数据库文件
@@ -962,10 +967,10 @@ class BackupService:
         只写指纹（16 位十六进制），不写任何密钥材料；审计失败不得影响恢复语义。
         """
         try:
-            from app.utils.audit_logger import AuditLevel, AuditLogger
+            from app.utils.audit_logger import AuditAction, AuditLevel, AuditLogger
 
             AuditLogger.log(
-                action="system_restore_key_mismatch",
+                action=AuditAction.SYSTEM_RESTORE_KEY_MISMATCH,
                 username=operator,
                 resource_type="backup",
                 resource_id=filename,
@@ -1230,9 +1235,10 @@ class BackupService:
             return False
 
         # 删除备份文件
-        if os.path.exists(config.value):
+        backup_file = cast(str, config.value)
+        if os.path.exists(backup_file):
             try:
-                os.unlink(config.value)
+                os.unlink(backup_file)
             except FileNotFoundError:
                 pass
 
@@ -1303,7 +1309,7 @@ class BackupService:
                     rec_time = datetime.fromisoformat(rec_time)
                 except ValueError:
                     continue
-            if rec_time is not None and as_utc(rec_time) < cutoff:
+            if rec_time is not None and cast(datetime, as_utc(rec_time)) < cutoff:
                 if rec.value and os.path.exists(rec.value):
                     try:
                         os.unlink(rec.value)
@@ -1742,12 +1748,12 @@ def get_backup_service(db: Session = None) -> "BackupService":
     # db=None 时才使用全局缓存（仅限只读场景，如 download/preview）
     global _backup_service_no_db
     if _backup_service_no_db is None:
-        _backup_service_no_db = BackupService(None)
+        _backup_service_no_db = BackupService(cast(Any, None))
     return _backup_service_no_db
 
 
 # 全局无 db 缓存实例（仅供只读路由使用，延迟初始化）
-_backup_service_no_db = None
+_backup_service_no_db: Optional[BackupService] = None
 
 # 使用 get_backup_service() 获取服务实例（延迟初始化）
 # 不要在这里直接实例化，以避免模块导入时的副作用

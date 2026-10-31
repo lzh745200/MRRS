@@ -15,7 +15,7 @@ import json
 import logging
 from app.utils.time_utils import utcnow
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,9 @@ class AuditAction(str, Enum):
     BACKUP = "backup"
     RESTORE = "restore"
     CONFIG_CHANGE = "config_change"
+    # 备份恢复时密钥指纹不一致（拒绝与强制都留痕）：历史上以裸字符串直传，
+    # 值必须与历史落库字符串逐字一致。
+    SYSTEM_RESTORE_KEY_MISMATCH = "system_restore_key_mismatch"
 
     # 权限操作
     # 介质数据包（P2）：导入/导出台账动作
@@ -115,7 +118,8 @@ class AuditLogger:
         user_id: Optional[int] = None,
         username: Optional[str] = None,
         resource_type: Optional[str] = None,
-        resource_id: Optional[int] = None,
+        # resource_id 列是 String(100)：整数主键与文件名都会写入（落库前统一 str()）。
+        resource_id: Optional[Union[int, str]] = None,
         details: Optional[Dict[str, Any]] = None,
         level: AuditLevel = AuditLevel.INFO,
         ip_address: Optional[str] = None,
@@ -260,7 +264,7 @@ class AuditLogger:
         user_id: int,
         username: str,
         resource_type: str,
-        resource_id: Optional[int] = None,
+        resource_id: Optional[Union[int, str]] = None,
         old_data: Optional[Dict[str, Any]] = None,
         new_data: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,

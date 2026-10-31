@@ -9,7 +9,7 @@ Requirements: 3.1, 3.2, 3.4 - Multi-level approval workflow
 
 import logging
 from datetime import datetime, time, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
@@ -54,7 +54,7 @@ class ApprovalWorkflowService:
             True 回写成功（或无处理器）；False 失败 —— 调用方应将任务标记为
             ``{final_status}_apply_failed`` 以便查询与重试，而非静默吞掉。
         """
-        handler = self._ENTITY_APPLY_HANDLERS.get(task.entity_type)
+        handler = self._ENTITY_APPLY_HANDLERS.get(cast(str, task.entity_type))
         if not handler:
             return True
         try:
@@ -511,11 +511,12 @@ class ApprovalWorkflowService:
                 return None
 
         # 当前级别（审批记录按操作发生时的级别落库）
-        record_level = task.current_level
+        record_level = cast(int, task.current_level)
 
         # 检查是否有下一级
-        workflow_nodes = sorted(task.workflow.nodes, key=lambda n: n.level)
-        next_level = task.current_level + 1
+        workflow: Any = task.workflow  # 关系属性静态类型为 Mapped[Any]，取节点前先落地
+        workflow_nodes = sorted(workflow.nodes, key=lambda n: n.level)
+        next_level = record_level + 1
 
         if next_level <= len(workflow_nodes):
             next_node = workflow_nodes[next_level - 1]
@@ -546,7 +547,7 @@ class ApprovalWorkflowService:
                 ApprovalTask.status == ApprovalStatus.PENDING.value,
                 ApprovalTask.current_level == record_level,
             )
-            .update(claim_values, synchronize_session=False)
+            .update(cast(Any, claim_values), synchronize_session=False)
         )
         if claimed != 1:
             return None
@@ -595,7 +596,7 @@ class ApprovalWorkflowService:
 
         # M30：同 approve_task —— 原子抢占（status + current_level 双条件，
         # rowcount != 1 视为已被并发/重放请求处理）。
-        record_level = task.current_level
+        record_level = cast(int, task.current_level)
         claimed = (
             self.db.query(ApprovalTask)
             .filter(
@@ -695,7 +696,8 @@ class ApprovalWorkflowService:
             task.change_data = change_data
 
         # 重置到第一级审批人
-        workflow_nodes = sorted(task.workflow.nodes, key=lambda n: n.level)
+        workflow: Any = task.workflow  # 关系属性静态类型为 Mapped[Any]，取节点前先落地
+        workflow_nodes = sorted(workflow.nodes, key=lambda n: n.level)
         if workflow_nodes:
             first_node = workflow_nodes[0]
             approver_id = first_node.approver_id
@@ -762,10 +764,11 @@ class ApprovalWorkflowService:
         if not task:
             return None
 
-        workflow_nodes = sorted(task.workflow.nodes, key=lambda n: n.level)
+        workflow: Any = task.workflow  # 关系属性静态类型为 Mapped[Any]，取节点前先落地
+        workflow_nodes = sorted(workflow.nodes, key=lambda n: n.level)
         for _node in workflow_nodes:
             task = self.approve_task(
-                task_id=task.id,
+                task_id=cast(int, task.id),
                 approver_id=submitter_id,
                 opinion="系统自动审批（单机模式）",
                 standalone=True,
@@ -851,7 +854,7 @@ class ApprovalWorkflowService:
         failed = 0
         for task in pending:
             try:
-                result = self.approve_task(task.id, approver_id, "自动批量审批", standalone=True)
+                result = self.approve_task(cast(int, task.id), approver_id, "自动批量审批", standalone=True)
                 if result and result.status == ApprovalStatus.APPROVED.value:
                     approved += 1
                 else:
@@ -955,11 +958,14 @@ def submit_entity_change_approval(
     失败仅记录日志，不阻断业务操作。返回审批任务 ID（未创建时返回 None）。
     """
     try:
+        # submitter_id 在公开签名上是 Optional（历史调用方可能没有登录主体），
+        # 服务内部要求 int；cast 不改变运行期取值，None 仍按原路径由 except 兜底。
+        effective_submitter_id = cast(int, submitter_id)
         service = ApprovalWorkflowService(db)
         task = service.submit_approval(
             entity_type=entity_type,
             entity_id=entity_id,
-            submitter_id=submitter_id,
+            submitter_id=effective_submitter_id,
             change_data=change_data,
             original_data=original_data,
             title=title,
@@ -969,7 +975,7 @@ def submit_entity_change_approval(
             task = service.submit_approval(
                 entity_type=entity_type,
                 entity_id=entity_id,
-                submitter_id=submitter_id,
+                submitter_id=effective_submitter_id,
                 change_data=change_data,
                 original_data=original_data,
                 title=title,

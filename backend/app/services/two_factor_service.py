@@ -9,7 +9,7 @@ import secrets
 from base64 import b64encode
 from datetime import timezone, datetime
 from io import BytesIO
-from typing import List
+from typing import Any, List, cast
 
 import pyotp
 from sqlalchemy.exc import IntegrityError
@@ -176,12 +176,14 @@ class TwoFactorService:
         encrypted_secret = encrypt_field(secret)
 
         # 落库的只有摘要；明文恢复码仅随本次响应返回给用户
+        # 备用码列是 MutableList(JSON)，静态类型退化为 Mapped[Any]；下方 cast 只影响
+        # 静态检查，赋值走的仍是同一 ORM 属性（变更事件照常触发）。
         hashed_backup_codes = [TwoFactorService._hash_backup_code(code) for code in backup_codes]
 
         # 创建或更新记录
         if existing:
             existing.secret_key = encrypted_secret
-            existing.backup_codes = hashed_backup_codes
+            existing.backup_codes = cast(Any, hashed_backup_codes)
             existing.enabled = False  # 需要验证后才启用
             existing.verified_at = None
             two_factor = existing
@@ -189,7 +191,7 @@ class TwoFactorService:
             two_factor = TwoFactorAuth(
                 user_id=user.id,
                 secret_key=encrypted_secret,
-                backup_codes=hashed_backup_codes,
+                backup_codes=cast(Any, hashed_backup_codes),
                 enabled=False,
             )
             db.add(two_factor)
@@ -210,7 +212,7 @@ class TwoFactorService:
             if existing is None:
                 raise
             existing.secret_key = encrypted_secret
-            existing.backup_codes = hashed_backup_codes
+            existing.backup_codes = cast(Any, hashed_backup_codes)
             existing.enabled = False
             existing.verified_at = None
             two_factor = existing
@@ -219,7 +221,7 @@ class TwoFactorService:
         db.refresh(two_factor)
 
         # 生成二维码
-        qr_code = TwoFactorService.generate_qr_code(secret, user.email)
+        qr_code = TwoFactorService.generate_qr_code(secret, cast(str, user.email))
 
         return {"secret": secret, "qr_code": qr_code, "backup_codes": backup_codes}
 
@@ -241,7 +243,7 @@ class TwoFactorService:
             raise ValueError("未找到双因素认证配置")
 
         # 解密密钥
-        secret = decrypt_field(two_factor.secret_key)
+        secret = decrypt_field(cast(str, two_factor.secret_key))
 
         # 验证令牌
         if TwoFactorService.verify_totp(secret, token):
@@ -276,12 +278,12 @@ class TwoFactorService:
             return False
 
         # 先尝试TOTP验证
-        secret = decrypt_field(two_factor.secret_key)
+        secret = decrypt_field(cast(str, two_factor.secret_key))
         if TwoFactorService.verify_totp(secret, token):
             return True
 
         # 尝试备用码验证（使用后移除；顺带把历史明文码升级为摘要存储）
-        stored_codes = list(two_factor.backup_codes or [])
+        stored_codes: List[str] = list(cast(Any, two_factor.backup_codes) or [])
         matched_index = None
         for index, stored in enumerate(stored_codes):
             if TwoFactorService._verify_backup_code(token, stored):
@@ -299,7 +301,7 @@ class TwoFactorService:
         ]
         if has_legacy_plaintext:
             logger.info("用户 %s 的历史明文备用码已升级为摘要存储", user.username)
-        two_factor.backup_codes = migrated
+        two_factor.backup_codes = cast(Any, migrated)
         safe_commit(db)
         logger.info(f"用户 {user.username} 使用备用码登录")
         return True

@@ -83,6 +83,19 @@
   大屏模块同时 `from sqlalchemy import cast`，`typing.cast` 与 SQL 的 `cast()` 同名，统一以 `type_cast` 别名引入，
   避免把类型收窄写成 SQL 表达式；上报服务把目标组织主键与来源组织编码各收窄一次局部变量
   （`target_org_id` / `cast(str, source_org.code)`），状态机校验与通知接收方主键显式 `cast`。运行期行为零变化。
+- `backend/app/services/{backup_service,two_factor_service,approval_workflow_service}.py` 类型收敛（mypy **30 → 0**）：
+  备份服务的数据库地址解析改 `getattr(bind, "url", None) or getattr(getattr(bind, "engine", None), "url", "")`
+  —— `Session.get_bind()` 静态类型是 `Engine | Connection`，而 `Connection` 没有 `.url`（只有 `Engine` 有）；
+  恢复流程的协调器改为显式 `Any`，在 `engine.dispose()` 后从 `app.core.database` 取真实 `db_coordinator`
+  （dispose 或导入失败时仍留 `None`，与改前语义一致）；删除备份的文件路径、清理时间戳、无会话单例一并收窄。
+  双因子服务的备用码列是 `MutableList.as_mutable(JSON)`，静态退化为 `Mapped[Any]`，4 处写入统一 `cast(Any, ...)`
+  （只影响静态检查，ORM 变更事件照常触发）；审批工作流的 `task.workflow` 关系静态类型同样是 `Mapped[Any]`，
+  三处取节点前先落地为局部变量，层级、任务主键与批量认领值显式 `cast`；`submit_entity_change_approval` 的公开签名
+  仍保留 `submitter_id: Optional[int]`（历史调用方可能没有登录主体），内部 `cast(int, ...)` 不改变运行期取值。
+- `backend/app/utils/audit_logger.py` 补齐 `AuditAction.SYSTEM_RESTORE_KEY_MISMATCH`（备份恢复密钥不一致历史裸字符串直传，
+  落库值逐字不变），`resource_id` 放宽为 `Optional[Union[int, str]]` —— `audit_logs.resource_id` 实为 `String(100)`，
+  `log()` 内部本就 `str()` 落库。全量 `mypy app` **340 → 306 条 / 101 → 97 个文件**。
+  回归：审批 183 项 + 备份 240 项 + 双因子/审计日志 107 项全部通过，flake8 rc=0。
 
 ### 验证
 
