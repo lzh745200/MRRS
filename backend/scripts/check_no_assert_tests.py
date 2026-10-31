@@ -17,7 +17,10 @@ W26 全栈检测发现 `tests/test_approval_idempotency.py` 的 **10 个测试�
 2. 调用了 mock 断言（`assert_called*` 等以 `assert` 开头的属性/函数）；
 3. 使用了 `pytest.raises` / `warns` / `deprecated_call` / `fail`（含 with 形式）；
 4. 显式标记豁免：函数上带 `@pytest.mark.no_assert`（用于"仅验证不抛异常"的
-   合理 smoke 用例，必须写明理由）。
+   合理 smoke 用例，必须写明理由）；
+5. 把断言委托给**同文件**的断言助手（如 `_assert_403(fn, user)`）——
+   助手自身带断言时视为覆盖（最多递归 3 层，防环；
+   只认同文件，跨文件助手不可见、宁可报错）。
 
 ## 棘轮
 
@@ -57,7 +60,38 @@ def _call_name(node: ast.Call) -> str:
     return ""
 
 
-def _has_assertion(fn: ast.AST) -> bool:
+def _collect_helpers(tree: ast.AST) -> dict[str, ast.AST]:
+    """收集同一测试文件里**非 test 开头**的函数 / 方法（含类方法与嵌套定义）。
+
+    断言常常委托给本文件的断言助手（如 `_assert_403(…)`）；只看被测函数体里的
+    字面 `assert` 会把这类用例误判成“零断言测试”。同名时保留先出现的（模块级优先）。
+    """
+    helpers: dict[str, ast.AST] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # 只认**断言助手**（命名约定 assert*/_assert*）：任意同文件帮手都放行
+            # 会让“调用一个恰好含断言的准备帮手”的空壳测试蒙混过关（实测
+            # test_r16_coverage_gaps.py::test_failed_path_skips_when_task_deleted 就是这种形态）
+            if node.name.startswith("test"):
+                continue
+            if node.name.startswith("assert") or node.name.startswith("_assert"):
+                helpers.setdefault(node.name, node)
+    return helpers
+
+
+def _has_assertion(
+    fn: ast.AST,
+    helpers: dict[str, ast.AST] | None = None,
+    _seen: set[str] | None = None,
+    _depth: int = 0,
+) -> bool:
+    """是否有断言：字面 `assert` / mock 断言族 / `pytest.raises` 上下文，
+    或调用了**同文件**自身带断言的助手（最多递归 3 层，防止循环引用）。
+    """
+    helpers = helpers or {}
+    seen = _seen if _seen is not None else set()
+    if _depth > 3:
+        return False
     for n in ast.walk(fn):
         if isinstance(n, ast.Assert):
             return True
@@ -66,6 +100,11 @@ def _has_assertion(fn: ast.AST) -> bool:
             # mock 断言族：assert_called / assert_called_once_with / assert_not_called ...
             if name.startswith("assert") or name in ASSERTION_CALLS:
                 return True
+            helper = helpers.get(name)
+            if helper is not None and name not in seen:
+                seen.add(name)
+                if _has_assertion(helper, helpers, seen, _depth + 1):
+                    return True
         if isinstance(n, (ast.With, ast.AsyncWith)):
             for item in n.items:
                 ctx = item.context_expr
@@ -95,14 +134,14 @@ def collect_violations() -> list[str]:
     found: list[str] = []
     unparsable: list[str] = []
 
-    def _walk(body, prefix: str) -> None:
+    def _walk(body, prefix: str, helpers: dict[str, ast.AST]) -> None:
         for node in body:
             if isinstance(node, ast.ClassDef):
-                _walk(node.body, f"{prefix}{node.name}::")
+                _walk(node.body, f"{prefix}{node.name}::", helpers)
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if not node.name.startswith("test"):
                     continue
-                if _has_assertion(node) or _is_exempt(node):
+                if _has_assertion(node, helpers) or _is_exempt(node):
                     continue
                 found.append(f"{prefix}{node.name}")
 
@@ -119,7 +158,7 @@ def collect_violations() -> list[str]:
             # 必须当作硬失败上报，否则"加个 BOM 就绕过门禁"。
             unparsable.append(f"{rel}  ({type(exc).__name__}: {exc})")
             continue
-        _walk(tree.body, f"{rel}::")
+        _walk(tree.body, f"{rel}::", _collect_helpers(tree))
 
     if unparsable:
         raise RuntimeError(

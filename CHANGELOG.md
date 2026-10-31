@@ -223,6 +223,13 @@
     （改 patch `is_superuser`）；`test_message_service.py` 的聚合 MagicMock 行补 `_mapping`。
   - 定向回归：评估 / 零信任 / 数据分级 / 数据同步 / 数据上报 / 校验 / 乡村工作 / 系统监控与更新日志 / 消息 / 通知 /
     NLP / 导出 **45 个用例文件 1,059 项通过**；`flake8 --max-line-length=120 --max-complexity=16` 对 24 个改动源文件 rc=0。
+- **零断言测试门禁识别「断言助手委托」**：`scripts/check_no_assert_tests.py`
+  原先只认测试函数体内的字面 `assert`，把 `_assert_403(require_superuser, None)` 这类「断言写在同文件助手」
+  的用例误判成零断言测试（并发在途的 `tests/unit/test_superuser_only_sec2.py` 18 个用例因此被全量误报）。
+  现按命名约定（`assert*` / `_assert*`）追认同文件助手，递归最多 3 层并带 `_seen` 防环；
+  **普通准备助手即使内部含 `assert` 也不放行** —— 实测 `test_r16_coverage_gaps.py::test_failed_path_skips_when_task_deleted`
+  正是「调用一个恰好含断言的准备函数」的空壳形态，仍被正确标记。新增 4 项门禁自测
+  （助手命中 / 助手无断言 / 非 assert 命名助手 / 互递归不死循环）。
 
 
 

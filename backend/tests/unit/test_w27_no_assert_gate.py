@@ -14,7 +14,10 @@
 2. 门禁**能失败**：新增零断言测试 → NEW>0 → 退出码 1；
 3. 三类断言都算覆盖：`assert` 语句、mock 的 `assert_*`、`pytest.raises`（含 with 形式）；
 4. `@pytest.mark.no_assert` 是唯一的显式豁免通道；
-5. 门禁确实**接进了 CI**。
+5. 门禁确实**接进了 CI**；
+6. 断言委托给**同文件的断言助手**（命名 `assert*` / `_assert*`）也算覆盖，
+   但普通准备帮手即使内部恰好有 `assert` 也**不算**——否则“调用一个会断言的
+   准备函数”就能把空壳测试洗白（已实测过这种形态）。
 """
 
 import contextlib
@@ -194,6 +197,73 @@ class TestGateCannotBeBypassed:
             encoding="utf-8",
         )
         assert gate.collect_violations() == ["tests/test_ok.py::test_b"]
+
+
+class TestAssertionHelperDelegation:
+    """断言委托给同文件断言助手（如 `_assert_403(fn, user)`）应算覆盖；
+    但只认**命名约定** `assert*` / `_assert*` 的助手，避免把“调用一个恰好含断言的
+    准备帮手”的空壳测试洗白（实测 test_r16_coverage_gaps.py::test_failed_path_skips_when_task_deleted
+    就属于这种形态）。
+    """
+
+    @staticmethod
+    def _sandbox(tmp_path, monkeypatch, gate):
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        monkeypatch.setattr(gate, "TESTS_DIR", tests_dir)
+        monkeypatch.setattr(gate, "BACKEND_ROOT", tmp_path)
+        return tests_dir
+
+    def test_same_file_assert_helper_covers_delegation(self, gate, tmp_path, monkeypatch):
+        tests_dir = self._sandbox(tmp_path, monkeypatch, gate)
+        (tests_dir / "test_helper.py").write_text(
+            "import pytest\n"
+            "from fastapi import HTTPException\n"
+            "def _assert_403(fn, user):\n"
+            "    with pytest.raises(HTTPException) as exc:\n"
+            "        fn(user)\n"
+            "    assert exc.value.status_code == 403\n"
+            "def test_guarded():\n"
+            "    _assert_403(lambda u: None, None)\n",
+            encoding="utf-8",
+        )
+        assert gate.collect_violations() == []
+
+    def test_helper_without_assert_still_flagged(self, gate, tmp_path, monkeypatch):
+        tests_dir = self._sandbox(tmp_path, monkeypatch, gate)
+        (tests_dir / "test_helper.py").write_text(
+            "def _assert_403(fn, user):\n"
+            "    fn(user)\n"
+            "def test_guarded():\n"
+            "    _assert_403(lambda u: None, None)\n",
+            encoding="utf-8",
+        )
+        assert gate.collect_violations() == ["tests/test_helper.py::test_guarded"]
+
+    def test_non_assert_named_helper_does_not_cover(self, gate, tmp_path, monkeypatch):
+        """准备帮手（非 assert 命名）内部已有断言也不算覆盖。"""
+        tests_dir = self._sandbox(tmp_path, monkeypatch, gate)
+        (tests_dir / "test_helper.py").write_text(
+            "def _run_cases(value):\n"
+            "    assert value == 1\n"
+            "def test_shell():\n"
+            "    _run_cases(1)\n",
+            encoding="utf-8",
+        )
+        assert gate.collect_violations() == ["tests/test_helper.py::test_shell"]
+
+    def test_helper_cycle_does_not_hang(self, gate, tmp_path, monkeypatch):
+        tests_dir = self._sandbox(tmp_path, monkeypatch, gate)
+        (tests_dir / "test_helper.py").write_text(
+            "def _assert_a(fn):\n"
+            "    _assert_b(fn)\n"
+            "def _assert_b(fn):\n"
+            "    _assert_a(fn)\n"
+            "def test_cycle():\n"
+            "    _assert_a(None)\n",
+            encoding="utf-8",
+        )
+        assert gate.collect_violations() == ["tests/test_helper.py::test_cycle"]
 
 
 class TestGateWiredIntoCi:
