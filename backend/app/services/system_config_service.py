@@ -3,7 +3,7 @@
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -211,7 +211,7 @@ class SystemConfigService:
         if self.db is None:
             return {k: v["value"] for k, v in self.DEFAULT_CONFIGS.items()}
         configs = self.db.query(SystemConfig).all()
-        return {config.key: config.value for config in configs}
+        return {cast(str, config.key): cast(str, config.value) for config in configs}
 
     def initialize_defaults(self):
         """初始化默认配置"""
@@ -305,6 +305,8 @@ class SystemConfigService:
 
     def _set_no_commit(self, key: str, value: Any, description: str = None) -> None:
         """set() 的无提交变体（批量导入用，事务由调用方统一提交）。"""
+        # 静态收窄：set()/set_many() 调用方保证会话存在（同 rbac_service 手法）
+        db = cast(Session, self.db)
         if isinstance(value, bool):
             value = "true" if value else "false"
         elif isinstance(value, (dict, list)):
@@ -312,7 +314,7 @@ class SystemConfigService:
         else:
             value = str(value)
 
-        config = self.db.query(SystemConfig).filter(SystemConfig.key == key).first()
+        config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
 
         if config:
             config.value = value
@@ -324,4 +326,4 @@ class SystemConfigService:
                 value=value,
                 description=description or self.DEFAULT_CONFIGS.get(key, {}).get("description", ""),
             )
-            self.db.add(config)
+            db.add(config)

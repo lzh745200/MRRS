@@ -286,7 +286,7 @@ async def _import_entities(
         # 实际写入了数据（会话关闭无法撤销已提交事务）。
         from app.core.database import SessionLocal
         dry_db = SessionLocal()
-        dry_db.commit = lambda: None  # 屏蔽会话内一切提交（含 safe_commit）
+        setattr(dry_db, "commit", lambda: None)  # 屏蔽会话内一切提交（含 safe_commit）
         try:
             dry_importer = ExcelImporterService(dry_db, current_user=current_user)
             # import_data 是同步实现（只接受 file_content/file_name/file_size），
@@ -329,6 +329,7 @@ async def _import_entities(
 
 def _resolve_validator(entity_type: str):
     """根据实体类型选择验证器和解析配置"""
+    validator: Any
     if entity_type == "supported_village":
         validator = DataValidatorService()
         header_parser = validator.parse_excel_headers
@@ -500,6 +501,7 @@ def _setup_preview_entity(entity_type: str, db: Session, rows=None):
             status_code=400,
             detail=f"不支持的实体类型: {entity_type}，支持 {', '.join(VALID_ENTITY_TYPES)}",
         )
+    validator: Any
     if entity_type == "supported_village":
         validator = DataValidatorService()
         duplicate_field = "village_name"

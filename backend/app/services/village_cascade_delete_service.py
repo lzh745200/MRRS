@@ -4,6 +4,8 @@
 """
 
 import logging
+from typing import Any, cast
+
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, ProgrammingError
@@ -88,7 +90,7 @@ class VillageCascadeDeleteService:
                         text(f"DELETE FROM {table_name} WHERE {column_name} = :village_id"),  # nosec B608 - 常量表名
                         {"village_id": village_id},
                     )
-                    deleted_count = result.rowcount
+                    deleted_count = cast(Any, result).rowcount
                     if deleted_count > 0:
                         delete_stats[table_name] = deleted_count
                         total_deleted += deleted_count
@@ -109,7 +111,7 @@ class VillageCascadeDeleteService:
                 text("DELETE FROM supported_villages WHERE id = :village_id"),
                 {"village_id": village_id},
             )
-            village_deleted = result.rowcount
+            village_deleted = cast(Any, result).rowcount
 
             if village_deleted == 0:
                 logger.warning(f"村庄 ID={village_id} 不存在")
@@ -152,7 +154,7 @@ class VillageCascadeDeleteService:
                     text(f"SELECT COUNT(*) FROM {table_name} WHERE {column_name} = :village_id"),  # nosec B608 - 常量表名
                     {"village_id": village_id},
                 )
-                count = result.scalar()
+                count = cast(int, result.scalar())
                 if count > 0:
                     reference_stats[table_name] = count
                     total_refs += count

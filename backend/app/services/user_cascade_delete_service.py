@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -120,7 +120,7 @@ class UserCascadeDeleteService:
                                  f"WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                             {"uid": user_id},
                         )
-                        set_null_records += result.rowcount or 0
+                        set_null_records += cast(Any, result).rowcount or 0
                     except Exception:
                         db.rollback()
                         logger.error(
@@ -132,14 +132,14 @@ class UserCascadeDeleteService:
                         text(f"DELETE FROM {tbl_ident} WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                         {"uid": user_id},
                     )
-                    deleted_records += result.rowcount or 0
+                    deleted_records += cast(Any, result).rowcount or 0
                 elif col_nullable:
                     result = db.execute(
                         text(f"UPDATE {tbl_ident} SET {col_ident} = NULL "
                              f"WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                         {"uid": user_id},
                     )
-                    set_null_records += result.rowcount or 0
+                    set_null_records += cast(Any, result).rowcount or 0
                 else:
                     # 非空列无法置空（SET NULL + NOT NULL 矛盾），
                     # 删除引用记录以解除外键约束。
@@ -147,7 +147,7 @@ class UserCascadeDeleteService:
                         text(f"DELETE FROM {tbl_ident} WHERE {col_ident} = :uid"),  # nosec B608 - _safe_ident 已校验
                         {"uid": user_id},
                     )
-                    deleted_records += result.rowcount or 0
+                    deleted_records += cast(Any, result).rowcount or 0
 
         db.delete(user)
         safe_commit(db)

@@ -131,6 +131,28 @@
   回归：指标/仪表盘/零信任/告警/错误处理/校验引擎 **21 个用例文件 327 项通过**，
   `flake8 --max-line-length=120 --max-complexity=16` rc=0；全量 `mypy app` **242 → 215 条 / 85 → 79 个文件**。
 
+- 类型收敛（第十一批，纯静态、运行期零变化）：`backend/app/services/village_cascade_delete_service.py`、
+  `backend/app/services/user_cascade_delete_service.py`、`backend/app/services/system_config_service.py`、
+  `backend/app/services/message_template_service.py`、`backend/app/services/offline_map_service.py`、
+  `backend/app/services/organization_permission_service.py`、`backend/app/api/v1/map.py`、
+  `backend/app/api/v1/organization.py`、`backend/app/api/v1/report_templates.py`、
+  `backend/app/api/v1/import_export/import_data.py` 共 40 处注解收窄（各文件 mypy 归零）：SQLAlchemy 的
+  `Result.rowcount`（静态类型 `Result[Any]` 无该属性）与 `scalar()` 返回值一律显式 `cast`；
+  `system_config_service._set_no_commit` 用 `db = cast(Session, self.db)` 收窄会话（与 `rbac_service` 同法，
+  **不加`if None` 守卫**，避免新增未覆盖分支撞 100% 语句+分支覆盖率门禁）；`render_template` 返回注解改
+  `Optional[Dict[str, Optional[str]]]`（`email_subject` / `email_body` 本就允许 `None`）；
+  `_merge_bounds` 第 2 参放宽为 `Sequence[float]`（tuple 与 list 都收）；`_village_prepare_import` 返回注解
+  由 `Tuple[int, set, dict]` 改 `Tuple[int, set]`（运行期一直只返回 2 元组，调用点早已按 2 元组解包）；
+  `dict(db.query(...).all())` 改字典推导式；`import_data.py` 的 `dry_db.commit = lambda: None` 改
+  `setattr(dry_db, "commit", lambda: None)`（实例属性遮蔽方法，语义完全相同）。
+  `backend/mypy.ini` 新增 `[mypy-aiofiles.*]` 段：全局 `ignore_missing_imports` **不覆盖** `import-untyped`，
+  须再显式 `disable_error_code = import-untyped`（`aiofiles` 无 stubs 也无 `py.typed`，两处 import 站点由此清零）。
+  审计枚举补齐：`audit_logger.AuditAction` 新增 `ORGANIZATION_DELETE = "organization_delete"`，
+  `organization.py` 的删除审计改走枚举（落库字符串逐字不变）。
+  回归：级联删除/系统配置/消息模板/离线地图/组织权限/组织服务与接口/地图接口/报表模板/Excel 导入
+  共 **23 个用例文件 702 项通过**，`flake8 --max-line-length=120 --max-complexity=16` rc=0；
+  全量 `mypy app` **215 → 175 条 / 79 → 69 个文件**。
+
 ### 验证
 
 - `verify_tiles.py` 支持 **MANIFEST 声明的稀疏层级**（`[5,6,7,8,13]` / `[5,6,7,8,14]`），

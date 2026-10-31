@@ -8,7 +8,7 @@
 
 import io
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
@@ -343,7 +343,7 @@ def _org_level_to_number(org: Organization) -> int:
 
 def _org_to_tree_node(org: Organization, org_dict: dict) -> dict:
     """将组织对象转为树节点字典"""
-    path = _build_org_path(org.id, org_dict)
+    path = _build_org_path(cast(int, org.id), org_dict)
     return {
         "id": str(org.id),
         "name": org.name,
@@ -399,7 +399,7 @@ async def get_organization_tree(
     response: Response = None,
 ):
     """获取组织树形结构"""
-    _set_no_cache_headers(response)
+    _set_no_cache_headers(cast(Response, response))
     try:
         query = db.query(Organization).filter(Organization.is_active == True)  # noqa: E712
         # 2026-10-14 数据范围收敛：普通用户只见本组织及子树；管理员/超管全量。
@@ -757,7 +757,7 @@ async def create_organization(
 
     # 编码即行政区划代码（6 位），是跨机匹配的唯一依据，必填
     try:
-        org_code = OrganizationCodeService.normalize_admin_code(data.code)
+        org_code = OrganizationCodeService.normalize_admin_code(cast(str, data.code))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -1009,10 +1009,10 @@ async def delete_organization(
         logger.debug("记录工作日志失败", exc_info=True)
     logger.info(f"删除成功: org_id={org_id}")
     # 批次 3（危险操作强制审计）：删除组织属高影响操作，必须留审计痕迹
-    from app.utils.audit_logger import AuditLogger
+    from app.utils.audit_logger import AuditAction, AuditLogger
 
     AuditLogger.log(
-        action="organization_delete",
+        action=AuditAction.ORGANIZATION_DELETE,
         user_id=current_user.id,
         username=getattr(current_user, "username", ""),
         resource_type="organization",

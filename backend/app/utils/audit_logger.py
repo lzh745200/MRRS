@@ -96,6 +96,10 @@ class AuditAction(str, Enum):
     VILLAGE_TRANSITION_CHANGE = "village_transition_change"
     VILLAGE_PURGE = "village_purge"
 
+    # 组织删除（危险操作强制审计）：历史上以裸字符串直传 AuditLogger.log，
+    # 值必须与历史落库字符串逐字一致。
+    ORGANIZATION_DELETE = "organization_delete"
+
 
 class AuditLevel(str, Enum):
     """审计级别"""

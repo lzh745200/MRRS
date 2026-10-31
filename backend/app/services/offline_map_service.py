@@ -35,7 +35,7 @@ import os
 import re
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, cast
 
 import aiofiles
 
@@ -101,7 +101,7 @@ def _tile_lonlat_bounds(z: int, x: int, y: int) -> Tuple[float, float, float, fl
 
 
 def _merge_bounds(
-    bounds: Optional[List[float]], tile_box: Tuple[float, float, float, float]
+    bounds: Optional[List[float]], tile_box: Sequence[float]
 ) -> List[float]:
     """把单瓦片包围盒并入累计覆盖范围（``None`` 表示尚未累计任何瓦片）。"""
     if bounds is None:
@@ -141,7 +141,7 @@ def _scan_x_dir(
             tile_y = int(name[:-4])
         except ValueError:
             continue
-        if not 0 <= tile_y < tile_scale:
+        if not 0 <= tile_y < cast(int, tile_scale):
             continue
         bounds = _merge_bounds(bounds, _tile_lonlat_bounds(zoom_level, tile_x, tile_y))
     return tiles, total_bytes, bounds
@@ -698,7 +698,7 @@ class OfflineMapService:
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"创建离线地图缓存目录失败: {e}")
-        self._map_data = {}
+        self._map_data: Dict[str, Any] = {}
         self._coverage_cache: Optional[Dict[str, Any]] = None
 
     def get_tile_path(self, z: int, x: int, y: int) -> Path:

@@ -12,7 +12,7 @@ import random
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Optional, Sequence, TypeGuard
+from typing import Any, Optional, Sequence, TypeGuard, cast
 
 from app.core.config import settings as _settings
 from app.utils.helpers import safe_json_loads
@@ -487,14 +487,14 @@ async def update_marker_coordinates(
         village = db.query(SupportedVillage).filter(SupportedVillage.id == marker_id).first()
         if not village:
             raise HTTPException(status_code=404, detail="帮扶村不存在")
-        village.latitude = coords.latitude
-        village.longitude = coords.longitude
+        village.latitude = cast(Any, coords.latitude)
+        village.longitude = cast(Any, coords.longitude)
     elif marker_type == "school":
         school = db.query(School).filter(School.id == marker_id).first()
         if not school:
             raise HTTPException(status_code=404, detail="学校不存在")
-        school.latitude = coords.latitude
-        school.longitude = coords.longitude
+        school.latitude = cast(Any, coords.latitude)
+        school.longitude = cast(Any, coords.longitude)
     else:
         raise HTTPException(status_code=400, detail="marker_type 必须为 'village' 或 'school'")
 

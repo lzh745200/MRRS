@@ -10,7 +10,7 @@ import logging
 import uuid
 from datetime import datetime, date as date_type
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from app.utils.helpers import safe_json_loads
 from app.core.async_utils import run_in_thread
@@ -493,7 +493,7 @@ async def download_template(
 
     wb = Workbook()
     ws = wb.active
-    ws.title = t.name[:31]  # Excel sheet name max 31 chars
+    ws.title = cast(str, t.name)[:31]  # Excel sheet name max 31 chars
 
     col_count = max(len(fields), 1)
     max_col = get_column_letter(col_count)
@@ -676,7 +676,7 @@ def _safe_datetime(val):
 
 def _village_prepare_import(
     db: Session, parsed_data: List[Dict[str, Any]], mode: str, current_user=None
-) -> Tuple[int, set, dict]:
+) -> Tuple[int, set]:
     """Prepare village import: handle overwrite, find existing names, preload village map.
 
     安全修复：覆盖模式下仅删除当前用户数据范围内的记录，而非全表删除。
@@ -1499,11 +1499,14 @@ def _template_export_rows(
         }
         village_ids.discard(None)
         if village_ids:
-            village_names = dict(
-                db.query(SupportedVillage.id, SupportedVillage.village_name)
-                .filter(SupportedVillage.id.in_(village_ids))
-                .all()
-            )
+            village_names = {
+                vid: name
+                for vid, name in (
+                    db.query(SupportedVillage.id, SupportedVillage.village_name)
+                    .filter(SupportedVillage.id.in_(village_ids))
+                    .all()
+                )
+            }
 
     headers = [f.get("excel_header") or f.get("db_field") or "" for f in fields]
     columns = [

@@ -11,7 +11,7 @@ Requirements: 7.1, 7.2, 7.3, 7.4, 7.5
 
 import re
 from datetime import timezone, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -319,7 +319,7 @@ class MessageTemplateService:
 
     def render_template(
         self, code: str, variables: Dict[str, Any], use_defaults: bool = True
-    ) -> Optional[Dict[str, str]]:
+    ) -> Optional[Dict[str, Optional[str]]]:
         """
         渲染模板
 
@@ -341,8 +341,8 @@ class MessageTemplateService:
         render_vars = self._prepare_variables(variables, use_defaults)
 
         return {
-            "title": self._render_string(template.title_template, render_vars),
-            "content": self._render_string(template.content_template, render_vars),
+            "title": self._render_string(cast(str, template.title_template), render_vars),
+            "content": self._render_string(cast(str, template.content_template), render_vars),
             "email_subject": (
                 self._render_string(template.email_subject_template, render_vars)
                 if template.email_subject_template

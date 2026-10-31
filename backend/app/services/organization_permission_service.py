@@ -6,7 +6,7 @@ Organization Permission Service
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Set
+from typing import Any, List, Optional, Set, cast
 
 from sqlalchemy.orm import Session
 
@@ -272,7 +272,7 @@ class OrganizationPermissionService:
             return is_admin(user)
 
         # 用户可以在自己组织或下级组织下创建子组织
-        accessible_orgs = self.get_accessible_organization_set(user_id or user.id)
+        accessible_orgs = self.get_accessible_organization_set(cast(int, user_id or user.id))
         return parent_org_id in accessible_orgs
 
     def get_data_scope_filter(self, user_id: int, org_id_column: Any) -> Any:
@@ -326,9 +326,11 @@ class OrganizationPermissionService:
             return []
 
         ancestors = self.org_service.get_ancestors(user_org_id)
-        return [org.id for org in ancestors]
+        return [cast(int, org.id) for org in ancestors]
 
-    def is_superior_of(self, user_id: int = None, user: User = None, target_org_id: int = None) -> bool:
+    def is_superior_of(
+        self, user_id: Optional[int] = None, user: Optional[User] = None, target_org_id: Optional[int] = None
+    ) -> bool:
         """
         检查用户是否是目标组织的上级
 
@@ -358,11 +360,11 @@ class OrganizationPermissionService:
             return is_admin(user)
 
         # 获取目标组织的所有上级
-        target_org = self.org_service.get_organization(target_org_id)
+        target_org = self.org_service.get_organization(cast(int, target_org_id))
         if not target_org:
             return False
 
-        ancestors = self.org_service.get_ancestors(target_org_id)
+        ancestors = self.org_service.get_ancestors(cast(int, target_org_id))
         ancestor_ids = [org.id for org in ancestors]
 
         return user_org_id in ancestor_ids
