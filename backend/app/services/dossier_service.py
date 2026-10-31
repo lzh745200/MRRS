@@ -184,8 +184,9 @@ def record_dossier_audit(
     current_user: Any, entity_type: str, entity_id: Any, entity_name: str
 ) -> None:
     """档案册生成留痕（导出审计）。"""
-    from app.models.audit import AuditAction
-    from app.utils.audit_logger import AuditLogger
+    # 必须用 audit_logger 里的 AuditAction：models.audit.AuditAction 是另一套枚举，
+    # AuditLogger.log 的 isinstance 判定不认它，落库 action 会退化成 "AuditAction.EXPORT"。
+    from app.utils.audit_logger import AuditAction, AuditLogger
 
     AuditLogger.log(
         action=AuditAction.EXPORT,

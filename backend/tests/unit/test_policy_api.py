@@ -930,8 +930,8 @@ class TestPolicyAPI:
 
 
 def test_accumulate_policy_stats_reads_real_row_mapping():
-    """回归：真实 SQLAlchemy Row 的 .count 是保留名（返回 tuple.count 提示访问器，不是列值），
-    必须从 _mapping 取列值；历史实现 int(stat.count) 在真库有政策时抛 TypeError 导致端点恒 500。
+    """回归：真实 SQLAlchemy Row 上按 _mapping 取聚合列（mypy 会把 Row.count 误判为
+    tuple.count 方法，运行期它其实是列值；下面同时断言两种访问相等以固定该认知）。
     """
     from sqlalchemy import create_engine, text
 
@@ -945,6 +945,7 @@ def test_accumulate_policy_stats_reads_real_row_mapping():
                 " UNION ALL SELECT 'local', 'provincial', 2"
             )
         ).all()
+    assert int(rows[0].count) == 3  # 运行期属性访问即列值，mypy 误判为方法
     assert int(rows[0]._mapping["count"]) == 3
     military_levels, local_levels, military_total, local_total = _accumulate_policy_stats(rows)
     assert military_levels == {"national": 3}

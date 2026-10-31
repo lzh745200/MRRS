@@ -18,7 +18,7 @@ import hmac
 import logging
 import os
 import time
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse, Response
@@ -73,7 +73,9 @@ def generate_csrf_token() -> str:
     return f"{ts}.{rand}"
 
 
-def sign_csrf_token(token: str, secret_key: Optional[str] = None) -> str:
+def sign_csrf_token(
+    token: Union[str, bytes], secret_key: Optional[Union[str, bytes]] = None
+) -> str:
     """对 CSRF token 进行 HMAC-SHA256 签名
 
     使用 CSRF_SECRET_KEY 对原始 token 签名，防止 token 篡改。
@@ -92,12 +94,12 @@ def sign_csrf_token(token: str, secret_key: Optional[str] = None) -> str:
 
         secret_key = settings.CSRF_SECRET_KEY or settings.SECRET_KEY
 
-    if isinstance(secret_key, str):
-        secret_key = secret_key.encode("utf-8")
-    if isinstance(token, str):
-        token = token.encode("utf-8")
+    # 运行期同时接受 str/bytes（内部调用传 str，历史用例传 bytes）；
+    # 拆成局部变量后形参保持 Union 语义，避免静态检查把 bytes 赋回 str 形参。
+    key_bytes = secret_key.encode("utf-8") if isinstance(secret_key, str) else secret_key
+    token_bytes = token.encode("utf-8") if isinstance(token, str) else token
 
-    return hmac.new(secret_key, token, hashlib.sha256).hexdigest()
+    return hmac.new(key_bytes, token_bytes, hashlib.sha256).hexdigest()
 
 
 def _extract_timestamp(token: str) -> Optional[int]:

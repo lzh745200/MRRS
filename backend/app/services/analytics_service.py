@@ -817,14 +817,15 @@ class AnalyticsService:
 
             export_service = ExcelExportService()
 
-            summary_data = []
             basic_stats = {
                 "帮扶村总数": data.get("dashboard", {}).get("total_villages", 0),
                 "组织机构数": data.get("dashboard", {}).get("total_organizations", 0),
                 "政策文件数": data.get("performance", {}).get("policies", {}).get("total", 0),
             }
-            for key, value in basic_stats.items():
-                summary_data.append({"指标": key, "数值": str(value)})
 
-            return export_service.export_list(summary_data, ["指标", "数值"], "数据分析报告", "分析数据")
+            # 历史实现调用 ExcelExportService.export_list(...)，该方法自始不存在（AttributeError），
+            # 使 /api/v1/data/analytics/export 的 excel 分支恒 500。
+            # export_comprehensive_report 的汇总 sheet 表头正是 ["统计项", "数值"]，
+            # 三个统计项作为键值传入即可；村庄/项目/经费 sheet 传空列表会被跳过。
+            return export_service.export_comprehensive_report(basic_stats, [], [], [], watermark="分析数据")
         return b""

@@ -692,7 +692,7 @@ class TestAnalyticsService:
         db = MagicMock()
         svc = AnalyticsService(db)
         mock_export = MagicMock()
-        mock_export.export_list.return_value = b"excel bytes"
+        mock_export.export_comprehensive_report.return_value = b"excel bytes"
 
         data = {
             "dashboard": {"total_villages": 10, "total_organizations": 5},
@@ -704,7 +704,12 @@ class TestAnalyticsService:
             result = svc.export_data(db, "excel", data)
 
         assert result == b"excel bytes"
-        mock_export.export_list.assert_called_once()
+        call = mock_export.export_comprehensive_report.call_args
+        summary, villages, projects, funds = call.args
+        assert summary == {"帮扶村总数": 10, "组织机构数": 5, "政策文件数": 7}
+        assert villages == [] and projects == [] and funds == []
+        assert call.kwargs["watermark"] == "分析数据"
+        mock_export.export_list.assert_not_called()
 
     def test_export_data_other_format(self):
         db = MagicMock()

@@ -8,7 +8,7 @@ import logging
 import os
 import threading
 from datetime import timezone, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import psutil
 from sqlalchemy import case, func
@@ -167,7 +167,9 @@ class MonitoringService:
             .all()
         )
 
-        error_by_code = {str(stat.status_code): stat.count for stat in stats}
+        # mypy 按 typeshed 把 Row.count 静态推断成 tuple.count 方法（Callable），
+        # 运行期它其实是本列的值；经 _mapping 取值可同时消除静态误判且运行期等价。
+        error_by_code = {str(stat.status_code): int(stat._mapping["count"]) for stat in stats}
         total_errors = sum(error_by_code.values())
 
         return {"total_errors": total_errors, "error_by_code": error_by_code}
@@ -220,7 +222,7 @@ class MonitoringService:
     @staticmethod
     def _check_rule(db: Session, rule: AlertRule):
         """检查单个告警规则"""
-        since = datetime.now(timezone.utc) - timedelta(seconds=rule.duration_seconds)
+        since = datetime.now(timezone.utc) - timedelta(seconds=cast(int, rule.duration_seconds))
 
         if rule.metric_type == "response_time":
             # 检查平均响应时间
@@ -283,7 +285,7 @@ class MonitoringService:
         alert = AlertHistory(
             rule_id=rule.id,
             message=message,
-            metric_value=metric_value,
+            metric_value=cast(Any, metric_value),
             status="triggered",
         )
         db.add(alert)

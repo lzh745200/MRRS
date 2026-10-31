@@ -188,18 +188,23 @@ cache_result = cached
 # Backward-compat: CacheManager._cache property
 # Backward-compat _cache property with getter/setter
 _compat_cache_attr = "_cache_data"
-if not hasattr(CacheManager, "_cache") or isinstance(getattr(CacheManager, "_cache", None), property):
-    @property
-    def _cache(self):
-        if not hasattr(self, "_cache_data"):
-            object.__setattr__(self, "_cache_data", {})
-        return object.__getattribute__(self, "_cache_data")
 
-    @_cache.setter
-    def _cache(self, value):
-        object.__setattr__(self, "_cache_data", value)
 
-    @_cache.deleter
-    def _cache(self):
+def _compat_cache_get(self):
+    if not hasattr(self, "_cache_data"):
         object.__setattr__(self, "_cache_data", {})
-    CacheManager._cache = _cache
+    return object.__getattribute__(self, "_cache_data")
+
+
+def _compat_cache_set(self, value):
+    object.__setattr__(self, "_cache_data", value)
+
+
+def _compat_cache_del(self):
+    object.__setattr__(self, "_cache_data", {})
+
+
+if not hasattr(CacheManager, "_cache") or isinstance(getattr(CacheManager, "_cache", None), property):
+    # 装饰器写法在模块作用域下会被静态检查判为 "property used with a non-method"，
+    # 改为 property() 显式拼装；运行期仍是同一个 getter/setter/deleter。
+    setattr(CacheManager, "_cache", property(_compat_cache_get, _compat_cache_set, _compat_cache_del))

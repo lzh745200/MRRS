@@ -525,10 +525,9 @@ async def delete_category(
 def _accumulate_policy_stats(rows) -> tuple[Dict[str, int], Dict[str, int], int, int]:
     """把「分类 x 级别」聚合行累加成军事/地方两组计数。
 
-    统计列以 count 为标签，而 SQLAlchemy 2.0 的 Row.count 是保留名字（返回 tuple.count
-    的提示访问器，不是列值）；历史实现直接读 stat.count，在库里有政策的真实环境下会
-    TypeError 导致该端点恒 500（单测用 MagicMock 喂 count 属性把问题掩盖了）。
-    这里改走 row._mapping 取列值。
+    统计列以 count 为标签。mypy 按 typeshed 把 Row.count 推断成 tuple.count 方法
+    （Callable），运行期它其实是该列的值；这里统一走 row._mapping 取列值，
+    既消除静态误判又与历史行为完全等价。抽成模块级函数便于用真实 Row 回归。
     """
     military_levels: Dict[str, int] = {}
     local_levels: Dict[str, int] = {}

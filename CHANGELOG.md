@@ -107,11 +107,11 @@
   异步导出任务、导入导出历史的「首个赋值即定型」窄容器（`stats` / `summary` / `by_category` / `id_mapping`）
   改为显式 `Dict[str, Any]` 一类宽注解，冲突合并的预取键先落地为 `prefetch_key` 并同时判 `key_attr is not None`
   （只判前者时 `key_attr.in_(...)` 仍报 `Any | None` 无 `in_`）；异步导出任务过期时间与历史服务的
-  `Session | AsyncSession` 会话按调用面 `cast` 收窄。**顺带修一处真实缺陷**：`GET /api/v1/policies/statistics`
-  的聚合列标签是 `count`，而 **SQLAlchemy 2.0 的 `Row.count` 是保留名**（属性访问返回 `tuple.count` 提示访问器，
-  不是列值），历史实现 `int(stat.count)` 在库里有政策时必抛 `TypeError` → 该端点恒 500；单测用 MagicMock 喂
-  `count` 属性把问题掩盖了。现抽出 `_accumulate_policy_stats()` 改从 `row._mapping["count"]` 取值，并补一条用
-  真实 SQLite `Row` 的回归用例（`create_engine("sqlite://")` + `text(...)`）。
+  `Session | AsyncSession` 会话按调用面 `cast` 收窄。**一处误诊更正**：`GET /api/v1/policies/statistics` 的聚合
+  列标签是 `count`，mypy 按 typeshed 把 `Row.count` 静态推断成 `tuple.count` 方法（`Callable`），但运行期它**就是
+  列值**（真实 SQLite `Row` 实测 `row.count == row._mapping["count"]`），历史实现 `int(stat.count)` 从未在真库失败
+  （此处更正早前「保留名 → 端点恒 500」的错误结论）。抽出的 `_accumulate_policy_stats()` 仍走
+  `row._mapping["count"]`（运行期等价、静态意图明确），回归用例同时断言两种访问相等。
   回归：消费帮扶/捐赠/经费预算/数据上报/数据校验/数据分级/冲突合并/异步导出/导入导出历史/政策
   共 **46 个用例文件 824 项通过**（含新增回归 1 项），`flake8 --max-line-length=120 --max-complexity=16` rc=0；
   全量 `mypy app` **306 → 242 条 / 97 → 85 个文件**。
@@ -152,6 +152,30 @@
   回归：级联删除/系统配置/消息模板/离线地图/组织权限/组织服务与接口/地图接口/报表模板/Excel 导入
   共 **23 个用例文件 702 项通过**，`flake8 --max-line-length=120 --max-complexity=16` rc=0；
   全量 `mypy app` **215 → 175 条 / 79 → 69 个文件**。
+
+- 类型收敛 + 两处真实缺陷（第十二批，32 处注解收窄，各文件 mypy 归零）：
+  `backend/app/services/analytics_service.py` 的 `export_data(export_type="excel")` 原本调用
+  `ExcelExportService.export_list()` —— 该方法**不存在**（服务只有 `export_*_report` /
+  `export_comprehensive_report`），唯一调用方 `backend/app/api/v1/data/data/analytics.py` 的 excel 分支因此必 500；
+  现改调 `export_comprehensive_report(basic_stats, [], [], [], watermark="分析数据")`（汇总页表头仍是
+  「统计项 / 数值」，村庄/项目/经费页传空列表自动跳过），单测同步断言汇总入参、watermark 与
+  `export_list` 不再被调用。
+  `backend/app/services/dossier_service.py` 的 `record_dossier_audit` 原本从 `app.models.audit` 取
+  `AuditAction` 喂给 `app.utils.audit_logger.AuditLogger.log` —— 两个同名字符串枚举互不 `isinstance`，
+  落库 action 会退化成 `"AuditAction.EXPORT"` 而非 `"export"`，审计按动作检索失真；现统一用
+  `audit_logger.AuditAction`。
+  `monitoring_service` 的聚合列改走 `Row._mapping["count"]`（mypy 的静态误判、运行期等价），
+  `duration_seconds` / `metric_value` 显式 `cast`；`csrf_middleware.sign_csrf_token` 形参如实声明
+  `Union[str, bytes]`（既有用例就传 bytes），签名前先拆出 `key_bytes` / `token_bytes` 两个局部变量；
+  `core/cache.py` 的兼容 property 改由模块级 getter/setter/deleter 经
+  `setattr(CacheManager, "_cache", property(...))` 拼装（消除 `property used with a non-method` 与
+  `type[CacheManager] has no attribute` 两条静态误报，行为不变）；`services/__init__.py` 的
+  `EncryptionService` 别名 ignore 补 `misc` 错误码。
+  **误诊更正**：上一批把 `/policies/statistics` 的 `Row.count` 说成「保留名 → 端点恒 500」是错的，
+  已在原处改正（运行期 `row.count` 就是列值，`int(stat.count)` 从未失败）。
+  回归：监控/分析/档案/CSRF/缓存/服务注册/政策共 **19 个用例文件 409 项通过**（另有 1 项因并行会话在途的
+  `system/cache.py` 换 superuser 门而红，与本批无关），`flake8 --max-line-length=120 --max-complexity=16` rc=0；
+  全量 `mypy app` **175 → 164 条 / 69 → 63 个文件**。
 
 ### 验证
 

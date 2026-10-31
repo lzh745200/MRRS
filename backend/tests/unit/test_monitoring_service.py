@@ -181,15 +181,36 @@ class TestGetErrorStats:
         mock_db = MagicMock()
         stat1 = MagicMock()
         stat1.status_code = 500
-        stat1.count = 3
+        # 实现统一经 Row._mapping 读聚合列，MagicMock 需显式提供该映射
+        stat1._mapping = {"count": 3}
         stat2 = MagicMock()
         stat2.status_code = 404
-        stat2.count = 2
+        stat2._mapping = {"count": 2}
         mock_db.query.return_value.filter.return_value.group_by.return_value.all.return_value = [stat1, stat2]
         result = MonitoringService.get_error_stats(mock_db)
         assert result["total_errors"] == 5
         assert result["error_by_code"]["500"] == 3
         assert result["error_by_code"]["404"] == 2
+
+    def test_reads_real_row_mapping(self):
+        """真实 Row 回归：聚合列在真实 Row 上可取值（属性访问与 _mapping 运行期等价）。"""
+        from sqlalchemy import create_engine, text
+        from app.services.monitoring_service import MonitoringService
+
+        engine = create_engine("sqlite://")
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT 500 AS status_code, 3 AS count UNION ALL SELECT 404, 2")
+            ).fetchall()
+        # mypy 把 Row.count 误判成 tuple.count 方法，运行期它其实是列值
+        assert rows[0].count == 3
+        assert rows[0]._mapping["count"] == 3
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.group_by.return_value.all.return_value = list(rows)
+        result = MonitoringService.get_error_stats(mock_db)
+        assert result["total_errors"] == 5
+        assert result["error_by_code"] == {"500": 3, "404": 2}
 
 
 class TestGetResourceStats:
