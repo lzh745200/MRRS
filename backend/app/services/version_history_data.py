@@ -3743,4 +3743,22 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.30",
+        "date": "2026-10-31",
+        "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
+        "features": [
+            "standalone spec 删除标准库排除项，difflib 显式加入 hiddenimports；统一 spec 同步显式声明，避免未来 excludes 漂移。",
+            (
+                "新增 scripts/verify_frozen_modules.py：直接读取 onedir 产物的CArchive/PYZ 模块表，校验 difflib、入口链与全部 379 个 ap"
+                "p.* 模块。"
+            ),
+            "Windows、ARM64 Electron、standalone DEB、deb-complete 四条打包链路全部接入该门禁：模块漏收在构建期失败，不再等到装机后启动才暴露。",
+            "start.py 增加 BACKEND_IMPORT_CHECK=1 手动自检入口（只 import，不监听端口）。",
+            "ARM64 standalone spec 不再排除标准库 difflib，并显式加入隐藏导入",
+            "新增冻结产物模块门禁，校验 difflib、入口链与全部 379 个 app.* 模块",
+            "Windows / ARM64 Electron / standalone DEB / deb-complete 四条出包链路全部接入门禁",
+            "后端启动增加 BACKEND_IMPORT_CHECK 自检入口，构建期即可验证产物可导入",
+        ],
+    },
 ]

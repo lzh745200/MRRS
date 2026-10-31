@@ -75,6 +75,22 @@ async def report_error(
             record.id, report.severity, report.error_type, report.message, report.source,
         )
 
+        # 写路由强制审计：错误报告可能含堆栈/上下文等敏感信息，必须留痕。
+        from app.utils.audit_logger import AuditLogger
+
+        AuditLogger.log(
+            action="error_report_create",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", "anonymous"),
+            resource_type="error_report",
+            resource_id=record.id,
+            details={
+                "source": report.source,
+                "severity": report.severity,
+                "error_type": report.error_type,
+            },
+        )
+
         return {
             "success": True,
             "message": "错误报告已提交，运维人员将尽快处理",

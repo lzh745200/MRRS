@@ -21,6 +21,13 @@ standalone 后端产物，安装后后端启动即 `ModuleNotFoundError: No modu
 全部收录；数据质量路由 21 例通过；`vue-tsc`、前端构建、系统管理前端 759 例
 与全量分片测试均通过。
 
+### Fixed（构建与安装）
+
+- ARM64 standalone spec 不再排除标准库 `difflib`，并显式加入隐藏导入
+- 新增冻结产物模块门禁，校验 `difflib`、入口链与全部 379 个 `app.*` 模块
+- Windows / ARM64 Electron / standalone DEB / deb-complete 四条出包链路全部接入门禁
+- 后端启动增加 `BACKEND_IMPORT_CHECK` 自检入口，构建期即可验证产物可导入
+
 ## [1.18.29] - 2026-10-30 — 全库并发收口：导出线程化/权限边界/初始化门禁/调度器与桌面退出
 
 ### Added（核心链路闭环测试 —— 系统体检第 2 批）
@@ -99,7 +106,7 @@ scheduler_registration / hardcoded_styles / pragma_reasons / type_debt / backend
 - **组织树只在 `onMounted` 拉取**：新增/编辑用户弹窗改为每次打开重新拉取，新增组织后立即可选（此前整页不刷新就只能看到旧快照）。
 - **姓名必填校验从未生效**：规则键写成 `name`，表单项却是 `prop="full_name"`，必填规则匹不上任何字段（后端也不拦）；改为 `full_name`。
 - **创建成功提示读错契约**：原读 `res.data.data.password`，而后端出于安全不回传密码，该分支永不可达；改为展示本次提交/自动生成的初始密码。
-- **角色口径**：部门级 admin 不再看到无法创建的“超级管理员”选项（后端仅超管可建超管）；角色展示名收敛到 `utils/roleAccess.ts` 的 `roleLabel`。**系统仍为且仅为 4 个角色**：`super_admin`（超级管理员）/ `admin`（系统管理员）/ `user`（普通用户）/ `viewer`（访客）；历史值 `approval_leader`/`manager`→系统管理员、`operator`→普通用户 仅作归一化兼容，不再作为候选项暴露。
+- **角色口径**：角色展示名收敛到 `utils/roleAccess.ts` 的 `roleLabel`；曾尝试按 `is_superuser` 对部门级 admin 隐藏“超级管理员”选项，但后端登录响应对 `role∈ADMIN_ROLES` 的账号统一标记 `is_superuser=true`（`auth/auth.py:348`），该过滤在生产环境永不生效，对抗评审后**回退为恒展示 4 个角色**，创建超管由后端 `_assert_can_manage_super_admin` 403 拦截。**系统仍为且仅为 4 个角色**：`super_admin`（超级管理员）/ `admin`（系统管理员）/ `user`（普通用户）/ `viewer`（访客）；历史值 `approval_leader`/`manager`→系统管理员、`operator`→普通用户 仅作归一化兼容，不再作为候选项暴露。
 - **系统管理域越权收口**：用户会话列表/强制登出/2FA 重置补超管与跨组织守卫；解锁账号补提权收敛；`PUT /users/{id}/permissions` 补组织可达性校验（此前只校验组织是否存在）；组织子级/祖先/详情与成员增删补读/写范围守卫；根组织仅超级管理员可建；错误详情不再外泄数据库异常原文。
 - **审计/任务/配置/反馈/OrgGrant**：审计筛选改用后端枚举并支持用户名与“结束日期含当天”；任务列表与详情按创建者收敛（非管理员不可读他人 `params/result`）；配置包恢复按真实 `defaults` 数组写入，避免恢复出垃圾键；加密状态按 `is_enabled`/`has_salt` 展示；错误报告支持全部状态与来源模糊筛选；反馈列表与 OrgGrant 组织树改用 `unwrapList` 解包。
 - **验证**：受影响后端用例 274 项、前端用例 357 项 + 新增真实组件回归 1 项全绿；`check_stack_alignment` / `check_menu_alignment` / `check_console_tab_mapping` / `check_changelog` 全过；`vue-tsc --noEmit` 无错误。
