@@ -12,6 +12,7 @@
 
 import json
 import logging
+from typing import Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
@@ -74,7 +75,7 @@ def _check_name_unique(db: Session, name: str, exclude_id: int | None = None) ->
         raise HTTPException(status_code=400, detail=f"权限包名称已存在: {name}")
 
 
-def _bound_user_count(db: Session, pack_id: int) -> int:
+def _bound_user_count(db: Session, pack_id: Optional[int]) -> int:
     """统计绑定到指定权限包的用户数"""
     return (
         db.query(func.count(User.id))
@@ -87,8 +88,8 @@ def _bound_user_count(db: Session, pack_id: int) -> int:
 def _pack_response(pack: PermissionPack, bound_user_count: int) -> dict:
     """序列化权限包（含绑定用户数）"""
     return PackResponse(
-        id=pack.id,
-        name=pack.name,
+        id=cast(int, pack.id),
+        name=cast(str, pack.name),
         description=pack.description,
         menu_keys=pack.menu_keys_list,
         is_active=bool(pack.is_active),
@@ -99,7 +100,9 @@ def _pack_response(pack: PermissionPack, bound_user_count: int) -> dict:
     ).model_dump(mode="json")
 
 
-def _log(pack_id: int, action: str, entity_name: str, current_user: User, db: Session) -> None:
+def _log(
+    pack_id: Optional[int], action: str, entity_name: str, current_user: User, db: Session
+) -> None:
     """写操作日志（失败不阻断主流程）"""
     try:
         write_work_log(
@@ -118,12 +121,13 @@ def list_packs(
     """获取全部权限包（含每个包绑定用户数）"""
     _require_admin(current_user)
     packs = db.query(PermissionPack).order_by(PermissionPack.id).all()
-    counts = dict(
-        db.query(User.permission_pack_id, func.count(User.id))
+    counts: dict[Optional[int], int] = {
+        row[0]: row[1]
+        for row in db.query(User.permission_pack_id, func.count(User.id))
         .filter(User.permission_pack_id.isnot(None))
         .group_by(User.permission_pack_id)
         .all()
-    )
+    }
     return success_response(data=[_pack_response(p, counts.get(p.id, 0) or 0) for p in packs])
 
 
@@ -226,7 +230,7 @@ def bind_users(
     users = (
         db.query(User).filter(User.id.in_(data.user_ids)).all() if data.user_ids else []
     )
-    found_ids = {u.id for u in users}
+    found_ids: set[int] = {cast(int, u.id) for u in users}
     missing = [uid for uid in data.user_ids if uid not in found_ids]
     if missing:
         raise HTTPException(status_code=400, detail=f"用户不存在: {missing}")
@@ -268,16 +272,16 @@ def unbind_users(
     users = (
         db.query(User).filter(User.id.in_(data.user_ids)).all() if data.user_ids else []
     )
-    found_ids = {u.id for u in users}
+    found_ids: set[int] = {cast(int, u.id) for u in users}
     missing = [uid for uid in data.user_ids if uid not in found_ids]
     if missing:
         raise HTTPException(status_code=400, detail=f"用户不存在: {missing}")
 
-    unbound_ids = []
+    unbound_ids: list[int] = []
     for u in users:
         if u.permission_pack_id == pack.id:
             u.permission_pack_id = None
-            unbound_ids.append(u.id)
+            unbound_ids.append(cast(int, u.id))
     safe_commit(db)
     _log(pack.id, "unbind_users", f"权限包 {pack.name} 解绑用户: {sorted(unbound_ids)}", current_user, db)
     logger.info(

@@ -14,7 +14,7 @@ batch_grant_permissions 的实际效果是"限制/禁用"，而非放行——�
 
 import logging
 from datetime import datetime
-from typing import List, Optional, Set
+from typing import List, Optional, Sequence, Set, cast
 
 from sqlalchemy.orm import Session
 
@@ -96,7 +96,7 @@ class MachineCodePermissionService:
         if not machine_code_record:
             return set()
 
-        return self.get_restricted_permissions(machine_code_record.id)
+        return self.get_restricted_permissions(cast(int, machine_code_record.id))
 
     def grant_permission(
         self,
@@ -191,7 +191,7 @@ class MachineCodePermissionService:
     def batch_grant_permissions(
         self,
         machine_code_id: int,
-        permissions: List[str],
+        permissions: Sequence[str],
         granted_by: int,
         expires_at: Optional[datetime] = None,
     ) -> int:
@@ -240,7 +240,7 @@ class MachineCodePermissionService:
             logger.warning(f"批量授予权限失败: machine_code_id={machine_code_id}, error={e}")
         return count
 
-    def batch_revoke_permissions(self, machine_code_id: int, permissions: List[str]) -> int:
+    def batch_revoke_permissions(self, machine_code_id: int, permissions: Sequence[str]) -> int:
         """批量撤销机器码权限
 
         Args:

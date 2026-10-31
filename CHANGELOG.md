@@ -31,6 +31,10 @@
   `DirEntry.stat()` 复用目录枚举元数据，不再每张瓦片多一次 `Path.stat()` syscall），
   7 万张瓦片实测 **8.6s → 0.38s**；`GET /map/tile-info` 与导入后统计改走
   `asyncio.to_thread`，扫描期间不再阻塞事件循环（此前现场表现为地图转圈、瓦片图片排队）。
+- `backend/app/api/v1/fund_lifecycle.py` 类型注解纠正：`tx_by_fund` 误标为
+  `list[FundTransferVoucher]`（实际存的是 `FundTransaction`）、`fund` 在 `fund_id` 分支内显式 `cast`，
+  该文件 mypy **67 → 58 条**，运行期行为零变化（219 项经费用例全绿）。
+- `backend/app/api/v1/{todos,pairing,permission_packs,machine_code}.py`、`backend/app/api/v1/system/help.py`、  `backend/app/api/v1/map.py`、`backend/app/services/machine_code_permission_service.py` 类型注解收敛：  待办/配对/权限包/机器码响应构造统一走显式 `cast` 或模块级转换函数（`todos._to_response`），  help 文章表落 `TypedDict`、map 的 bbox 校验改 `TypeGuard` 并把三态缓存哨兵标注 `Any`；  `MachineCodePermissionService.batch_grant_permissions/batch_revoke_permissions` 形参由 `List[str]` 放宽为  `Sequence[str]`（`Permission(str, Enum)` 可直接传入，契约与实参一致）。共减少 mypy 101 条，运行期行为零变化。
 
 ### 验证
 

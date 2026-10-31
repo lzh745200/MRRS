@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -23,7 +23,18 @@ router = APIRouter(prefix="/help", tags=["帮助中心"])
 # 内容约定：纯文本，【...】为小节标题（前端会渲染为带目录的分节），
 # 每行一个段落，不使用 markdown 语法；按钮/菜单名以「」标注并与前端页面文案保持一致。
 
-_HELP_ARTICLES = [
+
+class _HelpArticle(TypedDict):
+    """一条帮助文档；字段固定，供筛选/搜索按字符串处理。"""
+
+    id: int
+    category: str
+    title: str
+    content: str
+    tags: List[str]
+
+
+_HELP_ARTICLES: List[_HelpArticle] = [
     # ── 快速入门 ──
     {
         "id": 1,
@@ -1009,7 +1020,7 @@ async def search_help_articles(
         return ok_list(items=[], total=0)
 
     q_lower = q.lower()
-    results = []
+    results: List[dict[str, Any]] = []
     for article in _HELP_ARTICLES:
         score = 0
         if q_lower in article["title"].lower():

@@ -6,7 +6,7 @@
 
 import logging
 from datetime import timezone, datetime
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -69,6 +69,25 @@ class TodoListResponse(BaseModel):
     total: int
 
 
+def _to_response(todo: Todo) -> TodoResponse:
+    """ORM 落到 TodoResponse 的唯一出口。
+
+    SQLAlchemy 2.0 legacy Column(...) 让静态检查把主键/标题/优先级都看成 Optional，
+    而行已落库时它们必然有值；这里一次性收窄，避免 5 个端点各写一份构造代码。
+    """
+    return TodoResponse(
+        id=cast(int, todo.id),
+        title=cast(str, todo.title),
+        description=todo.description,
+        deadline=todo.deadline,
+        completed=cast(bool, todo.completed),
+        priority=cast(str, todo.priority),
+        user_id=todo.user_id,
+        created_at=todo.created_at.isoformat() if todo.created_at else None,
+        updated_at=todo.updated_at.isoformat() if todo.updated_at else None,
+    )
+
+
 # ==================== 接口 ====================
 
 
@@ -91,17 +110,7 @@ async def get_todo(
     if not todo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="待办事项不存在")
 
-    return TodoResponse(
-        id=todo.id,
-        title=todo.title,
-        description=todo.description,
-        deadline=todo.deadline,
-        completed=todo.completed,
-        priority=todo.priority,
-        user_id=todo.user_id,
-        created_at=todo.created_at.isoformat() if todo.created_at else None,
-        updated_at=todo.updated_at.isoformat() if todo.updated_at else None,
-    )
+    return _to_response(todo)
 
 
 @router.get("", response_model=TodoListResponse, summary="获取待办列表")
@@ -132,17 +141,7 @@ async def get_todos(
 
         return TodoListResponse(
             items=[
-                TodoResponse(
-                    id=item.id,
-                    title=item.title,
-                    description=item.description,
-                    deadline=item.deadline,
-                    completed=item.completed,
-                    priority=item.priority,
-                    user_id=item.user_id,
-                    created_at=item.created_at.isoformat() if item.created_at else None,
-                    updated_at=item.updated_at.isoformat() if item.updated_at else None,
-                )
+                _to_response(item)
                 for item in items
             ],
             total=total,
@@ -182,17 +181,7 @@ async def create_todo(
         except Exception:
             logger.debug("记录工作日志失败")
 
-        return TodoResponse(
-            id=todo.id,
-            title=todo.title,
-            description=todo.description,
-            deadline=todo.deadline,
-            completed=todo.completed,
-            priority=todo.priority,
-            user_id=todo.user_id,
-            created_at=todo.created_at.isoformat() if todo.created_at else None,
-            updated_at=todo.updated_at.isoformat() if todo.updated_at else None,
-        )
+        return _to_response(todo)
     except Exception as e:
         db.rollback()
         logger.error(f"创建待办失败: {e}")
@@ -242,17 +231,7 @@ async def update_todo(
         except Exception:
             logger.debug("记录工作日志失败")
 
-        return TodoResponse(
-            id=todo.id,
-            title=todo.title,
-            description=todo.description,
-            deadline=todo.deadline,
-            completed=todo.completed,
-            priority=todo.priority,
-            user_id=todo.user_id,
-            created_at=todo.created_at.isoformat() if todo.created_at else None,
-            updated_at=todo.updated_at.isoformat() if todo.updated_at else None,
-        )
+        return _to_response(todo)
     except HTTPException:
         raise
     except Exception as e:
@@ -331,17 +310,7 @@ async def toggle_todo(
         safe_commit(db)
         db.refresh(todo)
 
-        return TodoResponse(
-            id=todo.id,
-            title=todo.title,
-            description=todo.description,
-            deadline=todo.deadline,
-            completed=todo.completed,
-            priority=todo.priority,
-            user_id=todo.user_id,
-            created_at=todo.created_at.isoformat() if todo.created_at else None,
-            updated_at=todo.updated_at.isoformat() if todo.updated_at else None,
-        )
+        return _to_response(todo)
     except HTTPException:
         raise
     except Exception as e:

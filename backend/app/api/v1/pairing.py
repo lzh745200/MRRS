@@ -8,7 +8,7 @@
 
 import logging
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -156,7 +156,9 @@ def _get_visit_or_404(
     return visit
 
 
-def _write_log(db: Session, action: str, entity_id: int, title: str, current_user, detail: str = "") -> None:
+def _write_log(
+    db: Session, action: str, entity_id: Optional[int], title: Optional[str], current_user, detail: Optional[str] = ""
+) -> None:
     write_work_log(
         db,
         "pairing",
@@ -328,8 +330,8 @@ async def create_pairing(
     db.refresh(pairing)
 
     _write_log(db, "create", pairing.id, pairing.title, current_user)
-    data = attach_partner_names(db, [pairing.to_dict()])[0]
-    return success_response(data=data, message="创建成功")
+    created = attach_partner_names(db, [pairing.to_dict()])[0]
+    return success_response(data=created, message="创建成功")
 
 
 @router.put("/{pairing_id}")
@@ -346,7 +348,7 @@ async def update_pairing(
     if "partner_type" in update_data:
         update_data = normalize_partner_fields(update_data)
 
-    merged = {
+    merged: dict[str, Any] = {
         "subject_type": update_data.get("subject_type", pairing.subject_type),
         "partner_type": update_data.get("partner_type", pairing.partner_type),
         "village_id": update_data.get("village_id", pairing.village_id),
@@ -373,8 +375,8 @@ async def update_pairing(
     db.refresh(pairing)
 
     _write_log(db, "update", pairing.id, pairing.title, current_user)
-    data = attach_partner_names(db, [pairing.to_dict()])[0]
-    return success_response(data=data, message="更新成功")
+    updated = attach_partner_names(db, [pairing.to_dict()])[0]
+    return success_response(data=updated, message="更新成功")
 
 
 @router.delete("/{pairing_id}")

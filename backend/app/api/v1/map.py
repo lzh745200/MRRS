@@ -12,7 +12,7 @@ import random
 import sys
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Sequence, TypeGuard
 
 from app.core.config import settings as _settings
 from app.utils.helpers import safe_json_loads
@@ -58,7 +58,8 @@ except ImportError:  # pragma: no cover - 可选依赖缺失（功能降级为�
 
 # 惰性单例哨兵：_UNSET 表示"尚未初始化"；None 表示"不可用/已禁用"。
 _UNSET = object()
-_map_cache = _UNSET
+# 三种状态：哨兵（未初始化）/ None（不可用）/ diskcache.Cache 实例。
+_map_cache: Any = _UNSET
 _map_cache_lock = threading.Lock()
 
 _DISTANCES_TTL = 600  # 10 分钟
@@ -173,7 +174,7 @@ def _resolve_tiles_dir() -> Path:
 TILES_DIR = _resolve_tiles_dir()
 
 
-def _valid_bbox(value) -> bool:
+def _valid_bbox(value: object) -> TypeGuard[Sequence[float]]:
     """bbox 必须是「4 个有限数值」的序列。
 
     只校验长度是不够的：["x", 1, 2, 3] 这类非法值会被当作 Leaflet bounds 传给
@@ -483,17 +484,17 @@ async def update_marker_coordinates(
         raise HTTPException(status_code=400, detail="经纬度超出合法范围")
 
     if marker_type == "village":
-        record = db.query(SupportedVillage).filter(SupportedVillage.id == marker_id).first()
-        if not record:
+        village = db.query(SupportedVillage).filter(SupportedVillage.id == marker_id).first()
+        if not village:
             raise HTTPException(status_code=404, detail="帮扶村不存在")
-        record.latitude = coords.latitude
-        record.longitude = coords.longitude
+        village.latitude = coords.latitude
+        village.longitude = coords.longitude
     elif marker_type == "school":
-        record = db.query(School).filter(School.id == marker_id).first()
-        if not record:
+        school = db.query(School).filter(School.id == marker_id).first()
+        if not school:
             raise HTTPException(status_code=404, detail="学校不存在")
-        record.latitude = coords.latitude
-        record.longitude = coords.longitude
+        school.latitude = coords.latitude
+        school.longitude = coords.longitude
     else:
         raise HTTPException(status_code=400, detail="marker_type 必须为 'village' 或 'school'")
 
@@ -538,7 +539,7 @@ async def get_distances(
         except Exception:
             logger.debug("读取地图距离缓存失败")
 
-    result = {
+    result: dict[str, Any] = {
         "base": {"lng": MILITARY_BASE[0], "lat": MILITARY_BASE[1], "name": "区域中心"},
         "villages": [],
         "schools": [],

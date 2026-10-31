@@ -8,7 +8,7 @@
 
 from datetime import date, datetime
 import json as _json
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
@@ -842,6 +842,8 @@ async def create_transfer_voucher(
     # `_get_accessible_fund_or_403` 在 fund_id 有值时要么返回 Fund，要么抛错，
     # 因此这里无需再判空（旧 if fund 分支不可达，只会制造覆盖缺口）。
     if data.fund_id:
+        # fund_id 有值时 _get_accessible_fund_or_403 要么返回 Fund 要么抛错，这里收窄给类型检查看
+        fund = cast(Fund, fund)
         approved = float(fund.approved_amount or fund.planned_amount or fund.amount or 0)
         used = float(fund.used_amount or 0)
         # 已有确认状态凭证的划转金额
@@ -1496,7 +1498,7 @@ async def fund_flow(
     ) if fund_ids else []
 
     # 构建索引映射
-    tx_by_fund: dict[Optional[int], list[FundTransferVoucher]] = {}
+    tx_by_fund: dict[Optional[int], list[FundTransaction]] = {}
     for t in all_transactions:
         tx_by_fund.setdefault(t.fund_id, []).append(t)
     vc_by_fund: dict[Optional[int], list[FundTransferVoucher]] = {}

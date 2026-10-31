@@ -10,7 +10,7 @@ from app.core.permission_utils import is_superuser, is_admin, require_admin
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -214,7 +214,7 @@ async def admin_create_machine_code(
         # 创建机器码记录
         record = service.create_machine_code_record(
             machine_code=request.machine_code,
-            created_by=current_user.id,
+            created_by=cast(int, current_user.id),
             description=request.description,
             pass_code=request.pass_code,
         )
@@ -269,8 +269,9 @@ async def admin_list_machine_codes(
         for record in records:
             # 使用预加载的用户关系，避免 N+1 查询
             username = None
-            if record.user:
-                username = record.user.username
+            user: Any = record.user
+            if user:
+                username = user.username
 
             items.append(
                 {
@@ -654,7 +655,9 @@ async def get_organization_verification_code(
 
         # 生成校验码
         service = MachineCodeService()
-        verification_code = service.generate_organization_verification_code(org.id, org.name)
+        verification_code = service.generate_organization_verification_code(
+            cast(int, org.id), cast(str, org.name)
+        )
 
         return {
             "code": 200,
@@ -701,7 +704,9 @@ async def create_organization_pass_code(
 
         # 生成组织校验码（用于验证管理员输入的校验码是否匹配组织）
         service = MachineCodeService(db)
-        expected_code = service.generate_organization_verification_code(org.id, org.name)
+        expected_code = service.generate_organization_verification_code(
+            cast(int, org.id), cast(str, org.name)
+        )
         if expected_code != request.verification_code:
             raise HTTPException(status_code=400, detail="校验码不正确，请确认下级单位提供的校验码")
 
@@ -710,7 +715,7 @@ async def create_organization_pass_code(
             organization_id=request.organization_id,
             verification_code=request.verification_code,
             allow_subordinate=request.allow_subordinate_generation,
-            created_by=current_user.id,
+            created_by=cast(int, current_user.id),
             description=request.description,
         )
 
@@ -784,7 +789,7 @@ async def list_organization_pass_codes(
         items = []
         for record in records:
             # 使用预加载的组织关系，避免 N+1 查询
-            org = record.organization
+            org: Any = record.organization
 
             # 生成校验码
             verification_code = ""
@@ -850,7 +855,7 @@ async def export_organization_pass_codes(
         export_data = []
         for record in records:
             # 使用预加载的组织关系，避免 N+1 查询
-            org = record.organization
+            org: Any = record.organization
 
             # 生成校验码
             verification_code = ""
@@ -1014,7 +1019,7 @@ async def grant_machine_code_permissions(
         count = service.batch_grant_permissions(
             machine_code_id=machine_code_id,
             permissions=request.permissions,
-            granted_by=current_user.id,
+            granted_by=cast(int, current_user.id),
             expires_at=request.expires_at,
         )
 
