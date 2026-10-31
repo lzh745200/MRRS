@@ -1,4 +1,40 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Added（宽泛异常捕获理由门禁 —— 补上 check_pragma_reasons 的另一半）
+
+**发现的盲区**：项目已有 `check_pragma_reasons.py` 管住 `# pragma: no cover`（覆盖率豁免必须写理由），
+但**没有**管住 `# noqa: BLE001`（宽泛捕获 `except Exception`）—— 同一类「豁免必须留痕」的规则
+只覆盖了一半。
+
+**巡检实测**：`backend/app` 有 **88 处** `noqa: BLE001`，其中 **15 处没有理由**，集中在：
+
+| 文件 | 处数 |
+|---|---|
+| `api/v1/system/diagnostics.py` | 10 |
+| `startup/preflight.py` | 3 |
+| `services/backup_service.py` | 1 |
+| `services/village_cascade_delete_service.py` | 1 |
+
+**逐处核验结论：15 处全部是设计意图，不是静默吞异常**——
+
+- 12 处把异常**降级为 `error_type` 返回给调用方**（体检/预检单项失败不中断整轮），
+  是**可观测**的降级而非吞掉；
+- 3 处（`diagnostics.py:366` / `backup_service.py` / `village_cascade_delete_service.py`）
+  **本身就有 `logger.error/warning`**，只是注释没写理由。
+
+因此**没有改任何逻辑**，只补齐 15 处理由注释。
+
+**新增门禁 `scripts/check_broad_except_reasons.py`**：`noqa: BLE001` 必须同行写明
+「为什么不能收窄到具体异常类型」（判定口径与 `check_pragma_reasons` 对齐：
+`-`/`—`/`:`/`：` 后 ≥2 个非空字符，或 `#` 注释形式）。理由已全部补齐 → **零容忍**（非棘轮）。
+
+**单测** `test_broad_except_reasons_gate.py`（10 例，含负向）：无理由违规、`-`/`：`/`#` 注释三种
+合规形式、pragma 混合形式、非 BLE001 行豁免、**理由不足 2 字符仍违规**（防写个 `-` 糊弄）、
+`find_violations` 注入坏行必被抓到、`--json` 可解析、真实仓库零违规。
+
+**验证**：门禁正负双向实测（正常 0 / 注入无理由 → 1 / 恢复 → 0）· flake8 0 · 新增 10 passed ·
+diagnostics/preflight/backup/cascade 相关域 **745 passed**。
+CI：`pr-checks.yml` static-analysis 增加 `Broad except reason check` 步骤。
+
 ### Added（外键索引棘轮门禁 —— 数据库层巡检）
 
 **巡检发现**：SQLite（及多数库）**不会为外键列自动建索引**。缺索引时 `WHERE fk = ?`、

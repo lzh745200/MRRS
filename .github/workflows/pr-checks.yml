@@ -631,6 +631,11 @@ jobs:
       # 外键索引棘轮（2026-10-31 巡检）：SQLite 不为外键自动建索引，缺索引会让
       # WHERE fk=? / JOIN / 级联删除全表扫描。基线 44 处只许减少（均为零查询
       # 审计列，不做猜测性 schema 变更），新增外键时必须同时加索引。
+      # 宽泛异常捕获理由（2026-10-31 巡检）：对齐 check_pragma_reasons 的口径，
+      # noqa: BLE001 必须同行写明「为什么不能收窄到具体异常类型」；理由已全部
+      # 补齐（15 处），故零容忍而非棘轮。
+      - name: Broad except reason check
+        run: python scripts/check_broad_except_reasons.py
       - name: FK index ratchet
         run: python scripts/check_fk_indexes.py
       - name: Frontend API usage ratchet

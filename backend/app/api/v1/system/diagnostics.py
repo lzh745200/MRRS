@@ -131,7 +131,7 @@ def _build_snapshot() -> dict:
         from app.core.build_info import get_build_info
 
         info = get_build_info() or {}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         return {"error_type": type(exc).__name__}
     return {key: info.get(key) for key in ("version", "git_hash", "build_time", "builder")}
 
@@ -151,7 +151,7 @@ def _migration_snapshot() -> dict:
     """Alembic 迁移状态（复用 main 的模块级状态，不重复跑迁移）。"""
     try:
         from app.main import _migration_status
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         return {"error_type": type(exc).__name__}
     return {
         "at_head": _migration_status.get("at_head"),
@@ -169,7 +169,7 @@ def _database_snapshot(db: Session, db_path: Optional[Path]) -> dict:
     }
     try:
         snapshot["integrity_check"] = str(db.execute(text("PRAGMA integrity_check")).scalar())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         snapshot["integrity_check"] = None
         snapshot["integrity_error_type"] = type(exc).__name__
 
@@ -188,7 +188,7 @@ def _database_snapshot(db: Session, db_path: Optional[Path]) -> dict:
             count_sql = text(f"SELECT COUNT(*) FROM {quoted}")  # nosec B608 - sqlite_master 表名 + dialect 引号器
             counts[name] = int(db.execute(count_sql).scalar() or 0)
         snapshot["tables"] = counts
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         snapshot["tables"] = {}
         snapshot["tables_error_type"] = type(exc).__name__
     return snapshot
@@ -224,7 +224,7 @@ def _resource_snapshot() -> dict:
         # （硬编码 "C:\\" 回退在麒麟上会直接 FileNotFoundError，2026-09-03 工单已收敛）
         root = os.environ.get("SystemDrive") or os.path.abspath(os.sep)
         snapshot["disk_percent"] = psutil.disk_usage(root).percent
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         snapshot["error_type"] = type(exc).__name__
     return snapshot
 
@@ -265,7 +265,7 @@ def _business_snapshot(db: Session) -> dict:
             "alive_count": sum(1 for t in timers if hasattr(t, "is_alive") and t.is_alive()),
             "jobs": sorted({t.name for t in timers if getattr(t, "name", None)}),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         business["scheduler"] = {"error_type": type(exc).__name__}
 
     # ── 后台任务：失败数量与最近失败类型 ──
@@ -273,7 +273,7 @@ def _business_snapshot(db: Session) -> dict:
         from app.api.v1.system.tasks import get_tasks_diagnostics
 
         business["tasks"] = get_tasks_diagnostics()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         business["tasks"] = {"error_type": type(exc).__name__}
 
     # ── 数据包占用：导出目录体积（P1-6 保留策略的可见化）──
@@ -284,7 +284,7 @@ def _business_snapshot(db: Session) -> dict:
         business["data_packages"] = {
             "export_dir_size_mb": round(svc.get_upload_dir_size() / (1024 * 1024), 2),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         business["data_packages"] = {"error_type": type(exc).__name__}
 
     # ── PII 加密：密钥指纹 + 存量密文可解性 ──
@@ -300,7 +300,7 @@ def _business_snapshot(db: Session) -> dict:
             # W18-offline P1-1：运行期解密失败累计（换机/重装后密钥漂移的事实证据）
             "decrypt_failures": decrypt_failure_stats(),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         business["pii_encryption"] = {"error_type": type(exc).__name__}
 
     return business
@@ -363,7 +363,7 @@ def _audit_export(db: Session, current_user) -> None:
             username=getattr(current_user, "username", ""),
             detail="导出系统诊断包",
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 体检单项失败降级为 error_type 返回，不中断整轮体检
         logger.error("诊断包导出审计写入失败: %s", type(exc).__name__, exc_info=True)
 
 

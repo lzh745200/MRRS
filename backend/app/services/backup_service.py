@@ -1717,7 +1717,7 @@ class BackupService:
                     "total_mb": d.get("total_mb", -1),
                     "sufficient": d.get("sufficient", False),
                 }
-            except Exception as _e:  # noqa: BLE001
+            except Exception as _e:  # noqa: BLE001 - 探测失败降级为保守值并 warning 留痕，不阻断备份
                 logger.warning("磁盘空间探测失败 path=%s: %s", path, _e)
                 return {"path": path, "free_mb": -1, "total_mb": -1, "sufficient": True}
 

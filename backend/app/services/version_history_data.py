@@ -3748,6 +3748,11 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-31",
         "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
         "features": [
+            "12 处把异常降级为 error_type 返回给调用方（体检/预检单项失败不中断整轮），是可观测的降级而非吞掉；",
+            (
+                "3 处（diagnostics.py:366 / backup_service.py / village_cascade_delete_service.py）本身就有 logger.err"
+                "or/warning，只是注释没写理由。"
+            ),
             "后端全量 GET 巡检：432 个路由 → 发现并修复 1 个真缺陷（/menus/accessible 的 user 形态健壮性，见上一条）；修复后 0 个 5xx。",
             "后端写端点巡检：255 个 POST/PUT/PATCH（排除危险操作）→ 0 个 5xx。",
             "债务标记：后端 TODO/FIXME 0 处（1 处为注释误报）、前端 0 处。",
@@ -3768,8 +3773,6 @@ VERSION_HISTORY_DATA = [
                 "p.* 模块。"
             ),
             "Windows、ARM64 Electron、standalone DEB、deb-complete 四条打包链路全部接入该门禁：模块漏收在构建期失败，不再等到装机后启动才暴露。",
-            "start.py 增加 BACKEND_IMPORT_CHECK=1 手动自检入口（只 import，不监听端口）。",
-            "ARM64 standalone spec 不再排除标准库 difflib，并显式加入隐藏导入",
         ],
     },
 ]

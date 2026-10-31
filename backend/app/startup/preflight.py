@@ -67,7 +67,7 @@ def _check_db_writable() -> Dict:
             "exists": True,
             "writable": os.access(path, os.W_OK),
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 预检单项失败降级为 error_type，不阻断启动
         return {"status": "unknown", "error_type": type(exc).__name__}
 
 
@@ -100,7 +100,7 @@ def _check_clock_drift() -> Dict:
                 "behind_days": round(behind_days, 1),
             }
         return {"status": "ok", "behind_days": round(max(behind_days, 0.0), 1)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 预检单项失败降级为 error_type，不阻断启动
         return {"status": "unknown", "error_type": type(exc).__name__}
 
 
@@ -190,7 +190,7 @@ def _check_encryption_key() -> Dict:
                 "existing_ciphertext": True,
             }
         return {"status": "ok", "existing_ciphertext": True}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 预检单项失败降级为 error_type，不阻断启动
         return {"status": "warning", "error_type": type(exc).__name__}
 
 
