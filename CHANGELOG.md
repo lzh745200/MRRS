@@ -66,6 +66,22 @@
   （5xx 双态判红、匿名 401 放行/带令牌 401 必红、503 白名单、三元组豁免不跨态顶替、隔离库绝对 URL；
   新增：路径参数代入样例值、400 仅在带参扫描放行且不影响 5xx 判定、catch-all 不代入、清理重试成功）。
 
+### Fixed（组织删除改硬删后 2 个越权用例断言过期）
+
+- `13acd413` 把组织 DELETE 从软删改为**物理删除**（`OrganizationService.delete_organization`
+  三重守卫后 `db.delete` + `safe_commit`，响应 `type=hard_delete`），但
+  `backend/tests/unit/test_org_write_scope_r27.py` 的两个用例仍断言旧软删语义
+  `is_active is False`，在已消失的行上取值直接 `AttributeError: 'NoneType' object has no
+  attribute 'is_active'` —— CI `backend-test`（段 `5/12: unit root i-n-o`，
+  `2 failed, 936 passed`）因此变红。
+- 两个用例（`TestR27DeptAdminOwnSubtreeAllowed::test_delete_own_leaf_ok`、
+  `TestR27SuperuserUnchanged::test_delete_cross_branch_ok`）改为断言 `200` +
+  `data.type == "hard_delete"` + `expire_all()` 后记录**从 organizations 表消失**（`is None`），
+  越权/放行的判定部分一字未动。
+- 验证：`pytest tests/unit/test_org_write_scope_r27.py -q` **17 项通过**；
+  `pytest tests/unit/test_org_write_scope_r27.py tests/unit/test_organization_api.py -q`
+  **86 项通过**。
+
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
 ### Fixed（CI 两处红 —— 异常直出 + 列表解包）
 

@@ -3788,4 +3788,57 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.31",
+        "date": "2026-10-31",
+        "description": "瓦片地图“缩放看不到全省、没有图注”：内置概览层 + 视图范围解耦 + 右侧图例",
+        "features": [
+            (
+                "每个瓦片包内置 z5–8 全省概览（31 张 / 约 0.8MB）：新脚本scripts/tiles/pack_guizhou_bundles.py 统一产出 guizhou-overvi"
+                "ew_z5-8.zip、guizhou-all_z13.zip（96.0MB）、guizhou-all_z14.zip（284.5MB）与 9 个市州 z14 包（22.3~64.6MB）"
+                "，任何单包导入后都能缩到 z4~z5 看全省。"
+            ),
+            (
+                "前端视图范围解耦：tileViewBbox = 覆盖 bbox ∪ 全省 bbox，maxBounds 不再被市州包锁死；新增「全省视图」按钮（一键 fitBounds 全省）；缺概览时显"
+                "示明确提示并给出补装包名。"
+            ),
+            (
+                "右侧图例 / 图注（默认展开、可收起）：帮扶村（z≥12 常显）、学校（z≥13 常显）、乡镇/县市注记、道路/水系/行政界四类符号说明 + 瓦片数/层级/来源 + © OpenStree"
+                "tMap contributors署名；新增比例尺控件（metric）。"
+            ),
+            "安装包恢复内置 z5–12（5,623 张 / 60.0MB，MANIFEST 修正 © 乱码）：新装环境即使不导入任何包，也能在地图页缩放查看全省。",
+            (
+                "scripts/tiles/verify_tiles.py 稀疏层级校验口径；scripts/tiles/_common.pynormalize_manifest 输出 zoomLevel"
+                "s。"
+            ),
+            "resources/map-tiles 重新写入正确 MANIFEST（ODbL-1.0 (© OpenStreetMap contributors)）。",
+            (
+                "mapTiles.ts 新增 tileViewBbox / tileViewBounds / tileHasOverview /tileOverviewMissing / mergeTil"
+                "eBbox / PROVINCE_OVERVIEW_MAX_ZOOM。"
+            ),
+            (
+                "scan_tiles_dir 扫描性能：_iter_png_entries 改用 os.scandir（Windows 上DirEntry.stat() 复用目录枚举元数据，不再每张瓦片多"
+                "一次 Path.stat() syscall），7 万张瓦片实测 8.6s → 0.38s；GET /map/tile-info 与导入后统计改走asyncio.to_thread，扫描期"
+                "间不再阻塞事件循环（此前现场表现为地图转圈、瓦片图片排队）。"
+            ),
+            (
+                "endpoint_500 门禁硬化（隔离库 + 双登录态）：backend/scripts/check_endpoint_500.py 原先只做匿名扫描、且复用本机开发库。实测匿名态 29"
+                "3 个 GET 里有 277 个死在 401（鉴权中间件直接短路，处理函数体一行没跑），门禁深度近乎为零；复用开发库还让结果随本机脏数据漂移、CI 跑不了。"
+            ),
+            (
+                "13acd413 把组织 DELETE 从软删改为物理删除（OrganizationService.delete_organization三重守卫后 db.delete + safe_co"
+                "mmit，响应 type=hard_delete），但backend/tests/unit/test_org_write_scope_r27.py 的两个用例仍断言旧软删语义is_acti"
+                "ve is False…"
+            ),
+            (
+                "两个用例（TestR27DeptAdminOwnSubtreeAllowed::test_delete_own_leaf_ok、TestR27SuperuserUnchanged::tes"
+                "t_delete_cross_branch_ok）改为断言 200 +data.type == \"hard_delete\" + expire_all() 后记录从 organizati"
+                "ons 表消失（is None），越权/放行的判定部分一字未动。"
+            ),
+            (
+                "验证：pytest tests/unit/test_org_write_scope_r27.py -q 17 项通过；pytest tests/unit/test_org_write_sc"
+                "ope_r27.py tests/unit/test_organization_api.py -q86 项通过。"
+            ),
+        ],
+    },
 ]

@@ -221,11 +221,14 @@ class TestR27DeptAdminOwnSubtreeAllowed:
         assert _org(org_db, 2).name == "部门A新名"
 
     def test_delete_own_leaf_ok(self, dept_client, org_db):
+        """硬删除：200 且记录从 organizations 表物理移除（v1.18.31 由软删改硬删）。"""
         resp = dept_client.delete(
             "/api/v1/organizations/3", headers={"X-Confirm-Password": DEPT_PASSWORD}
         )
         assert resp.status_code == 200
-        assert _org(org_db, 3).is_active is False
+        assert resp.json()["data"]["type"] == "hard_delete"
+        org_db.expire_all()
+        assert _org(org_db, 3) is None
 
     def test_move_within_subtree_recomputes_path(self, dept_client, org_db):
         """子树内移动 → 200，且 v1.12.16 的级联重算 path 仍然生效
@@ -274,11 +277,14 @@ class TestR27SuperuserUnchanged:
         assert _org(org_db, 8).name == "超管改名B"
 
     def test_delete_cross_branch_ok(self, super_client, org_db):
+        """硬删除：200 且记录从 organizations 表物理移除（v1.18.31 由软删改硬删）。"""
         resp = super_client.delete(
             "/api/v1/organizations/9", headers={"X-Confirm-Password": SUPER_PASSWORD}
         )
         assert resp.status_code == 200
-        assert _org(org_db, 9).is_active is False
+        assert resp.json()["data"]["type"] == "hard_delete"
+        org_db.expire_all()
+        assert _org(org_db, 9) is None
 
     def test_move_across_branches_ok_with_path_recompute(self, super_client, org_db):
         """超管把 3 挂到 8 名下 → 200，path 级联重算为 /1/8/3/。"""
