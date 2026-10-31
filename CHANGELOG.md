@@ -22,12 +22,18 @@
 
 ### Changed
 
+- `scripts/tiles/verify_tiles.py` 稀疏层级校验口径；`scripts/tiles/_common.py`
+  `normalize_manifest` 输出 `zoomLevels`。
 - `resources/map-tiles` 重新写入正确 MANIFEST（`ODbL-1.0 (© OpenStreetMap contributors)`）。
 - `mapTiles.ts` 新增 `tileViewBbox` / `tileViewBounds` / `tileHasOverview` /
   `tileOverviewMissing` / `mergeTileBbox` / `PROVINCE_OVERVIEW_MAX_ZOOM`。
 
 ### 验证
 
+- `verify_tiles.py` 支持 **MANIFEST 声明的稀疏层级**（`[5,6,7,8,13]` / `[5,6,7,8,14]`），
+  不再把「概览 + 明细」的正式交付形态误判成「切片中断」；`_common.normalize_manifest`
+  保留 `zoomLevels` 供校验使用。新增 `backend/tests/unit/test_tiles_sparse_packages.py`（7 项：
+  稀疏通过 / 未声明的缺层仍失败 / 声明层级缺失 / 未声明层级）。
 - 前端单测：`RasterTileLayer.test.ts` 38 项、`mapTiles.test.ts` 57 项，合计 **95 项通过**；
   `vue-tsc --noEmit` 0；eslint 0 error。
 - 覆盖场景：只导入市州包时 `maxBounds` 仍为全省；「全省视图」按钮 fitBounds 全省；

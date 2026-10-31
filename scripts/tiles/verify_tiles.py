@@ -147,10 +147,23 @@ def verify(root: Path, require_min: int, sample: int) -> dict:  # noqa: C901 - �
                 )
 
     if levels:
-        expected = list(range(levels[0], levels[-1] + 1))
-        missing = [z for z in expected if z not in levels]
-        if missing:
-            report["problems"].append(f"缩放级别不连续，缺少 z{missing}")
+        # v1.18.31 起正式交付“稀疏层级”包（z5–8 全省概览 + z13/z14 明细）。
+        # MANIFEST.zoomLevels 已显式声明时以声明为准：只校验声明层级齐全、无未声明层级；
+        # 历史包未声明 zoomLevels 时仍按“连续”口径检查，避免切片中断被静默放过。
+        declared = manifest.get("zoomLevels") if manifest is not None else None
+        if declared:
+            declared_set = {int(z) for z in declared}
+            absent = sorted(declared_set - set(levels))
+            undeclared = sorted(set(levels) - declared_set)
+            if absent:
+                report["problems"].append(f"MANIFEST.zoomLevels 声明的层级缺失: z{absent}")
+            if undeclared:
+                report["problems"].append(f"存在 MANIFEST.zoomLevels 未声明的层级: z{undeclared}")
+        else:
+            expected = list(range(levels[0], levels[-1] + 1))
+            missing = [z for z in expected if z not in levels]
+            if missing:
+                report["problems"].append(f"缩放级别不连续，缺少 z{missing}")
 
     samples = _sample_tiles(root, sample)
     report["sampled"] = len(samples)

@@ -202,6 +202,13 @@ def normalize_manifest(raw: Any) -> Dict[str, Any]:
 
     z_min: Optional[int] = None
     z_max: Optional[int] = None
+    declared_levels: Optional[List[int]] = None
+    raw_levels = raw.get("zoomLevels")
+    if isinstance(raw_levels, list) and raw_levels:
+        try:
+            declared_levels = sorted({int(level) for level in raw_levels})
+        except (TypeError, ValueError) as exc:
+            raise TileToolError("MANIFEST.json 的 zoomLevels 字段非法（应为整数列表）") from exc
     zoom = raw.get("zoom")
     if isinstance(zoom, dict):
         try:
@@ -215,14 +222,8 @@ def normalize_manifest(raw: Any) -> Dict[str, Any]:
             z_min, z_max = int(zoom[0]), int(zoom[1])
         except (TypeError, ValueError) as exc:
             raise TileToolError("MANIFEST.json 的 zoom 字段非法（应为两个整数）") from exc
-    else:
-        levels = raw.get("zoomLevels")
-        if isinstance(levels, list) and levels:
-            try:
-                int_levels = [int(level) for level in levels]
-            except (TypeError, ValueError) as exc:
-                raise TileToolError("MANIFEST.json 的 zoomLevels 字段非法（应为整数列表）") from exc
-            z_min, z_max = min(int_levels), max(int_levels)
+    elif declared_levels:
+        z_min, z_max = declared_levels[0], declared_levels[-1]
 
     tile_count = raw.get("tileCount")
     total_bytes = raw.get("totalBytes")
@@ -240,6 +241,7 @@ def normalize_manifest(raw: Any) -> Dict[str, Any]:
         "license": raw.get("license"),
         "coordinateSystem": raw.get("coordinateSystem"),
         "zRange": [z_min, z_max] if z_min is not None else None,
+        "zoomLevels": declared_levels,
         "generatedAt": raw.get("generatedAt"),
         "tileCount": tile_count,
         "totalBytes": total_bytes,
