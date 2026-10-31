@@ -1062,7 +1062,7 @@ describe('导出参数分支', () => {
     vm.handleSelectionChange([rowA, rowB] as any)
     await vm.handleExport()
     await flushPromises()
-    expect(exportMock.mock.calls[1][0]).toMatchObject({ village_ids: [11, 12], year: undefined })
+    expect(exportMock.mock.calls[1][0]).toMatchObject({ village_ids: '11,12', year: undefined })
     expect(vm.selectedRows).toHaveLength(0)
     wrapper.unmount()
   })
@@ -1147,7 +1147,9 @@ describe('导入错误明细', () => {
     const detail = alertMock.mock.calls[0][0] as string
     expect(detail).toContain('1. 第 2 行：bad')
     expect(detail).toContain('2. 第 3 行：worse')
-    expect(detail).toContain('3. 第 3 行：{"odd":true}')
+    // F1（2026-10-31）：失败明细逐项 escapeHtml 后再拼 <br/>，避免后端回显的
+    // Excel 单元格文本被当作 HTML 渲染（`"` 会被转成 &quot;）。
+    expect(detail).toContain('3. 第 3 行：{&quot;odd&quot;:true}')
     // 3 条 ≤ 10 → 无"共 N 条失败"尾注
     expect(alertMock.mock.calls[0][0]).not.toContain('共 3 条失败')
     expect(ElMessage.warning).toHaveBeenCalledWith('有3条数据导入失败，请检查数据格式')
@@ -1299,7 +1301,7 @@ describe('筛选记忆 / 导出当前筛选（009）', () => {
     vm.handleSelectionChange([rowA, rowB] as any)
     await vm.handleExport()
     await flushPromises()
-    expect(exportMock.mock.calls.at(-1)?.[0]).toMatchObject({ village_ids: [11, 12], year: undefined })
+    expect(exportMock.mock.calls.at(-1)?.[0]).toMatchObject({ village_ids: '11,12', year: undefined })
     wrapper.unmount()
   })
 })

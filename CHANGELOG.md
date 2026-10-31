@@ -248,12 +248,7 @@
   **BrPart=0**；打包后端运行期实测 `GET /map/tile-info` 200（`tileCount=70,523`、
   `zoomLevels=[5..12,14]`、bbox 全省），z14 与 z5 瓦片均 200。
 - 新包组合验证：内置 z5–12 + `guizhou-all_z14.zip` 合并后 `zoomLevels=5..12,14`、z14 瓦片 200。
-- 类型门禁：全量 `mypy app`（384 个源文件）**563 → 512 条 / 115 → 111 个文件**（pydantic 插件消掉 28 条
-  虚报，导出签名与 `async_export` 再清 23 条）；
-- CI 接线：`.github/workflows/pr-checks.yml` 的 `lint` 作业补装 `pydantic==2.13.4` —— 插件模块就住在
-  pydantic 包里，只装 mypy + SQLAlchemy 会在加载配置阶段报 `No module named 'pydantic'`，
-  让棘轮门禁拿不到汇总行而 exit 2；`.type-debt-baseline.json` 的 `mypy_errors` 同步 **848 → 540**
-  （当前 512 条，留 28 条余量给在途改动）。
+- 类型门禁：全量 `mypy app`（384 个源文件）**563 → 515 条**（pydantic 插件消掉 28 条虚报，本轮再清 12 条）；
   `pytest tests -k "async_export or report_export or export_report"` **143 项通过**；
   `flake8 --max-line-length=120 --max-complexity=16` 对 3 个改动文件 rc=0。
 - 类型收敛回归：经费生命周期 / 数据同步 / 项目 API / 智能推荐相关 **37 个用例文件 2,190 项通过**
@@ -366,6 +361,40 @@
 - 验证：`pytest tests/unit/test_org_write_scope_r27.py -q` **17 项通过**；
   `pytest tests/unit/test_org_write_scope_r27.py tests/unit/test_organization_api.py -q`
   **86 项通过**。
+
+### Fixed（2026-10-31 全面审查：权限收紧 / 媒体链路 / 前端缺陷）
+
+- **权限包导入提权（阻断）**：`backend/app/api/v1/permission_package.py` 的 `/import` 与 `/confirm`
+  原先「匿名 + 本机回环」即可调用，包内 `role`/`data_scope` 原样落库 → 任何已登录的 viewer
+  都能把自己改成 `super_admin`。现在已登录非管理员一律 403；匿名仅允许「本机回环 + 库内无账号」
+  的首次安装；`confirm` 传入 `allow_privileged`（仅超管/空库首装为 True），
+  `PermissionPackageService._sanitize_legacy_privilege` 对非特权导入把 `super_admin`→`admin`、
+  `data_scope=all`→`org`，未知角色回落 `user`（`normalize_role` 归一）。
+- **「仅超级管理员」实际只校验部门级管理员（高）**：新增
+  `app/core/permission_utils.require_superuser`，替换备份创建/删除/下载/预览/校验/恢复、
+  PII 主密钥导出/导入、关机/重启、`PUT /system/config`、配置包导入共 15 处；
+  系统信息、备份列表、清缓存、读配置等读/低影响写保留 `require_admin` 并纠正文案。
+- **审计日志可被部门级 admin 销毁（中）**：`system/audit.py` 三个删除/改写端点改
+  `require_superuser`（留痕行本身可被再次批量删除，证据链可闭合）。
+- **组织通行码跨组织（高）**：`machine_code.py` 的校验码/通行码生成、列表、导出、删除
+  全部经 `assert_org_reachable`；列表额外传 `_scoped_org_ids`（超管 None，部门 admin
+  本组织及子树，无组织 fail-closed 空集），`MachineCodeService.get_organization_pass_codes`
+  新增 `organization_ids` 过滤。
+- **未认证校验码穷举（低）**：`POST /machine-code/verify-machine-code` 加 20 次/60 秒
+  按 IP 限流。
+- **媒体链路（中）**：`media_service.py` 的 `resolve_upload_file` 增加 `is_relative_to`
+  越界断言（符号链接逃逸）；`load_image` 限制 5000 万像素；对比图单元格宽度上限 1440px。
+- **前端**：自动锁屏标记改存 localStorage（新标签页/重启不再绕过锁屏）；退出登录先
+  `await logout()` 再冻结请求（服务端 token 真正吊销）；导入失败明细逐项 `escapeHtml`
+  （不再 HTML 注入）；登出清理 `form:draft:*` 草稿（防止共用电脑恢复他人 PII）。
+
+### 验证
+
+- 后端：`test_permission_package_sec1.py`(14) + `test_superuser_only_sec2.py`(22) +
+  `test_machine_code_org_scope_sec3.py`(8) + `test_media_hardening_1031.py`(6) 全绿；
+  备份/审计/权限包/通行码/媒体相关既有文件回归 181 + 200 + 104 + 136 + 61 + 61 项通过。
+- 前端：`vitest` 相关 6 个文件 121 项通过（90 + 31）；`vue-tsc --noEmit` exit 0；
+  `eslint` 改动源文件无告警。
 
 ### Fixed（打包态启动崩溃 / 覆盖率红线 / 测试断言过期）
 

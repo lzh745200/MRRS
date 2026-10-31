@@ -22,8 +22,13 @@ function readLockFlag(): boolean {
   // 要求异常时 fail-closed（按已锁定处理）；用 safeGetItem 会让异常退化成
   // null → 判定为「未锁定」→ fail-open（单测 test_guards「sessionStorage 抛错」
   // 已抓到该回归）。
+  //
+  // 2026-10-31 F2：锁标记同时写 localStorage（AuthStorage.setLocked）。只读
+  // sessionStorage 时，新标签页 / 重启应用后标记丢失，而"记住登录"的持久令牌
+  // 仍在 localStorage → 守卫直接放行进工作台，锁屏被绕过。
   try {
-    return sessionStorage.getItem('auto_lock_active') === '1'
+    if (sessionStorage.getItem('auto_lock_active') === '1') return true
+    return localStorage.getItem('auto_lock_active') === '1'
   } catch {
     return true
   }

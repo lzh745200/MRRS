@@ -840,3 +840,23 @@ def test_superuser_flag_grants_audit_access():
             app.dependency_overrides[get_current_user] = original
         else:
             app.dependency_overrides.pop(get_current_user, None)
+
+class TestAuditDateBoundary:
+    def test_end_date_is_local_day_end_converted_to_utc(self):
+        from datetime import datetime, time
+
+        from app.api.v1.system.audit import _inclusive_end_date
+        from app.utils.time_utils import to_utc_naive
+
+        value = datetime(2026, 1, 31, 0, 0, 0)
+        expected = to_utc_naive(datetime.combine(value.date(), time.max))
+        assert _inclusive_end_date(value) == expected
+
+    def test_explicit_time_is_preserved_as_local(self):
+        from datetime import datetime
+
+        from app.api.v1.system.audit import _inclusive_end_date
+        from app.utils.time_utils import to_utc_naive
+
+        value = datetime(2026, 1, 31, 12, 30, 0)
+        assert _inclusive_end_date(value) == to_utc_naive(value)

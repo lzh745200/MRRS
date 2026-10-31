@@ -277,6 +277,7 @@ import { useFilterMemory } from '@/composables/useFilterMemory'
 import { DIALOG_LG } from '@/config/dialog'
 import { logger } from '@/utils/logger'
 import { format } from '@/utils'
+import { escapeHtml } from '@/utils/sanitize'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
@@ -772,8 +773,11 @@ async function handleExport() {
     // 勾选行优先：仅导出所选记录（后端 village_ids 参数）
     const ids = selectedRows.value.map((r: any) => r.id).filter(Boolean)
     await exportSupportedVillages({
-      ...(ids.length ? { village_ids: ids } : {}),
-      year: ids.length ? undefined : new Date().getFullYear(),
+      // 后端 village_ids 是逗号分隔字符串；直接传 number[] 会被 axios 序列化成
+      // village_ids[]=...，FastAPI 收不到，勾选导出会退化为全量导出。
+      ...(ids.length ? { village_ids: ids.join(',') } : {}),
+      // 年度口径必须跟随列表筛选（yearStart），勾选导出时不强行套当前年。
+      year: filters.yearStart ?? (ids.length ? undefined : new Date().getFullYear()),
       keyword: filters.keyword || undefined,
       department: filters.department || undefined,
       county: filters.county || undefined,
@@ -809,7 +813,9 @@ function handleImport() {
           .map((e: any, i: number) => {
             const row = e?.row ?? e?.row_index ?? i + 1
             const msg = e?.error ?? e?.message ?? JSON.stringify(e)
-            return `${i + 1}. 第 ${row} 行：${msg}`
+            // F1（2026-10-31）：错误文本可能来自 Excel 单元格（不可信输入），
+            // 配合 dangerouslyUseHTMLString 渲染前必须转义。
+            return `${i + 1}. 第 ${escapeHtml(String(row))} 行：${escapeHtml(String(msg))}`
           })
           .join('<br/>')
         const more = result.errors.length > 10 ? `<br/>… 共 ${result.errors.length} 条失败` : ''

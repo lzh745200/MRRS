@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.constants import ADMIN_ROLES, DEFAULT_PAGE_SIZE, FACTORY_ADMIN_PASSWORD, MAX_PAGE_SIZE
+from app.core.data_permission import _get_scope_org_ids, assert_org_reachable
 from app.core.database import get_db
 from app.core.response import ok_list
 from app.core.security import check_rate_limit, get_client_ip, get_current_user, get_password_hash
@@ -32,6 +33,21 @@ from app.utils.pagination import clamp_offset_limit, coerce_page_param
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/machine-code", tags=["机器码管理"])
+
+
+def _scoped_org_ids(db: Session, current_user: User) -> Optional[list[int]]:
+    """组织通行码/机器码列表的组织范围（SEC-3，2026-10-31 审计）。
+
+    历史缺陷：这些列表只判 ``is_admin`` 后直接查全表，部门级 admin 能读到其它
+    组织的通行码与校验码（校验码可换通行码，通行码可注册账号）。
+
+    返回约定：``None`` = 不限制（仅超管）；``[]`` = 无组织归属，fail-closed
+    返回空集；``[id, ...]`` = 本组织及子树。复用 ``core.data_permission`` 的
+    子树展开（``_get_scope_org_ids``），不在此重复组织树遍历逻辑。
+    """
+    if is_superuser(current_user):
+        return None
+    return _get_scope_org_ids(current_user, db)
 
 
 # ==================== Pydantic 模型 ====================
@@ -328,13 +344,24 @@ async def admin_revoke_machine_code(
 
 
 @router.post("/verify-machine-code")
-async def verify_machine_code(request: VerifyMachineCodeRequest):
+async def verify_machine_code(request: Request, data: VerifyMachineCodeRequest):
     """验证机器码和校验码是否匹配
 
     公开接口，用于验证机器码的有效性。
+
+    安全基线（SEC-5，2026-10-31）：校验码是确定性派生（md5 前 8 位 % 9000 + 1000，
+    仅 4 位数字），本端点原先无认证、无限流，构成校验码 oracle（最坏 9000 次命中，
+    可配合 reset-password-with-machine-code 重置口令）。此处按客户端 IP 限流，
+    使穷举在时间上不可行；接口语义与响应结构保持不变。
     """
+    client_ip = get_client_ip(request)
+    if not await check_rate_limit(
+        key=f"verify_mc:{client_ip}", request=request, limit=20, window=60
+    ):
+        raise HTTPException(status_code=429, detail="验证过于频繁，请稍后再试")
+
     service = MachineCodeService()
-    is_valid = service.verify_machine_code(request.machine_code, request.verification_code)
+    is_valid = service.verify_machine_code(data.machine_code, data.verification_code)
 
     return {
         "code": 200,
@@ -645,6 +672,9 @@ async def get_organization_verification_code(
     if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
+    # SEC-3：校验码可换取通行码（进而注册账号），部门级管理员只能取本组织子树内的
+    assert_org_reachable(db, current_user, org_id, action="获取校验码")
+
     try:
         from app.models.organization import Organization
 
@@ -693,6 +723,11 @@ async def create_organization_pass_code(
     # 权限检查
     if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="需要管理员权限")
+
+    # SEC-3：无权为不可达组织生成通行码（否则等于替别单位发放入场券）
+    assert_org_reachable(
+        db, current_user, request.organization_id, action="生成通行码"
+    )
 
     try:
         from app.models.organization import Organization
@@ -778,11 +813,14 @@ async def list_organization_pass_codes(
         # page_size=-1/超大值一次拉全表（DoS + pass_code 批量暴露面）。
         page_size = coerce_page_param(page_size, DEFAULT_PAGE_SIZE)
         skip, page_size = clamp_offset_limit((page - 1) * page_size, page_size)
+        if organization_id is not None:
+            assert_org_reachable(db, current_user, organization_id, action="查询通行码")
         records, total = service.get_organization_pass_codes(
             organization_id=organization_id,
             status=status,
             skip=skip,
             limit=page_size,
+            organization_ids=_scoped_org_ids(db, current_user),
         )
 
         # 构建响应
@@ -844,11 +882,14 @@ async def export_organization_pass_codes(
         service = MachineCodeService(db)
 
         # 查询所有数据（不分页）
+        if organization_id is not None:
+            assert_org_reachable(db, current_user, organization_id, action="导出通行码")
         records, _ = service.get_organization_pass_codes(
             organization_id=organization_id,
             status=status,
             skip=0,
             limit=10000,  # 导出最多 10000 条
+            organization_ids=_scoped_org_ids(db, current_user),
         )
 
         # 构建导出数据
@@ -917,6 +958,14 @@ async def delete_organization_pass_code(
 
     try:
         service = MachineCodeService(db)
+        # SEC-3：按 id 删除前先取归属组织做可达性校验（否则可删任意组织通行码）
+        from app.models.machine_code import MachineCode as MachineCodeModel
+
+        target = db.query(MachineCodeModel).filter(MachineCodeModel.id == pass_code_id).first()
+        if target is not None and target.organization_id is not None:
+            assert_org_reachable(
+                db, current_user, target.organization_id, action="删除通行码记录"
+            )
         success = service.delete_organization_pass_code(pass_code_id)
 
         if not success:

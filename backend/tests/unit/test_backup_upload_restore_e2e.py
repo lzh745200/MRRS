@@ -15,7 +15,8 @@ from app.core.security import get_current_user
 
 
 def _admin():
-    return SimpleNamespace(id=1, role="admin", username="root", is_superuser=False)
+    # SEC-2：上传恢复会全库覆盖，仅超级管理员可执行（role=admin 必须 403）
+    return SimpleNamespace(id=1, role="super_admin", username="root", is_superuser=True)
 
 
 def _make_backup(tmp_path, password=None):

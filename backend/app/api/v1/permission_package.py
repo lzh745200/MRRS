@@ -20,7 +20,7 @@ from app.services.package_import_guard import (
     record_import,
 )
 from app.core.security import get_current_user
-from app.core.permission_utils import is_admin
+from app.core.permission_utils import is_admin, is_superuser
 from app.models.user import User
 from app.schemas.permission_package import (
     PermissionPackageConfirmRequest,
@@ -153,6 +153,38 @@ async def _optional_current_user(
         return None
 
 
+def _assert_package_import_principal(
+    request: Optional[Request],
+    current_user: Optional[User],
+    db: Session,
+) -> bool:
+    """校验权限包导入调用者，返回是否允许授予超管级权限（SEC-1，2026-10-31）。
+
+    合法通道只有两条：
+    1) 已登录**管理员** —— 预览放行；确认时仅超管可授予 super_admin / data_scope=all，
+       部门级 admin 导入由服务层把超管级取值收敛（见 ``confirm_import(allow_privileged=...)``）；
+    2) **空库 + 本机来源** —— 离线首装一次性引导（库内无任何账号，提权无意义）。
+
+    历史缺陷（Critical）：旧实现把「本机来源」当成免认证通道 ——
+    ``if not current_user or not is_admin(current_user): 仅校验 loopback``。
+    于是已登录的 viewer/user 在本机（桌面应用天然 loopback）即可调用
+    ``/import`` + ``/confirm`` 改写整库 RBAC 并把自己提成 super_admin；
+    而权限包内容与校验和均由上传者自造、签名验证默认关闭，不构成第二道门槛。
+    """
+    if current_user is not None:
+        if not is_admin(current_user):
+            raise HTTPException(status_code=403, detail="仅管理员可导入权限配置包")
+        return is_superuser(current_user)
+    if not _client_is_loopback(request):
+        raise HTTPException(status_code=403, detail="仅允许本机导入权限包")
+    if db.query(User.id).first() is not None:
+        raise HTTPException(
+            status_code=403,
+            detail="系统已存在账号，请先登录管理员账号后再导入权限包",
+        )
+    return True
+
+
 @router.post("/export", response_model=PermissionPackageExportResult, summary="导出权限配置包")
 def export_permission_package(
     body: PermissionPackageExportRequest = Body(default_factory=PermissionPackageExportRequest),
@@ -236,10 +268,8 @@ async def import_permission_package(
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="请上传 .zip 格式的权限配置包文件")
 
-    # 未认证调用仅允许本机（桌面应用场景），防止远程未授权上传
-    if not current_user or not is_admin(current_user):
-        if not _client_is_loopback(request):
-            raise HTTPException(status_code=403, detail="仅允许本机导入权限包")
+    # SEC-1：仅「已登录管理员」或「空库 + 本机来源（离线首装一次性引导）」可上传预览
+    _assert_package_import_principal(request, current_user, db)
 
     # 路径遍历防护：净化文件名并解析到上传目录内
     from app.utils.paths import get_runtime_uploads_path
@@ -309,10 +339,8 @@ def confirm_import_permission_package(
     （管理员在其他机器导出,新机器导入后获得页面访问权限）。
     未登录调用时仅允许本机来源(127.0.0.1/::1),防止远程未授权导入。
     """
-    if not current_user or not is_admin(current_user):
-        # 登录前离线导入: 仅允许本机来源（桌面应用场景）
-        if not _client_is_loopback(request):
-            raise HTTPException(status_code=403, detail="仅允许本机导入权限包")
+    # SEC-1：确认阶段会重写全库 RBAC，故非超管调用者只允许「收敛后的导入」
+    allow_privileged = _assert_package_import_principal(request, current_user, db)
 
     # 路径遍历防护：净化 file_name（历史缺陷可致任意文件删除）
     file_path = _resolve_package_upload_path(file_name)
@@ -329,6 +357,7 @@ def confirm_import_permission_package(
             file_path,
             overwrite_existing=body.overwrite_existing,
             mode=body.mode,
+            allow_privileged=allow_privileged,
         )
     finally:
         # Clean up the uploaded file after import (success or failure)

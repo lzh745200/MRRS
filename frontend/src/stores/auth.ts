@@ -4,11 +4,11 @@ import { apiRequest, _setCachedToken, prefetchCsrfToken } from '@/api/request'
 import { useMenuStore } from '@/stores/menu'
 import { getCurrentUser } from '@/api/queries/user'
 import { AuthStorage } from '@/utils/authStorage'
+import { clearAllDrafts } from '@/composables/useFormDraft'
 import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import { verifyLoginTwoFactor } from '@/api/twoFactor'
 import type { AuthData } from '@/utils/authStorage'
 import type { ApiResponse } from '@/types/api'
-import { safeSetItem, safeRemoveItem } from '@/utils/safeStorage'
 
 export type UserInfo = AuthData['user']
 
@@ -112,20 +112,27 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
-  function logout() {
+  function logout(): Promise<void> {
     // W3-T3：尽力通知服务端吊销（access 入黑名单 + token_version 递增，
     // 使被窃 refresh_token 一并失效）。携带 refresh_token 供后端一并吊销；
     // 网络/后端失败均不阻塞本地清理（登出必须始终可用）。
+    //
+    // 2026-10-31 F3：返回值改为吊销请求的完成 Promise。调用方必须先 await 它
+    // 再 freezeRequests()：请求拦截器在微任务里检查冻结标志，先冻结会让
+    // /auth/logout 被直接取消，服务端令牌永不吊销（本地看似已退出）。
+    let revoke: Promise<void> = Promise.resolve()
     try {
       const refresh = AuthStorage.getRefreshToken()
-      void apiRequest({
+      revoke = apiRequest({
         method: 'POST',
         url: '/auth/logout',
         data: refresh ? { refresh_token: refresh } : {},
         timeout: 3000,
-      }).catch(() => {
-        /* 吊销失败静默：本地清理照常执行 */
       })
+        .then(() => undefined)
+        .catch(() => {
+          /* 吊销失败静默：本地清理照常执行 */
+        })
     } catch {
       /* 静默 */
     }
@@ -135,11 +142,15 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = ''
     _setCachedToken(null)
     AuthStorage.clear()
+    // F5：草稿含未提交 PII，必须随会话销毁（共用电脑不得让下一个使用者恢复）
+    clearAllDrafts()
+    return revoke
   }
 
   /**
    * 锁屏（自动/手动）：仅结束当前会话，保留"记住登录"持久凭据。
-   * 同时写入会话级锁标记，防止路由守卫凭持久令牌自动跳回工作台。
+   * 同时写入锁屏标记（local + session，见 AuthStorage.setLocked），防止路由
+   * 守卫凭持久令牌自动跳回工作台——包括新标签页/重启应用的情形。
    */
   function lockSession() {
     token.value = ''
@@ -148,12 +159,12 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = ''
     _setCachedToken(null)
     AuthStorage.clearSession()
-    safeSetItem('auto_lock_active', '1', 'session')
+    AuthStorage.setLocked()
   }
 
-  /** 登录/自动登录成功后解除锁屏标记 */
+  /** 登录/自动登录成功后解除锁屏标记（local + session 一并清除） */
   function unlockSession() {
-    safeRemoveItem('auto_lock_active', 'session')
+    AuthStorage.clearLock()
   }
 
   /** 当前认证数据（供"记住登录"持久化，含刷新令牌） */

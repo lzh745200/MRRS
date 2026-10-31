@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.core.permission_utils import require_admin
+from app.core.permission_utils import require_admin, require_superuser
 from app.services.system_config_service import SystemConfigService
 from app.services.package_import_guard import (
     assert_content_not_duplicate,
@@ -169,7 +169,7 @@ async def import_config_package(
     将之前导出的配置包数据恢复或应用到当前系统。
     需要管理员权限。
     """
-    require_admin(current_user, error_message="仅超级管理员可导入配置包")
+    require_superuser(current_user, error_message="仅超级管理员可导入配置包")
 
     try:
         # 解析配置包数据
@@ -253,7 +253,7 @@ async def delete_config_package(
 
     需要管理员权限。
     """
-    require_admin(current_user, error_message="仅超级管理员可删除配置包")
+    require_admin(current_user, error_message="需要管理员权限")
 
     try:
         svc = SystemConfigService(db)

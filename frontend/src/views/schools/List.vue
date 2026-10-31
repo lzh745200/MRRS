@@ -280,6 +280,7 @@ import { DIALOG_SM } from '@/config/dialog'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { escapeHtml } from '@/utils/sanitize'
 import { buildSchoolLinkWarning, fetchSchoolLinkCounts } from '@/utils/schoolLinkWarning'
 
 import { ref, reactive, computed, onMounted, onActivated, onUnmounted, watch, nextTick } from 'vue'
@@ -667,7 +668,9 @@ function onImportSuccess(response: any) {
       .map((e: any, i: number) => {
         const row = e?.row ?? e?.row_index ?? i + 1
         const m = e?.error ?? e?.message ?? JSON.stringify(e)
-        return `${i + 1}. 第 ${row} 行：${m}`
+        // F1（2026-10-31）：后端错误里可能回显 Excel 单元格文本，属不可信输入；
+        // ElMessageBox 用 dangerouslyUseHTMLString 渲染时必须逐项转义。
+        return `${i + 1}. 第 ${escapeHtml(String(row))} 行：${escapeHtml(String(m))}`
       })
       .join('<br/>')
     const more = importErrors.length > 10 ? `<br/>… 共 ${importErrors.length} 条失败` : ''

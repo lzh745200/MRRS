@@ -4,6 +4,7 @@ import { computed, nextTick, reactive } from 'vue'
 import {
   DRAFT_STORAGE_PREFIX,
   DRAFT_TTL_DAYS,
+  clearAllDrafts,
   clearDraft,
   draftStorageKey,
   isBlankForm,
@@ -259,5 +260,32 @@ describe('useFormDraft', () => {
 
     const stored = readDraft<Record<string, unknown>>(KEY) as { data: Record<string, unknown> }
     expect(stored.data.title).toBe('ab')
+  })
+})
+
+// F5（2026-10-31 审计）：登出必须清空全部草稿 —— 草稿里有未提交的 PII，
+// 共用电脑不能让下一个使用者经「恢复草稿」拿到上一个人的录入内容。
+describe('clearAllDrafts（登出清理）', () => {
+  it('清除所有 form:draft:* 键，保留其它 localStorage 数据', () => {
+    seed('schools:edit:1', { name: '甲', phone: '13800000000' })
+    seed('policies:edit:new', { title: '乙' })
+    localStorage.setItem('nav:recent', '["dashboard"]')
+    localStorage.setItem('ui:prefs', '{}')
+
+    clearAllDrafts()
+
+    expect(readDraft('schools:edit:1')).toBeNull()
+    expect(readDraft('policies:edit:new')).toBeNull()
+    expect(localStorage.getItem('nav:recent')).toBe('["dashboard"]')
+    expect(localStorage.getItem('ui:prefs')).toBe('{}')
+  })
+
+  it('存储不可用时静默不抛（登出流程不得被草稿清理失败打断）', () => {
+    vi.stubGlobal('localStorage', undefined)
+    try {
+      expect(() => clearAllDrafts()).not.toThrow()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

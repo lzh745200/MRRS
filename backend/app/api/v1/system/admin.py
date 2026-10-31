@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.async_utils import run_in_thread
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.permission_utils import require_admin
+from app.core.permission_utils import require_admin, require_superuser
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.core.transaction import safe_commit
@@ -87,7 +87,7 @@ class SystemConfig(BaseModel):
 @router.get("/info", response_model=SystemInfo)
 async def get_system_info(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取系统信息"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_admin(current_user, error_message="需要管理员权限")
 
     db_path = get_database_path()
     db_size = db_path.stat().st_size if db_path.exists() else 0
@@ -118,7 +118,7 @@ async def get_system_info(current_user=Depends(get_current_user), db: Session = 
 @router.post("/backup")
 async def create_backup(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """创建数据库备份"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_superuser(current_user, error_message="仅超级管理员可创建系统备份")
 
     try:
         db_path = get_database_path()
@@ -156,7 +156,7 @@ async def create_backup(current_user=Depends(get_current_user), db: Session = De
 @router.get("/backups")
 async def list_backups(current_user=Depends(get_current_user)):
     """获取备份列表"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_admin(current_user, error_message="需要管理员权限")
 
     backup_dir = get_backup_directory()
 
@@ -201,7 +201,7 @@ async def restore_backup(
     正规入口：``POST /api/v1/system/backup/restore``（或上传恢复
     ``POST /api/v1/system/backup/upload-restore``）。
     """
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_admin(current_user, error_message="需要管理员权限")
 
     logger.warning(
         "已下线的旧恢复端点被调用（filename=%s，操作人=%s），已拒绝",
@@ -217,7 +217,7 @@ async def restore_backup(
 @router.delete("/backups/{filename}")
 async def delete_backup(filename: str, current_user=Depends(get_current_user)):
     """删除备份文件"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_superuser(current_user, error_message="仅超级管理员可删除备份")
 
     # 安全检查：防止路径遍历攻击
     if ".." in filename or "/" in filename or "\\" in filename or filename.startswith("."):
@@ -242,7 +242,7 @@ async def delete_backup(filename: str, current_user=Depends(get_current_user)):
 @router.get("/config")
 async def get_system_config(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取系统配置（从 system_configs 表读取，回退到默认值）"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_admin(current_user, error_message="需要管理员权限")
 
     from app.services.system_config_service import SystemConfigService
 
@@ -266,7 +266,7 @@ async def update_system_config(
     db: Session = Depends(get_db),
 ):
     """更新系统配置（持久化到 system_configs 表）"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_superuser(current_user, error_message="仅超级管理员可修改系统配置")
 
     from app.services.system_config_service import SystemConfigService
 
@@ -292,7 +292,7 @@ async def update_system_config(
 @router.post("/clear-cache")
 async def clear_cache(current_user=Depends(get_current_user)):
     """清理系统缓存"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_admin(current_user, error_message="需要管理员权限")
 
     try:
         from app.core.cache import cache_manager
@@ -328,7 +328,7 @@ async def get_system_logs(
     current_user=Depends(get_current_user),
 ):
     """获取系统日志"""
-    require_admin(current_user, error_message="仅超级管理员可执行此操作")
+    require_admin(current_user, error_message="需要管理员权限")
 
     log_file = Path(settings.LOG_FILE)
     if not log_file.exists():

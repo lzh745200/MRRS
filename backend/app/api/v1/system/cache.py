@@ -87,7 +87,7 @@ async def clear_cache(
     清理内存缓存，重置统计数据。用于解决缓存引起的临时问题。
     需要管理员权限。
     """
-    require_admin(current_user, error_message="仅超级管理员可清除缓存")
+    require_admin(current_user, error_message="需要管理员权限")
 
     try:
         with default_cache._lock:

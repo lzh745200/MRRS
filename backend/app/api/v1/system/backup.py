@@ -21,7 +21,7 @@ from app.utils.upload_helper import read_zip_member
 from app.models.user import User
 from app.core.transaction import safe_commit
 from app.core.security import get_current_user
-from app.core.permission_utils import require_admin
+from app.core.permission_utils import require_admin, require_superuser
 from app.services.backup_service import (
     BackupIncompleteError,
     BackupKeyMismatchError,
@@ -189,7 +189,7 @@ async def _authenticate_backup_delete_request(request: Request) -> str:
     if _internal_backup_key_valid(request):
         return "internal-backup"
     user = await _jwt_user_from_request(request)
-    require_admin(user, error_message="仅超级管理员可删除备份")
+    require_superuser(user, error_message="仅超级管理员可删除备份")
     return getattr(user, "username", "unknown")
 
 
@@ -710,7 +710,7 @@ async def download_backup(
     返回备份 ZIP 文件供本地保存或迁移使用。
     需要管理员权限（备份含全库数据）。
     """
-    require_admin(current_user, error_message="仅管理员可下载备份文件")
+    require_superuser(current_user, error_message="仅超级管理员可下载备份文件")
 
     from fastapi.responses import FileResponse
 
@@ -739,7 +739,7 @@ async def preview_backup(
     返回 {filename, size, files: [{name, size}], meta}；加密/损坏的 ZIP 返回 400。
     需要管理员权限。
     """
-    require_admin(current_user, error_message="仅超级管理员可预览备份")
+    require_superuser(current_user, error_message="仅超级管理员可预览备份")
 
     import json
     import zipfile
@@ -784,7 +784,7 @@ async def verify_backup(
     以及备份内文件的哈希校验。
     需要管理员权限。
     """
-    require_admin(current_user, error_message="仅超级管理员可验证备份")
+    require_superuser(current_user, error_message="仅超级管理员可验证备份")
 
     try:
         file_path = _resolve_backup_file_path(filename)
@@ -816,7 +816,7 @@ async def restore_backup(
     此操作将覆盖当前数据库和上传文件。
     需要管理员权限。
     """
-    require_admin(current_user, error_message="仅超级管理员可恢复备份")
+    require_superuser(current_user, error_message="仅超级管理员可恢复备份")
 
     try:
         file_path = _resolve_backup_file_path(body.filename)
@@ -905,7 +905,7 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
     上传的文件会临时保存到备份目录，恢复完成后自动删除。
     需要管理员权限。
     """
-    require_admin(current_user, error_message="仅超级管理员可上传恢复备份")
+    require_superuser(current_user, error_message="仅超级管理员可上传恢复备份")
 
     # W12-T045: 上传恢复前本盘容量预检（备份目录所在盘 <500MB 拒绝，避免写出损坏文件）
     try:

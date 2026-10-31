@@ -74,4 +74,59 @@ describe('W3-T3 登出服务端吊销', () => {
     expect(store.token).toBe('')
     expect(AuthStorage.getToken()).toBeNull()
   })
+
+  // F3（2026-10-31）：退出登录原先先 freezeRequests() 再 logout()，
+  // 请求拦截器把 /auth/logout 直接取消 → 服务端令牌不吊销。logout 现返回
+  // 吊销请求的完成 Promise，调用方先 await 再冻结。
+  it('logout 返回吊销请求的 Promise，await 后表示吊销已完成', async () => {
+    const store = useAuthStore()
+    AuthStorage.setToken('tk-f3'); AuthStorage.setRefreshToken('rf-f3')
+    let resolveRevoke: (v: unknown) => void = () => {}
+    postMock.mockReturnValue(new Promise((resolve) => { resolveRevoke = resolve }))
+
+    const pending = store.logout()
+    expect(pending).toBeInstanceOf(Promise)
+    // 本地清理是同步的：不 await 也已退出（登出必须始终可用）
+    expect(store.token).toBe('')
+    expect(AuthStorage.getToken()).toBeNull()
+
+    let settled = false
+    void pending.then(() => { settled = true })
+    await Promise.resolve()
+    expect(settled).toBe(false) // 服务端吊销未返回前不结束
+
+    resolveRevoke({ code: 200 })
+    await pending
+    expect(settled).toBe(true)
+  })
+
+  it('logout 清除锁屏标记（避免登出后下次打开停在锁定页）', async () => {
+    const store = useAuthStore()
+    AuthStorage.setToken('tk-f3b')
+    AuthStorage.setLocked()
+    postMock.mockResolvedValue({ code: 200 })
+
+    await store.logout()
+
+    expect(AuthStorage.isLocked()).toBe(false)
+    expect(localStorage.getItem('auto_lock_active')).toBeNull()
+  })
+
+  // F5（2026-10-31）：草稿含未提交 PII，登出必须全清，避免共用电脑上
+  // 下一位使用者经「恢复草稿」拿到上一位的身份证号/手机号。
+  it('logout 清除全部表单草稿，但保留界面偏好等非草稿数据', async () => {
+    const store = useAuthStore()
+    AuthStorage.setToken('tk-f5')
+    localStorage.setItem(
+      'form:draft:schools:edit:1',
+      JSON.stringify({ data: { id_card: '110101199001011234' }, savedAt: Date.now() }),
+    )
+    localStorage.setItem('ui:prefs', '{}')
+    postMock.mockResolvedValue({ code: 200 })
+
+    await store.logout()
+
+    expect(localStorage.getItem('form:draft:schools:edit:1')).toBeNull()
+    expect(localStorage.getItem('ui:prefs')).toBe('{}')
+  })
 })

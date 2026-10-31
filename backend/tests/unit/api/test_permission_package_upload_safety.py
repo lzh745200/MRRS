@@ -35,6 +35,9 @@ def env(tmp_path):
     可能被 git add -A 带进提交。tmp_path 由 pytest 自动回收，两个问题一并消失。
     """
     db = MagicMock()
+    # SEC-1：匿名导入仅在「空库」时放行，故默认把用户存在性查询 mock 成
+    # `None`（等价于全新安装）。需要验证「有账号时必须登录」的用例自行覆盖。
+    db.query.return_value.first.return_value = None
     upload_dir = str(tmp_path / "pp_test_uploads")
     _original = app.dependency_overrides.copy()
     app.dependency_overrides[get_db] = lambda: db
@@ -58,6 +61,18 @@ class TestImportAuthGate:
         )
         assert resp.status_code == 403
         assert "本机" in resp.json()["detail"]
+
+    def test_unauthenticated_loopback_rejected_when_accounts_exist(self, env):
+        """SEC-1：本机来源不是免认证通道 —— 库里已有账号就必须先登录。"""
+        tc, db, _ = env
+        db.query.return_value.first.return_value = object()
+        with patch("app.api.v1.permission_package._client_is_loopback", return_value=True):
+            resp = tc.post(
+                "/api/v1/permission-packages/import",
+                files={"file": ("pkg.zip", ZIP_MAGIC + b"payload", "application/zip")},
+            )
+        assert resp.status_code == 403
+        assert "登录" in resp.json()["detail"]
 
     def test_unauthenticated_loopback_allowed(self, env):
         tc, db, upload_dir = env

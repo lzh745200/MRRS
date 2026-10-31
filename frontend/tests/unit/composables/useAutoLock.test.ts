@@ -4,10 +4,12 @@ import { mount } from '@vue/test-utils'
 
 // 2026-09-30 深审修复：默认 lockNow 的 catch 由"完全静默"改为 logger.error 可观测。
 // 为覆盖失败分支（真实环境无注入时不会失败），此处 mock 会话清理并令其抛错。
-const authMocks = vi.hoisted(() => ({ clearSession: vi.fn() }))
+const authMocks = vi.hoisted(() => ({ clearSession: vi.fn(), setLocked: vi.fn() }))
 const lockMocks = vi.hoisted(() => ({ markLockNow: vi.fn() }))
 const logMocks = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }))
-vi.mock('@/utils/authStorage', () => ({ AuthStorage: { clearSession: authMocks.clearSession } }))
+vi.mock('@/utils/authStorage', () => ({
+  AuthStorage: { clearSession: authMocks.clearSession, setLocked: authMocks.setLocked },
+}))
 vi.mock('@/utils/lockDigest', () => ({ markLockNow: lockMocks.markLockNow }))
 vi.mock('@/utils/logger', () => ({ logger: logMocks }))
 
@@ -134,7 +136,8 @@ describe('useAutoLock（自动锁屏）', () => {
     const { w } = mountHost()
     vi.advanceTimersByTime(15 * 60 * 1000 + 100)
     expect(authMocks.clearSession).toHaveBeenCalled()
-    expect(window.sessionStorage.getItem('auto_lock_active')).toBe('1')
+    // F2：锁标记改由 AuthStorage.setLocked 写 local+session（不再直接写 sessionStorage）
+    expect(authMocks.setLocked).toHaveBeenCalled()
     expect(lockMocks.markLockNow).toHaveBeenCalled()
     expect(logMocks.error).not.toHaveBeenCalled()
     w.unmount()

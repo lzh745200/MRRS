@@ -104,6 +104,29 @@ export function clearDraft(key: string): void {
   }
 }
 
+/**
+ * 清除当前浏览器上的全部表单草稿（登出时必须调用）。
+ *
+ * 2026-10-31 审计（F5）：草稿里是未提交的业务数据，常见含身份证号、手机号等
+ * PII；原先退出登录只清 token/user，`form:draft:*` 原样留在共用电脑上，下一个
+ * 使用者可经「发现未提交的草稿，是否恢复？」拿到上一个人的录入内容。草稿的
+ * 生命周期必须止于会话：登出即全清（锁屏不清，锁屏后仍是同一用户回到原处）。
+ */
+export function clearAllDrafts(): void {
+  const store = storage()
+  if (!store) return
+  try {
+    const keys: string[] = []
+    for (let i = 0; i < store.length; i += 1) {
+      const key = store.key(i)
+      if (key && key.startsWith(DRAFT_STORAGE_PREFIX)) keys.push(key)
+    }
+    keys.forEach((key) => store.removeItem(key))
+  } catch {
+    // 存储不可用：静默降级（登出流程不得因清理草稿而失败）
+  }
+}
+
 /** 所有字段都为空/未填时视为"没内容"，不写入存储。 */
 export function isBlankForm(source: Record<string, unknown>): boolean {
   return Object.values(source).every((value) => {

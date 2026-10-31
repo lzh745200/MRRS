@@ -370,4 +370,34 @@ describe('utils/authStorage', () => {
       expect(AuthStorage.getUser()).toBeNull()
     })
   })
+
+  // F2（2026-10-31）：锁屏标记必须与「记住登录」同属 localStorage 级，
+  // 否则新标签页/重启后 sessionStorage 为空 → 守卫判为未锁 → 免密进入。
+  describe('lock flag（F2 锁屏不可绕过）', () => {
+    it('setLocked 同时写 local 与 session', () => {
+      AuthStorage.setLocked()
+      expect(localStorage.getItem('auto_lock_active')).toBe('1')
+      expect(sessionStorage.getItem('auto_lock_active')).toBe('1')
+      expect(AuthStorage.isLocked()).toBe(true)
+    })
+
+    it('clearLock 两处都清', () => {
+      AuthStorage.setLocked()
+      AuthStorage.clearLock()
+      expect(localStorage.getItem('auto_lock_active')).toBeNull()
+      expect(sessionStorage.getItem('auto_lock_active')).toBeNull()
+      expect(AuthStorage.isLocked()).toBe(false)
+    })
+
+    it('仅 local 有标记也算锁定（模拟新标签页/重启后 session 为空）', () => {
+      localStorage.setItem('auto_lock_active', '1')
+      expect(AuthStorage.isLocked()).toBe(true)
+    })
+
+    it('logout 的 clear() 一并清除锁标记（避免登出后停在锁定页）', () => {
+      AuthStorage.setLocked()
+      AuthStorage.clear()
+      expect(AuthStorage.isLocked()).toBe(false)
+    })
+  })
 })

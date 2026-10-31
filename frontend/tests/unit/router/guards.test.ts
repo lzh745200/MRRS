@@ -125,6 +125,7 @@ describe('白名单路由（登录/注册/找回密码）免登录跳转 + 锁�
     mockGetToken.mockReturnValue('tok')
     mockGetUser.mockReturnValue({ role: 'user' })
     sessionStorage.clear()
+    localStorage.clear()
   })
 
   it('已登录且未锁屏访问 /login → 直接进 /dashboard（免登录）', async () => {
@@ -188,6 +189,23 @@ describe('白名单路由（登录/注册/找回密码）免登录跳转 + 锁�
     const next = vi.fn()
     await routeGuard({ meta: {}, path: '/dashboard' } as any, {} as any, next)
     expect(next).toHaveBeenCalledWith('/login?redirect=/dashboard')
+  })
+
+  // F2（2026-10-31）：锁标记只写 sessionStorage 时，新标签页/重启应用后标记丢失，
+  // 而「记住登录」令牌仍在 localStorage → 守卫直接进工作台。故标记也写 localStorage。
+  it('仅 localStorage 有锁标记（模拟新标签页/重启）→ 仍拦截受保护路由', async () => {
+    localStorage.setItem('auto_lock_active', '1')
+    const next = vi.fn()
+    await routeGuard({ meta: {}, path: '/dashboard' } as any, {} as any, next)
+    expect(next).toHaveBeenCalledWith('/login?redirect=/dashboard')
+  })
+
+  it('仅 localStorage 有锁标记时访问 /login → 不自动跳回工作台（必须重输密码）', async () => {
+    localStorage.setItem('auto_lock_active', '1')
+    const next = vi.fn()
+    await routeGuard({ meta: {}, path: '/login' } as any, {} as any, next)
+    expect(next).toHaveBeenCalledWith()
+    expect(next).not.toHaveBeenCalledWith('/dashboard')
   })
 
   it('锁屏标记存在时，含权限/菜单元数据的路由同样先收口到登录页', async () => {

@@ -512,11 +512,17 @@ class PermissionPackageService:
         file_path: str,
         overwrite_existing: bool = True,
         mode: Optional[str] = None,
+        allow_privileged: bool = True,
     ) -> Dict[str, Any]:
         """确认导入权限配置包。
 
         mode: "overwrite"=完全替换（默认，mirror）；"merge"=合并保留目标机既有配置。
         兼容旧调用：mode 为 None 时按 overwrite_existing 判断。
+
+        allow_privileged（SEC-1，2026-10-31）：调用者是否有权授予超管级权限。
+        只有「超级管理员」或「空库离线首装（本机来源）」可传 True；部门级 admin
+        导入时传 False，包内的 super_admin / data_scope=all 会被收敛为
+        admin / org —— 否则 admin 可自造权限包把任意账号（含自己）提成 super_admin。
         """
         if not os.path.exists(file_path) or not zipfile.is_zipfile(file_path):
             return {"success": False, "errors": ["无效的文件"], "message": "无效的文件"}
@@ -591,7 +597,8 @@ class PermissionPackageService:
                 user_menus_data, stats, errors, merge_mode=merge_mode
             )
             stats, errors = self._import_user_legacy(
-                user_legacy_data, stats, errors, merge_mode=merge_mode
+                user_legacy_data, stats, errors,
+                merge_mode=merge_mode, allow_privileged=allow_privileged,
             )
 
             self.db.commit()
@@ -945,7 +952,44 @@ class PermissionPackageService:
                 errors.append(f"用户菜单「{username}」导入失败: {e}")
         return stats, errors
 
-    def _import_user_legacy(self, user_legacy_data, stats, errors, merge_mode=False):
+    #: 权限包内允许落库的角色/数据范围（SEC-1；与 core.constants 单一源对齐）
+    _IMPORTABLE_ROLES = ("super_admin", "admin", "user", "viewer")
+    _IMPORTABLE_DATA_SCOPES = ("all", "org", "own")
+
+    def _sanitize_legacy_privilege(self, legacy_data, allow_privileged, stats):
+        """归一化并收敛权限包内的 role / data_scope（SEC-1，2026-10-31）。
+
+        - 未知角色/范围一律回落最小权限（user / org），防脏包破坏判权；
+        - 非特权导入（部门级 admin）不得经包授予 super_admin 或 data_scope=all，
+          否则 admin 可自造权限包把任意账号（含自己）提成超管。
+        """
+        from app.core.constants import normalize_role
+
+        role = normalize_role(legacy_data.get("role") or "user")
+        if role not in self._IMPORTABLE_ROLES:
+            role = "user"
+        data_scope = legacy_data.get("data_scope") or "org"
+        if data_scope not in self._IMPORTABLE_DATA_SCOPES:
+            data_scope = "org"
+        if not allow_privileged:
+            clamped = False
+            if role == "super_admin":
+                role, clamped = "admin", True
+            if data_scope == "all":
+                data_scope, clamped = "org", True
+            if clamped:
+                stats["privileged_values_downgraded"] = (
+                    stats.get("privileged_values_downgraded", 0) + 1
+                )
+                logger.warning(
+                    "权限包导入：调用者非超管，已把 username=%s 的 super_admin/all 收敛为 admin/org",
+                    legacy_data.get("username", ""),
+                )
+        return role, data_scope
+
+    def _import_user_legacy(
+        self, user_legacy_data, stats, errors, merge_mode=False, allow_privileged=True
+    ):
         """导入遗留权限字段。"""
         for legacy_data in user_legacy_data:
             username = ""
@@ -957,18 +1001,21 @@ class PermissionPackageService:
                 user = self._resolve_user_by_username_or_id(username, None)
                 if not user:
                     continue
+                role, data_scope = self._sanitize_legacy_privilege(
+                    legacy_data, allow_privileged, stats
+                )
                 if merge_mode:
                     # merge 语义：目标字段为空/默认时才填充，不覆盖既有配置
                     if not getattr(user, "permissions", ""):
                         user.permissions = legacy_data.get("permissions", "")
                     if getattr(user, "data_scope", "org") in (None, "", "org"):
-                        user.data_scope = legacy_data.get("data_scope", "org")
+                        user.data_scope = data_scope
                     if (getattr(user, "role", "user") or "user") == "user":
-                        user.role = legacy_data.get("role", "user")
+                        user.role = role
                 else:
-                    user.role = legacy_data.get("role", "user")
+                    user.role = role
                     user.permissions = legacy_data.get("permissions", "")
-                    user.data_scope = legacy_data.get("data_scope", "org")
+                    user.data_scope = data_scope
                 # 恢复组织关联：优先按组织编码匹配（跨机器稳定），
                 # 回退按导出机原始 ID，均失败则置空（用户可通过界面重新指定）
                 org_id = legacy_data.get("organization_id")

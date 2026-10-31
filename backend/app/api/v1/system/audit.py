@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.permission_utils import is_admin
+from app.core.permission_utils import is_admin, require_superuser
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.audit import AuditAction, AuditLevel, AuditStatus
@@ -15,7 +15,7 @@ from app.services.audit_service import AuditService, SecurityEventService
 from app.utils.audit_logger import AuditLevel as AuditLoggerLevel
 from app.utils.audit_logger import AuditLogger
 from app.core.transaction import safe_commit
-from app.utils.time_utils import utcnow
+from app.utils.time_utils import to_utc_naive, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -120,9 +120,13 @@ def _inclusive_end_date(end_date: Optional[datetime]) -> Optional[datetime]:
     """
     if end_date is None:
         return None
-    if end_date.time() == time.min:
-        return datetime.combine(end_date.date(), time.max)
-    return end_date
+    local_end = (
+        datetime.combine(end_date.date(), time.max)
+        if end_date.time() == time.min
+        else end_date
+    )
+    # 入参是本地日历时间；AuditLog.created_at 是 UTC 墙钟，必须换算后再比较。
+    return to_utc_naive(local_end)
 
 
 def get_security_service(db: Session = Depends(get_db)) -> SecurityEventService:
@@ -140,15 +144,18 @@ async def batch_delete_audit_logs(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """批量删除审计日志（仅管理员）。
+    """批量删除审计日志（仅超级管理员）。
+
+    SEC-4（2026-10-31 审计）：删除审计日志会破坏审计链，且删除动作本身的留痕
+    也只是普通 audit_logs 行（可被再次批量删除而闭合证据链）。部门级 admin 只应
+    查看本单位日志，不得销毁全库证据，故收紧为超级管理员。
 
     支持三种删除策略：
     - ids: 按 ID 列表删除（优先级最高）
     - actions / action: 按操作类型（列表或单个）删除
     - before_date: 按日期范围删除（可与 actions 组合）
     """
-    if not is_admin(current_user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    require_superuser(current_user)
 
     from app.models.audit import AuditLog as AuditLogModel
 
@@ -223,9 +230,8 @@ async def delete_audit_log(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """删除单条审计日志"""
-    if not is_admin(current_user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """删除单条审计日志（仅超级管理员，SEC-4）"""
+    require_superuser(current_user)
 
     from app.models.audit import AuditLog as AuditLogModel
 
@@ -265,9 +271,8 @@ async def update_audit_log_remark(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """更新审计日志备注（remark 最长 500 字，超长 422 而非静默写库）"""
-    if not is_admin(current_user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """更新审计日志备注（仅超级管理员，SEC-4；remark 最长 500 字，超长 422）"""
+    require_superuser(current_user)
 
     from app.models.audit import AuditLog as AuditLogModel
 
@@ -331,7 +336,7 @@ async def export_audit_logs(  # noqa: C901
     if action:
         query = query.filter(AuditLogModel.action == action)
     if start_date:
-        query = query.filter(AuditLogModel.created_at >= start_date)
+        query = query.filter(AuditLogModel.created_at >= to_utc_naive(start_date))
     if end_date:
         query = query.filter(AuditLogModel.created_at <= _inclusive_end_date(end_date))
 

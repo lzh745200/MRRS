@@ -136,6 +136,65 @@ def require_admin(func=_UNSET, *, error_message: str = "需要管理员权限"):
     return None
 
 
+def require_superuser(func=_UNSET, *, error_message: str = "仅超级管理员可执行此操作"):
+    """超级管理员权限验证 — 支持装饰器和直接调用两种模式。
+
+    与 :func:`require_admin` 的区别是**不把部门级 admin 视为放行**：只有
+    ``is_superuser=True`` 或 ``role == "super_admin"`` 可以通过。
+
+    适用场景（不可逆 / 全库范围 / 密钥材料）：
+    - 全库备份下载、备份预览/校验、恢复（含上传恢复）、删除备份；
+    - PII 主密钥导出/导入；
+    - 关机 / 重启。
+
+    历史缺陷（2026-10-31 审计，SEC-2）：这些端点的错误文案写的是"仅超级管理员"，
+    实现却调用 ``require_admin``，于是任意部门级 admin 都能下载/恢复全库、导出
+    PII 主密钥。文案与实现必须由本函数统一，不得再以 ``require_admin`` 顶替。
+
+    用法与 :func:`require_admin` 完全一致（装饰器 / 直接调用），非法用户一律
+    fail-closed（403，不返回 wrapper）。
+    """
+    if func is _UNSET:
+        def decorator(f):
+            return require_superuser(f, error_message=error_message)
+        return decorator
+
+    # 装饰器模式：仅有函数/方法/类才当作待装饰对象（同 require_admin 的说明）。
+    if inspect.isfunction(func) or inspect.ismethod(func) or inspect.isclass(func):
+
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            current_user = kwargs.get("current_user")
+            if current_user is None:
+                for arg in args:
+                    if hasattr(arg, "role") or hasattr(arg, "is_superuser"):
+                        current_user = arg
+                        break
+
+            if current_user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="未提供用户认证信息",
+                )
+
+            if not is_superuser(current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=error_message,
+                )
+
+            return await func(*args, **kwargs)
+
+        return wrapper
+
+    if not is_superuser(func):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_message,
+        )
+    return None
+
+
 def get_user_org_id(user) -> Optional[int]:
     """获取用户的组织ID
 

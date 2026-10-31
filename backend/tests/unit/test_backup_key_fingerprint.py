@@ -436,7 +436,8 @@ class TestMismatchAudit:
 
 
 def _admin():
-    return SimpleNamespace(id=1, role="admin", username="root", is_superuser=False)
+    # SEC-2：恢复/上传恢复仅超级管理员可执行
+    return SimpleNamespace(id=1, role="super_admin", username="root", is_superuser=True)
 
 
 def _valid_zip_bytes():

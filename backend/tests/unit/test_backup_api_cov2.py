@@ -23,7 +23,8 @@ from app.core.security import get_current_user
 
 
 def _admin():
-    return SimpleNamespace(id=1, role="admin", username="root", is_superuser=False)
+    # SEC-2：备份恢复/上传恢复是全库覆盖操作，仅超级管理员可执行
+    return SimpleNamespace(id=1, role="super_admin", username="root", is_superuser=True)
 
 
 @pytest.fixture

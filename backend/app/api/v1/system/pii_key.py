@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.permission_utils import require_admin
+from app.core.permission_utils import require_admin, require_superuser
 from app.core.response import success_response
 from app.core.security import get_current_user
 from app.services.work_log_service import write_work_log
@@ -122,7 +122,7 @@ def export_pii_key(
     current_user=Depends(get_current_user),
 ):
     """导出本机 PII 密钥，供其它机器导入以统一密文解钥。"""
-    require_admin(current_user, error_message="仅管理员可导出 PII 密钥")
+    require_superuser(current_user, error_message="仅超级管理员可导出 PII 主密钥")
     try:
         secret = _current_secret()
     except Exception as exc:
@@ -143,7 +143,7 @@ def import_pii_key(
     current_user=Depends(get_current_user),
 ):
     """导入源机 PII 密钥；成功后立即生效（无需重启）。"""
-    require_admin(current_user, error_message="仅管理员可导入 PII 密钥")
+    require_superuser(current_user, error_message="仅超级管理员可导入 PII 主密钥")
 
     new_secret = (body.key or "").strip()
     if len(new_secret) < _MIN_SECRET_LEN:

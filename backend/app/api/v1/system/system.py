@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.config import settings
-from app.core.permission_utils import require_admin
+from app.core.permission_utils import require_admin, require_superuser
 
 logger = logging.getLogger(__name__)
 
@@ -237,8 +237,7 @@ async def shutdown_system(
     延迟指定秒数后执行系统关闭操作。此操作需要管理员权限。
     系统将在关闭前完成当前请求的处理。
     """
-    from app.core.permission_utils import require_admin
-    require_admin(current_user, error_message="仅超级管理员可执行关机操作")
+    require_superuser(current_user, error_message="仅超级管理员可执行关机操作")
 
     logger.warning(
         "系统关机已触发，操作人: %s，延迟: %d秒",
@@ -275,8 +274,7 @@ async def restart_system(
 
     延迟指定秒数后执行系统重启操作。此操作需要管理员权限。
     """
-    from app.core.permission_utils import require_admin
-    require_admin(current_user, error_message="仅超级管理员可执行重启操作")
+    require_superuser(current_user, error_message="仅超级管理员可执行重启操作")
 
     logger.warning(
         "系统重启已触发，操作人: %s，延迟: %d秒",

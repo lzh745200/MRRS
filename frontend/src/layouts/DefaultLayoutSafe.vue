@@ -822,7 +822,7 @@ const globalShortcuts: Shortcut[] = [
 const showShortcutHelp = ref(false)
 useKeyboardShortcuts(globalShortcuts)
 
-function handleCommand(command: string) {
+async function handleCommand(command: string) {
   switch (command) {
     case 'appearance':
       openAppearanceSettings()
@@ -834,10 +834,13 @@ function handleCommand(command: string) {
       pushSafe('/change-password')
       break
     case 'logout':
+      // F3（2026-10-31）：必须先等吊销请求真正发出（logout 返回其完成 Promise），
+      // 再冻结/取消。旧顺序先 freezeRequests() → 请求拦截器直接取消 /auth/logout，
+      // 服务端令牌永不吊销（被窃刷新令牌仍可换新 access）。
+      await authStore.logout()
       // 冻结请求 + 取消 pending，防止 router.push 异步跳转期间组件发请求触发 401
       freezeRequests()
       cancelAllRequests()
-      authStore.logout()
       // 硬跳转（避免 Vue Router 异步跳转期间组件继续渲染发请求）
       window.location.href = '/login'
       break

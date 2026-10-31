@@ -318,8 +318,10 @@ const handleChangePassword = async () => {
 
     // 2. 同步清 token（阻止任何残留请求带失效 token）
     try {
+      // 改密接口后端已递增 token_version 使全部令牌失效，此处只需本地清理：
+      // 不 await 其吊销请求（该请求本身已带失效令牌，必 401），加 void 显式丢弃。
       if (authStore && typeof authStore.logout === 'function') {
-        authStore.logout()
+        void authStore.logout()
       }
       if (userStore && typeof userStore.logout === 'function') {
         userStore.logout()

@@ -47,6 +47,10 @@ MAX_COMPARE_IMAGES = 9
 # 对比图单元格图片高度 / 日期标注条高度（像素）
 COMPARE_CELL_HEIGHT = 360
 COMPARE_LABEL_HEIGHT = 40
+# 单张图片解码上限（像素）：50MP 约等于当前手机主摄上限，超出多为恶意/异常图
+MAX_IMAGE_PIXELS = 50_000_000
+# 对比图单元格最大宽度：防止超宽全景图把整张画布撑到数万像素（内存耗尽）
+COMPARE_MAX_CELL_WIDTH = 1440
 
 _EXIF_TAG_DATETIME_ORIGINAL = 36867
 _EXIF_TAG_DATETIME = 306
@@ -149,7 +153,8 @@ def resolve_upload_file(file_url: str) -> Path:
     """把 ``/uploads/...`` URL 解析为上传根目录内的物理路径（防路径穿越）
 
     Raises:
-        HTTPException 400: 非 ``/uploads/`` 地址 / 含空段或 ``..`` 穿越段
+        HTTPException 400: 非 ``/uploads/`` 地址 / 含空段或 ``..`` 穿越段 /
+            resolve 后跳出上传根（符号链接逃逸，2026-10-31 加固）
     """
     if not isinstance(file_url, str) or not file_url.startswith(UPLOAD_URL_PREFIX):
         raise HTTPException(status_code=400, detail="非法的文件地址（仅支持 /uploads/ 下的文件）")
@@ -157,7 +162,13 @@ def resolve_upload_file(file_url: str) -> Path:
     segments = [segment for segment in relative.split("/") if segment not in ("", ".")]
     if not segments or any(segment == ".." for segment in segments):
         raise HTTPException(status_code=400, detail="非法的文件地址（禁止路径穿越）")
-    return get_runtime_uploads_path().resolve().joinpath(*segments).resolve()
+    upload_root = get_runtime_uploads_path().resolve()
+    resolved = upload_root.joinpath(*segments).resolve()
+    # 逐段过滤只能挡住字面量 `..`；上传目录里若存在指向外部的符号链接，
+    # resolve() 之后仍可能落到根目录之外。此处以真实路径再做一次包含性断言。
+    if not resolved.is_relative_to(upload_root):
+        raise HTTPException(status_code=400, detail="非法的文件地址（越界访问）")
+    return resolved
 
 
 def read_upload_bytes(file_url: str) -> Optional[bytes]:
@@ -173,12 +184,23 @@ def read_upload_bytes(file_url: str) -> Optional[bytes]:
 
 
 def load_image(file_url: str) -> Image.Image:
-    """读取并解码上传目录内的图片为 RGB（404 文件缺失 / 400 非图片）"""
+    """读取并解码上传目录内的图片为 RGB（404 文件缺失 / 400 非图片）
+
+    2026-10-31：解码前校验像素总量。Pillow 默认只在 ~1.78 亿像素时才报
+    DecompressionBombError，单张 1 亿像素的 PNG 解码即需 ~300MB RGB 内存；
+    对比图接口每次最多 9 张，足以打爆进程（认证用户 DoS）。此处在 open 之后、
+    convert/load 之前拒绝超大图。
+    """
     content = read_upload_bytes(file_url)
     if content is None:
         raise HTTPException(status_code=404, detail="图片文件不存在")
     try:
         image = Image.open(io.BytesIO(content))
+        if image.width * image.height > MAX_IMAGE_PIXELS:
+            raise HTTPException(
+                status_code=400,
+                detail="图片尺寸过大（超过 5000 万像素），请压缩后重试",
+            )
         return image.convert("RGB")
     except (OSError, UnidentifiedImageError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="图片文件无法解析") from exc
@@ -437,11 +459,22 @@ def _resize_to_height(image: Image.Image, height: int) -> Image.Image:
 
 
 def _compose_grid(cells: list[tuple[Image.Image, str]]) -> bytes:
-    """把图片与日期标注合成为 PNG 网格（≤3 张横排；≥4 张 2 列多行）"""
+    """把图片与日期标注合成为 PNG 网格（≤3 张横排；≥4 张 2 列多行）
+
+    2026-10-31：单元格宽度原先直接取 ``max(resized.width)``。等比缩到高度 360
+    后，30000×500 的全景图宽度会变成 ~21600，整张画布随之放大到数万像素
+    （数 GB 内存）；这里对单元格宽度再设上限，并按人像/全景统一居中。
+    """
     count = len(cells)
     columns = count if count <= 3 else 2
     rows = 1 if count <= 3 else (count + 1) // 2
-    resized = [_resize_to_height(image, COMPARE_CELL_HEIGHT) for image, _label in cells]
+    resized: list[Image.Image] = []
+    for image, _label in cells:
+        scaled = _resize_to_height(image, COMPARE_CELL_HEIGHT)
+        if scaled.width > COMPARE_MAX_CELL_WIDTH:
+            target_height = max(1, round(scaled.height * COMPARE_MAX_CELL_WIDTH / scaled.width))
+            scaled = scaled.resize((COMPARE_MAX_CELL_WIDTH, target_height))
+        resized.append(scaled)
     cell_width = max(image.width for image in resized)
     cell_height = COMPARE_CELL_HEIGHT + COMPARE_LABEL_HEIGHT
     canvas = Image.new("RGB", (cell_width * columns, cell_height * rows), "white")
@@ -451,7 +484,8 @@ def _compose_grid(cells: list[tuple[Image.Image, str]]) -> bytes:
         cell = resized[index]
         row, column = divmod(index, columns)
         x = column * cell_width + (cell_width - cell.width) // 2
-        y = row * cell_height
+        # 被宽度上限二次缩放的图高度更小，垂直居中避免贴顶留白不均
+        y = row * cell_height + (COMPARE_CELL_HEIGHT - cell.height) // 2
         canvas.paste(cell, (x, y))
         text_width = drawer.textlength(label, font=font)
         drawer.text(

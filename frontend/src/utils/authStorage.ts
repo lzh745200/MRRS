@@ -40,6 +40,9 @@ const STORAGE_KEYS = {
   PERSIST_TOKEN: 'auth_persist_token',
   PERSIST_USER: 'auth_persist_user',
   PERSIST_REFRESH: 'auth_persist_refresh',
+  // 锁屏标记（2026-10-31 F2）：必须与"记住登录"同为 localStorage 级，
+  // 否则新标签页/重启后 sessionStorage 为空，锁屏会被守卫判为未锁。
+  LOCK: 'auto_lock_active',
 } as const
 
 // 旧版 localStorage 键名（用于向后兼容读取和清理）
@@ -267,6 +270,33 @@ export class AuthStorage {
   }
 
   /**
+   * 写入锁屏标记（2026-10-31 安全修复 F2：锁屏可绕过）。
+   *
+   * 旧实现只写 sessionStorage，而「记住登录」的令牌在 localStorage；新标签页 /
+   * 重启应用后 sessionStorage 为空 → readLockFlag() 判为未锁 → 路由守卫凭持久
+   * 令牌直接放行进工作台，锁屏形同虚设。此处 local 为主、session 同步写一份，
+   * 兼容既有读取点与旧测试；解除时两处一起清。
+   */
+  static setLocked(): void {
+    safeSetItem(STORAGE_KEYS.LOCK, '1', 'local')
+    safeSetItem(STORAGE_KEYS.LOCK, '1', 'session')
+  }
+
+  /** 解除锁屏标记（登录成功 / 自动登录恢复后调用），两处存储都清。 */
+  static clearLock(): void {
+    safeRemoveItem(STORAGE_KEYS.LOCK, 'local')
+    safeRemoveItem(STORAGE_KEYS.LOCK, 'session')
+  }
+
+  /** 当前是否处于锁屏态（任一存储命中即算锁定；异常时由调用方 fail-closed）。 */
+  static isLocked(): boolean {
+    return (
+      safeGetItem(STORAGE_KEYS.LOCK, 'local') === '1' ||
+      safeGetItem(STORAGE_KEYS.LOCK, 'session') === '1'
+    )
+  }
+
+  /**
    * 清除所有认证数据（含记住登录的持久数据——退出登录必须彻底清除）
    */
   static clear(): void {
@@ -282,6 +312,8 @@ export class AuthStorage {
 
     // 清除记住登录的持久数据（防止退出后仍自动登录）
     this.clearPersisted()
+    // 登出必须一并解除锁屏态，否则下次打开会停在"已锁定"的登录页
+    this.clearLock()
   }
 
   /**

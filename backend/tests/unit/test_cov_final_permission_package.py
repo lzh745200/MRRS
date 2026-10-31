@@ -30,17 +30,21 @@ class TestNonAdminForbidden:
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "需要管理员权限"
 
-    async def test_import_allowed_for_anonymous_preview(self):
-        # 导入仅做验证预览(不写库),允许登录前调用——离线权限包导入场景
-        # 非 zip 文件在权限检查前返回 400,证明非管理员可达(不再 403)
+    async def test_import_allowed_for_anonymous_preview_on_empty_database(self):
+        # SEC-1：匿名预览只保留「空库 + 本机来源」的离线首装通道（不写库）。
+        # 非 zip 文件在权限检查之后返回 400，证明该通道可达（不是 403）。
         file = SimpleNamespace(filename="pkg.tar")
+        request = MagicMock()
+        request.client.host = "127.0.0.1"
+        db = MagicMock()
+        db.query.return_value.first.return_value = None
         with pytest.raises(HTTPException) as exc_info:
-            await pp.import_permission_package(MagicMock(), file, _non_admin(), MagicMock())
+            await pp.import_permission_package(request, file, None, None, db)
         assert exc_info.value.status_code == 400
         assert "zip" in exc_info.value.detail
 
-    def test_confirm_forbidden_for_remote_non_admin(self):
-        # 非管理员 + 非本机来源 → 403(仅允许本机离线导入)
+    def test_confirm_forbidden_for_non_admin(self):
+        # SEC-1：已登录非管理员 → 403（本机来源不再是免认证通道）
         body = pp.PermissionPackageConfirmRequest()
         request = MagicMock()
         request.client.host = "10.0.0.5"
@@ -49,10 +53,10 @@ class TestNonAdminForbidden:
                 "pkg.zip", body, _non_admin(), MagicMock(), request
             )
         assert exc_info.value.status_code == 403
-        assert exc_info.value.detail == "仅允许本机导入权限包"
+        assert exc_info.value.detail == "仅管理员可导入权限配置包"
 
-    def test_confirm_allowed_for_local_non_admin(self):
-        # 非管理员 + 本机来源 → 通过来源校验,走到文件校验(不再 403)
+    def test_confirm_forbidden_for_local_non_admin(self):
+        # SEC-1 核心回归：本机来源 + 非管理员同样 403（历史提权路径）
         body = pp.PermissionPackageConfirmRequest()
         request = MagicMock()
         request.client.host = "127.0.0.1"
@@ -61,5 +65,5 @@ class TestNonAdminForbidden:
                 pp.confirm_import_permission_package(
                     "pkg.zip", body, _non_admin(), MagicMock(), request
                 )
-        assert exc_info.value.status_code == 404
-        assert "导入文件不存在" in exc_info.value.detail
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "仅管理员可导入权限配置包"
