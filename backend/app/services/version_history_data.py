@@ -3748,6 +3748,14 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-31",
         "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
         "features": [
+            "后端全量 GET 巡检：432 个路由 → 发现并修复 1 个真缺陷（/menus/accessible 的 user 形态健壮性，见上一条）；修复后 0 个 5xx。",
+            "后端写端点巡检：255 个 POST/PUT/PATCH（排除危险操作）→ 0 个 5xx。",
+            "债务标记：后端 TODO/FIXME 0 处（1 处为注释误报）、前端 0 处。",
+            (
+                "静默吞异常：前端空 catch 0 处；50 处「仅注释 catch」抽样均为有说明的合理降级（401 由拦截器处理 / 配额降级 / 逐项隔离），后端 35 处 except: pass"
+                " 均为窄异常 + 明确兜底。"
+            ),
+            "空壳页面：13 个「有表格/表单但零 API 关联」的页面/组件，逐个核实后确认均为展示组件（props/emit）或使用 store/localStorage 的合理设计，无真空壳。",
             "auth/auth.py 的 4 处用 getattr(user, \"allowed_menus_list\", None)（防御式）；",
             (
                 "api/v1/menus.py 的 4 处直接属性访问（user.allowed_menus_list）。test_cov_final_organization.py::test_is_a"
@@ -3762,9 +3770,6 @@ VERSION_HISTORY_DATA = [
             "Windows、ARM64 Electron、standalone DEB、deb-complete 四条打包链路全部接入该门禁：模块漏收在构建期失败，不再等到装机后启动才暴露。",
             "start.py 增加 BACKEND_IMPORT_CHECK=1 手动自检入口（只 import，不监听端口）。",
             "ARM64 standalone spec 不再排除标准库 difflib，并显式加入隐藏导入",
-            "新增冻结产物模块门禁，校验 difflib、入口链与全部 379 个 app.* 模块",
-            "Windows / ARM64 Electron / standalone DEB / deb-complete 四条出包链路全部接入门禁",
-            "后端启动增加 BACKEND_IMPORT_CHECK 自检入口，构建期即可验证产物可导入",
         ],
     },
 ]
