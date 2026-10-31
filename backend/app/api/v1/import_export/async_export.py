@@ -10,7 +10,7 @@ Requirements: 2.1, 2.2, 2.3
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,6 +18,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.v1.deps import authenticated_user_id
 from app.core.database import get_db
 from app.core.permission_utils import is_superuser
 from app.core.security import get_current_user
@@ -121,7 +122,7 @@ def export_reports(
 
     try:
         # 构造查询参数
-        query_params = {
+        query_params: dict[str, Any] = {
             "report_type": params.report_type,
             "format": params.format,
             "scope": params.scope,
@@ -178,7 +179,7 @@ async def export_villages(
 
     if should_async:  # 异步导出
         task = await service.export_supported_villages_async(
-            user_id=current_user.id, query_params=query_params
+            user_id=authenticated_user_id(current_user), query_params=query_params
         )
 
         return ExportRequestResponse(
@@ -310,7 +311,9 @@ def get_export_tasks(
     - 支持分页和状态筛选
     """
     service = AsyncExportService(db)
-    tasks, total = service.get_user_export_tasks(user_id=current_user.id, page=page, page_size=page_size, status=status)
+    tasks, total = service.get_user_export_tasks(
+        user_id=authenticated_user_id(current_user), page=page, page_size=page_size, status=status
+    )
 
     return ExportTaskListResponse(
         items=[

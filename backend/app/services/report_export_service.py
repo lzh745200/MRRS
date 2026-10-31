@@ -11,6 +11,7 @@
 import logging
 from datetime import datetime
 from io import BytesIO
+from typing import Optional
 
 from app.services.export_service import (
     build_scope_footnote,
@@ -103,7 +104,7 @@ class ReportExportService:
             footnote = build_scope_footnote(filters={"年度": data.get("year")})
         return format_scope_footnote(footnote)
 
-    def generate_summary_report_data(self, db, year: int, current_user) -> dict:
+    def generate_summary_report_data(self, db, year: Optional[int], current_user) -> dict:
         """生成年度帮扶工作总结数据（村/校/项目/经费四块合并）"""
         year = self._resolve_year(year)
         village = self.generate_village_summary_report_data(db, year, current_user)
@@ -143,7 +144,7 @@ class ReportExportService:
             "footnote": self._report_footnote(current_user, year),
         }
 
-    def generate_fund_detail_report_data(self, db, year: int, current_user) -> dict:
+    def generate_fund_detail_report_data(self, db, year: Optional[int], current_user) -> dict:
         """生成经费明细报表数据（按经费类型分组聚合）
 
         数据域：``current_user`` 必填（H6），聚合仅覆盖调用者可见组织/本人记录。
@@ -215,7 +216,7 @@ class ReportExportService:
                 "footnote": self._report_footnote(current_user, year),
             }
 
-    def generate_project_progress_report_data(self, db, year: int, current_user) -> dict:
+    def generate_project_progress_report_data(self, db, year: Optional[int], current_user) -> dict:
         """生成项目进度报表数据（按状态分组聚合）
 
         数据域：``current_user`` 必填（H6）。
@@ -287,7 +288,7 @@ class ReportExportService:
                 "footnote": self._report_footnote(current_user, year),
             }
 
-    def generate_school_statistics_report_data(self, db, year: int, current_user) -> dict:
+    def generate_school_statistics_report_data(self, db, year: Optional[int], current_user) -> dict:
         """生成帮扶学校统计报表数据
 
         数据域：``current_user`` 必填（H6）。
@@ -336,7 +337,7 @@ class ReportExportService:
             "footnote": self._report_footnote(current_user, year),
         }
 
-    def generate_village_summary_report_data(self, db, year: int, current_user) -> dict:
+    def generate_village_summary_report_data(self, db, year: Optional[int], current_user) -> dict:
         """生成帮扶村年度汇总报表数据
 
         数据域：``current_user`` 必填（H6）。
@@ -373,7 +374,7 @@ class ReportExportService:
             "footnote": self._report_footnote(current_user, year),
         }
 
-    def generate_annual_summary_report_data(self, db, year: int, current_user) -> dict:
+    def generate_annual_summary_report_data(self, db, year: Optional[int], current_user) -> dict:
         """生成年度综合总结报告数据（合并村/项目/资金/学校）
 
         数据域：``current_user`` 必填（H6），四块子报表逐块透传。

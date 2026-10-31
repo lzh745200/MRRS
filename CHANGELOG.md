@@ -47,6 +47,20 @@
   `get_statistics` 的 `max_level` 改走 `level_order()` 归一（原先直接 `max(level)` 会因 `level` 存
   `level_2` 与整数两种口径而抛 `TypeError`），`OrganizationStatistics` 用字段别名 `level_distribution=` 构造
   （`populate_by_name=True` 两种都收，运行期等价）。
+- **启用 pydantic mypy 插件**（`backend/mypy.ini`：`plugins = sqlalchemy.ext.mypy.plugin, pydantic.mypy` +
+  `[pydantic-mypy]` 的 `init_forbid_extra` / `init_typed` / `warn_required_dynamic_aliases` 全关）：
+  pydantic v2 通过 `ModelMetaclass` 的 `@dataclass_transform` 暴露字段默认值，官方插件缺席时 mypy
+  会把「必填字段之后声明的 `x: T = Field(None, ...)`」一并当成必填，全仓因此虚报 **28 条**
+  `Missing named argument`（`call-arg` 9 / `arg-type` 19，例如 `ExportRequestResponse(mode=..., message=...)`
+  这类完全合法的构造）。同一份 384 个源文件实测 **563 → 527 条**。该文件**必须保持 ASCII**：
+  mypy 按平台 locale 读配置（本机 GBK），中文注释会让整个类型门禁 `UnicodeDecodeError` 崩掉。
+- `backend/app/services/report_export_service.py` 的 6 个 `generate_*_report_data(db, year, ...)`
+  把 `year: int` 放宽为 `Optional[int]`：`import_export/export.py` 的 `/report-word`、`/report-pdf`
+  传的是 `Query(None)`，而每个方法首行都 `year = self._resolve_year(year)`（`int(year) if year else
+  datetime.now().year`），运行期语义一字未变，消掉该文件 12 条 `arg-type`。
+- `backend/app/api/v1/import_export/async_export.py` 类型收敛（mypy **3 → 0**）：报表导出的
+  `query_params` 显式标 `dict[str, Any]`（此前被首个值推断成 `dict[str, str]`，`options` 字典无处可放），
+  两处 `user_id=current_user.id` 改走 `deps.authenticated_user_id()`。
 
 ### 验证
 
@@ -63,6 +77,9 @@
   **BrPart=0**；打包后端运行期实测 `GET /map/tile-info` 200（`tileCount=70,523`、
   `zoomLevels=[5..12,14]`、bbox 全省），z14 与 z5 瓦片均 200。
 - 新包组合验证：内置 z5–12 + `guizhou-all_z14.zip` 合并后 `zoomLevels=5..12,14`、z14 瓦片 200。
+- 类型门禁：全量 `mypy app`（384 个源文件）**563 → 515 条**（pydantic 插件消掉 28 条虚报，本轮再清 12 条）；
+  `pytest tests -k "async_export or report_export or export_report"` **143 项通过**；
+  `flake8 --max-line-length=120 --max-complexity=16` 对 3 个改动文件 rc=0。
 
 ### 质量门禁
 
