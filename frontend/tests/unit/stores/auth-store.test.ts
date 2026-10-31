@@ -22,6 +22,13 @@ vi.mock('@/utils/authStorage', () => {
     setRefreshToken: vi.fn(),
     setAuthData: vi.fn(),
     clear: vi.fn(),
+    // 锁屏标记（stores/auth 的 login → persistAuth → unlockSession 会调用 clearLock，
+    // lockSession 会调用 setLocked）。真实实现经 safeSetItem/safeRemoveItem 吞掉存储异常，
+    // mock 必须提供同名方法，否则 unlockSession 抛 TypeError 会让 login() 落进 catch
+    // 返回 'error'（CI 实测：auth-store.test.ts > login > 成功: persistAuth + return success）。
+    setLocked: vi.fn(),
+    clearLock: vi.fn(),
+    isLocked: vi.fn(() => false),
   }
   // Default returns
   storage.getToken.mockReturnValue('')
