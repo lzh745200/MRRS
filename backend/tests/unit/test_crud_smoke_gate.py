@@ -256,3 +256,103 @@ def test_scenarios_cover_user_visible_capabilities_and_logout_is_last():
         assert any(keyword in name for name in names), keyword
     assert "登出" in names
     assert gate.SCENARIOS[-1][0] == "登出", "登出会让令牌失效，必须最后执行"
+
+class _StubClient:
+    """只回固定响应的客户端替身：用于测场景的前置校验与数据库绑定。"""
+
+    def __init__(self, post_response, get_handler):
+        self._post_response = post_response
+        self._get_handler = get_handler
+        self.org_id = None
+        self.db_path = None
+
+    def post(self, path, payload=None, timeout=None):
+        return self._post_response
+
+    def get(self, path, timeout=None):
+        return self._get_handler(path)
+
+
+def _json_response(status, payload):
+    import json
+
+    return gate.Response(status, json.dumps(payload).encode("utf-8"), {})
+
+
+def test_http_client_declares_org_and_db_binding_fields():
+    client = gate.HttpClient("http://127.0.0.1:1")
+    assert client.org_id is None
+    assert client.db_path is None
+
+
+def test_scenarios_cover_org_and_data_package_roundtrip():
+    names = [name for name, _scenario in gate.SCENARIOS]
+    assert any("组织" in name for name in names)
+    assert any("数据包" in name for name in names)
+    # 数据包导出依赖「管理员已绑定组织」；备份与登出必须排在它之后
+    assert names.index("组织与管理员绑定") < names.index("数据包导入导出")
+    assert names.index("数据包导入导出") < names.index("备份")
+    assert gate.SCENARIOS[-1][0] == "登出"
+
+
+def test_organization_scenario_requires_isolated_db_path():
+    client = _StubClient(
+        _json_response(200, {"code": 200, "data": {"id": 7}, "message": "ok"}),
+        lambda path: _json_response(200, {"code": 200, "data": {"id": 7, "code": "522700"}}),
+    )
+    with pytest.raises(gate.SmokeFailure) as excinfo:
+        gate.scenario_organization(client, [])
+    assert "一次性库路径" in str(excinfo.value)
+
+
+def test_organization_scenario_binds_seeded_admin(tmp_path):
+    import sqlite3
+
+    db_path = tmp_path / "smoke.db"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("CREATE TABLE users (username TEXT, organization_id INTEGER)")
+        conn.execute(
+            "INSERT INTO users (username, organization_id) VALUES (?, NULL)",
+            (gate.ep.FACTORY_ADMIN_USERNAME,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    client = _StubClient(
+        _json_response(200, {"code": 200, "data": {"id": 7}, "message": "ok"}),
+        lambda path: _json_response(
+            200,
+            (
+                {"code": 200, "data": {"id": 7, "code": "522700"}}
+                if "/organizations/" in path
+                else {"code": 200, "data": {"username": gate.ep.FACTORY_ADMIN_USERNAME, "organization_id": 7}}
+            ),
+        ),
+    )
+    client.db_path = str(db_path)
+    steps = []
+    gate.scenario_organization(client, steps)
+
+    assert client.org_id == 7
+    assert [step.name for step in steps] == [
+        "组织创建（行政区划编码校验）",
+        "管理员绑定组织（数据包按组织隔离的前提）",
+    ]
+    conn = sqlite3.connect(str(db_path))
+    try:
+        bound = conn.execute(
+            "SELECT organization_id FROM users WHERE username = ?",
+            (gate.ep.FACTORY_ADMIN_USERNAME,),
+        ).fetchone()
+    finally:
+        conn.close()
+    assert bound == (7,)
+
+
+def test_data_package_scenario_requires_bound_organization():
+    with pytest.raises(gate.SmokeFailure) as excinfo:
+        gate.scenario_data_package(gate.HttpClient("http://127.0.0.1:1"), [])
+    assert "尚未绑定组织" in str(excinfo.value)
+

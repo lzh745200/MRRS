@@ -16,7 +16,9 @@ check_endpoint_500.py 只发 GET，且大量端点在鉴权通过后就立刻返
 - 帮扶村 / 项目 / 政策 的 创建 → 详情 → 更新 → 软删 → 列表消失（帮扶村另验重复删除 409）；
 - 文件上传 → 静态路径回读（字节级一致）；
 - 报表导出（真实 xlsx，校验 ZIP 魔数）；
-- 备份 创建 → 列表可见 → 完整性校验（database_verified）→ 删除 → 列表消失。
+- 备份 创建 → 列表可见 → 完整性校验（database_verified）→ 删除 → 列表消失；
+- 组织 创建（行政区划编码校验）→ 管理员绑定组织（数据包按组织隔离的前提）；
+- 数据包 导出 → 下载 zip（PK 魔数）→ 回传导入（校验通过）→ 确认导入（导入导出闭环）。
 
 任何一步不符预期即红。全部操作都在 .scratch/crud-smoke-* 的一次性库里，
 进程退出即删除，绝不触碰真实数据。
@@ -28,6 +30,7 @@ import argparse
 import base64
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import time
@@ -159,6 +162,8 @@ class HttpClient:
         self.timeout = timeout
         self.csrf_token: Optional[str] = None
         self.cookies: Dict[str, str] = {}
+        self.org_id: Optional[int] = None
+        self.db_path: Optional[str] = None
 
     def _cookie_header(self) -> str:
         return "; ".join("%s=%s" % (name, value) for name, value in self.cookies.items())
@@ -301,6 +306,51 @@ def scenario_login(client: HttpClient, steps: List[Step]) -> None:
     # 写请求统一要 CSRF 双提交（Cookie 签名 + header raw token），登录态不代表免校验
     client.fetch_csrf()
     record(steps, "CSRF 令牌获取（GET /auth/csrf-token）")
+
+
+def scenario_organization(client: HttpClient, steps: List[Step]) -> None:
+    """组织：创建（行政区划编码）→ 详情读回 → 把播种管理员绑定到该组织。
+
+    为什么必须绑定：数据包导出/接收都以组织为隔离单位，而播种管理员默认没有组织
+    （空库首启就是这样），不绑定则导出直接 400「当前用户未绑定组织」。这里直接改
+    一次性库里的 users.organization_id（与生产「管理员属于某组织」一致），
+    不引入额外的用户管理流程。
+    """
+    code = "522700"  # 黔南州：权威区划表内的市州级编码，可作为根组织
+    name = "冒烟组织-" + stamp()
+    created = expect_status(
+        client.post("/api/v1/organizations", {"name": name, "code": code}),
+        (200, 201),
+        "创建组织",
+    )
+    org_id = created_id(created, "组织")
+    detail = expect_status(client.get("/api/v1/organizations/%d" % org_id), (200,), "组织详情")
+    detail_data = data_of(detail)
+    expect(
+        isinstance(detail_data, dict) and detail_data.get("code") == code,
+        "组织详情编码不符：%s" % detail.text[:200],
+    )
+    record(steps, "组织创建（行政区划编码校验）", "id=%d code=%s" % (org_id, code))
+
+    expect(isinstance(client.db_path, str) and client.db_path, "缺少一次性库路径，无法绑定管理员组织")
+    conn = sqlite3.connect(str(client.db_path))
+    try:
+        conn.execute(
+            "UPDATE users SET organization_id = ? WHERE username = ?",
+            (org_id, ep.FACTORY_ADMIN_USERNAME),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    me = expect_status(client.get("/api/v1/auth/me"), (200,), "组织绑定后身份读取")
+    me_data = data_of(me)
+    expect(
+        isinstance(me_data, dict) and me_data.get("organization_id") == org_id,
+        "管理员未绑定到新组织：%s" % me.text[:200],
+    )
+    client.org_id = org_id
+    record(steps, "管理员绑定组织（数据包按组织隔离的前提）")
 
 
 def scenario_settings(client: HttpClient, steps: List[Step]) -> None:
@@ -484,6 +534,95 @@ def scenario_export(client: HttpClient, steps: List[Step]) -> None:
     record(steps, "报表导出（POST /reports/export/excel）", "%d 字节" % len(resp.body))
 
 
+def scenario_data_package(client: HttpClient, steps: List[Step]) -> None:
+    """数据包：导出 → 下载 zip → 回传导入 → 确认导入（导入导出闭环）。
+
+    这几步走的是用户真实的「上级导出 → 介质传递 → 下级接收」链路：
+    导出接口 response_model 直出（无信封），所以这里用 payload_of 而不是 data_of；
+    org_id 从详情接口取（导入必须显式指定目标组织，admin 播种账号没有默认组织）。
+    """
+    org_id = client.org_id
+    expect(isinstance(org_id, int), "数据包场景前置：管理员尚未绑定组织（见「组织」场景）")
+
+    village_name = "冒烟数据包村-" + stamp()
+    expect_status(
+        client.post("/api/v1/supported-villages", {"village_name": village_name}),
+        (200, 201),
+        "数据包准备：创建待导出帮扶村",
+    )
+
+    exported = expect_status(
+        client.post(
+            "/api/v1/data-packages/export",
+            {"org_id": int(org_id), "data_types": ["villages"], "description": "端到端冒烟数据包"},
+            timeout=300,
+        ),
+        (200,),
+        "导出数据包",
+    )
+    export_data = payload_of(exported)
+    package_id = export_data.get("package_id")
+    expect(isinstance(package_id, int), "导出响应缺少 package_id：%s" % exported.text[:200])
+    expect(int(export_data.get("file_size") or 0) > 0, "导出包大小为 0：%r" % export_data.get("file_size"))
+    manifest = export_data.get("manifest") or {}
+    counts = manifest.get("record_counts") or {}
+    expect(int(counts.get("villages") or 0) >= 1, "导出包未包含待导出帮扶村：%r" % counts)
+    record(steps, "数据包导出", "package_id=%d villages=%s" % (int(package_id), counts.get("villages")))
+
+    downloaded = expect_status(
+        client.get("/api/v1/data-packages/%d/download" % int(package_id), timeout=300),
+        (200,),
+        "下载数据包",
+    )
+    expect(downloaded.body[:2] == b"PK", "数据包不是 zip（缺少 PK 魔数）：%r" % downloaded.body[:8])
+    record(steps, "数据包下载", "%d 字节" % len(downloaded.body))
+
+    detail = expect_status(
+        client.get("/api/v1/data-packages/%d" % int(package_id)), (200,), "数据包详情"
+    )
+    detail_org = payload_of(detail).get("org_id")
+    expect(detail_org == org_id, "导出包组织归属不符：%r（期望 %r）" % (detail_org, org_id))
+
+    imported = expect_status(
+        client.upload(
+            "/api/v1/data-packages/import?org_id=%d&force=true" % int(org_id),
+            "crud-smoke-package.zip",
+            downloaded.body,
+            timeout=600,
+        ),
+        (200,),
+        "导入数据包",
+    )
+    import_data = payload_of(imported)
+    imported_id = import_data.get("package_id")
+    expect(isinstance(imported_id, int), "导入响应缺少 package_id：%s" % imported.text[:200])
+    validation = import_data.get("validation")
+    expect(isinstance(validation, dict), "导入响应缺少 validation：%s" % imported.text[:300])
+    expect(validation.get("is_valid") is True, "导入校验未通过：%s" % imported.text[:400])
+    record(steps, "数据包导入（校验通过）", "package_id=%d" % int(imported_id))
+
+    confirmed = expect_status(
+        client.post(
+            "/api/v1/data-packages/%d/confirm" % int(imported_id),
+            {"confirm": True, "overwrite_existing": False},
+            timeout=600,
+        ),
+        (200,),
+        "确认导入数据包",
+    )
+    confirm_data = payload_of(confirmed)
+    expect(confirm_data.get("success") is True, "确认导入失败：%s" % confirmed.text[:400])
+    imported_counts = confirm_data.get("imported_counts") or {}
+    skipped_counts = confirm_data.get("skipped_counts") or {}
+    touched = sum(int(value) for value in list(imported_counts.values()) + list(skipped_counts.values()))
+    expect(touched >= 1, "确认导入未处理任何记录：imported=%r skipped=%r" % (imported_counts, skipped_counts))
+    record(
+        steps,
+        "确认导入（冲突策略生效）",
+        "imported=%r skipped=%r" % (imported_counts, skipped_counts),
+    )
+
+
 def scenario_backup(client: HttpClient, steps: List[Step]) -> None:
     """备份：创建 → 列表可见 → 完整性校验 → 删除 → 列表消失。"""
     created = expect_status(
@@ -539,12 +678,14 @@ def scenario_logout(client: HttpClient, steps: List[Step]) -> None:
 
 SCENARIOS: List[Tuple[str, Any]] = [
     ("登录", scenario_login),
+    ("组织与管理员绑定", scenario_organization),
     ("设置保存", scenario_settings),
     ("帮扶村增删改查", scenario_village_crud),
     ("项目增删改查", scenario_project_crud),
     ("政策增删改查", scenario_policy_crud),
     ("上传下载", scenario_upload_download),
     ("报表导出", scenario_export),
+    ("数据包导入导出", scenario_data_package),
     ("备份", scenario_backup),
     ("登出", scenario_logout),
 ]
@@ -636,7 +777,7 @@ def print_report(steps: List[Step], verbose: bool) -> None:
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="隔离库端到端 CRUD 冒烟（登录/设置/增删改查/上传/导出/备份/登出）")
+    parser = argparse.ArgumentParser(description="隔离库端到端 CRUD 冒烟（登录/设置/增删改查/上传/导出/数据包导入导出/备份/登出）")
     parser.add_argument("--port", type=int, default=8801)
     parser.add_argument("--verbose", action="store_true", help="打印每一步（含通过项）")
     parser.add_argument("--keep-server", action="store_true", help="调试：结束后不杀进程、不删目录")
@@ -663,6 +804,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
 
         client = HttpClient(base_url, token=boot_token)
+        client.db_path = str(database_file(env))
         run_scenarios(client, steps, SCENARIOS)
 
         failures = [step for step in steps if not step.ok]
