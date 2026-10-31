@@ -1,0 +1,90 @@
+{
+  "fields": {
+    "base_package_id": {
+      "annotation": "typing.Optional[int]",
+      "required": false
+    },
+    "changes": {
+      "annotation": "typing.Optional[typing.Dict[str, typing.Any]]",
+      "required": false
+    },
+    "checksum": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "compression": {
+      "annotation": "<class 'str'>",
+      "required": false
+    },
+    "created_at": {
+      "annotation": "typing.Optional[datetime.datetime]",
+      "required": false
+    },
+    "data_types": {
+      "annotation": "typing.List[str]",
+      "required": false
+    },
+    "dependencies": {
+      "annotation": "typing.List[str]",
+      "required": false
+    },
+    "description": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "encryption": {
+      "annotation": "<class 'str'>",
+      "required": false
+    },
+    "export_scope": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "export_time": {
+      "annotation": "typing.Optional[datetime.datetime]",
+      "required": false
+    },
+    "exported_by": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "exported_by_name": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "incremental": {
+      "annotation": "<class 'bool'>",
+      "required": false
+    },
+    "key_fingerprint": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "org_code": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "org_name": {
+      "annotation": "typing.Optional[str]",
+      "required": false
+    },
+    "package_type": {
+      "annotation": "<enum 'PackageType'>",
+      "required": false
+    },
+    "record_counts": {
+      "annotation": "typing.Dict[str, int]",
+      "required": false
+    },
+    "version": {
+      "annotation": "<class 'str'>",
+      "required": false
+    }
+  },
+  "manifest_cls": "DataPackageManifest",
+  "package_type_values": [
+    "report",
+    "task",
+    "update"
+  ]
+}

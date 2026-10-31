@@ -1,4 +1,25 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+- **P0 三道棘轮（发版前必跑）**：
+  ① `frozen_smoke`（`check_frozen_smoke.py`）—— 冻结产物必须通过 `BACKEND_IMPORT_CHECK=1`
+  导入自检，并用随机端口真实起服务（/health 200 + 受保护端点 401）；产物不存在自动 SKIP。
+  这正是 v1.18.23~26 连红 3 次 tag 的根因门禁。踩到的两个环境坑也一并写进脚本注释：
+  `%TEMP%` 在受限策略下不可写（WinError 5）、`CACHE_DIR` 默认是 cwd 相对路径（装到
+  Program Files 后即只读）——冒烟因此显式给 DATA_DIR/CACHE_DIR 并落在仓库 `.scratch/`。
+  ② `endpoint_500`（`check_endpoint_500.py`）—— 进程内枚举 FastAPI 的全部 GET 路由
+  （跳过 path 参数），真实实例逐个探测；**无登录态返回 5xx 即红**，豁免需写入
+  `gate_baselines/endpoint_500.json` 并写明理由。首跑实测 **293 个 GET 端点 0 处 5xx**。
+  ③ `package_contract`（`check_package_contract.py`）—— 数据包 manifest 字段契约快照
+  （20 字段 / 3 枚举）：删字段、改类型、改必填、增删枚举值都必须 `--update` 显式确认。
+  三道门禁共 17 例回归用例（SKIP 语义、环境隔离、5xx 判定、基线抵扣、契约 diff 顺序）。
+- **P3：性能基线加 20000 行档 + 噪声地板**：`bench.py` 支持 `--rows 5000,20000` 多档，
+  基线写入 `tiers`（同时保留顶层首档，向后兼容旧读者）；新增 `MIN_ABS_SECONDS=0.05`
+  噪声地板：毫秒级路径（5,000 行 CSV 导出 ~5ms）两侧都低于地板就跳过比较，
+  避免「机器抖动 50%」被当成性能回归（实测消除了一次假 WARN）。
+  实测：5000 行 xlsx 0.30s / csv 0.007s / 模板 0.083s；20000 行 xlsx 1.06s / csv 0.02s。
+- **P1：密钥轮换后 PII 加解密自检**：新增 `pii_crypto.self_check()`（加密→解密往返，
+  失败即抛），并接到 `POST /api/v1/secrets/rotate` —— 自检失败返回 **500**
+  「密钥轮换后 PII 加解密自检失败，请勿继续写入」，而不是像以前那样回「轮换成功」。
+  成因：PII 解密失败是逐字段静默降级（原样回密文），现场看到的是「数据变乱码」。5 例回归。
 ### Performance（资助学生导入的 N+1 去重查询 —— 实测 40 倍差）
 
 **巡检方法**：静态扫描「循环体内含数据库查询」的 for 循环（全仓 43 处），

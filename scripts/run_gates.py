@@ -115,6 +115,14 @@ GATES: List[Gate] = [
           why="pragma 豁免必须写理由"),
     _gate("migration_evidence", "scripts/check_migration_self_evidence.py",
           why="会改 schema 的迁移必须自带旧库自证测试"),
+    _gate("package_contract", "scripts/check_package_contract.py", backend=True,
+          why="数据包 manifest 字段契约棘轮（删字段/改类型/改必填即红）"),
+    # 需要真实实例 / 冻结产物：缺失或未构建自动 SKIP，不伪装成绿
+    _gate("endpoint_500", "scripts/check_endpoint_500.py", backend=True, slow=True,
+          why="逐 GET 端点巡检：无登录态返回 5xx 即红（--slow 启用）"),
+    _gate("frozen_smoke", "scripts/check_frozen_smoke.py", backend=True, slow=True,
+          requires=BACKEND / "dist" / "assistance-backend" / "assistance-backend.exe",
+          why="冻结后端产物冒烟：导入自检 + 真实起服务"),
     # 需要构建产物或外部数据：缺失自动 SKIP，不伪装成绿
     _gate("branch_coverage", "../scripts/check_branch_coverage.py", backend=True,
           args=["--json", "coverage-branch.json",
@@ -124,7 +132,8 @@ GATES: List[Gate] = [
     _gate("upgrade_rehearsal", "scripts/upgrade_rehearsal.py", backend=True, slow=True,
           why="旧库升级演练（慢，需后端依赖）"),
     # 性能基线只报警不阻断（CI 机器噪声大），--slow 时纳入观察
-    _gate("bench", "scripts/bench.py", slow=True, why="关键路径性能基线（只报警不阻断）"),
+    _gate("bench", "scripts/bench.py", args=["--rows", "5000,20000"], slow=True,
+          why="关键路径性能基线（5000/20000 两档，只报警不阻断）"),
     # 打 tag 前确认 main 的 PR Checks 已 success（需 gh 已登录 + 网络，默认跳过）
     _gate("main_ci", "scripts/check_main_ci.py", slow=True, why="tag 前确认 main CI 已绿"),
 ]

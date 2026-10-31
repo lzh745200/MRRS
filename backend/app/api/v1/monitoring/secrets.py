@@ -48,6 +48,18 @@ async def rotate_key(
     _require_admin(current_user)
     try:
         new_version = secrets_manager.rotate_key(version_id)
+        # 轮换后自检：密钥类操作「返回成功」不等于「数据还能解开」。
+        # PII 解密失败是逐字段静默降级（原样回密文），如果不在这一步证明往返能力，
+        # 现场看到的是「身份证/手机号全变乱码」，而审计里写的是「轮换成功」。
+        try:
+            from app.core.pii_crypto import self_check as _pii_self_check
+
+            _pii_self_check()
+        except RuntimeError as exc:  # 自检失败是显式 RuntimeError；其余异常照常冒泡
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"密钥轮换后 PII 加解密自检失败，请勿继续写入：{exc}",
+            ) from exc
         # 批次 3（危险操作强制审计）：密钥轮换会使全部既有密文/令牌受影响
         from app.utils.audit_logger import AuditLogger
 

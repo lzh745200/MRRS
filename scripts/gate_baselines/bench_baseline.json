@@ -1,6 +1,20 @@
 {
+  "tiers": {
+    "5000": {
+      "rows": 5000,
+      "xlsx_parse_s": 0.3007,
+      "csv_export_s": 0.0066,
+      "template_build_s": 0.0829
+    },
+    "20000": {
+      "rows": 20000,
+      "xlsx_parse_s": 1.0578,
+      "csv_export_s": 0.02,
+      "template_build_s": 0.0776
+    }
+  },
   "rows": 5000,
-  "xlsx_parse_s": 0.3221,
-  "csv_export_s": 0.005,
-  "template_build_s": 0.0517
+  "xlsx_parse_s": 0.3007,
+  "csv_export_s": 0.0066,
+  "template_build_s": 0.0829
 }

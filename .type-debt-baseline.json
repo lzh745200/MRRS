@@ -1,5 +1,5 @@
 {
-  "mypy_errors": 851,
+  "mypy_errors": 848,
   "as_any": 0,
   "broad_except": 805,
   "_comment": "技术债棘轮基线。任一指标超过此值即 CI 失败；下调请直接改小。上调需在 PR 说明理由。生成命令：python scripts/check_type_debt.py --update",

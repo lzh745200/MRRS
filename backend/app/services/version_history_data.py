@@ -3748,6 +3748,20 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-31",
         "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
         "features": [
+            (
+                "P0 三道棘轮（发版前必跑）：① frozen_smoke（check_frozen_smoke.py）—— 冻结产物必须通过 BACKEND_IMPORT_CHECK=1导入自检，并用随"
+                "机端口真实起服务（/health 200 + 受保护端点 401）；产物不存在自动 SKIP。这正是 v1.18.23~26 连红 3 次 tag 的根因门禁。"
+            ),
+            (
+                "P3：性能基线加 20000 行档 + 噪声地板：bench.py 支持 --rows 5000,20000 多档，基线写入 tiers（同时保留顶层首档，向后兼容旧读者）；新增 MIN_"
+                "ABS_SECONDS=0.05噪声地板：毫秒级路径（5,000 行 CSV 导出 ~5ms）两侧都低于地板就跳过比较，避免「机器抖动 50%」被当成性能回归（实测消除了一次假 WARN）"
+                "。"
+            ),
+            (
+                "P1：密钥轮换后 PII 加解密自检：新增 pii_crypto.self_check()（加密→解密往返，失败即抛），并接到 POST /api/v1/secrets/rotate ——"
+                " 自检失败返回 500「密钥轮换后 PII 加解密自检失败，请勿继续写入」，而不是像以前那样回「轮换成功」。成因：PII 解密失败是逐字段静默降级（原样回密文），现场看到的是「数据变乱码」"
+                "。5 例回归。"
+            ),
             "预查一次 (student_name, grade) 对，按 school_id 过滤；",
             "循环内改查内存集合（O(1)），插入后把新行加入集合。",
             "12 处把异常降级为 error_type 返回给调用方（体检/预检单项失败不中断整轮），是可观测的降级而非吞掉；",
@@ -3762,16 +3776,10 @@ VERSION_HISTORY_DATA = [
                 "静默吞异常：前端空 catch 0 处；50 处「仅注释 catch」抽样均为有说明的合理降级（401 由拦截器处理 / 配额降级 / 逐项隔离），后端 35 处 except: pass"
                 " 均为窄异常 + 明确兜底。"
             ),
-            "空壳页面：13 个「有表格/表单但零 API 关联」的页面/组件，逐个核实后确认均为展示组件（props/emit）或使用 store/localStorage 的合理设计，无真空壳。",
-            "auth/auth.py 的 4 处用 getattr(user, \"allowed_menus_list\", None)（防御式）；",
             (
-                "api/v1/menus.py 的 4 处直接属性访问（user.allowed_menus_list）。test_cov_final_organization.py::test_is_a"
-                "ctive_defaulted_when_absent 仍用is_superuser=False 的用户建根（520000），被 403 拦截。该用例意图是验证 is_active 默认值"
-                "而非建根权限 → 用户改为超管，守卫另测。"
-            ),
-            (
-                "standalone spec 删除标准库排除项，difflib 显式加入 hiddenimports；统一 spec 同步显式声明，避免未来 excludes 漂移。CArchive/P"
-                "YZ 模块表，校验 difflib、入口链与全部 379 个 app.* 模块。接入该门禁：模块漏收在构建期失败，不再等到装机后启动才暴露。"
+                "空壳页面：13 个「有表格/表单但零 API 关联」的页面/组件，逐个核实后确认均为展示组件（props/emit）或使用 store/localStorage 的合理设计，无真空壳。te"
+                "st_cov_final_organization.py::test_is_active_defaulted_when_absent 仍用is_superuser=False 的用户建根（"
+                "520000），被 403 拦截。"
             ),
         ],
     },

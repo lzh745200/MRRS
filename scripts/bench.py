@@ -33,6 +33,9 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 BASELINE = ROOT / "scripts" / "gate_baselines" / "bench_baseline.json"
 SLOW_RATIO = 0.5
+# 噪声地板：毫秒级路径（如 5,000 行的 CSV 导出 ~5ms）在任意机器上都可能抖动 50%+，
+# 对它报警等于制造假红；只有**两侧都**低于地板时才跳过比较。
+MIN_ABS_SECONDS = 0.05
 
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
@@ -90,6 +93,7 @@ def run_bench(rows: int = 5000) -> dict:
 
 
 def compare(current: dict, baseline: dict) -> list:
+    """与基线比较：≥ 基线 1+SLOW_RATIO 的报告出来（只报警不阻断，除非 --strict）。"""
     problems = []
     for key, value in current.items():
         if key == "rows":
@@ -97,25 +101,48 @@ def compare(current: dict, baseline: dict) -> list:
         base = baseline.get(key)
         if not base:
             continue
+        if value < MIN_ABS_SECONDS and base < MIN_ABS_SECONDS:
+            continue  # 噪声地板内不比较
         if value > base * (1 + SLOW_RATIO):
             problems.append("%s=%.3fs 比基线 %.3fs 慢 %.0f%%（阈值 +%.0f%%）"
                             % (key, value, base, (value / base - 1) * 100, SLOW_RATIO * 100))
     return problems
 
 
+def run_tier(rows: int) -> dict:
+    return run_bench(rows)
+
+
+def _tier_key(rows: int) -> str:
+    return str(rows)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="关键路径性能基线（只报警不阻断）")
-    parser.add_argument("--rows", type=int, default=5000, help="基准数据量（默认 5000）")
-    parser.add_argument("--update", action="store_true", help="把当前值写回基线")
+    parser.add_argument("--rows", default="5000",
+                        help="基准数据量：单个数字或逗号分隔的多档（如 5000,20000）")
+    parser.add_argument("--update", action="store_true", help="把当前各档值写回基线")
     parser.add_argument("--strict", action="store_true", help="超基线 50% 时以非 0 退出")
     parser.add_argument("--json", action="store_true", help="JSON 输出")
     args = parser.parse_args(argv)
 
-    current = run_bench(args.rows)
+    try:
+        row_sets = [int(x) for x in str(args.rows).split(",") if str(x).strip()]
+    except ValueError:
+        parser.error("--rows 需要整数或逗号分隔的整数列表")
+    if not row_sets:
+        parser.error("--rows 至少给一个数据量")
+
+    current_tiers = {_tier_key(n): run_tier(n) for n in row_sets}
+
     if args.update:
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
-        BASELINE.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print("[bench] 基线已更新: " + json.dumps(current, ensure_ascii=False))
+        first_key = _tier_key(row_sets[0])
+        payload = {"tiers": current_tiers}
+        # 兼容旧读者：把首档同时放在顶层（旧格式 == 单档）
+        payload.update(current_tiers[first_key])
+        BASELINE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print("[bench] 基线已更新: " + json.dumps(current_tiers, ensure_ascii=False))
         return 0
 
     baseline = {}
@@ -124,18 +151,30 @@ def main(argv=None) -> int:
             baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             baseline = {}
-    problems = compare(current, baseline)
+    baseline_tiers = baseline.get("tiers") or {_tier_key(baseline.get("rows", row_sets[0])): baseline}
+
+    problems = []
+    missing_tiers = []
+    for key, metrics in current_tiers.items():
+        tier_base = baseline_tiers.get(key)
+        if not tier_base:
+            missing_tiers.append(key)
+            continue
+        for item in compare(metrics, tier_base):
+            problems.append("rows=%s %s" % (key, item))
 
     if args.json:
-        print(json.dumps({"current": current, "baseline": baseline, "problems": problems},
+        print(json.dumps({"current": current_tiers, "baseline": baseline_tiers,
+                          "problems": problems, "missing_tiers": missing_tiers},
                          ensure_ascii=False, indent=2))
     else:
-        detail = ", ".join("%s=%.3fs" % (k, v) for k, v in current.items() if k != "rows")
-        print("[bench] rows=%d %s" % (current["rows"], detail))
+        for key, metrics in current_tiers.items():
+            detail = ", ".join("%s=%.3fs" % (k, v) for k, v in metrics.items() if k != "rows")
+            print("[bench] rows=%s %s" % (key, detail))
         for item in problems:
             print("  WARN " + item)
-        if not baseline:
-            print("  （无基线：跑 --update 记录首次值）")
+        for key in missing_tiers:
+            print("  （rows=%s 无基线：跑 --update 记录首次值）" % key)
     return 1 if (args.strict and problems) else 0
 
 

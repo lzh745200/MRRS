@@ -132,3 +132,18 @@ def key_fingerprint() -> str:
     机器指纹不一致，就说明密钥漂移了，无需暴露密钥内容。
     """
     return hashlib.sha256(_load_key()).hexdigest()[:16]
+
+
+def self_check(probe: str = "pii-self-check") -> None:
+    """自检：当前密钥必须能完成一次「加密 → 解密」往返。
+
+    为什么需要：轮换密钥/重启换环境后，`decrypt_pii` 的失败是**逐字段静默降级**
+    （原样返回密文，页面显示 enc.v1:…），运维看到的是"数据变成乱码"而不是"密钥错了"。
+    在危险操作（密钥轮换）后跑一次往返，能把「成功但不可用」变成**当场可见的失败**。
+    """
+    cipher = encrypt_pii(probe)
+    if not cipher or not is_encrypted(cipher):
+        raise RuntimeError("PII 自检失败：加密结果没有密文标记，当前密钥不可用于写入")
+    back = decrypt_pii(cipher)
+    if back != probe:
+        raise RuntimeError("PII 自检失败：解密往返不一致，当前密钥与写入密钥不匹配")
