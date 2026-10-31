@@ -1,7 +1,7 @@
 """自动化提醒引擎 — 审批超时/项目到期/经费告警."""
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,7 @@ def _elapsed_hours(created_at: Optional[datetime]) -> float:
     """
     if created_at is None:
         return 0.0
-    return round((utcnow() - as_utc(created_at)).total_seconds() / 3600, 1)
+    return round((utcnow() - cast(datetime, as_utc(created_at))).total_seconds() / 3600, 1)
 
 
 def _approval_recipient(task: Any) -> Optional[int]:

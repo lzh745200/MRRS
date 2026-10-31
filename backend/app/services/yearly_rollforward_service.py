@@ -22,7 +22,7 @@
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -190,7 +190,7 @@ def _replace_members(
             VillageCommitteeMember(
                 committee_info_id=committee_row.id,
                 supported_village_id=village_id,
-                **{field: member.get(field) for field in _MEMBER_FIELDS},
+                **cast(Any, {field: member.get(field) for field in _MEMBER_FIELDS}),
             )
         )
 
@@ -369,6 +369,8 @@ def _apply_section(
         current_row.supported_village_id = village_id
         current_row.year = year
         db.add(current_row)
+    # 已保证非空：要么读回既有行，要么创建了新实例（上面两分支互斥且都赋值）。
+    current_row = cast(Any, current_row)
     written_fields: List[str] = []
     kept_fields: List[str] = []
     for column in _field_columns(model):

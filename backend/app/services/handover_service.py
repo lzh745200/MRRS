@@ -23,7 +23,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
 from fastapi import HTTPException
 from sqlalchemy import or_
@@ -613,6 +613,7 @@ def execute_handover(
 
     target = db.query(User).filter(User.id == int(to_user_id)).first()
     assert_handover_target(actor, target)
+    target = cast(User, target)  # assert 已在为空时抛 4xx，这里只做静态收窄
 
     collected = _collect_assets(db, actor, selected_scope)
     selected = _select_assets(collected, selected_scope, item_ids)

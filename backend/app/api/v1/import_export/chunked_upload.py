@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
+from app.api.v1.deps import authenticated_user_id
 from app.core.security import get_current_user
 from app.models.user import User
 from app.utils.upload_helper import read_upload_with_limit
@@ -73,7 +74,7 @@ async def init_upload(
         session = upload_service.create_session(
             file_name=request.file_name,
             file_size=request.file_size,
-            user_id=current_user.id,
+            user_id=authenticated_user_id(current_user),
             chunk_size=request.chunk_size,
             file_hash=request.file_hash,
         )

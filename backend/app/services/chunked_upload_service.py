@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import timezone, datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import aiofiles
 
@@ -474,7 +474,7 @@ class ChunkedUploadService:
             raise ValueError(f"Upload not complete, missing chunks: {missing}")
 
         if session.status == ChunkUploadStatus.MERGED:
-            return session.merged_file_path
+            return cast(str, session.merged_file_path)
 
         # 深审 #2：合并过程含 await（逐分片读写），同一 session 可被并发调用
         # 重入 —— 第二次进来时状态已是 MERGING，会与第一次同时写同一个

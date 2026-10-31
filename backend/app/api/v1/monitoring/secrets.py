@@ -68,10 +68,10 @@ async def rotate_key(
                 detail="密钥轮换后 PII 加解密自检失败，请勿继续写入（详情见服务端日志）",
             ) from exc
         # 批次 3（危险操作强制审计）：密钥轮换会使全部既有密文/令牌受影响
-        from app.utils.audit_logger import AuditLogger
+        from app.utils.audit_logger import AuditAction, AuditLogger
 
         AuditLogger.log(
-            action="secrets_rotate",
+            action=AuditAction.SECRETS_ROTATE,
             user_id=getattr(current_user, "id", None),
             username=getattr(current_user, "username", ""),
             resource_type="secrets",

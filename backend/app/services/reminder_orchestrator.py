@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from app.core.transaction import get_db_context
 from app.models.message import Message
@@ -145,10 +145,10 @@ def list_reminders(
             .limit(limit)
             .all()
         )
-        dispositions = load_dispositions(db, [m.id for m in rows], user_id)
+        dispositions = load_dispositions(db, [cast(int, m.id) for m in rows], user_id)
         items: List[Dict[str, Any]] = []
         for m in rows:
-            disposition = serialize_disposition(dispositions.get(m.id))
+            disposition = serialize_disposition(dispositions.get(cast(int, m.id)))
             if disposition["state"] == "ignored" and not include_ignored:
                 continue
             items.append(

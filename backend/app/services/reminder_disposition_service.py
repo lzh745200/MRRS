@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -49,7 +49,7 @@ def load_owned_reminder(db: Session, message_id: int, user_id: Optional[int]) ->
     msg = db.query(Message).filter(Message.id == message_id).first()
     if msg is None or msg.user_id != user_id:
         raise ReminderNotFoundError()
-    if not is_reminder_type(msg.message_type):
+    if not is_reminder_type(cast(str, msg.message_type)):
         raise ReminderNotFoundError()
     return msg
 
@@ -81,7 +81,7 @@ def load_dispositions(
         )
         .all()
     )
-    return {row.message_id: row for row in rows}
+    return {cast(int, row.message_id): row for row in rows}
 
 
 def _upsert(db: Session, msg: Message, user_id: int) -> ReminderDisposition:

@@ -189,6 +189,27 @@
   `schemas/fund.py`（导入兜底类补 `no-redef` ignore）。
   定向回归 **32 个用例文件 731 项通过**；`flake8 --max-line-length=120 --max-complexity=16` 对 15 个改动文件 rc=0。
 
+- 全仓**审计动作枚举化**：`backend/app/utils/audit_logger.py` 补齐 9 个 `AuditAction` 成员
+  （`REGISTER_DENIED_UNTRUSTED` / `VIEWER_WRITE_DENIED` / `ERROR_REPORT_CREATE` / `SECRETS_ROTATE` /
+  `RBAC_ASSIGN_ROLE` / `RBAC_REVOKE_ROLE` / `RBAC_GRANT_PERMISSIONS` / `RBAC_REVOKE_PERMISSIONS` /
+  `RBAC_SAVE_PERMISSIONS`），`api/v1/auth/auth.py`、`middleware/viewer_readonly.py`、
+  `api/v1/system/error_report.py`、`api/v1/monitoring/secrets.py`、`api/v1/auth/rbac.py` 共 9 处
+  裸字符串改传枚举成员（`log()` 落库的 `action` 字符串逐字不变，按 action 检索的审计口径零漂移），
+  `rbac._audit_permission_change` 形参标注由 `str` 收紧为 `AuditAction`。
+- 其余 12 个模块类型收敛（各自 mypy 归零）：`core/data_permission.py` 组织子树的 id/名称收窄；
+  `handover_service.py` 在 `assert_handover_target()`（为空即抛 4xx）之后显式 `cast(User, target)`；
+  `chunked_upload_service.py` 合并结果路径收窄；`yearly_rollforward_service.py` 的沿用行 `**kwargs`
+  与复用/新建行落地为 `Any`；`fund_anomaly_detector.py`、`reminder_engine.py` 的 `as_utc()` 结果
+  （`datetime | None`）与经费金额列收窄；`reminder_disposition_service.py`、`reminder_orchestrator.py`
+  的提醒消息主键与 `message_type` 收窄；`api/v1/effectiveness.py`、`api/v1/import_export/chunked_upload.py`
+  改走 `deps.authenticated_user_id()`；`api/v1/auth/auth.py` 刷新令牌的 `sub` 收窄。运行期行为零变化。
+- `backend/mypy.ini` 补 `[mypy-aiofiles]` 段：`import aiofiles` 解析到**包本身**，此前的
+  `[mypy-aiofiles.*]` 只匹配子模块，`import-untyped` 因此漏报。全量 `mypy app`
+  **129 → 103 条 / 48 → 33 个文件**，技术债基线 `mypy_errors` 同步由 540 收紧至 **140**。
+  定向回归：数据权限/移交/分片上传/年度沿用/异常检测/提醒/成效评估/认证/审计日志
+  **32 个用例文件 640 项通过**，`flake8` 对 16 个改动文件 rc=0。
+
+
 
 ### 验证
 

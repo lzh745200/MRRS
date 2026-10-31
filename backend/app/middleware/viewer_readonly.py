@@ -117,11 +117,11 @@ def resolve_viewer_identity(scope) -> Optional[Tuple[Optional[int], Optional[str
 def _audit_denied(scope, user_id, username) -> None:
     """记录 viewer 写操作被拒审计（失败只记日志，绝不影响 403 响应）。"""
     try:
-        from app.utils.audit_logger import AuditLevel, AuditLogger
+        from app.utils.audit_logger import AuditAction, AuditLevel, AuditLogger
 
         client = scope.get("client")
         AuditLogger.log(
-            action="viewer_write_denied",
+            action=AuditAction.VIEWER_WRITE_DENIED,
             user_id=user_id,
             username=username,
             resource_type="api",

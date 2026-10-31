@@ -46,7 +46,7 @@ Semantics:
 
 import logging
 from enum import Enum
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 from fastapi import Depends, HTTPException
 from sqlalchemy import Select, false as sa_false, or_
@@ -351,10 +351,10 @@ def _get_org_subtree(
     if not org:
         return [], []
 
-    ids = [org.id]
-    names = [org.name]
+    ids: List[int] = [cast(int, org.id)]
+    names: List[str] = [cast(str, org.name)]
     for child in db.query(Organization).filter(Organization.parent_id == org_id).all():
-        child_ids, child_names = _get_org_subtree(db, child.id, _depth + 1, _visited)
+        child_ids, child_names = _get_org_subtree(db, cast(int, child.id), _depth + 1, _visited)
         ids.extend(child_ids)
         names.extend(child_names)
     return ids, names
@@ -470,7 +470,7 @@ async def get_org_scope(
                 return OrgScopeFilter(is_admin=False, org_names=[dept], org_ids=[])
             return _no_org_self_only()
         org = db.query(Organization).filter(Organization.id == org_id).first()
-        org_names = [org.name] if org else []
+        org_names = [cast(str, org.name)] if org else []
         return OrgScopeFilter(is_admin=False, org_names=org_names, org_ids=[org_id])
 
     # org_children (default): current org + all descendants

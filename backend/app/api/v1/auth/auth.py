@@ -10,7 +10,7 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -30,7 +30,7 @@ from app.core.token_manager import token_manager
 from app.schemas.auth import LoginData, LoginRequest, LoginResponse, TwoFactorLoginVerifyRequest, UserInfo
 from app.schemas.user import UserCreate
 from app.services.user_service import UserService
-from app.utils.audit_logger import AuditLevel, AuditLogger
+from app.utils.audit_logger import AuditAction, AuditLevel, AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ def _enforce_register_source_gate(request: Request, username: str, pass_code_sec
         client_ip,
     )
     AuditLogger.log(
-        action="register_denied_untrusted",
+        action=AuditAction.REGISTER_DENIED_UNTRUSTED,
         username=username,
         resource_type="auth",
         details={
@@ -766,7 +766,7 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
         if not payload:
             raise HTTPException(status_code=401, detail="无效的刷新令牌，请使用 refresh_token")
 
-        username: str = payload.get("sub")
+        username = cast(str, payload.get("sub"))
         if not username:
             raise HTTPException(status_code=401, detail="无效的令牌")
 

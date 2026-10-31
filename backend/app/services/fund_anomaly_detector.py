@@ -9,7 +9,7 @@
 """
 
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, cast
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -165,7 +165,7 @@ def _check_idle(fund: Fund) -> List[dict]:
     # 可能是 naive（按约定视为 UTC）。统一经 as_utc 归一后再与 utcnow() 相减——
     # 此前用本地 naive 的 datetime.now() 与其相减，aware/naive 混算必抛 TypeError，
     # 且异常被 backup_scheduler 的逐项目 try/except 吞掉，导致资金闲置检测静默失效。
-    days_since = (utcnow() - as_utc(alloc_date)).days
+    days_since = (utcnow() - cast(datetime, as_utc(alloc_date))).days
     if days_since < IDLE_DAYS:
         return []
 
@@ -250,7 +250,7 @@ def _check_large_cash(db: Session, project_id: int) -> List[dict]:
                 "fund_id": tx.fund_id,
                 "anomaly_type": "large_cash",
                 "severity": AnomalySeverity.WARNING.value,
-                "description": f"单笔支出 {float(tx.amount):.2f} 万元超过大额阈值 "
+                "description": f"单笔支出 {float(cast(Any, tx.amount)):.2f} 万元超过大额阈值 "
                 f"{LARGE_CASH_THRESHOLD} 万元，用途：{tx.purpose or '未说明'}",
             }
         )

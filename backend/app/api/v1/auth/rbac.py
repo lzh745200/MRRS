@@ -17,7 +17,7 @@ from app.models.rbac import RbacRole, RolePermission, UserRole
 from app.models.user import User
 from app.core.transaction import TransactionManager
 from app.services.rbac_service import Permission, rbac_service
-from app.utils.audit_logger import AuditLevel, AuditLogger
+from app.utils.audit_logger import AuditAction, AuditLevel, AuditLogger
 from app.utils.pagination import clamp_offset_limit
 
 router = APIRouter(prefix="/rbac", tags=["权限管理"])
@@ -26,7 +26,7 @@ logger = __import__("logging").getLogger(__name__)
 
 
 def _audit_permission_change(
-    action: str,
+    action: AuditAction,
     current_user,
     details: dict,
     level: AuditLevel = AuditLevel.INFO,
@@ -352,7 +352,7 @@ async def assign_role(
     if result["success"]:
         status = "已完成分配" if result["newly_granted"] else "角色已存在（无需操作）"
         _audit_permission_change(
-            "rbac_assign_role",
+            AuditAction.RBAC_ASSIGN_ROLE,
             current_user,
             {
                 "target_user_id": str(assignment.user_id),
@@ -382,7 +382,7 @@ async def revoke_role(
 
     if success:
         _audit_permission_change(
-            "rbac_revoke_role",
+            AuditAction.RBAC_REVOKE_ROLE,
             current_user,
             {"target_user_id": str(revoke.user_id), "role_id": revoke.role_id},
             level=AuditLevel.WARNING,
@@ -410,7 +410,7 @@ async def grant_permission(
         )
 
     _audit_permission_change(
-        "rbac_grant_permissions",
+        AuditAction.RBAC_GRANT_PERMISSIONS,
         current_user,
         {
             "target_user_id": str(grant.user_id),
@@ -446,7 +446,7 @@ async def revoke_permission(
         )
 
     _audit_permission_change(
-        "rbac_revoke_permissions",
+        AuditAction.RBAC_REVOKE_PERMISSIONS,
         current_user,
         {
             "target_user_id": str(revoke.user_id),
@@ -480,7 +480,7 @@ async def save_permissions(
         )
 
     _audit_permission_change(
-        "rbac_save_permissions",
+        AuditAction.RBAC_SAVE_PERMISSIONS,
         current_user,
         {
             "target_user_id": str(grant.user_id),

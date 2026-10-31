@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.v1.deps import get_current_active_user, get_db
+from app.api.v1.deps import authenticated_user_id, get_current_active_user, get_db
 from app.core.data_permission import apply_scope_filter
 from app.core.permission_utils import is_admin
 from app.models.user import User
@@ -43,7 +43,7 @@ async def evaluate_village(
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     result = EffectivenessService.evaluate_village(
-        db=db, village_id=request.village_id, year=request.year, user_id=current_user.id
+        db=db, village_id=request.village_id, year=request.year, user_id=authenticated_user_id(current_user)
     )
 
     if "error" in result:
@@ -87,7 +87,7 @@ async def evaluate_village(
             task = svc.submit_approval(
                 entity_type="assessment",
                 entity_id=request.village_id,
-                submitter_id=current_user.id,
+                submitter_id=authenticated_user_id(current_user),
                 title=f"年度考核复核-村{request.village_id}-{request.year}年",
                 change_data={"year": request.year, "score": result.get("total_score")},
             )

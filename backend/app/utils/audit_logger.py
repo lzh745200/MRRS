@@ -100,6 +100,18 @@ class AuditAction(str, Enum):
     # 值必须与历史落库字符串逐字一致。
     ORGANIZATION_DELETE = "organization_delete"
 
+    # 认证/中间件/监控/RBAC 链路上的审计动作：此前以裸字符串直传 AuditLogger.log，
+    # 值必须与历史落库字符串逐字一致，否则按 action 检索的审计口径会漂移。
+    REGISTER_DENIED_UNTRUSTED = "register_denied_untrusted"
+    VIEWER_WRITE_DENIED = "viewer_write_denied"
+    ERROR_REPORT_CREATE = "error_report_create"
+    SECRETS_ROTATE = "secrets_rotate"
+    RBAC_ASSIGN_ROLE = "rbac_assign_role"
+    RBAC_REVOKE_ROLE = "rbac_revoke_role"
+    RBAC_GRANT_PERMISSIONS = "rbac_grant_permissions"
+    RBAC_REVOKE_PERMISSIONS = "rbac_revoke_permissions"
+    RBAC_SAVE_PERMISSIONS = "rbac_save_permissions"
+
 
 class AuditLevel(str, Enum):
     """审计级别"""
