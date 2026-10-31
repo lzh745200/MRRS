@@ -359,6 +359,15 @@ class TestCreateOrganization:
         # safe_commit + write_work_log 可能导致多次 commit
         assert mock_db.commit.call_count >= 1
 
+    def test_success_with_explicit_sort_order(self, client_admin, mock_db):
+        """显式 sort_order 时跳过“同级末尾 +1”查询分支（覆盖率 100% 契约）。"""
+        mock_db.query.return_value.first.return_value = None
+        resp = client_admin.post("/api/v1/organizations", json={
+            "name": "指定排序组织", "org_type": "department", "code": "520000", "sort_order": 7,
+        })
+        assert resp.status_code == 200
+        assert mock_db.add.call_count >= 1
+
     def test_duplicate_code(self, client_admin, mock_db):
         mock_db.query.return_value.first.return_value = _make_mock_org(1)
         resp = client_admin.post("/api/v1/organizations", json={
