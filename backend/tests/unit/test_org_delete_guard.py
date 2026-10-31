@@ -67,8 +67,13 @@ def test_guard_allows_empty_org(mem_db):
     svc = OrganizationService(db=mem_db)
     import asyncio
 
+    org_id = org.id
     ok = asyncio.run(svc.delete_organization(org.id))
     assert ok is True
+    # 真删除契约：记录必须从 organizations 表消失，而不是 is_active=False
+    from app.models.organization import Organization
+
+    assert mem_db.query(Organization).filter(Organization.id == org_id).first() is None
 
 
 def test_db_level_set_null_survives_hard_delete(mem_db):

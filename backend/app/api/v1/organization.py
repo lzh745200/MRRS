@@ -931,7 +931,7 @@ async def delete_organization(
     db: Session = Depends(get_db),
 ):
     """
-    删除组织（逻辑删除：将 is_active 设为 False）
+    删除组织（硬删除：记录从 organizations 表移除）
 
     Args:
         org_id: 组织ID
@@ -980,12 +980,30 @@ async def delete_organization(
         logger.warning(f"组织有子组织: org_id={org_id}, children_count={children}")
         raise HTTPException(status_code=400, detail="该组织下有子组织，请先删除子组织")
 
-    # 逻辑删除：将 is_active 设置为 False
-    logger.info(f"执行逻辑删除: org_id={org_id}")
-    org.is_active = False
-    safe_commit(db)
+    # 硬删除：删除后记录不再存在于 organizations 表。
+    # 2026-10-31：原实现只把 is_active 置 False，且列表默认包含停用组织，
+    # 用户看到“删除成功但记录仍在”。统一委托 OrganizationService，
+    # 复用「子组织 / 名下项目 / 名下用户」三重守卫，避免硬删连带破坏业务数据。
+    from app.services.organization_service import (
+        OrganizationHasSubordinatesError,
+        OrganizationInUseError,
+        OrganizationNotFoundError,
+        OrganizationService,
+    )
+
+    org_name = org.name
+    logger.info(f"执行硬删除: org_id={org_id}")
     try:
-        write_work_log(db, "organization", "delete", org_id, f"删除组织: {org.name}",
+        await OrganizationService(db).delete_organization(org_id)
+    except OrganizationHasSubordinatesError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except OrganizationInUseError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except OrganizationNotFoundError:
+        raise HTTPException(status_code=404, detail="组织不存在")
+
+    try:
+        write_work_log(db, "organization", "delete", org_id, f"删除组织: {org_name}",
                        user_id=current_user.id, username=getattr(current_user, "username", ""))
     except Exception:  # pragma: no cover - 纯防御兜底：工作日志写入失败按约定不阻断主流程
         logger.debug("记录工作日志失败", exc_info=True)
@@ -999,14 +1017,14 @@ async def delete_organization(
         username=getattr(current_user, "username", ""),
         resource_type="organization",
         resource_id=org_id,
-        details={"name": org.name, "type": "soft_delete"},
+        details={"name": org_name, "type": "hard_delete"},
     )
     await cache_manager.delete("orgs:list")
     _invalidate_dashboard_cache_safe()
 
     return success_response(data={
         "message": "组织已删除",
-        "type": "soft_delete",
+        "type": "hard_delete",
     }, message="组织已删除")
 
 

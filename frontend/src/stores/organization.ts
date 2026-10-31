@@ -73,7 +73,7 @@ export const useOrganizationStore = defineStore('organization', () => {
   }
 
   /**
-   * 删除组织（后端为逻辑删除）。
+   * 删除组织（后端为硬删除，删除后记录不再存在）。
    *
    * 后端契约：`DELETE /organizations/{org_id}`，二次确认密码走**请求头**
    * `X-Confirm-Password`（2026-10-14 由查询串改为请求头，避免密码进 access log）。

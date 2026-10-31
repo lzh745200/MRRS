@@ -436,6 +436,9 @@ class TestDeleteOrganization:
                 q.filter.return_value.first.return_value = SimpleNamespace(
                     id=1, hashed_password=password_hash,
                 )
+                # 同一 User 查询也被 OrganizationService 用来统计名下用户数；
+                # 密码校验走 first()，引用计数走 count()，两者必须分别给值。
+                q.filter.return_value.count.return_value = 0
                 return q
             return mock_db.query.return_value
 
@@ -487,7 +490,61 @@ class TestDeleteOrganization:
         mock_db.query.return_value = children_q
         resp = client_admin.delete("/api/v1/organizations/1", headers={"X-Confirm-Password": "pass123"})
         assert resp.status_code == 200
-        assert resp.json()["data"]["type"] == "soft_delete"
+        assert resp.json()["data"]["type"] == "hard_delete"
+        mock_db.delete.assert_called_once()
+
+    def _prepare_delete(self, mock_db, password_hash):
+        self._mock_user_password(mock_db, password_hash)
+        q = mock_db.query.return_value
+        q.first.return_value = _make_mock_org(1)
+        children_q = MagicMock(name="children_q")
+        children_q.filter.return_value = children_q
+        children_q.count.return_value = 0
+        mock_db.query.return_value = children_q
+
+    def test_service_reports_subordinates(self, client_admin, mock_db):
+        from app.core.security import hash_password
+        from app.services.organization_service import OrganizationHasSubordinatesError
+
+        self._prepare_delete(mock_db, hash_password("pass123"))
+        with patch(
+            "app.services.organization_service.OrganizationService.delete_organization",
+            new=AsyncMock(side_effect=OrganizationHasSubordinatesError(1, 2)),
+        ):
+            resp = client_admin.delete(
+                "/api/v1/organizations/1", headers={"X-Confirm-Password": "pass123"}
+            )
+        assert resp.status_code == 400
+        assert "下级单位" in resp.text
+
+    def test_service_reports_in_use(self, client_admin, mock_db):
+        from app.core.security import hash_password
+        from app.services.organization_service import OrganizationInUseError
+
+        self._prepare_delete(mock_db, hash_password("pass123"))
+        with patch(
+            "app.services.organization_service.OrganizationService.delete_organization",
+            new=AsyncMock(side_effect=OrganizationInUseError(1, 3, 2)),
+        ):
+            resp = client_admin.delete(
+                "/api/v1/organizations/1", headers={"X-Confirm-Password": "pass123"}
+            )
+        assert resp.status_code == 400
+        assert "仍被引用" in resp.text
+
+    def test_service_reports_not_found(self, client_admin, mock_db):
+        from app.core.security import hash_password
+        from app.services.organization_service import OrganizationNotFoundError
+
+        self._prepare_delete(mock_db, hash_password("pass123"))
+        with patch(
+            "app.services.organization_service.OrganizationService.delete_organization",
+            new=AsyncMock(side_effect=OrganizationNotFoundError(1)),
+        ):
+            resp = client_admin.delete(
+                "/api/v1/organizations/1", headers={"X-Confirm-Password": "pass123"}
+            )
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

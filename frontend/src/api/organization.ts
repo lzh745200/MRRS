@@ -15,7 +15,7 @@ export const getOrganizationTree = () => get('/organizations/tree')
 export const createOrganization = (data: any) => post('/organizations', data)
 export const updateOrganization = (id: number, data: any) => put('/organizations/' + id, data)
 /**
- * 删除组织（后端逻辑删除）。
+ * 删除组织（后端硬删除，记录从 organizations 表移除）。
  *
  * 二次确认密码自 2026-10-14 起改为 **请求头** `X-Confirm-Password`：
  * 此前放在 URL 查询串，会原样进 uvicorn access log，明文密码随之落盘。
@@ -36,7 +36,8 @@ export const deleteOrganization = (id: number, confirmPassword?: string) => {
     headers: { 'X-Confirm-Password': password },
   })
 }
-export const batchUpdateSortOrders = (d: any[]) => post('/organizations/batch-update-sort', d)
+export const batchUpdateSortOrders = (d: any[]) =>
+  post('/organizations/batch-update-sort', { items: d })
 
 export const getMyOrganization = () => get('/organizations/my-organization')
 

@@ -38,6 +38,34 @@ def _make_user(**kwargs):
     return user
 
 
+class TestUserInfoAllowedMenus:
+    """登录响应契约：DB 的 JSON 文本必须归一化为数组。"""
+
+    def test_json_array_string_is_normalized(self):
+        from app.schemas.auth import UserInfo
+
+        info = UserInfo(
+            id=1,
+            username="u",
+            allowed_menus='["dashboard"]',
+            allowed_menus_list='["projects"]',
+        )
+        assert info.allowed_menus == ["dashboard"]
+        assert info.allowed_menus_list == ["projects"]
+
+    def test_malformed_json_falls_back_to_none(self):
+        from app.schemas.auth import UserInfo
+
+        info = UserInfo(id=1, username="u", allowed_menus="not-json{{{")
+        assert info.allowed_menus is None
+
+    def test_json_object_is_not_a_menu_list(self):
+        from app.schemas.auth import UserInfo
+
+        info = UserInfo(id=1, username="u", allowed_menus='{"dashboard": true}')
+        assert info.allowed_menus is None
+
+
 class TestLogin:
     prefix = "/api/v1/auth"
 
@@ -333,7 +361,12 @@ class TestLogin:
     @patch("app.api.v1.auth.auth.AuditLogger")
     def test_login_success_normal(self, mock_audit, mock_usr_svc, mock_ip, mock_rl, client):
         mock_rl.return_value = True
-        user = _make_user()
+        # 回归：DB 里 allowed_menus 是 JSON 字符串；登录响应字段必须是数组，
+        # 否则 UserInfo(list) 校验报「allowed_menus应为数组」。
+        user = _make_user(
+            allowed_menus='["dashboard"]',
+            allowed_menus_list=["dashboard"],
+        )
         inst = Mock()
         inst.get_user_by_username.return_value = user
         mock_usr_svc.return_value = inst
@@ -356,6 +389,8 @@ class TestLogin:
                     assert data["data"]["access_token"] == "at1"
                     assert data["refresh_token"] == "rt1"
                     assert data["must_change_password"] is False
+                    assert data["data"]["user"]["allowed_menus"] == ["dashboard"]
+                    assert data["data"]["user"]["allowed_menus_list"] == ["dashboard"]
 
     @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
     @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")

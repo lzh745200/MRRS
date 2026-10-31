@@ -120,7 +120,7 @@ describe('api/organization', () => {
       { id: 2, sort_order: 2 },
     ]
     await batchUpdateSortOrders(d)
-    expect(mockPost).toHaveBeenCalledWith('/organizations/batch-update-sort', d)
+    expect(mockPost).toHaveBeenCalledWith('/organizations/batch-update-sort', { items: d })
   })
 
   it('getMyOrganization GET /organizations/my-organization', async () => {

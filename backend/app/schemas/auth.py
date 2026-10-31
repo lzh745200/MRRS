@@ -1,8 +1,9 @@
 """认证相关 Pydantic Schemas"""
 
+import json
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -40,6 +41,24 @@ class UserInfo(BaseModel):
     permissions: Optional[list] = Field(default_factory=list, description="权限列表")
     allowed_menus: Optional[list] = Field(None, description="允许访问的菜单列表")
     allowed_menus_list: Optional[list] = Field(None, description="允许访问的菜单key列表")
+
+    @field_validator("allowed_menus", "allowed_menus_list", mode="before")
+    @classmethod
+    def _normalize_menu_keys(cls, value):
+        """DB 的 users.allowed_menus 是 JSON 文本；响应契约要求数组。
+
+        真实模型通过 ``allowed_menus_list`` 属性已解析，但历史调用方/外部数据
+        仍可能直接传原始字符串。这里统一把 JSON 数组文本转成 list，避免
+        Pydantic 抛 ``list_type``（前端看到「allowed_menus应为数组」）。
+        非法 JSON 按“未配置”处理，不把坏数据带进出站响应。
+        """
+        if not isinstance(value, str):
+            return value
+        try:
+            parsed = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        return parsed if isinstance(parsed, list) else None
 
 
 class LoginData(BaseModel):

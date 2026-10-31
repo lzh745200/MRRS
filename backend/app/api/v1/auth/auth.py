@@ -368,7 +368,7 @@ async def login(
         organization_id=getattr(user, "organization_id", None),
         organization_name=getattr(user, "organization_name", "") or "",
         permissions=getattr(user, "permissions_list", []) or [],
-        allowed_menus=getattr(user, "allowed_menus", None),
+        allowed_menus=getattr(user, "allowed_menus_list", None),
         allowed_menus_list=getattr(user, "allowed_menus_list", None),
     )
 
@@ -547,7 +547,7 @@ async def two_factor_verify_login(
         organization_id=getattr(user, "organization_id", None),
         organization_name=getattr(user, "organization_name", "") or "",
         permissions=getattr(user, "permissions_list", []) or [],
-        allowed_menus=getattr(user, "allowed_menus", None),
+        allowed_menus=getattr(user, "allowed_menus_list", None),
         allowed_menus_list=getattr(user, "allowed_menus_list", None),
     )
 
@@ -830,7 +830,7 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
             organization_id=getattr(user, "organization_id", None),
             organization_name=getattr(user, "organization_name", "") or "",
             permissions=getattr(user, "permissions_list", []) or [],
-            allowed_menus=getattr(user, "allowed_menus", None),
+            allowed_menus=getattr(user, "allowed_menus_list", None),
             allowed_menus_list=getattr(user, "allowed_menus_list", None),
         )
 
@@ -1101,7 +1101,7 @@ async def register_user(
             role=user.role or "user",
             is_active=user.is_active if user.is_active is not None else True,
             is_superuser=_user_info_is_superuser(user),
-            allowed_menus=getattr(user, "allowed_menus", None),
+            allowed_menus=getattr(user, "allowed_menus_list", None),
             allowed_menus_list=getattr(user, "allowed_menus_list", None),
         )
 
