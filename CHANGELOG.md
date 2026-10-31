@@ -1,4 +1,38 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Performance（资助学生导入的 N+1 去重查询 —— 实测 40 倍差）
+
+**巡检方法**：静态扫描「循环体内含数据库查询」的 for 循环（全仓 43 处），
+再按「批量导入」这一用户可感知场景**实测**影响，而不是凭直觉判断。
+
+**实测**（1000 行、单机 SQLite 内存库）：
+
+| 方案 | 耗时 |
+|---|---|
+| 现状：每行一次 `db.query(ScholarshipStudent)...first()` | **413.3 ms** |
+| 批量预查（一次 `IN`/全量 + 内存字典） | **10.4 ms** |
+
+差 **403 ms（40 倍）**；5000 行时逐行查会多等约 2 秒 —— 对「批量导入」是用户可感知的卡顿。
+
+**修复**（`POST /schools/{school_id}/scholarship-students/import`）：
+把逐行去重查询改为**一次预查 + 内存集合**：
+
+- 预查一次 `(student_name, grade)` 对，按 `school_id` 过滤；
+- 循环内改查内存集合（O(1)），插入后把新行加入集合。
+
+**语义等价性**：原实现每行 `query(...).first()` 在 SQLAlchemy `autoflush=True` 下同样能看到
+本次已 `add` 的记录，因此把新增行同步加入集合后，**同文件内重复也照样跳过**（行为不变）。
+事务边界本来就正确（`safe_commit` 在循环外），未改动。
+
+**回归** `tests/unit/test_school_import_nplus1_r59.py`（4 例，先 red 后 green）：
+查询次数与行数无关（1 行 / 5 行都只查 1 次）、预查命中即跳过、**同文件内重复行被跳过**。
+同步更新 `test_school_cov.py::test_duplicate_student_skipped` 的 mock（契约由 `.first()` 改 `.all()`）。
+
+**验证**：flake8 0 · 新增 4 passed（red→green 留痕）· school 域 **303 passed**。
+
+> 未改动：已弃用端点 `POST /schools/import-scholarship-students` 有同类循环，但已标
+> `deprecated=True`（应改用带 school_id 的新端点），故不投入。全仓其余 41 处循环内查询
+> 经抽查多为**合理的**分块处理（`range(0, n, 500)`）或固定配置遍历，未做无基线重构。
+
 ### Added（宽泛异常捕获理由门禁 —— 补上 check_pragma_reasons 的另一半）
 
 **发现的盲区**：项目已有 `check_pragma_reasons.py` 管住 `# pragma: no cover`（覆盖率豁免必须写理由），

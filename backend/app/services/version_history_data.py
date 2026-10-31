@@ -3748,6 +3748,8 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-31",
         "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
         "features": [
+            "预查一次 (student_name, grade) 对，按 school_id 过滤；",
+            "循环内改查内存集合（O(1)），插入后把新行加入集合。",
             "12 处把异常降级为 error_type 返回给调用方（体检/预检单项失败不中断整轮），是可观测的降级而非吞掉；",
             (
                 "3 处（diagnostics.py:366 / backup_service.py / village_cascade_delete_service.py）本身就有 logger.err"
@@ -3767,12 +3769,10 @@ VERSION_HISTORY_DATA = [
                 "ctive_defaulted_when_absent 仍用is_superuser=False 的用户建根（520000），被 403 拦截。该用例意图是验证 is_active 默认值"
                 "而非建根权限 → 用户改为超管，守卫另测。"
             ),
-            "standalone spec 删除标准库排除项，difflib 显式加入 hiddenimports；统一 spec 同步显式声明，避免未来 excludes 漂移。",
             (
-                "新增 scripts/verify_frozen_modules.py：直接读取 onedir 产物的CArchive/PYZ 模块表，校验 difflib、入口链与全部 379 个 ap"
-                "p.* 模块。"
+                "standalone spec 删除标准库排除项，difflib 显式加入 hiddenimports；统一 spec 同步显式声明，避免未来 excludes 漂移。CArchive/P"
+                "YZ 模块表，校验 difflib、入口链与全部 379 个 app.* 模块。接入该门禁：模块漏收在构建期失败，不再等到装机后启动才暴露。"
             ),
-            "Windows、ARM64 Electron、standalone DEB、deb-complete 四条打包链路全部接入该门禁：模块漏收在构建期失败，不再等到装机后启动才暴露。",
         ],
     },
 ]

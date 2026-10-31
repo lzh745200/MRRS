@@ -221,8 +221,9 @@ class TestImportSchoolScholarshipStudents:
         rows = [["h", "h"], ("学生乙", "二年级")]
         content = _xlsx_bytes(rows)
         _db = MagicMock()
-        # 去重查询命中已有记录 → 跳过
-        _db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=5)
+        # 2026-10-31：去重改为「一次预查 + 内存集合」（消除 N+1），
+        # 预查走 .all() 返回 (student_name, grade) 行；命中已有记录 → 跳过。
+        _db.query.return_value.filter.return_value.all.return_value = [("学生乙", "二年级")]
         with (
             patch.object(sch, "_get_school_and_check_permission"),
             patch.object(sch, "safe_commit"),
