@@ -88,6 +88,11 @@ class AuditAction(str, Enum):
     PERMISSION_REVOKE = "permission_revoke"
     ROLE_CHANGE = "role_change"
 
+    # 帮扶村专项动作：这两处历史上以裸字符串直传 AuditLogger.log（绕过枚举），
+    # 值必须与历史落库字符串逐字一致，否则按 action 检索的审计口径会漂移。
+    VILLAGE_TRANSITION_CHANGE = "village_transition_change"
+    VILLAGE_PURGE = "village_purge"
+
 
 class AuditLevel(str, Enum):
     """审计级别"""
@@ -235,7 +240,7 @@ class AuditLogger:
         """记录登录操作"""
         action = AuditAction.LOGIN if success else AuditAction.LOGIN_FAILED
         level = AuditLevel.INFO if success else AuditLevel.WARNING
-        details = {"success": success}
+        details: Dict[str, Any] = {"success": success}
         if failure_reason:
             details["failure_reason"] = failure_reason
 

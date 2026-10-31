@@ -11,7 +11,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -440,7 +440,7 @@ async def import_scholarship_students(
                     student_name=str(row[1]).strip(),
                     school_id=school_row.id if school_row else None,
                     year=int(row[3]) if len(row) > 3 and row[3] else None,
-                    amount=float(row[4]) if len(row) > 4 and row[4] else 0.0,
+                    amount=cast(Any, float(row[4]) if len(row) > 4 and row[4] else 0.0),
                     grade=str(row[6]) if len(row) > 6 and row[6] else None,
                     reason=str(row[7]) if len(row) > 7 and row[7] else None,
                     remarks="；".join(remark_parts) or None,
@@ -703,7 +703,7 @@ async def download_attachment(
             error_message="无权下载该附件",
         )
 
-    file_path = _validate_file_path(att.file_path)
+    file_path = _validate_file_path(cast(str, att.file_path))
 
     return FileResponse(
         path=file_path,
@@ -731,7 +731,7 @@ async def delete_attachment(
             error_message="无权删除该附件",
         )
 
-    file_path = _validate_file_path(att.file_path)
+    file_path = _validate_file_path(cast(str, att.file_path))
 
     # 删除磁盘文件
     os.remove(file_path)
@@ -992,7 +992,7 @@ async def update_school(
             db,
             current_user=current_user,
             entity_type="school",
-            entity_id=school.id,
+            entity_id=cast(int, school.id),
             title=f"学校变更：{school.name}",
             change_data=update_data,
             original_data=school.to_dict(),
@@ -1069,7 +1069,7 @@ async def delete_school(
             db,
             current_user=current_user,
             entity_type="school",
-            entity_id=school.id,
+            entity_id=cast(int, school.id),
             title=f"学校删除：{school.name}",
             change_data={DELETED_KEY: True, "name": school.name, "code": school.code},
             original_data={"name": school.name, "code": school.code,
@@ -1259,7 +1259,7 @@ async def create_project(
     approval_task_id = submit_entity_change_approval(
         db,
         entity_type="school_project",
-        entity_id=project.id,
+        entity_id=cast(int, project.id),
         submitter_id=current_user.id,
         title=f"学校帮扶项目新增：{project.name or f'#{project.id}'}",
         change_data={"school_id": school_id, "name": project.name,
@@ -1297,7 +1297,7 @@ async def update_project(
     approval_task_id = submit_entity_change_approval(
         db,
         entity_type="school_project",
-        entity_id=project.id,
+        entity_id=cast(int, project.id),
         submitter_id=current_user.id,
         title=f"学校帮扶项目变更：{project.name or f'#{project.id}'}",
         change_data={"school_id": school_id, "name": project.name,
@@ -1329,7 +1329,7 @@ async def delete_project(
     approval_task_id = submit_entity_change_approval(
         db,
         entity_type="school_project",
-        entity_id=project.id,
+        entity_id=cast(int, project.id),
         submitter_id=current_user.id,
         title=f"学校帮扶项目删除：{project.name or f'#{project.id}'}",
         change_data={"deleted": True, "school_id": school_id, "name": project.name},
@@ -1399,7 +1399,7 @@ async def create_scholarship_student(
     approval_task_id = submit_entity_change_approval(
         db,
         entity_type="scholarship_student",
-        entity_id=student.id,
+        entity_id=cast(int, student.id),
         submitter_id=current_user.id,
         title=f"资助申请：{student.student_name or f'#{student.id}'}",
         change_data={
@@ -1412,9 +1412,9 @@ async def create_scholarship_student(
             "school_id": school_id,
         },
     )
-    data = student.to_dict()
-    data["approval_task_id"] = approval_task_id
-    return success_response(data=data, message="创建成功")
+    payload = student.to_dict()
+    payload["approval_task_id"] = approval_task_id
+    return success_response(data=payload, message="创建成功")
 
 
 @router.put("/{school_id}/scholarship-students/{student_id}")
@@ -1454,16 +1454,16 @@ async def update_scholarship_student(
     approval_task_id = submit_entity_change_approval(
         db,
         entity_type="scholarship_student",
-        entity_id=stu.id,
+        entity_id=cast(int, stu.id),
         submitter_id=current_user.id,
         title=f"资助变更：{stu.student_name or f'#{stu.id}'}",
         change_data={"student_name": stu.student_name, "status": new_status,
                      "amount": float(stu.amount) if stu.amount is not None else 0},
         original_data={"student_name": stu.student_name, "status": old_status},
     )
-    data = stu.to_dict()
-    data["approval_task_id"] = approval_task_id
-    return success_response(data=data, message="更新成功")
+    payload = stu.to_dict()
+    payload["approval_task_id"] = approval_task_id
+    return success_response(data=payload, message="更新成功")
 
 
 @router.delete("/{school_id}/scholarship-students/{student_id}")
@@ -1555,7 +1555,7 @@ async def import_school_scholarship_students(
                     # 聚合/筛选对不上。统一用 _sgrade（纯空白归一为 None）。
                     grade=_sgrade,
                     year=int(row[2]) if len(row) > 2 and row[2] else None,
-                    amount=float(row[3]) if len(row) > 3 and row[3] else 0,
+                    amount=cast(Any, float(row[3]) if len(row) > 3 and row[3] else 0),
                     reason=str(row[4]) if len(row) > 4 and row[4] else None,
                     status=(
                         ScholarshipStatus(status_map.get(str(row[5]), "pending"))
@@ -1638,7 +1638,7 @@ async def export_school_dossier(
     except Exception:
         logger.error("一校一档 PDF 生成失败: school_id=%s", school_id, exc_info=True)
         raise HTTPException(status_code=500, detail="档案册生成失败，请稍后重试")
-    record_dossier_audit(current_user, "school", school.id, school.name)
+    record_dossier_audit(current_user, "school", school.id, cast(str, school.name))
     filename = quote(f"{school.name}_档案册.pdf")
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

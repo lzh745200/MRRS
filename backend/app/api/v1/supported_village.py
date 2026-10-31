@@ -8,7 +8,7 @@ import io
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
@@ -57,6 +57,8 @@ from app.services.yearly_rollforward_service import (
     apply_rollforward,
     build_prefill,
 )
+
+from app.utils.audit_logger import AuditAction as AuditLogAction
 
 logger = logging.getLogger(__name__)
 
@@ -974,7 +976,7 @@ async def update_village(
         # 记录审计日志
         from app.utils.audit_logger import AuditLogger
         AuditLogger.log(
-            action="village_transition_change",
+            action=AuditLogAction.VILLAGE_TRANSITION_CHANGE,
             user_id=current_user.id,
             username=current_user.username,
             resource_type="supported_village",
@@ -992,7 +994,7 @@ async def update_village(
             db,
             current_user=current_user,
             entity_type="supported_village",
-            entity_id=village.id,
+            entity_id=cast(int, village.id),
             title=f"帮扶村变更：{village.village_name}",
             change_data=update_dict,
             original_data=old_snapshot,
@@ -1048,7 +1050,7 @@ async def delete_village(
             db,
             current_user=current_user,
             entity_type="supported_village",
-            entity_id=village.id,
+            entity_id=cast(int, village.id),
             title=f"帮扶村删除：{village.village_name}",
             change_data={DELETED_KEY: True, "village_name": village.village_name},
             original_data=_village_to_diff_dict(village),
@@ -1157,7 +1159,7 @@ async def purge_village(
     from app.utils.audit_logger import AuditLogger
 
     AuditLogger.log(
-        action="village_purge",
+        action=AuditLogAction.VILLAGE_PURGE,
         user_id=current_user.id,
         username=current_user.username,
         resource_type="supported_village",
@@ -1201,7 +1203,7 @@ async def get_yearly_data(
     _get_village_or_404(db, village_id, current_user)
     # 统一 camelCase 键名（内层已由 _get_section_data→dict_keys_to_camel 处理）
     # camelCase 为主键名，snake_case 保留向后兼容（计划 2027-01-01 移除）
-    result = {"villageId": village_id, "village_id": village_id, "year": year}
+    result: Dict[str, Any] = {"villageId": village_id, "village_id": village_id, "year": year}
     for section, model in _SECTION_MODEL.items():
         data = _get_section_data(db, model, village_id, year)
         result[section] = data if data else None
@@ -1581,10 +1583,11 @@ async def download_section_attachment(
     )
     if not attachment:
         raise HTTPException(status_code=404, detail="附件不存在")
-    if not _os.path.exists(attachment.file_path):
+    attachment_path = cast(str, attachment.file_path)
+    if not _os.path.exists(attachment_path):
         raise HTTPException(status_code=404, detail="文件不存在")
     return FileResponse(
-        attachment.file_path,
+        attachment_path,
         filename=attachment.file_name,
         media_type=attachment.mime_type or "application/octet-stream",
     )
@@ -1836,11 +1839,11 @@ async def import_all_sections_data(
     total_imported = 0
     total_failed = 0
     for name in wb.sheetnames:
-        key = sheet_alias.get(name.strip().lower()) or sheet_alias.get(name.strip())
-        if key is None:
+        resolved_key = sheet_alias.get(name.strip().lower()) or sheet_alias.get(name.strip())
+        if resolved_key is None:
             continue  # 未识别的工作表跳过，不误报
-        result = _import_section_sheet(wb[name], _SECTION_MODEL[key], village_id, target_year, db)
-        sections.append({"name": name, "section_key": key, **result})
+        result = _import_section_sheet(wb[name], _SECTION_MODEL[resolved_key], village_id, target_year, db)
+        sections.append({"name": name, "section_key": resolved_key, **result})
         total_imported += result["imported"]
         total_failed += result["failed"]
     safe_commit(db)
@@ -1954,8 +1957,8 @@ async def save_transition_funding(
             ),
         )
 
-    village.transition_fund_military_total = military
-    village.transition_fund_local_total = local
+    village.transition_fund_military_total = cast(Any, military)
+    village.transition_fund_local_total = cast(Any, local)
     # Store per-year breakdown as JSON for retrieval
     items_json = [{
         "year": item.year,
@@ -2026,7 +2029,7 @@ async def export_village_dossier(
     except Exception:
         logger.error("一村一档 PDF 生成失败: village_id=%s", village_id, exc_info=True)
         raise HTTPException(status_code=500, detail="档案册生成失败，请稍后重试")
-    record_dossier_audit(current_user, "supported_village", village.id, village.village_name)
+    record_dossier_audit(current_user, "supported_village", village.id, cast(str, village.village_name))
     filename = quote(f"{village.village_name}_档案册.pdf")
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

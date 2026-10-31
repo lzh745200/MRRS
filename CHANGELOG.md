@@ -69,6 +69,14 @@
   `RecommendationService.match_policies` 读 `Policy` 并不存在的 `scope` / `province` / `city` 三列
   （真库一旦有 active 政策就 `AttributeError`，单测用 MagicMock 喂这三个属性把 schema 漂移掩盖了），
   改为 `getattr` 降级为纯关键词匹配，并补 2 个「只有真实列」的回归用例。全量 `mypy app` **512 → 395 条 / 111 → 107 个文件**。
+- `backend/app/utils/audit_logger.py`、`backend/app/api/v1/{school,supported_village}.py` 类型收敛（mypy **26 → 0**）：
+  帮扶村两处 `AuditLogger.log(action="village_transition_change"` / `"village_purge"`)
+  原先直传裸字符串、绕过 `AuditAction` 枚举，补齐 `VILLAGE_TRANSITION_CHANGE` / `VILLAGE_PURGE`
+  两个枚举成员（`log()` 落库的 `action` 字符串逐字不变，按 action 检索的审计口径零漂移）；
+  学校/帮扶村的附件路径、审批 `entity_id`、经济金额列与档案册实体名统一显式 `cast`
+  （`int | None` / `str | None` / `Numeric` 三类 ORM legacy 推断），且两处把 Pydantic 形参
+  覆盖成 dict 的 `data` 改名 `payload`；`AuditLogger.log_login` 的 `details` 显式标 `Dict[str, Any]`。
+  回归：学校/帮扶村/审计日志/档案册 **293 项通过**，flake8 rc=0。
 
 ### 验证
 
