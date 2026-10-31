@@ -16,7 +16,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, 
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.core.constants import ADMIN_ROLES, normalize_role
+from app.core.constants import normalize_role
 from app.core.database import get_db
 from app.core.response import success_response
 from app.core.transaction import safe_commit
@@ -33,6 +33,25 @@ from app.services.user_service import UserService
 from app.utils.audit_logger import AuditLevel, AuditLogger
 
 logger = logging.getLogger(__name__)
+
+
+def _user_info_is_superuser(user) -> bool:
+    """登录响应契约中的超级管理员标记（单一事实源）。
+
+    只认同「真超管」：数据库 ``is_superuser`` 标志，或 ``role == "super_admin"``。
+    部门级管理员（``role == "admin"``）**不得**被标记为超管——此前
+    ``user.is_superuser or normalize_role(user.role) in ADMIN_ROLES`` 把
+    部门级 admin 也标成 is_superuser=True，而后端内部的严格口径
+    （core/permission_utils.is_superuser、menus.py 超管菜单豁免、数据权限 R28）
+    只认真超管，于是前端所有 ``is_superuser === true`` 判定（菜单旁路、
+    模块权限代理、角色选项过滤等）都被污染：部门级 admin 在本地被当成超管
+    显示全量菜单/全量 tab/全部权限，而后端按严格口径拒绝——正是
+    menu.ts 注释所警告的「本地可见、后端拒绝」不一致。
+    """
+    if getattr(user, "is_superuser", False):
+        return True
+    return normalize_role(getattr(user, "role", None)) == "super_admin"
+
 
 # 登录专用速率限制参数：同一 IP 每分钟最多 5 次
 _LOGIN_RATE_LIMIT = 5
@@ -345,7 +364,7 @@ async def login(
         full_name=user.full_name,
         role=user_role,
         is_active=user.is_active if user.is_active is not None else True,
-        is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
+        is_superuser=_user_info_is_superuser(user),
         organization_id=getattr(user, "organization_id", None),
         organization_name=getattr(user, "organization_name", "") or "",
         permissions=getattr(user, "permissions_list", []) or [],
@@ -524,7 +543,7 @@ async def two_factor_verify_login(
         full_name=user.full_name,
         role=user_role,
         is_active=user.is_active if user.is_active is not None else True,
-        is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
+        is_superuser=_user_info_is_superuser(user),
         organization_id=getattr(user, "organization_id", None),
         organization_name=getattr(user, "organization_name", "") or "",
         permissions=getattr(user, "permissions_list", []) or [],
@@ -618,7 +637,7 @@ async def get_current_user_info(
             "full_name": user.full_name,
             "role": user_role,
             "is_active": user.is_active if user.is_active is not None else True,
-            "is_superuser": user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
+            "is_superuser": _user_info_is_superuser(user),
             "organization_id": getattr(user, "organization_id", None),
             "organization_name": getattr(user, "organization_name", "") or "",
             "permissions": getattr(user, "permissions_list", []) or [],
@@ -807,7 +826,7 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
             full_name=user.full_name,
             role=user.role or "user",
             is_active=user.is_active if user.is_active is not None else True,
-            is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
+            is_superuser=_user_info_is_superuser(user),
             organization_id=getattr(user, "organization_id", None),
             organization_name=getattr(user, "organization_name", "") or "",
             permissions=getattr(user, "permissions_list", []) or [],
@@ -1081,7 +1100,7 @@ async def register_user(
             full_name=user.full_name,
             role=user.role or "user",
             is_active=user.is_active if user.is_active is not None else True,
-            is_superuser=user.is_superuser or normalize_role(user.role) in ADMIN_ROLES,
+            is_superuser=_user_info_is_superuser(user),
             allowed_menus=getattr(user, "allowed_menus", None),
             allowed_menus_list=getattr(user, "allowed_menus_list", None),
         )

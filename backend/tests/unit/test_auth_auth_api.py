@@ -456,7 +456,12 @@ class TestMe:
             mock_usr_svc.return_value = inst
             response = client.get(f"{self.prefix}/me")
             assert response.status_code == 200
-            assert response.json()["data"]["is_superuser"] is True
+            # 契约修正（2026-10-31）：部门级管理员（role=admin, is_superuser=False）
+            # 不再被标成超管。此前 auth.py 用 `or normalize_role(role) in ADMIN_ROLES`
+            # 把部门级 admin 也标 is_superuser=True，与后端内部严格口径
+            # （permission_utils.is_superuser / menus 超管豁免 / R28 数据范围）矛盾，
+            # 导致前端菜单旁路/模块权限代理把部门级 admin 当超管（本地可见、后端拒绝）。
+            assert response.json()["data"]["is_superuser"] is False
 
         self._clear_gcu(client)
 

@@ -375,16 +375,13 @@ const ALL_ROLE_OPTIONS = [
   { value: 'viewer', label: '访客' },
 ] as const
 
-// 后端 _assert_can_manage_super_admin 只允许超管创建超管；部门级 admin
-// 看到该选项只会得到 403，因此按调用者收敛选项（搜索/表单共用）。
-const canManageSuperAdmin = computed(
-  () => authStore.user?.is_superuser === true || authStore.user?.role === 'super_admin'
-)
-const roleOptions = computed(() =>
-  canManageSuperAdmin.value
-    ? [...ALL_ROLE_OPTIONS]
-    : ALL_ROLE_OPTIONS.filter((role) => role.value !== 'super_admin')
-)
+// 契约口径（2026-10-31 对抗评审 + 契约修复）：登录响应此前对 role∈ADMIN_ROLES
+// 的账号统一标记 is_superuser=true，前端无法用 is_superuser 区分部门级管理员与超管，
+// 按 is_superuser 隐藏「超级管理员」选项是永不生效的死分支。后端现已修正为
+// 严格口径（auth.py _user_info_is_superuser：仅 DB 标志或 role=='super_admin'），
+// 但选项仍恒为 4 个（简洁且无损）：部门级管理员选择超管时由后端
+// _assert_can_manage_super_admin 403 拦截，前端不做隐藏。
+const roleOptions = ref<{ value: string; label: string }[]>([...ALL_ROLE_OPTIONS])
 
 // 角色选项固定使用 users.role 体系（4 个实用角色）。
 // 注意：不再用 /rbac/roles（RbacRole 表）覆盖选项——

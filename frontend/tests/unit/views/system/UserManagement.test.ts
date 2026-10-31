@@ -425,9 +425,8 @@ describe('挂载与初始化', () => {
 
   it('组织树选择器显式映射 value=id（否则节点可见但无法写回 v-model）', async () => {
     // 本文件的 treeNormalizer 被 mock；必须取真实模块，才能守住生产常量。
-    const actual = await vi.importActual<typeof import('@/utils/treeNormalizer')>(
-      '@/utils/treeNormalizer'
-    )
+    const actual =
+      await vi.importActual<typeof import('@/utils/treeNormalizer')>('@/utils/treeNormalizer')
     // 与 UserFormDialog 共用同一常量；Element Plus TreeSelect 默认 key 是 value，
     // 组织树节点只有 id。缺 value 映射 = 点击不写回 = “无法选择组织”。
     expect(actual.ORG_TREE_SELECT_PROPS).toMatchObject({
@@ -451,14 +450,21 @@ describe('挂载与初始化', () => {
     ])
   })
 
-  it('部门级管理员不展示“超级管理员”选项（后端只允许超管创建超管）', async () => {
+  it('角色选项恒为 4 个：登录响应把全部管理员标记 is_superuser=true，前端不做超管选项过滤', async () => {
+    // 契约依据：backend/app/api/v1/auth/auth.py:348 ——
+    // is_superuser = user.is_superuser or normalize_role(user.role) in ADMIN_ROLES，
+    // 部门级 admin（role=admin）登录后 store 里 is_superuser 恒为 true，
+    // 前端无法用 is_superuser 区分部门级与真正的超管。
+    // 因此「按 is_superuser 隐藏 super_admin 选项」是永不生效的死分支
+    // （测试曾用生产环境不可能出现的 is_superuser=false 状态制造假绿）。
+    // 正确口径：前端恒展示 4 角色，创建超管由后端 403 拦截。
     const original = authState.user
     authState.user = { role: 'admin', is_superuser: false } as any
     try {
       const wrapper = mountComp()
       await flushPromises()
       const roles = (wrapper.vm as any).roleOptions as { value: string }[]
-      expect(roles.map((r) => r.value)).toEqual(['admin', 'user', 'viewer'])
+      expect(roles.map((r) => r.value)).toEqual(['super_admin', 'admin', 'user', 'viewer'])
     } finally {
       authState.user = original
     }
