@@ -55,7 +55,10 @@ class TestSystemStatus:
             result = await sy.get_system_status(_admin())
         services = {s["name"]: s for s in result["data"]["services"]}
         assert services["database"]["status"] == "disconnected"
-        assert "db down" in services["database"]["error"]
+        # 2026-10-31 安全收口：错误细节不出站，只回异常类名；
+        # 原文含数据库路径/SQL 片段，任何登录用户都能读该端点。
+        assert services["database"]["error"] == "RuntimeError"
+        assert "db down" not in services["database"]["error"]
         assert services["cache"]["status"] == "unavailable"
 
 
