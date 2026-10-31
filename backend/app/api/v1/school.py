@@ -1540,7 +1540,8 @@ async def import_school_scholarship_students(
                 continue
             try:
                 _sname = str(row[0]).strip()
-                _sgrade = str(row[1]).strip() if len(row) > 1 and row[1] else None
+                # 年级归一：去前后空白；纯空白视为「年级未知」(None)，不落空字符串
+                _sgrade = (str(row[1]).strip() or None) if len(row) > 1 and row[1] else None
                 # 重复学生去重：同校同姓名同年级已有记录（含本次已导入）则跳过并提示
                 if (_sname, _sgrade) in _seen_pairs:
                     errors.append(f"第{row_idx}行: 学生 {_sname}（{_sgrade or '年级未知'}）已存在，跳过")
@@ -1548,7 +1549,11 @@ async def import_school_scholarship_students(
                 stu = ScholarshipStudent(
                     school_id=school_id,
                     student_name=_sname,
-                    grade=str(row[1]) if len(row) > 1 and row[1] else None,
+                    # 2026-10-31 口径修正：原先落库用 str(row[1])（未去空白），而上面去重
+                    # 判据用的是 _sgrade（已 strip）—— 两者不一致时，「同校同姓名同年级」
+                    # 会因空白被判成不同记录，且库里落下 " 一年级 " 这类值，后续按年级
+                    # 聚合/筛选对不上。统一用 _sgrade（纯空白归一为 None）。
+                    grade=_sgrade,
                     year=int(row[2]) if len(row) > 2 and row[2] else None,
                     amount=float(row[3]) if len(row) > 3 and row[3] else 0,
                     reason=str(row[4]) if len(row) > 4 and row[4] else None,
