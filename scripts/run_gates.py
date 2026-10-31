@@ -127,7 +127,7 @@ GATES: List[Gate] = [
           why="数据包 manifest 字段契约棘轮（删字段/改类型/改必填即红）"),
     # 需要真实实例 / 冻结产物：缺失或未构建自动 SKIP，不伪装成绿
     _gate("endpoint_500", "scripts/check_endpoint_500.py", backend=True, slow=True,
-          why="逐 GET 端点巡检：无登录态返回 5xx 即红（--slow 启用）"),
+          why="隔离库双登录态 GET 巡检：任一端点 5xx（或带令牌仍 401）即红（--slow 启用）"),
     _gate("frozen_smoke", "scripts/check_frozen_smoke.py", backend=True, slow=True,
           requires=BACKEND / "dist" / "assistance-backend" / "assistance-backend.exe",
           why="冻结后端产物冒烟：导入自检 + 真实起服务"),

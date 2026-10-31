@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """check_endpoint_500.py 的巡检口径回归（P0-F2）。
 
-只对公开函数做纯单元断言（不拉真服务进程）：状态白名单、5xx 捕获、基线抵扣、只挑 GET。
+纯单元断言（不拉真服务进程），锁两件事：
+1. 哪些状态码算违规 —— 5xx / 连接失败两态都红；匿名态 401 放行，带管理员令牌仍 401 必红；
+2. 豁免清单按 (mode, path, status) 三元组抵扣 —— 同一路径两种登录态的结论互不顶替（棘轮只减不增）。
 """
-from importlib.util import spec_from_file_location, module_from_spec
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 import pytest
@@ -15,7 +17,7 @@ spec.loader.exec_module(gate)
 
 
 def _patch_http(monkeypatch, mapping):
-    def fake(url: str, timeout: float = 10.0):
+    def fake(url: str, timeout: float = 10.0, token=None):
         for suffix, status in mapping.items():
             if url.endswith(suffix):
                 return status, ""
@@ -31,29 +33,82 @@ def test_allowed_statuses_complete():
         assert violet not in gate.ALLOWED_STATUSES, violet
 
 
+def test_classify_5xx_is_violation_in_both_modes():
+    assert gate.classify(500, gate.MODE_ANON) == "HTTP 500"
+    assert gate.classify(500, gate.MODE_AUTH) == "HTTP 500"
+    assert gate.classify(502, gate.MODE_ANON) == "HTTP 502"
+    # 503 是维护窗口对写请求的合法降级响应，不算服务端错误
+    assert gate.classify(503, gate.MODE_ANON) is None
+
+
+def test_classify_anon_401_allowed_but_auth_401_flagged():
+    assert gate.classify(401, gate.MODE_ANON) is None
+    assert gate.classify(401, gate.MODE_AUTH)
+
+
+def test_classify_ordinary_and_connection_states():
+    for status in (200, 204, 302, 403, 404, 405, 422, 429):
+        assert gate.classify(status, gate.MODE_AUTH) is None, status
+    assert gate.classify(-1, gate.MODE_ANON)
+    assert gate.classify(418, gate.MODE_ANON)
+
+
 def test_probe_all_reports_5xx_only(monkeypatch):
     _patch_http(monkeypatch, {"/a": 401, "/b": 422, "/c": 503, "/bad": 500, "/oops": 502})
-    violations = gate.probe_all("http://x", ["/a", "/b", "/c", "/bad", "/ok", "/oops"])
-    assert violations == [("/bad", 500), ("/oops", 502)]
+    violations = gate.probe_all("http://x", ["/a", "/b", "/c", "/bad", "/ok", "/oops"], gate.MODE_ANON)
+    assert violations == [("/bad", 500, "anon"), ("/oops", 502, "anon")]
+
+
+def test_probe_all_flags_401_only_when_authenticated(monkeypatch):
+    _patch_http(monkeypatch, {"/me": 401})
+    assert gate.probe_all("http://x", ["/me"], gate.MODE_ANON) == []
+    assert gate.probe_all("http://x", ["/me"], gate.MODE_AUTH, token="t") == [("/me", 401, "auth")]
 
 
 def test_probe_all_surfaces_connection_error(monkeypatch):
-    monkeypatch.setattr(
-        gate, "http_get",
-        lambda url, timeout=10.0: (_ for _ in ()).throw(RuntimeError("refused")),
-    )
+    def boom(url, timeout=10.0, token=None):
+        raise RuntimeError("refused")
+
+    monkeypatch.setattr(gate, "http_get", boom)
     with pytest.raises(RuntimeError, match="refused"):
-        gate.probe_all("http://x", ["/boom"])
+        gate.probe_all("http://x", ["/boom"], gate.MODE_ANON)
 
 
-def test_known_exemptions_are_discounted_not_erased(monkeypatch):
-    """基线豁免只抵扣对应条目，新的 5xx 不受其影响（棘轮只减不增）。"""
-    _patch_http(monkeypatch, {"/bad": 500, "/worse": 500})
-    known = json_like([{"path": "/bad", "status": 500, "reason": "x"}])
-    fresh = [(p, s) for p, s in gate.probe_all("http://x", ["/bad", "/worse"])
-             if (p, s) not in known]
-    assert fresh == [("/worse", 500)]
+def test_legacy_baseline_entry_without_mode_counts_as_anon():
+    assert gate.entry_key({"path": "/api/v1/x", "status": 500}) == ("anon", "/api/v1/x", 500)
 
 
-def json_like(items):
-    return {(x["path"], x["status"]) for x in items}
+def test_known_exemptions_are_discounted_not_erased():
+    """基线豁免只抵扣对应三元组，新的 5xx 不受其影响（棘轮只减不增）。"""
+    known = [{"path": "/bad", "status": 500, "reason": "x"}]
+    fresh, excused = gate.partition_violations(
+        [("/bad", 500, "anon"), ("/worse", 500, "anon")], known
+    )
+    assert excused == [("/bad", 500, "anon")]
+    assert fresh == [("/worse", 500, "anon")]
+
+
+def test_same_path_different_mode_is_not_interchangeable():
+    known = [{"mode": "anon", "path": "/api/v1/x", "status": 401}]
+    fresh, excused = gate.partition_violations(
+        [("/api/v1/x", 401, "anon"), ("/api/v1/x", 401, "auth")], known
+    )
+    assert excused == [("/api/v1/x", 401, "anon")]
+    assert fresh == [("/api/v1/x", 401, "auth")]
+
+
+def test_isolated_env_points_at_absolute_sqlite_url(tmp_path):
+    env = gate.isolated_env(tmp_path)
+    assert env["DATABASE_URL"].startswith("sqlite:///")
+    db_path = gate.database_file(env)
+    assert db_path.is_absolute()
+    assert db_path.parent == tmp_path / "data"
+    assert Path(env["DATA_DIR"]) == tmp_path / "data"
+    assert Path(env["CACHE_DIR"]) == tmp_path / "cache"
+
+
+def test_collect_get_paths_skips_parametrized_routes():
+    paths = gate.collect_get_paths()
+    assert "/health" in paths
+    assert paths == sorted(set(paths))
+    assert not [p for p in paths if "{" in p]
