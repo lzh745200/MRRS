@@ -3748,6 +3748,12 @@ VERSION_HISTORY_DATA = [
         "date": "2026-10-31",
         "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
         "features": [
+            "auth/auth.py 的 4 处用 getattr(user, \"allowed_menus_list\", None)（防御式）；",
+            (
+                "api/v1/menus.py 的 4 处直接属性访问（user.allowed_menus_list）。test_cov_final_organization.py::test_is_a"
+                "ctive_defaulted_when_absent 仍用is_superuser=False 的用户建根（520000），被 403 拦截。该用例意图是验证 is_active 默认值"
+                "而非建根权限 → 用户改为超管，守卫另测。"
+            ),
             "standalone spec 删除标准库排除项，difflib 显式加入 hiddenimports；统一 spec 同步显式声明，避免未来 excludes 漂移。",
             (
                 "新增 scripts/verify_frozen_modules.py：直接读取 onedir 产物的CArchive/PYZ 模块表，校验 difflib、入口链与全部 379 个 ap"

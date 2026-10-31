@@ -1380,7 +1380,9 @@ def _get_user_accessible_menu_keys(user: User, db: Session) -> set[str]:
         keys = matrix.visible_keys()
         # 工作台是登录后的落地页，缺了会白屏，故恒定可见
         keys.add(_DASHBOARD_MENU_KEY)
-        allowed = user.allowed_menus_list
+        # getattr 兜底（与 auth.py 的 allowed_menus_list 口径一致）：该端点是
+        # 前端整站导航的数据源，user 对象形态不完整时不应 500。
+        allowed = getattr(user, "allowed_menus_list", None)
         if allowed is not None:
             # 用户级配置**只能收窄、不能扩大**：否则本地管理员给某个用户设一份
             # allowed_menus 就能绕过上级授权（下级无超管，这正是要防的路径）。
@@ -1388,7 +1390,7 @@ def _get_user_accessible_menu_keys(user: User, db: Session) -> set[str]:
             keys.add(_DASHBOARD_MENU_KEY)
         return keys
 
-    allowed = user.allowed_menus_list
+    allowed = getattr(user, "allowed_menus_list", None)
     if allowed is not None:
         # 用户级别配置优先
         keys = set(allowed)
@@ -1436,7 +1438,7 @@ async def get_accessible_menus(
     """
     allowed_keys = _get_user_accessible_menu_keys(current_user, db)
     sections = _build_sections(allowed_keys)
-    if current_user.allowed_menus_list is not None:
+    if getattr(current_user, "allowed_menus_list", None) is not None:
         source = "user"
     elif _get_user_bound_pack(current_user, db) is not None:
         source = "pack"
@@ -1499,7 +1501,7 @@ async def get_user_menu_config(
         raise HTTPException(status_code=404, detail="用户不存在")
 
     # 用户当前配置
-    user_menu_keys = user.allowed_menus_list  # None = 使用角色默认
+    user_menu_keys = getattr(user, "allowed_menus_list", None)  # None = 使用角色默认
     role_default_keys = _get_role_default_menu_keys(user.role)
     all_valid_keys = _iter_definition_keys()
 

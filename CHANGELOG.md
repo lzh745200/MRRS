@@ -1,4 +1,25 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Fixed（菜单端点的 user 形态健壮性 —— 全量 GET 巡检发现）
+
+**巡检方法**：用真实 `app` + 内存库 + 管理员依赖覆盖，遍历全部 **432 个 GET 路由**
+（路径参数填 `1`），统计运行期 5xx。结果：**430 非 5xx / 1 认证拦截 / 1 个 500**。
+
+**发现的缺陷**：`/api/v1/menus/accessible`（**前端整站导航的数据源**）在 user 对象
+缺少 `allowed_menus_list` 属性时抛 `AttributeError` → 500，前端拿不到菜单。
+根因是同一契约两种写法：
+
+- `auth/auth.py` 的 4 处用 `getattr(user, "allowed_menus_list", None)`（防御式）；
+- `api/v1/menus.py` 的 4 处直接属性访问（`user.allowed_menus_list`）。
+
+真实 `User` ORM 实例有该 `@property`，所以生产路径当前不触发；但导航端点对
+user 形态敏感属**真实健壮性缺陷**（认证链路上游已按防御式写，说明非 ORM 契约确实存在）。
+
+**修复**：`menus.py` 4 处（1383/1391/1439/1502）统一改为 `getattr(..., None)`，与 auth.py 对齐。
+
+**回归** `tests/unit/test_menus_user_shape_r58.py`（3 例）：缺属性 → 200（修复前 500）；
+显式 `None` → `source=role`（继承角色默认）；显式 `[]` → `source=user`（表示无菜单，非继承）。
+
+**验证**：flake8 0 · 新增 3 passed · menu 相关域 **136 passed**。
 ### Fixed（ARM64 Electron DEB 构建失败：冻结门禁缺 PyInstaller）
 
 **现象**：v1.18.30 的 tag 构建里 `Build Electron DEB Package` 作业失败；`Build Frontend`、
