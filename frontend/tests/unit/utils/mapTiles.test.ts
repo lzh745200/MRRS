@@ -33,6 +33,11 @@ import {
   formatTileBytes,
   formatZoomRange,
   isGcj02,
+  mergeTileBbox,
+  tileHasOverview,
+  tileOverviewMissing,
+  tileViewBbox,
+  tileViewBounds,
   isLocalTileUrl,
   isTileMapUsable,
   labelZoomForType,
@@ -610,8 +615,60 @@ describe('瓦片底图常显标签（zoom 阈值 / 碰撞 / 上限 / 优先级�
 
   it('空输入 / 空视口尺寸安全', () => {
     expect(selectVisibleLabels([], 13, viewport)).toEqual([])
-    expect(selectVisibleLabels([label('甲村', 'village', 10, 10)], 13, { width: 0, height: 0 })).toEqual(
-      []
-    )
+    expect(
+      selectVisibleLabels([label('甲村', 'village', 10, 10)], 13, { width: 0, height: 0 })
+    ).toEqual([])
+  })
+})
+
+describe('mapTiles — 看全省（视图范围与概览判定）', () => {
+  it('tileViewBbox 至少包含全省：市州 bbox 导入后仍能缩到全省', () => {
+    const info = normalizeTileInfo({
+      available: true,
+      tileCount: 1,
+      zoomLevels: [14],
+      bbox: [106.1, 26.1, 107.3, 27.4],
+    })
+    expect(tileViewBbox(info)).toEqual([103.6, 24.6, 109.6, 29.2])
+  })
+
+  it('tileViewBbox 与更大的覆盖 bbox 取并集', () => {
+    const info = normalizeTileInfo({
+      available: true,
+      tileCount: 1,
+      zoomLevels: [14],
+      bbox: [100, 20, 110, 30],
+    })
+    expect(tileViewBbox(info)).toEqual([100, 20, 110, 30])
+  })
+
+  it('tileViewBounds 返回 Leaflet [[south,west],[north,east]]', () => {
+    const info = normalizeTileInfo({
+      available: true,
+      tileCount: 1,
+      zoomLevels: [13],
+      bbox: [106.1, 26.1, 107.3, 27.4],
+    })
+    expect(tileViewBounds(info)).toEqual([
+      [24.6, 103.6],
+      [29.2, 109.6],
+    ])
+  })
+
+  it('tileHasOverview：最低层级 ≤8 才算有全省概览', () => {
+    expect(tileHasOverview(normalizeTileInfo({ zoomLevels: [5, 6, 7, 8, 14] }))).toBe(true)
+    expect(tileHasOverview(normalizeTileInfo({ zoomLevels: [12, 13, 14] }))).toBe(false)
+    expect(tileHasOverview(normalizeTileInfo({ zoomLevels: [] }))).toBe(false)
+  })
+
+  it('tileOverviewMissing 与 tileHasOverview 互斥', () => {
+    const withOverview = normalizeTileInfo({ zoomLevels: [5, 8, 13] })
+    const without = normalizeTileInfo({ zoomLevels: [13, 14] })
+    expect(tileOverviewMissing(withOverview)).toBe(false)
+    expect(tileOverviewMissing(without)).toBe(true)
+  })
+
+  it('mergeTileBbox 取两个 bbox 的并集', () => {
+    expect(mergeTileBbox([100, 20, 105, 25], [103, 24, 110, 30])).toEqual([100, 20, 110, 30])
   })
 })

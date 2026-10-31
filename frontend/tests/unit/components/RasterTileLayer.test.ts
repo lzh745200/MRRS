@@ -112,7 +112,10 @@ const hoisted = vi.hoisted(() => {
     },
   }
 
-  return { state, map, tileLayer, TileLayer, layerGroup, circleMarker }
+  /** 比例尺控件（图注的一部分） */
+  const scaleControl = vi.fn(() => ({ addTo: vi.fn() }))
+
+  return { state, map, tileLayer, TileLayer, layerGroup, circleMarker, scaleControl }
 })
 
 vi.mock('leaflet', () => ({
@@ -121,6 +124,7 @@ vi.mock('leaflet', () => ({
   TileLayer: hoisted.TileLayer,
   layerGroup: hoisted.layerGroup,
   circleMarker: hoisted.circleMarker,
+  control: { scale: hoisted.scaleControl },
 }))
 
 import RasterTileLayer from '@/components/map/RasterTileLayer.vue'
@@ -132,6 +136,9 @@ const GUIZHOU_BOUNDS = [
   [24.6, 103.6],
   [29.2, 109.6],
 ]
+
+/** 贵阳市单市州 bbox（用于验证视图范围仍包含全省） */
+const GUIYANG_BBOX = [106.1, 26.1, 107.3, 27.4]
 
 function makeInfo(overrides: Partial<TileInfo> = {}): TileInfo {
   return {
@@ -725,5 +732,74 @@ describe('RasterTileLayer.vue — 常显标签（z12 村 / z13 校，方案 A）
     const lateHandlers = [...(map.handlers.zoomend || [])]
     wrapper.unmount()
     expect(() => lateHandlers.forEach((fn) => fn())).not.toThrow()
+  })
+})
+
+describe('RasterTileLayer.vue — 看全省与图例（2026-10-31）', () => {
+  it('只导入市州包时，视图上限仍是全省（maxBounds 不被市州 bbox 锁死）', async () => {
+    await mountLayer({ tileInfo: makeInfo({ bbox: GUIYANG_BBOX, zoomLevels: [14] }) })
+    const opts = state.maps[0].opts
+    expect(opts.maxBounds[0][0]).toBeCloseTo(24.55)
+    expect(opts.maxBounds[0][1]).toBeCloseTo(103.55)
+    expect(opts.maxBounds[1][0]).toBeCloseTo(29.25)
+    expect(opts.maxBounds[1][1]).toBeCloseTo(109.65)
+  })
+
+  it('「全省视图」按钮把视野拉到全省 bbox', async () => {
+    const wrapper = await mountLayer({
+      tileInfo: makeInfo({ bbox: GUIYANG_BBOX, zoomLevels: [5, 6, 7, 8, 14] }),
+    })
+    const button = wrapper.find('.map-raster-province')
+    expect(button.exists()).toBe(true)
+    await button.trigger('click')
+    expect(state.maps[0].fitBounds).toHaveBeenLastCalledWith(GUIZHOU_BOUNDS, {
+      padding: [16, 16],
+      maxZoom: 9,
+    })
+  })
+
+  it('右侧图例：符号说明 + 覆盖信息 + 数据署名，可收起', async () => {
+    const wrapper = await mountLayer({
+      tileInfo: makeInfo({
+        manifest: {
+          provider: 'osm-render',
+          license: 'ODbL-1.0 (© OpenStreetMap contributors)',
+        } as any,
+      }),
+    })
+    const legend = wrapper.find('.map-raster-legend')
+    expect(legend.exists()).toBe(true)
+    const text = legend.text()
+    expect(text).toContain('图例')
+    expect(text).toContain('帮扶村')
+    expect(text).toContain('学校')
+    expect(text).toContain('瓦片')
+    expect(text).toContain('层级')
+    expect(text).toContain('来源')
+    expect(text).toContain('OpenStreetMap')
+    await wrapper.find('.legend-toggle').trigger('click')
+    expect(wrapper.find('.legend-items').exists()).toBe(false)
+  })
+
+  it('有 z5–8 概览时不提示补装；只有 z13/z14 时提示导入 guizhou-overview_z5-8.zip', async () => {
+    const withOverview = await mountLayer({
+      tileInfo: makeInfo({ zoomLevels: [5, 6, 7, 8, 14] }),
+    })
+    expect(withOverview.find('.map-raster-warn').exists()).toBe(false)
+
+    const withoutOverview = await mountLayer({
+      tileInfo: makeInfo({ zoomLevels: [13, 14], bbox: GUIYANG_BBOX }),
+    })
+    const warn = withoutOverview.find('.map-raster-warn')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text()).toContain('guizhou-overview_z5-8.zip')
+    expect(warn.text()).toContain('z13')
+  })
+
+  it('挂载比例尺控件（图注的一部分）', async () => {
+    await mountLayer()
+    expect(hoisted.scaleControl).toHaveBeenCalledWith(
+      expect.objectContaining({ position: 'bottomleft', imperial: false })
+    )
   })
 })

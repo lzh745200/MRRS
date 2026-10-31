@@ -324,3 +324,31 @@ python scripts/tiles/export_tiles.py --from .scratch/osm/tiles-z13 \
 4. 仍在旧版本（≤1.18.18）时，可先把 zip 放到本机目录，用
    `python scripts/tiles/import_tiles.py --source <zip> --target <瓦片目录>` 命令行导入，
    不受前端 30 秒超时限制。
+
+## 十二、缩放看不到全省 / 没有图注（v1.18.31）
+
+**现象**：导入 z13/z14 瓦片包后，地图缩不到全省；右侧没有图例/图注。
+
+**根因（两条叠加）**：
+1. 旧 z13/z14 包与 CI 安装包不含 z5–8 概览 → `tile-info.zoomLevels` 最低为 13/14，
+   前端 `tileZoomLimits` 最多降 2 档（z13 包最小 z11），**物理上没有全省瓦片**；
+2. `maxBounds` 用测量覆盖 bbox：只导入市州包时它只有该市州，缩放到全省会被 Leaflet 弹回。
+
+**修复（v1.18.31）**：
+- 每个瓦片包内置 **z5–8 全省概览**（31 张 / 0.8MB），单包导入即可缩到 z4~z5 看全省；
+  新包目录 `deliverables/osm-tiles-20261031/`：
+  `guizhou-overview_z5-8.zip`（0.8MB）、`guizhou-all_z13.zip`（96.0MB）、
+  `guizhou-all_z14.zip`（284.5MB）、9 个市州 z14 包（22.3~64.6MB）；
+- 前端 `tileViewBbox = 覆盖 bbox ∪ 全省 bbox`，`maxBounds` 不再锁死；新增「全省视图」按钮；
+- 缺概览时显示「请导入 guizhou-overview_z5-8.zip」并隐藏全省按钮；
+- 右侧新增图例/图注：帮扶村（z≥12 常显）、学校（z≥13 常显）、乡镇/县市、道路/水系/行政界，
+  以及瓦片数/层级/来源 + `© OpenStreetMap contributors` 署名；新增比例尺；
+- 安装包恢复内置 z5–12（5,623 张 / 60MB），新装即使不导入任何包也能看全省。
+
+**现场操作**：
+1. 已导入旧 z13/z14 包的：补导 `guizhou-overview_z5-8.zip`（0.8MB，几秒完成）即可缩到全省；
+2. 或直接用新包重导（旧包可删除，同名瓦片覆盖）；
+3. 新装 v1.18.31：内置 z5–12，直接可看全省；需要 z13/z14 细节再导入新包。
+
+**校验**：`import_tiles` + `verify_tiles` 逐个通过；后端合并后 `zoomLevels=5..12,14`、
+z14 瓦片 200；前端 95 项瓦片单测通过。

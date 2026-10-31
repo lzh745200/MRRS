@@ -10,6 +10,53 @@
     <div v-if="partialCoverageText" class="map-raster-partial">{{ partialCoverageText }}</div>
 
     <div v-if="gcj02" class="map-raster-gcj02">{{ GCJ02_HINT }}</div>
+
+    <!-- 右侧图例 / 图注：符号说明 + 当前覆盖信息 + 地图数据署名 -->
+    <aside v-if="isTileMapUsable(tileInfo)" class="map-raster-legend" aria-label="地图图例">
+      <div class="legend-head">
+        <span class="legend-title">图例</span>
+        <button class="legend-toggle" @click="legendOpen = !legendOpen">
+          {{ legendOpen ? '收起' : '展开' }}
+        </button>
+      </div>
+      <template v-if="legendOpen">
+        <ul class="legend-items">
+          <li><i class="legend-swatch legend-swatch--village" />帮扶村（z≥12 常显名称）</li>
+          <li><i class="legend-swatch legend-swatch--school" />学校（z≥13 常显名称）</li>
+          <li><i class="legend-swatch legend-swatch--place" />乡镇 / 县市（底图注记）</li>
+          <li><i class="legend-swatch legend-swatch--road" />道路 / 水系 / 行政界</li>
+        </ul>
+        <dl class="legend-meta">
+          <div>
+            <dt>瓦片</dt>
+            <dd>{{ coverageSummary }}</dd>
+          </div>
+          <div>
+            <dt>层级</dt>
+            <dd>{{ zoomSummary }}</dd>
+          </div>
+          <div>
+            <dt>来源</dt>
+            <dd>{{ sourceLabel }}</dd>
+          </div>
+        </dl>
+        <p class="legend-attribution">{{ attributionText }}</p>
+      </template>
+    </aside>
+
+    <button
+      v-if="isTileMapUsable(tileInfo) && !overviewMissing"
+      class="map-raster-province"
+      title="缩放到全省范围"
+      @click="fitProvince"
+    >
+      全省视图
+    </button>
+
+    <div v-if="overviewMissing" class="map-raster-warn" role="alert">
+      当前瓦片缺少 z5–8 全省概览，最小只能看到 z{{ minAvailableZoom }}；请导入
+      <code>guizhou-overview_z5-8.zip</code>（0.8MB）后即可缩放查看全省。
+    </div>
   </div>
 </template>
 
@@ -59,7 +106,10 @@ import {
   tileCoverageBbox,
   tileCoverageBounds,
   tileInfoHint,
+  tileOverviewMissing,
+  tileViewBounds,
   tileZoomLimits,
+  formatTileBytes,
   toDisplayCoord,
 } from '@/utils/mapTiles'
 
@@ -155,6 +205,37 @@ const partialCoverageText = computed(() =>
   loadedTiles.value > 0 && failedTiles.value > 0 ? PARTIAL_COVERAGE_HINT : ''
 )
 
+/** 图例展开/收起（默认展开：用户要求“侧面有标注”） */
+const legendOpen = ref(true)
+/** 是否缺 z5–8 全省概览（只导入 z13/z14 时为 true） */
+const overviewMissing = computed(() => tileOverviewMissing(props.tileInfo))
+/** 当前最低可用层级（缺概览时用于提示“最小只能看到 z13”） */
+const minAvailableZoom = computed(() => {
+  const levels = (props.tileInfo?.zoomLevels ?? []).filter((level) => Number.isFinite(level))
+  return levels.length > 0 ? Math.min(...levels) : TILE_FIT_MAX_ZOOM + 1
+})
+/** 图例：瓦片数量与体积 */
+const coverageSummary = computed(() => {
+  const info = props.tileInfo
+  return `${info?.tileCount ?? 0} 张 · ${formatTileBytes(info?.totalBytes ?? 0)}`
+})
+/** 图例：层级范围（稀疏层级逐档列出，如 5–8 / 14） */
+const zoomSummary = computed(() => {
+  const levels = [...(props.tileInfo?.zoomLevels ?? [])].filter((level) => Number.isFinite(level))
+  if (levels.length === 0) return '—'
+  return levels.join(' / ')
+})
+/** 图例：瓦片来源 */
+const sourceLabel = computed(() => {
+  const source = props.tileInfo?.source
+  if (source === 'env') return '安装包内置 / 环境指定'
+  if (source === 'meipass') return '程序内置'
+  if (source === 'dev') return '开发目录'
+  return '本机瓦片目录'
+})
+/** 图例：地图数据署名（OSM/ODbL 等） */
+const attributionText = computed(() => tileAttribution(props.tileInfo?.manifest))
+
 function markerColor(type?: string): string {
   if (type === 'school') return chartColor('success')
   if (type === 'project') return chartColor('warning')
@@ -244,6 +325,9 @@ function expandBounds(
 /** 用瓦片信息创建地图（仅在 tileInfo 可用时调用） */
 function initMap(info: TileInfo) {
   const bounds = tileCoverageBounds(info)
+  // 视图范围 = 已导入覆盖范围 ∪ 全省范围：只导入市州包时也不把视野锁死在该市州，
+  // 否则缩放到全省会被 maxBounds 弹回（现场“缩放看不到全貌”的根因之一）。
+  const viewBounds = tileViewBounds(info)
   // 修复缩放失效：显示层级不得等于瓦片原生层级。单层 z14 包的原始
   // minZoom=maxZoom=14 会让滚轮/双击/按钮全部无效；这里改为可交互区间 +
   // 原生层级分离，由 Leaflet 自动降采样/超采样。
@@ -254,8 +338,8 @@ function initMap(info: TileInfo) {
     zoom: props.zoom,
     minZoom,
     maxZoom,
-    // 视野不得拖出覆盖范围（外扩 0.05° 吸收边缘）
-    maxBounds: expandBounds(bounds),
+    // 视野不得拖出「覆盖范围 ∪ 全省」，外扩 0.05° 吸收边缘
+    maxBounds: expandBounds(viewBounds),
     maxBoundsViscosity: 1.0,
     worldCopyJump: false,
     attributionControl: true,
@@ -267,6 +351,8 @@ function initMap(info: TileInfo) {
     boxZoom: true,
     keyboard: true,
   })
+  // 比例尺（图注的一部分）：地图缩放时自动更新
+  L.control.scale({ position: 'bottomleft', imperial: false, maxWidth: 140 }).addTo(map)
   tileLayer = new NearestNativeTileLayer(TILE_URL_TEMPLATE, {
     minZoom,
     maxZoom,
@@ -297,6 +383,15 @@ function initMap(info: TileInfo) {
   }
   map.invalidateSize()
   startWatchdog()
+}
+
+/** 「全省视图」：缩放到覆盖范围 ∪ 全省，用户随时能看全貌（缺概览时仍会提示补装） */
+function fitProvince() {
+  if (!map) return
+  map.fitBounds(tileViewBounds(props.tileInfo), {
+    padding: [16, 16],
+    maxZoom: TILE_FIT_MAX_ZOOM,
+  })
 }
 
 /**
@@ -549,5 +644,157 @@ onBeforeUnmount(() => {
 /* 大字档：z≥13（学校常显起点）时名称更易读 */
 :deep(.map-raster-label--lg.leaflet-tooltip) {
   font-size: var(--font-size-sm);
+}
+
+/* 右侧图例 / 图注（用户要求“侧面有标注”）：符号说明 + 覆盖信息 + 数据署名 */
+.map-raster-legend {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 900;
+  width: 214px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-card);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text-regular);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.legend-title {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.legend-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.legend-items {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.legend-items li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.legend-swatch--village {
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.legend-swatch--school {
+  background: var(--color-success);
+}
+
+.legend-swatch--place {
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+}
+
+.legend-swatch--road {
+  background: var(--color-border-light);
+  border: 1px solid var(--color-text-secondary);
+}
+
+.legend-meta {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 6px;
+}
+
+.legend-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.legend-meta dt {
+  color: var(--color-text-secondary);
+}
+
+.legend-meta dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  text-align: right;
+  word-break: break-all;
+}
+
+.legend-attribution {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* 「全省视图」快捷按钮：图例下方/右下角，随时缩放到全貌 */
+.map-raster-province {
+  position: absolute;
+  right: 12px;
+  bottom: 44px;
+  z-index: 900;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-card);
+  color: var(--color-primary);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.map-raster-province:hover {
+  background: var(--color-bg-hover);
+}
+
+/* 缺概览瓦片：明确告知补装包，避免“缩放没反应”被误判为故障 */
+.map-raster-warn {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 900;
+  max-width: 78%;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--color-warning-light-9);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.map-raster-warn code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--color-bg-hover);
+  font-family: var(--font-family-mono);
 }
 </style>

@@ -1,3 +1,39 @@
+## [1.18.31] - 2026-10-31 — 瓦片地图“缩放看不到全省、没有图注”：内置概览层 + 视图范围解耦 + 右侧图例
+
+> 现场反馈：导入 z13/z14 后地图缩放看不到全貌、右侧没有图注。
+> 根因（两条叠加）：
+> ① 旧 z13/z14 包或 CI 安装包**不含 z5–8 概览**，`tile-info.zoomLevels` 最低层级被抬到 13/14；
+>    前端 `tileZoomLimits` 最多只能降 2 档（z13 包 → 最小 z11），物理上看不到全省；
+> ② `maxBounds` 用的是测量覆盖 bbox：只导入市州包时它只有该市州，缩放到全省会被 Leaflet 弹回。
+
+### Added
+
+- **每个瓦片包内置 z5–8 全省概览**（31 张 / 约 0.8MB）：新脚本
+  `scripts/tiles/pack_guizhou_bundles.py` 统一产出 `guizhou-overview_z5-8.zip`、
+  `guizhou-all_z13.zip`（96.0MB）、`guizhou-all_z14.zip`（284.5MB）与 9 个市州 z14 包
+  （22.3~64.6MB），任何**单包导入后都能缩到 z4~z5 看全省**。
+- **前端视图范围解耦**：`tileViewBbox = 覆盖 bbox ∪ 全省 bbox`，`maxBounds` 不再被市州包锁死；
+  新增「全省视图」按钮（一键 fitBounds 全省）；缺概览时显示明确提示并给出补装包名。
+- **右侧图例 / 图注**（默认展开、可收起）：帮扶村（z≥12 常显）、学校（z≥13 常显）、
+  乡镇/县市注记、道路/水系/行政界四类符号说明 + 瓦片数/层级/来源 + `© OpenStreetMap contributors`
+  署名；新增比例尺控件（metric）。
+- **安装包恢复内置 z5–12**（5,623 张 / 60.0MB，MANIFEST 修正 `©` 乱码）：新装环境即使不导入任何包，
+  也能在地图页缩放查看全省。
+
+### Changed
+
+- `resources/map-tiles` 重新写入正确 MANIFEST（`ODbL-1.0 (© OpenStreetMap contributors)`）。
+- `mapTiles.ts` 新增 `tileViewBbox` / `tileViewBounds` / `tileHasOverview` /
+  `tileOverviewMissing` / `mergeTileBbox` / `PROVINCE_OVERVIEW_MAX_ZOOM`。
+
+### 验证
+
+- 前端单测：`RasterTileLayer.test.ts` 38 项、`mapTiles.test.ts` 57 项，合计 **95 项通过**；
+  `vue-tsc --noEmit` 0；eslint 0 error。
+- 覆盖场景：只导入市州包时 `maxBounds` 仍为全省；「全省视图」按钮 fitBounds 全省；
+  图例内容/收起；缺概览告警与补装包名；比例尺控件挂载。
+- 新包组合验证：内置 z5–12 + `guizhou-all_z14.zip` 合并后 `zoomLevels=5..12,14`、z14 瓦片 200。
+
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
 ### Fixed（CI 两处红 —— 异常直出 + 列表解包）
 

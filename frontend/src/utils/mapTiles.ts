@@ -213,6 +213,48 @@ export function tileCoverageBounds(
   ]
 }
 
+/** 概览层级上限：最低层级 ≤ 该值视为「带全省概览」（z5–8 = 31 张、约 0.8MB） */
+export const PROVINCE_OVERVIEW_MAX_ZOOM = 8
+
+/** 两个 bbox 的并集（[minLon, minLat, maxLon, maxLat]） */
+export function mergeTileBbox(a: TileBbox, b: TileBbox): TileBbox {
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]
+}
+
+/**
+ * 「视图」bbox：已导入覆盖范围 ∪ 全省范围。
+ *
+ * 不能只用测量到的覆盖 bbox：现场只导入 z14 市州包时 measured bbox 只有该市州，
+ * 把 `maxBounds` 收紧到它之后，缩放到全省会被 Leaflet 弹回市州范围 ——
+ * 表现就是“缩放不能看到全貌”。视图范围固定至少覆盖全省，缺瓦片处用透明瓦片兜底
+ * （带 z5–8 概览包时即为完整的全省底图）。
+ */
+export function tileViewBbox(info: TileInfo | null | undefined): TileBbox {
+  return mergeTileBbox(tileCoverageBbox(info), [...TILE_COVERAGE_FALLBACK_BBOX] as TileBbox)
+}
+
+/** 视图 bounds（[[south, west], [north, east]]） */
+export function tileViewBounds(
+  info: TileInfo | null | undefined
+): [[number, number], [number, number]] {
+  const [minLon, minLat, maxLon, maxLat] = tileViewBbox(info)
+  return [
+    [minLat, minLon],
+    [maxLat, maxLon],
+  ]
+}
+
+/** 是否含全省概览瓦片（最低层级 ≤ PROVINCE_OVERVIEW_MAX_ZOOM） */
+export function tileHasOverview(info: TileInfo | null | undefined): boolean {
+  const levels = (info?.zoomLevels ?? []).filter((level) => Number.isFinite(level))
+  return levels.length > 0 && Math.min(...levels) <= PROVINCE_OVERVIEW_MAX_ZOOM
+}
+
+/** 缺全省概览：只导入 z13/z14 等高层级包时为 true，页面据此提示补装概览包 */
+export function tileOverviewMissing(info: TileInfo | null | undefined): boolean {
+  return !tileHasOverview(info)
+}
+
 /** 瓦片加载统计（loaded=成功张数，errors=失败张数） */
 export interface TileLoadStats {
   loaded: number
