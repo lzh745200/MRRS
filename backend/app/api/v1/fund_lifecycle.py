@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.elements import ColumnElement
 
 from ...core.database import get_db
 from ...core.response import ok_list, success_response
@@ -51,6 +50,15 @@ def _get_username(current_user) -> str:
     # full_name/username 都可能缺失或为 None；审计/操作人字段一律落字符串（空串兜底）
     name = getattr(current_user, "full_name", None) or getattr(current_user, "username", "")
     return str(name) if name else ""
+
+
+def _numeric(value: Any) -> Any:
+    """数字列的统一静态出口。
+
+    ORM 的 Numeric 列在静态类型上是 TypeVar 化的 _N | None，而经费各表（合同付款、
+    决算、预算版本、资产核验）的业务值一律是 float。这里只影响静态检查，值原样透传。
+    """
+    return value
 
 
 def _require_related_exists(db: Session, related_id, model, message: str) -> None:
@@ -90,7 +98,7 @@ def _get_accessible_fund_or_403(fund_id: int, current_user, db: Session) -> Fund
     if not check_record_access(fund, current_user):
         raise HTTPException(status_code=403, detail="无权操作该组织的经费")
     if getattr(fund, "project_id", None):
-        _get_project_or_403(fund.project_id, current_user, db)
+        _get_project_or_403(cast(int, fund.project_id), current_user, db)
     return fund
 
 
@@ -182,7 +190,7 @@ async def get_phases(
             {
                 "id": p.id,
                 "phase": p.phase,
-                "phase_label": PHASE_LABELS.get(p.phase, f"阶段{p.phase}"),
+                "phase_label": PHASE_LABELS.get(cast(int, p.phase), f"阶段{p.phase}"),
                 "status": p.status,
                 "entered_at": p.entered_at.isoformat() if p.entered_at else None,
                 "completed_at": p.completed_at.isoformat() if p.completed_at else None,
@@ -195,10 +203,10 @@ async def get_phases(
     current_phase = 1
     for p in phases:
         if p.status == PhaseStatus.IN_PROGRESS.value:
-            current_phase = p.phase
+            current_phase = cast(int, p.phase)
             break
         elif p.status == PhaseStatus.COMPLETED.value:
-            current_phase = p.phase + 1
+            current_phase = cast(int, p.phase) + 1
 
     return success_response(
         data={
@@ -259,7 +267,7 @@ def _complete_and_advance_phase(
 
     next_phase = None
     for p in phases:
-        if p.phase == current.phase + 1:
+        if p.phase == cast(int, current.phase) + 1:
             next_phase = p
             break
 
@@ -309,7 +317,8 @@ async def advance_phase(
         _complete_and_advance_phase(phases, current, now, username, remarks)
 
     funds = db.query(Fund).filter(Fund.project_id == project_id).all()
-    new_phase = current.phase if current.status == PhaseStatus.IN_PROGRESS.value else current.phase + 1
+    current_phase = cast(int, current.phase)
+    new_phase = current_phase if current.status == PhaseStatus.IN_PROGRESS.value else current_phase + 1
     for f in funds:
         f.lifecycle_phase = min(new_phase, 7)
 
@@ -343,7 +352,7 @@ async def rollback_phase(
             current = p
             break
 
-    if not current or current.phase <= 1:
+    if not current or cast(int, current.phase) <= 1:
         raise HTTPException(status_code=400, detail="已在第一阶段，无法退回")
 
     username = _get_username(current_user)
@@ -355,7 +364,7 @@ async def rollback_phase(
     # 上一阶段重新设为进行中
     prev = None
     for p in phases:
-        if p.phase == current.phase - 1:
+        if p.phase == cast(int, current.phase) - 1:
             prev = p
             break
 
@@ -368,10 +377,10 @@ async def rollback_phase(
     # 同步 Fund
     funds = db.query(Fund).filter(Fund.project_id == project_id).all()
     for f in funds:
-        f.lifecycle_phase = current.phase - 1
+        f.lifecycle_phase = cast(int, current.phase) - 1
 
     safe_commit(db)
-    return success_response(message=f"已退回到阶段 {current.phase - 1}")
+    return success_response(message=f"已退回到阶段 {cast(int, current.phase) - 1}")
 
 
 # =====================================================================
@@ -557,9 +566,9 @@ async def budget_aggregation(
                 bar_chart_data=[],
             )
 
-    # 各分支返回的 SQL 表达式类型不同（str / int / year），显式声明为通用列表达式，
-    # 否则 mypy 按第一个分支把变量钉成 ColumnElement[str]，后续 int 分支全被判错。
-    group_col: ColumnElement[Any]
+    # 各分支返回的 SQL 表达式类型不同（str / int / 年份列），统一按通用表达式处理；
+    # 否则 mypy 按第一个分支把变量钉死，后续分支全被判错。
+    group_col: Any
     if group_by == "type":
         group_col = sa_func.coalesce(Fund.type, "other")
     elif group_by == "village":
@@ -589,8 +598,8 @@ async def budget_aggregation(
     )
 
     items = []
-    grand_total_planned = 0
-    grand_total_used = 0
+    grand_total_planned: float = 0
+    grand_total_used: float = 0
     for row in rows:
         tp = float(row.total_planned or 0)
         tu = float(row.total_used or 0)
@@ -652,7 +661,7 @@ async def quota_lock(fund_id: int, current_user=Depends(get_current_user), db: S
     if not fund:
         raise HTTPException(status_code=404, detail="经费记录不存在")
     if getattr(fund, "project_id", None):
-        _get_project_or_403(fund.project_id, current_user, db)
+        _get_project_or_403(cast(int, fund.project_id), current_user, db)
 
     if not fund.budget_locked:
         raise HTTPException(status_code=400, detail="请先锁定预算基线（阶段2）")
@@ -671,7 +680,7 @@ async def quota_lock(fund_id: int, current_user=Depends(get_current_user), db: S
             )
 
     if getattr(fund, "project_id", None):
-        _get_project_or_403(fund.project_id, current_user, db)
+        _get_project_or_403(cast(int, fund.project_id), current_user, db)
 
     # R28-M12：原实现只做核验 + 写日志，**不落任何字段**却回 "额度已锁定" ——
     # 调用方以为锁定生效，实际数据库无任何变化（复核 R27-M12 后确认 Fund 模型
@@ -1326,7 +1335,7 @@ async def create_contract_payment(
     payment = FundContractPayment(
         contract_id=contract_id,
         payment_no=payment_no,
-        amount=data.amount,
+        amount=_numeric(data.amount),
         payment_date=data.payment_date,
         purpose=data.purpose,
         voucher_no=data.voucher_no,
@@ -1346,9 +1355,10 @@ async def create_contract_payment(
 
     # 仅已批准的付款才更新合同金额
     if initial_status == "approved":
-        c.paid_amount = float(c.paid_amount or 0) + data.amount
+        c.paid_amount = _numeric(float(c.paid_amount or 0) + data.amount)
         contract_amt = float(c.contract_amount or 0)
-        c.payment_progress = round(float(c.paid_amount or 0) / contract_amt * 100, 2) if contract_amt > 0 else 0
+        progress = round(float(c.paid_amount or 0) / contract_amt * 100, 2) if contract_amt > 0 else 0
+        c.payment_progress = _numeric(progress)
 
     safe_commit(db)
     db.refresh(payment)
@@ -1427,7 +1437,7 @@ async def monitoring_deviation(
         deviation = round(fund_progress - project_progress, 1)
 
         # 更新偏差率（此前只 db.flush()，get_db 关闭时回滚 → 偏差率永久丢失）
-        f.deviation_rate = abs(deviation)
+        f.deviation_rate = _numeric(abs(deviation))
 
         # 红黄绿灯预警：±5%绿灯，±5%-10%黄灯，±10%以上红灯
         abs_dev = abs(deviation)
@@ -1615,7 +1625,7 @@ async def resolve_anomaly(
     if a.fund_id:
         _fund = db.query(Fund).filter(Fund.id == a.fund_id).first()
         if _fund is not None and getattr(_fund, "project_id", None):
-            _get_project_or_403(_fund.project_id, current_user, db)
+            _get_project_or_403(cast(int, _fund.project_id), current_user, db)
     if a.resolved:
         raise HTTPException(status_code=400, detail="该异常已处理")
 
@@ -1679,9 +1689,9 @@ async def create_settlement(
         project_id=project_id,
         fund_id=(data.fund_id if data else None),
         settlement_no=settlement_no,
-        total_budget=total_budget,
-        total_spent=total_spent,
-        total_remaining=total_remaining,
+        total_budget=_numeric(total_budget),
+        total_spent=_numeric(total_spent),
+        total_remaining=_numeric(total_remaining),
         settlement_date=date.today(),
         created_by=_get_username(current_user),
         remarks=(data.remarks if data else None),
@@ -1739,7 +1749,7 @@ async def update_settlement(
     for key, val in data.model_dump(exclude_unset=True).items():
         setattr(s, key, val)
     if data.total_budget is not None and data.total_spent is not None:
-        s.total_remaining = data.total_budget - data.total_spent
+        s.total_remaining = _numeric(data.total_budget - data.total_spent)
 
     safe_commit(db)
     db.refresh(s)
@@ -2037,7 +2047,7 @@ async def quota_adjust(
     if not fund:
         raise HTTPException(status_code=404, detail="经费记录不存在")
     if getattr(fund, "project_id", None):
-        _get_project_or_403(fund.project_id, current_user, db)
+        _get_project_or_403(cast(int, fund.project_id), current_user, db)
 
     if data.is_emergency:
         role = getattr(current_user, "role", "")
@@ -2056,8 +2066,8 @@ async def quota_adjust(
         fund_id=fund.id,
         project_id=fund.project_id or 0,
         version=new_version,
-        planned_amount=old_amount,
-        approved_amount=data.new_amount,
+        planned_amount=_numeric(old_amount),
+        approved_amount=_numeric(data.new_amount),
         change_reason=data.reason,
         change_type="adjust",
         status="approved" if data.is_emergency else "submitted",
@@ -2067,7 +2077,7 @@ async def quota_adjust(
     db.add(bv)
 
     if data.is_emergency:
-        fund.approved_amount = data.new_amount
+        fund.approved_amount = _numeric(data.new_amount)
         fund.budget_version = new_version
         bv.approved_by = _get_username(current_user)
         bv.approved_at = utcnow()
@@ -2132,14 +2142,14 @@ async def inspection_clues(
             {
                 "anomaly_id": a.id,
                 "type": a.anomaly_type,
-                "type_label": type_labels.get(a.anomaly_type, a.anomaly_type),
+                "type_label": type_labels.get(cast(str, a.anomaly_type), a.anomaly_type),
                 "severity": a.severity,
                 "description": a.description,
                 "involved_amount": float(fund.amount or 0) if fund else None,
                 "involved_person": fund.operator if fund else None,
                 "detected_at": a.detected_at.isoformat() if a.detected_at else None,
                 "resolved": a.resolved,
-                "suggestion": suggestion_map.get(a.anomaly_type, "建议进一步核查"),
+                "suggestion": suggestion_map.get(cast(str, a.anomaly_type), "建议进一步核查"),
             }
         )
 
@@ -2188,10 +2198,10 @@ async def verify_asset(
     verification = FundAssetVerification(
         project_id=s.project_id,
         settlement_id=settlement_id,
-        total_paid=total_paid,
-        asset_value=asset_val,
-        difference=diff,
-        difference_rate=diff_rate,
+        total_paid=_numeric(total_paid),
+        asset_value=_numeric(asset_val),
+        difference=_numeric(diff),
+        difference_rate=_numeric(diff_rate),
         status="passed" if passed else "failed",
         verified_by=_get_username(current_user),
         # verified_at 为 UtcDateTime 列：必须写 aware UTC
@@ -2202,7 +2212,7 @@ async def verify_asset(
 
     # 更新决算记录
     s.asset_verified = passed
-    s.asset_value = asset_val
+    s.asset_value = _numeric(asset_val)
 
     safe_commit(db)
     db.refresh(verification)
@@ -2394,13 +2404,13 @@ def _voucher_to_dict(v: FundTransferVoucher) -> dict:
         "project_id": v.project_id,
         "voucher_no": v.voucher_no,
         "direction": v.direction,
-        "direction_label": direction_labels.get(v.direction, v.direction),
+        "direction_label": direction_labels.get(cast(str, v.direction), v.direction),
         "amount": float(v.amount or 0),
         "payer_account": v.payer_account,
         "payee_account": v.payee_account,
         "transfer_date": v.transfer_date.isoformat() if v.transfer_date else None,
         "status": v.status,
-        "status_label": status_labels.get(v.status, v.status),
+        "status_label": status_labels.get(cast(str, v.status), v.status),
         "confirmed_by": v.confirmed_by,
         "confirmed_at": v.confirmed_at.isoformat() if v.confirmed_at else None,
         "remarks": v.remarks,
@@ -2430,7 +2440,7 @@ def _contract_to_dict(c: FundContract) -> dict:
         "sign_date": c.sign_date.isoformat() if c.sign_date else None,
         "deadline": c.deadline.isoformat() if c.deadline else None,
         "status": c.status,
-        "status_label": status_labels.get(c.status, c.status),
+        "status_label": status_labels.get(cast(str, c.status), c.status),
         # 列表端不做写库修复，但也不能把历史脏数据（remarks 曾被附件 JSON 整体
         # 覆盖）当"备注"出站 —— 能解析成附件数组即视为无备注。
         "remarks": None if _parse_attachment_json(c.remarks) else c.remarks,
@@ -2469,9 +2479,9 @@ def _anomaly_to_dict(a: FundAnomaly) -> dict:
         "fund_id": a.fund_id,
         "project_id": a.project_id,
         "anomaly_type": a.anomaly_type,
-        "anomaly_type_label": type_labels.get(a.anomaly_type, a.anomaly_type),
+        "anomaly_type_label": type_labels.get(cast(str, a.anomaly_type), a.anomaly_type),
         "severity": a.severity,
-        "severity_label": severity_labels.get(a.severity, a.severity),
+        "severity_label": severity_labels.get(cast(str, a.severity), a.severity),
         "description": a.description,
         "detected_at": a.detected_at.isoformat() if a.detected_at else None,
         "resolved": a.resolved,
@@ -2494,12 +2504,12 @@ def _settlement_to_dict(s: FundSettlement) -> dict:
         "total_remaining": float(s.total_remaining or 0),
         "settlement_date": s.settlement_date.isoformat() if s.settlement_date else None,
         "status": s.status,
-        "status_label": status_labels.get(s.status, s.status),
+        "status_label": status_labels.get(cast(str, s.status), s.status),
         "auditor": s.auditor,
         "audit_opinion": s.audit_opinion,
         "performance_score": s.performance_score,
         "performance_level": s.performance_level,
-        "performance_level_label": level_labels.get(s.performance_level, ""),
+        "performance_level_label": level_labels.get(cast(str, s.performance_level), ""),
         "remarks": s.remarks,
         "created_by": s.created_by,
         "created_at": s.created_at.isoformat() if s.created_at else None,

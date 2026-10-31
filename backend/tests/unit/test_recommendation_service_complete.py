@@ -633,3 +633,72 @@ class TestMatchPolicies:
 
         assert len(result) > 0
         assert result[0]["effective_date"] == "2024-01-01"
+
+
+class TestMatchPoliciesSchemaDrift:
+    """Policy 模型没有 scope/province/city 列 —— 地域加分必须降级为跳过，不能 AttributeError。
+
+    历史实现直接取这三个属性，真库上一旦有 active 政策就会 500；单测用 MagicMock 喂过属性，
+    把这次 schema 漂移掩盖了（同 R9 的 `PackageStatusEnum.failed` 一类缺陷）。这里用
+    SimpleNamespace 构造**只有真实列**的政策对象，锁死降级行为。
+    """
+
+    @staticmethod
+    def _real_shaped_policy(**overrides):
+        """只有 Policy 真实列的政策对象（不含 scope/province/city）。"""
+        from types import SimpleNamespace
+
+        base = {
+            "id": 7,
+            "title": "关于加强广东省乡村振兴帮扶工作的意见",
+            "category": "乡村振兴",
+            "content": "本意见适用于广东省各地。",
+            "level": "省级",
+            "effective_date": None,
+            "status": "active",
+        }
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def test_matches_by_keyword_without_region_columns(self):
+        """缺列时只走关键词匹配：命中省份得 0.5 分，reasons 为空且不抛异常。"""
+        from app.services.ai.recommendation_service import RecommendationService
+
+        mock_village = MagicMock()
+        mock_village.id = 1
+        mock_village.village_name = "测试村"
+        mock_village.province = "广东"
+        mock_village.city = "深圳"
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_village
+
+        # 真实 Policy 行：没有 scope / province / city 三个属性
+        mock_db.query.return_value.filter.return_value.all.return_value = [self._real_shaped_policy()]
+
+        result = RecommendationService.match_policies(mock_db, 1, user=_admin)
+
+        assert len(result) == 1
+        assert result[0]["policy_id"] == 7
+        assert result[0]["score"] == 0.5
+        assert result[0]["reasons"] == []
+
+    def test_skips_policy_without_any_keyword_hit(self):
+        """缺列且关键词也不命中 → 分数 0，不出现在结果里（不因缺属性崩）。"""
+        from app.services.ai.recommendation_service import RecommendationService
+
+        mock_village = MagicMock()
+        mock_village.id = 1
+        mock_village.village_name = "测试村"
+        mock_village.province = "广东"
+        mock_village.city = "深圳"
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_village
+        mock_db.query.return_value.filter.return_value.all.return_value = [
+            self._real_shaped_policy(id=8, title="北方某省考核办法", content="与本村无关")
+        ]
+
+        result = RecommendationService.match_policies(mock_db, 1, user=_admin)
+
+        assert result == []

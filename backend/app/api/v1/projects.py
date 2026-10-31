@@ -6,7 +6,7 @@ import os
 import uuid as _uuid
 from datetime import date, datetime, timezone
 from io import BytesIO
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 from urllib.parse import quote
 
 from fastapi import (
@@ -377,12 +377,12 @@ def _batch_get_fund_health_fields(db: Session, project_ids: List[int]) -> dict:
     grouped: dict = defaultdict(list)
     for f in funds:
         try:
-            pid = int(f.project_id)
+            pid = int(cast(Any, f.project_id))
         except (TypeError, ValueError):
             continue
         grouped[pid].append(f)
 
-    result = {}
+    result: dict[int, dict[str, Any]] = {}
     for pid in project_ids:
         pid_funds = grouped.get(pid, [])
         if not pid_funds:
@@ -423,9 +423,9 @@ def _project_to_dict(p: Project) -> dict:
         "description": p.description,
         "objectives": p.objectives,
         "village_id": p.village_id,
-        "village_name": p.village.village_name if getattr(p, "village", None) else None,
+        "village_name": getattr(getattr(p, "village", None), "village_name", None),
         "organization_id": p.organization_id,
-        "organization_name": p.organization.name if getattr(p, "organization", None) else None,
+        "organization_name": getattr(getattr(p, "organization", None), "name", None),
         "budget": float(p.budget) if p.budget else 0,
         "actual_cost": float(p.actual_cost) if p.actual_cost else 0,
         "progress": p.progress or 0,
@@ -475,9 +475,9 @@ def _project_to_list_dict(p: Project) -> dict:
         "type": p.type,
         "status": p.status,
         "village_id": p.village_id,
-        "village_name": p.village.village_name if getattr(p, "village", None) else None,
+        "village_name": getattr(getattr(p, "village", None), "village_name", None),
         "organization_id": p.organization_id,
-        "organization_name": p.organization.name if getattr(p, "organization", None) else None,
+        "organization_name": getattr(getattr(p, "organization", None), "name", None),
         "budget": float(p.budget) if p.budget else 0,
         "actual_cost": float(p.actual_cost) if p.actual_cost else 0,
         "progress": p.progress or 0,
@@ -825,7 +825,7 @@ async def create_project(
         type=data.type,
         village_id=data.village_id,
         description=data.description,
-        budget=quantize_money(data.budget),
+        budget=cast(Any, quantize_money(data.budget)),
         progress=data.progress if data.progress is not None else 0,
         start_date=date.fromisoformat(data.start_date) if data.start_date else None,
         end_date=date.fromisoformat(data.end_date) if data.end_date else None,
@@ -914,7 +914,7 @@ async def create_project(
     approval_task_id = submit_entity_change_approval(
         db,
         entity_type="project",
-        entity_id=project.id,
+        entity_id=cast(int, project.id),
         submitter_id=getattr(current_user, "id", None),
         title=f"项目新增：{project.name or project.code}",
         change_data=_project_to_diff_dict(project),
@@ -976,7 +976,7 @@ def _handle_status_change_event(db: Session, project_id: int, old_status: str, n
     """触发经费阶段联动事件"""
     from app.services.fund_event_handler import on_project_status_change
 
-    operator = getattr(current_user, "full_name", None) or getattr(current_user, "username", "")
+    operator = str(getattr(current_user, "full_name", None) or getattr(current_user, "username", "") or "")
     on_project_status_change(db, project_id, old_status, new_status, operator)
 
 
@@ -1067,7 +1067,9 @@ async def update_project(
 
     if "status" in changed_fields and old_status != project.status:
         try:
-            _handle_status_change_event(db, project_id, old_status, project.status, current_user)
+            _handle_status_change_event(
+                db, project_id, cast(str, old_status), cast(str, project.status), current_user
+            )
         except Exception as evt_err:
             db.rollback()
             logger.error(f"经费阶段联动失败，项目更新已回滚: {evt_err}", exc_info=True)
@@ -1090,16 +1092,16 @@ async def update_project(
         approval_task_id = submit_entity_change_approval(
             db,
             entity_type="project",
-            entity_id=project.id,
+            entity_id=cast(int, project.id),
             submitter_id=getattr(current_user, "id", None),
             title=f"项目变更：{project.name or project.code}",
             change_data=_project_to_diff_dict(project),
             original_data=old_project_data,
         )
 
-    data = _project_to_dict(project)
-    data["approval_task_id"] = approval_task_id
-    return success_response(data=data, message="更新成功")
+    payload = _project_to_dict(project)
+    payload["approval_task_id"] = approval_task_id
+    return success_response(data=payload, message="更新成功")
 
 
 @router.delete("/{project_id}", summary="删除项目")
@@ -1245,7 +1247,7 @@ async def create_project_fund(
             project_id=project_id,
             project_name=project.name,
             name=data.name,
-            amount=data.amount,
+            amount=cast(Any, data.amount),
             source=data.source,
             purpose=data.purpose,
             organization_id=project.organization_id,
@@ -1259,7 +1261,7 @@ async def create_project_fund(
         approval_task_id = submit_entity_change_approval(
             db,
             entity_type="fund",
-            entity_id=fund.id,
+            entity_id=cast(int, fund.id),
             submitter_id=getattr(current_user, "id", None),
             title=f"经费新增：{fund.name or f'#{fund.id}'}（项目：{project.name}）",
             change_data={
@@ -1822,8 +1824,8 @@ def _build_import_project(db: Session, data: dict, current_user) -> Project:
         status=proj_status,
         description=data.get("description"),
         objectives=data.get("objectives"),
-        budget=quantize_money(budget_val),
-        invested_amount=quantize_money(invested_val),
+        budget=cast(Any, quantize_money(budget_val)),
+        invested_amount=cast(Any, quantize_money(invested_val)),
         progress=int(float(progress_val)) if progress_val is not None else 0,
         start_date=(date.fromisoformat(str(data["start_date"])[:10]) if data.get("start_date") else None),
         end_date=(date.fromisoformat(str(data["end_date"])[:10]) if data.get("end_date") else None),
@@ -1964,7 +1966,7 @@ def _file_to_dict(f: ProjectFile) -> dict:
         "id": f.id,
         "project_id": f.project_id,
         "category": f.category,
-        "category_label": _CATEGORY_LABEL.get(f.category, f.category),
+        "category_label": _CATEGORY_LABEL.get(cast(str, f.category), f.category),
         "filename": f.filename,
         "file_size": f.file_size,
         "uploaded_by": f.uploaded_by,

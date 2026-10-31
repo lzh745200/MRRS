@@ -66,6 +66,9 @@ def _init_cache():
         os.makedirs(_cache_dir, exist_ok=True)
         cache = diskcache.Cache(
             os.path.join(_cache_dir, "dashboard"),
+            # 默认 timeout=60s：缓存目录异常（只读 / -wal 损坏）时 sqlite 会长时间阻塞。
+            # 2 秒足够正常写入，异常时尽快失败并走降级。
+            timeout=2,
             size_limit=50 * 1024 * 1024,  # 50MB
             # 用 JSON 序列化替代默认的 pickle（CVE-2025-69872 / PYSEC-2026-2447：
             # diskcache ≤5.6.3 默认 pickle，能写缓存目录者即可在读取时执行任意代码，
@@ -82,36 +85,59 @@ def _init_cache():
         return None, 0
 
 
-_cache, _CACHE_TTL = _init_cache()
+_cache = None
+_CACHE_TTL = 0
+# 是否已尝试过初始化。失败也置 True —— 缓存不可用时不能每个请求都重试一遍。
+_cache_initialized = False
+
+
+def _get_cache():
+    """懒初始化仪表盘缓存，返回 cache 对象或 None。
+
+    为什么懒加载：本模块位于 app.api.v1.__init__ 的导入链上。2026-10-31 打包实测，
+    导入期构造 diskcache.Cache(...) 时若缓存目录不可写，diskcache 内部
+    _execute_with_retry 会长时间重试（实测 4 分钟仍未返回）——表现为后端进程活着、
+    但 8000 端口永不监听、连日志都来不及初始化。改成首次访问才建缓存后，
+    最坏情况只是这一次查询降级直查，启动不再受影响。
+    """
+    global _cache, _CACHE_TTL, _cache_initialized
+    if _cache_initialized:
+        return _cache
+    _cache_initialized = True
+    _cache, _CACHE_TTL = _init_cache()
+    return _cache
 
 
 def _get_cached(key: str):
     """安全地从缓存读取"""
-    if _cache is None:
+    cache = _get_cache()
+    if cache is None:
         return None
     try:
-        return _cache.get(key)
+        return cache.get(key)
     except Exception:
         logger.warning("仪表盘缓存读取失败", exc_info=True)
         return None
 
 
-def _set_cached(key: str, value, ttl: int = _CACHE_TTL):
-    """安全地写入缓存"""
-    if _cache is None:
+def _set_cached(key: str, value, ttl: int = 0):
+    """安全地写入缓存（ttl 传 0 时用初始化得到的默认 TTL）"""
+    cache = _get_cache()
+    if cache is None:
         return
     try:
-        _cache.set(key, value, expire=ttl)
+        cache.set(key, value, expire=ttl or _CACHE_TTL)
     except Exception:
         logger.debug("写入仪表盘缓存失败")
 
 
 def invalidate_dashboard_cache():
     """清除仪表盘缓存，供其他模块在数据变更后调用"""
-    if _cache is None:
+    cache = _get_cache()
+    if cache is None:
         return
     try:
-        _cache.clear()
+        cache.clear()
     except Exception:
         logger.debug("清除仪表盘缓存失败")
 

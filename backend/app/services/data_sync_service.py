@@ -7,7 +7,7 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import timezone, datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
 from pathlib import Path
 from contextlib import contextmanager
 from sqlalchemy import insert, text, update
@@ -196,7 +196,7 @@ class DataSyncService:
                 db.refresh(sync_log)
 
                 # 准备导出数据
-                export_data = {
+                export_data: Dict[str, Any] = {
                     "export_info": {
                         "package_name": package_name,
                         "exported_at": export_time.isoformat(),
@@ -428,7 +428,9 @@ class DataSyncService:
                         continue
 
                     try:
-                        import_result = await self._import_table_data(db, table_name, records, strategy, sync_log.id)
+                        import_result = await self._import_table_data(
+                            db, table_name, records, strategy, cast(int, sync_log.id)
+                        )
                         result["total_records"] += import_result["total"]
                         result["success_records"] += import_result["success"]
                         result["failed_records"] += import_result["failed"]
@@ -518,7 +520,7 @@ class DataSyncService:
         影响（此前裸 SQL 失败后无回滚点，失败条目的部分写入会被末尾 commit 固化）。
         """
         safe_table = self._validate_table_name(table_name)
-        result = {"total": len(records), "success": 0, "failed": 0, "conflicts": []}
+        result: Dict[str, Any] = {"total": len(records), "success": 0, "failed": 0, "conflicts": []}
 
         for record in records:
             try:
@@ -1093,7 +1095,7 @@ class DataSyncService:
 
                     try:
                         import_result = await self._import_table_data_enhanced(
-                            db, table_name, records, strategy, sync_log.id
+                            db, table_name, records, strategy, cast(int, sync_log.id)
                         )
                         result["total_records"] += import_result["total"]
                         result["success_records"] += import_result["success"]
@@ -1151,7 +1153,7 @@ class DataSyncService:
         Returns:
             导入统计
         """
-        result = {
+        result: Dict[str, Any] = {
             "total": len(records),
             "success": 0,
             "failed": 0,

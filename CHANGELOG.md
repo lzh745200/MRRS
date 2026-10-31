@@ -61,6 +61,14 @@
 - `backend/app/api/v1/import_export/async_export.py` 类型收敛（mypy **3 → 0**）：报表导出的
   `query_params` 显式标 `dict[str, Any]`（此前被首个值推断成 `dict[str, str]`，`options` 字典无处可放），
   两处 `user_id=current_user.id` 改走 `deps.authenticated_user_id()`。
+- `backend/app/api/v1/fund_lifecycle.py`、`backend/app/services/data_sync_service.py`、
+  `backend/app/api/v1/projects.py`、`backend/app/services/ai/recommendation_service.py` 类型注解收敛（mypy **117 → 0**）：
+  经费阶段列与金额列统一 `cast` / `_numeric()`（注释说明 ORM `Numeric` 列静态类型是 TypeVar 化的 `_N | None`，值原样透传）、
+  资料同步的导出与导入结果字典显式标 `Dict[str, Any]`、项目关联对象改 `getattr` 取值并把更新端点里被 dict 覆盖的
+  Pydantic 形参改名 `payload`、智能推荐的项目统计/资金分配/政策匹配容器显式注解；顺带修一处**真实缺陷** ——
+  `RecommendationService.match_policies` 读 `Policy` 并不存在的 `scope` / `province` / `city` 三列
+  （真库一旦有 active 政策就 `AttributeError`，单测用 MagicMock 喂这三个属性把 schema 漂移掩盖了），
+  改为 `getattr` 降级为纯关键词匹配，并补 2 个「只有真实列」的回归用例。全量 `mypy app` **512 → 395 条 / 111 → 107 个文件**。
 
 ### 验证
 
@@ -85,6 +93,8 @@
   （当前 512 条，留 28 条余量给在途改动）。
   `pytest tests -k "async_export or report_export or export_report"` **143 项通过**；
   `flake8 --max-line-length=120 --max-complexity=16` 对 3 个改动文件 rc=0。
+- 类型收敛回归：经费生命周期 / 数据同步 / 项目 API / 智能推荐相关 **37 个用例文件 2,190 项通过**
+  （含新增 `TestMatchPoliciesSchemaDrift` 2 项）；全量 `mypy app` 512 → **395** 条、`flake8` 对 4 个改动文件 rc=0。
 
 ### 质量门禁
 

@@ -100,7 +100,8 @@ class RecommendationService:
         successful_projects = successful_projects_query.all()
 
         # 统计项目类型和成功率
-        project_stats = {}
+        # 显式注解：否则被首个赋值推断成 dict[str, dict[str, object]]，后续 +=/除法/append 全部报错
+        project_stats: Dict[str, Dict[str, Any]] = {}
         for project in successful_projects:
             project_type = project.project_type or "other"
             if project_type not in project_stats:
@@ -125,7 +126,7 @@ class RecommendationService:
                 )
 
         # 计算推荐分数
-        recommendations = []
+        recommendations: List[Dict[str, Any]] = []
         for project_type, stats in project_stats.items():
             avg_progress = stats["avg_progress"] / stats["count"] if stats["count"] > 0 else 0
             avg_budget = stats["total_budget"] / stats["count"] if stats["count"] > 0 else 0
@@ -238,8 +239,8 @@ class RecommendationService:
             return _income_value_of(income)
 
         # 计算每个村庄的需求指数
-        allocations = []
-        total_score = 0
+        allocations: List[Dict[str, Any]] = []
+        total_score: float = 0
 
         for village in villages:
             population = pop_by_village.get(village.id)
@@ -322,20 +323,27 @@ class RecommendationService:
             return []
 
         # 计算匹配分数
-        matches = []
+        matches: List[Dict[str, Any]] = []
         for policy in policies:
-            score = 0
-            reasons = []
+            score: float = 0
+            reasons: List[str] = []
 
             # 地域匹配
-            if policy.scope == "national":
+            # Policy 模型没有 scope/province/city 列，原实现直接取属性会在真库上 AttributeError
+            # （单测用 MagicMock 喂这三个属性，掩盖了这次 schema 漂移）。这里用 getattr 兼容两类对象：
+            # 真实 Policy 取到 None 时跳过地域加分、只走关键词匹配；将来若给模型补上这三列也无需改本函数。
+            policy_scope = getattr(policy, "scope", None)
+            policy_province = getattr(policy, "province", None)
+            policy_city = getattr(policy, "city", None)
+
+            if policy_scope == "national":
                 score += 1
                 reasons.append("全国性政策")
-            elif policy.province and policy.province == village.province:
+            elif policy_province and policy_province == village.province:
                 score += 2
                 reasons.append(f"适用于{village.province}")
 
-                if policy.city and policy.city == village.city:
+                if policy_city and policy_city == village.city:
                     score += 1
                     reasons.append(f"适用于{village.city}")
 
