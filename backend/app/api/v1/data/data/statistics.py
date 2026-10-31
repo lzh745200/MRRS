@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, func
@@ -861,15 +862,15 @@ async def _get_analysis_data_impl(db: Session, current_user):
 
     # --- 帮扶分类统计 ---
     # 从各帮扶子表统计
-    cat_stats = []
-    cat_models = [
+    cat_stats: List[Dict[str, Any]] = []
+    cat_models: List[Tuple[str, Any, str]] = [
         ("产业帮扶", IndustrySupport, "investment"),
         ("基础设施", InfrastructureImprovement, "investment"),
         ("教育帮扶", EducationSupport, "investment"),
         ("医疗帮扶", MedicalSupport, "investment"),
         ("党建帮扶", PartyBuildingSupport, "investment"),
     ]
-    total_cat_inv = 0
+    total_cat_inv: float = 0
     for cat_name, model, inv_field in cat_models:
         # 合并 count + sum 为单次查询（减少 50% 查询数）；join 村表排除软删村数据
         # 2026-09-17 修复：分类聚合此前未套数据范围，窄范围用户可见全库分类汇总。
@@ -963,7 +964,7 @@ async def _get_analysis_data_impl(db: Session, current_user):
         )
 
     # --- 年度关键指标对比（按年份聚合，供前端年度对比图/描述展示） ---
-    yearly_comparison = {"years": [], "villages": {}, "investment": {}, "income": {}}
+    yearly_comparison: Dict[str, Any] = {"years": [], "villages": {}, "investment": {}, "income": {}}
     # 各年有数据的帮扶村数（以人口数据为准；软删村排除；2026-09-17 补数据范围）
     pop_rows = (
         _scoped(

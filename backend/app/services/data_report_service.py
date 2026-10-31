@@ -5,7 +5,7 @@ Data Report Service
 
 import logging
 from datetime import timezone, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 import uuid
 
 from sqlalchemy.orm import Session
@@ -126,7 +126,10 @@ class DataReportService:
             raise BusinessError(f"数据包不存在: {data.package_id}")
 
         # 验证目标组织是上级
-        target_org = self.org_service.get_organization(data.target_org_id)
+        # 目标组织主键：请求模型该字段为 int | None（旧契约允许省略），但走到这里必须已给出，
+        # 否则下方取组织为 None 会以「目标组织不存在」拒绝；此处先收窄一次供后续复用。
+        target_org_id = cast(int, data.target_org_id)
+        target_org = self.org_service.get_organization(target_org_id)
         if not target_org:
             raise BusinessError(f"目标组织不存在: {data.target_org_id}")
 
@@ -135,18 +138,18 @@ class DataReportService:
             raise BusinessError(f"来源组织不存在: {source_org_id}")
 
         # 验证目标是来源的上级
-        if not self._is_superior(data.target_org_id, source_org_id):
+        if not self._is_superior(target_org_id, source_org_id):
             raise BusinessError("目标组织必须是来源组织的上级")
 
         # 生成上报编码
-        report_code = self._generate_report_code(source_org.code)
+        report_code = self._generate_report_code(cast(str, source_org.code))
 
         # 创建上报记录
         report = DataReport(
             report_code=report_code,
             package_id=data.package_id,
             source_org_id=source_org_id,
-            target_org_id=data.target_org_id,
+            target_org_id=target_org_id,
             status=ReportStatus.DRAFT.value,
             title=data.title,
             # R29 修复：请求模型把 report_type 列为必填、响应模型也回显，
@@ -178,7 +181,7 @@ class DataReportService:
         report = self._get_report(report_id)
 
         # 验证状态转换
-        self._validate_status_transition(report.status, ReportStatus.SUBMITTED.value)
+        self._validate_status_transition(cast(str, report.status), ReportStatus.SUBMITTED.value)
 
         # 更新状态
         report.status = ReportStatus.SUBMITTED.value
@@ -216,7 +219,7 @@ class DataReportService:
             target_status = ReportStatus.REJECTED.value
 
         # 验证状态转换
-        self._validate_status_transition(report.status, target_status)
+        self._validate_status_transition(cast(str, report.status), target_status)
 
         # 更新状态
         report.status = target_status
@@ -471,10 +474,10 @@ class DataReportService:
 
     def _notify_submission(self, report: DataReport) -> None:
         """通知上级单位有新上报"""
-        source_org = self.org_service.get_organization(report.source_org_id)
+        source_org = self.org_service.get_organization(cast(int, report.source_org_id))
 
         self.notification_service.send_notification(
-            recipient_org_id=report.target_org_id,
+            recipient_org_id=cast(int, report.target_org_id),
             notification_type="report_submitted",
             title="收到新的数据上报",
             content=f"{source_org.name if source_org else '下级单位'} 提交了数据上报",
@@ -486,7 +489,7 @@ class DataReportService:
         status_text = "已批准" if report.status == ReportStatus.APPROVED.value else "已拒绝"
 
         self.notification_service.send_notification(
-            recipient_org_id=report.source_org_id,
+            recipient_org_id=cast(int, report.source_org_id),
             notification_type="report_reviewed",
             title=f"数据上报{status_text}",
             content=f"您的数据上报 {report.report_code} {status_text}",

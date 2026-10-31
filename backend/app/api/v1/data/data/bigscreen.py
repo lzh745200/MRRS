@@ -13,7 +13,7 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, cast as type_cast
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import String, cast, func, or_
@@ -761,7 +761,7 @@ def _latest_support_investments(db: Session, village_id: int) -> tuple:
     Returns:
         (latest_year, {模型: 该年度行})；无任何年度数据时 (None, {})。
     """
-    rows = []
+    rows: list[tuple[Any, Any]] = []
     for model, _label, _attr in _SUPPORT_INVESTMENT_FIELDS:
         row = (
             db.query(model)
@@ -850,7 +850,7 @@ def _build_village_profile(
     sections = [_village_basic_section(village)]
     if population is not None or income is not None:
         sections.append(_village_population_section(population, income))
-    support_year, support_rows = _latest_support_investments(db, village.id)
+    support_year, support_rows = _latest_support_investments(db, type_cast(int, village.id))
     sections.append(_village_investment_section(village, support_year, support_rows))
     sections.append(_pairing_section(pairing_stats))
     return {
@@ -865,8 +865,8 @@ def _collect_village_scope(
 ) -> dict:
     """帮扶村维度概览。"""
     village = _load_scoped_village(db, data_scope, village_id)
-    population = _latest_village_population(db, village.id)
-    income = _latest_village_income(db, village.id)
+    population = _latest_village_population(db, type_cast(int, village.id))
+    income = _latest_village_income(db, type_cast(int, village.id))
     pairing_stats = _pairing_stats(
         db,
         data_scope,
@@ -1090,19 +1090,19 @@ def _collect_school_scope(
 ) -> dict:
     """帮扶学校维度概览。"""
     school = _load_scoped_school(db, data_scope, school_id)
-    projects = _load_school_projects(db, school.id)
+    projects = _load_school_projects(db, type_cast(int, school.id))
     fund_conditions = [Fund.school_id == school.id]
     fund_trend, yearly = _fund_trend_lists(
         _year_window(years),
         _fund_year_rows(db, data_scope, fund_conditions),
-        _school_project_year_rows(db, school.id),
+        _school_project_year_rows(db, type_cast(int, school.id)),
     )
     pairing_stats = _pairing_stats(
         db,
         data_scope,
         [PairingRecord.partner_type == "school", PairingRecord.school_id == school.id],
     )
-    scholarship_count, scholarship_amount = _scholarship_stats(db, school.id)
+    scholarship_count, scholarship_amount = _scholarship_stats(db, type_cast(int, school.id))
     budget_total, actual_total = _school_project_totals(projects)
     ranking_rows = _school_project_rows(projects, _RANKING_LIMIT)
     kpis = [
@@ -1423,9 +1423,9 @@ async def get_bigscreen_overview(
     if scope_type == "all":
         data = _collect_all_scope(db, data_scope, years)
     elif scope_type == "village":
-        data = _collect_village_scope(db, data_scope, scope_id, years)
+        data = _collect_village_scope(db, data_scope, type_cast(int, scope_id), years)
     elif scope_type == "school":
-        data = _collect_school_scope(db, data_scope, scope_id, years)
+        data = _collect_school_scope(db, data_scope, type_cast(int, scope_id), years)
     else:
-        data = _collect_unit_scope(db, data_scope, unit_name, years)
+        data = _collect_unit_scope(db, data_scope, type_cast(str, unit_name), years)
     return success_response(data=data, message="大屏概览已获取")

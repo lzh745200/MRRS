@@ -77,6 +77,12 @@
   （`int | None` / `str | None` / `Numeric` 三类 ORM legacy 推断），且两处把 Pydantic 形参
   覆盖成 dict 的 `data` 改名 `payload`；`AuditLogger.log_login` 的 `details` 显式标 `Dict[str, Any]`。
   回归：学校/帮扶村/审计日志/档案册 **293 项通过**，flake8 rc=0。
+- `backend/app/api/v1/data/data/{bigscreen,statistics}.py`、`backend/app/services/data_report_service.py` 类型收敛（mypy **29 → 0**）：
+  大屏年度子表模型元组、统计的分区统计列表 / 分模型元组 / 年度对比容器显式注解（此前被推断成 `list[type[Base]]`
+  与 `dict[str, object]`，让 `model.supported_village_id`、`cs["investment"] / total` 一类本该合法的访问报假错）；
+  大屏模块同时 `from sqlalchemy import cast`，`typing.cast` 与 SQL 的 `cast()` 同名，统一以 `type_cast` 别名引入，
+  避免把类型收窄写成 SQL 表达式；上报服务把目标组织主键与来源组织编码各收窄一次局部变量
+  （`target_org_id` / `cast(str, source_org.code)`），状态机校验与通知接收方主键显式 `cast`。运行期行为零变化。
 
 ### 验证
 
@@ -103,6 +109,8 @@
   `flake8 --max-line-length=120 --max-complexity=16` 对 3 个改动文件 rc=0。
 - 类型收敛回归：经费生命周期 / 数据同步 / 项目 API / 智能推荐相关 **37 个用例文件 2,190 项通过**
   （含新增 `TestMatchPoliciesSchemaDrift` 2 项）；全量 `mypy app` 512 → **395** 条、`flake8` 对 4 个改动文件 rc=0。
+- 大屏 / 统计 / 数据上报相关 **18 个用例文件 330 项通过**；全量 `mypy app` 395 → **340** 条、
+  `flake8` 对 3 个改动文件 rc=0。
 
 ### 质量门禁
 
