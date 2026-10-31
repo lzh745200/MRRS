@@ -9,7 +9,7 @@ import tempfile
 import time
 import zipfile
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, Query,
                      Request, UploadFile, status)
@@ -401,7 +401,7 @@ async def get_data_package(
         raise NotFoundException("数据包不存在")
 
     # 检查权限 - 普通用户无权限时抛出404而不是403，避免前端看到错误
-    if not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         raise NotFoundException("数据包不存在")
 
     return DataPackageResponse.model_validate(package)
@@ -611,16 +611,18 @@ async def import_data_package(
         duration_ms = int((time.time() - start_time) * 1000)
 
         # 记录导入历史
-        op_result = OperationResult.SUCCESS if result.validation.is_valid else OperationResult.FAILED
+        # ORM 列声明为 Optional，但这里的校验结果必存；取一次局部引用供下方使用（运行期不变）。
+        validation: Any = result.validation
+        op_result = OperationResult.SUCCESS if validation.is_valid else OperationResult.FAILED
         error_msg = None
-        if not result.validation.is_valid:
-            error_msg = "; ".join([e.message for e in result.validation.errors[:3]])
+        if not validation.is_valid:
+            error_msg = "; ".join([e.message for e in validation.errors[:3]])
 
         history_service.record_import(
             package_id=result.package_id,
             org_id=target_org_id,
             user_id=current_user.id,
-            file_name=file.filename,
+            file_name=cast(str, file.filename),
             file_size=file_size,
             record_count=sum(result.manifest.record_counts.values()) if result.manifest else 0,
             data_types=result.manifest.data_types if result.manifest else [],
@@ -635,7 +637,7 @@ async def import_data_package(
         _safe_write_work_log(
             service.db, "import", result.package_id,
             file.filename or result.package_code, current_user,
-            detail=f"接收数据包，校验{'通过' if result.validation.is_valid else '未通过'}",
+            detail=f"接收数据包，校验{'通过' if validation.is_valid else '未通过'}",
         )
 
         # P2：写导入台账（失败不阻断主流程，仅供查重与追溯）
@@ -648,7 +650,7 @@ async def import_data_package(
             file_name=file.filename or "",
             source_org_code=org_check.get("package_org_code") or None,
             record_count=sum(result.manifest.record_counts.values()) if result.manifest else 0,
-            result="success" if result.validation.is_valid else "invalid",
+            result="success" if validation.is_valid else "invalid",
         )
 
         return result
@@ -802,7 +804,7 @@ async def incremental_detect_changes(
     by_type: Dict[str, Dict[str, int]] = {}
     total_added = total_modified = total_deleted = 0
     for dtype in data_types:
-        model = DATA_TYPE_MODELS.get(dtype)
+        model: Any = DATA_TYPE_MODELS.get(dtype)
         if not model:
             continue
         query = service.db.query(sa_func.count(model.id))
@@ -1075,7 +1077,7 @@ async def validate_data_package(
     # 归属校验：本端点会真实解包并回传校验明细，是 preview/confirm/download 的
     # 同类读路径，但历史实现漏了组织校验——任何登录用户凭 package_id 即可
     # 解析他组织数据包（越权读 + 写他人 package 的校验历史）。与同组端点同口径 404。
-    if not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         raise NotFoundException("数据包不存在")
 
     # R9：校验失败被拒绝的包不落实体文件（file_path 为 NULL），再次校验
@@ -1095,7 +1097,7 @@ async def validate_data_package(
     op_result = OperationResult.SUCCESS if result.is_valid else OperationResult.FAILED
     history_service.record_validate(
         package_id=package_id,
-        org_id=package.org_id,
+        org_id=cast(int, package.org_id),
         user_id=current_user.id,
         result=op_result,
         error_message="; ".join([e.message for e in result.errors]) if result.errors else None,
@@ -1120,14 +1122,15 @@ async def preview_data_package(
         raise NotFoundException("数据包不存在")
 
     # 检查权限 - 无权限时返回空列表
-    if not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         return []
 
     preview = await service.preview_package_data(package_id)
 
     # 记录预览历史
     history_service.record_preview(
-        package_id=package_id, org_id=package.org_id, user_id=current_user.id, ip_address=get_client_ip(request)
+        package_id=package_id, org_id=cast(int, package.org_id), user_id=current_user.id,
+        ip_address=get_client_ip(request),
     )
 
     return preview
@@ -1151,7 +1154,7 @@ async def confirm_import(
         raise NotFoundException("数据包不存在")
 
     # 检查权限
-    if not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权确认该数据包导入")
 
     start_time = time.time()
@@ -1175,7 +1178,7 @@ async def confirm_import(
 
         history_service.record_confirm(
             package_id=package_id,
-            org_id=package.org_id,
+            org_id=cast(int, package.org_id),
             user_id=current_user.id,
             record_count=total_imported,
             data_types=data.selected_types,
@@ -1194,7 +1197,7 @@ async def confirm_import(
         # 审计日志
         _safe_write_work_log(
             service.db, "confirm", package_id,
-            package.file_name or package.package_code, current_user,
+            cast(str, package.file_name or package.package_code), current_user,
             detail=f"确认导入，成功 {total_imported} 条，跳过 {sum(result.skipped_counts.values())} 条",
         )
 
@@ -1250,7 +1253,7 @@ async def download_data_package(
         raise NotFoundException("数据包不存在")
 
     # 检查权限 - 无权限时返回404
-    if not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         raise NotFoundException("数据包不存在")
 
     # R9：无实体文件（校验失败被拒绝）→ 409 明确语义；有路径但磁盘缺失 → 404
@@ -1286,10 +1289,10 @@ async def delete_data_package(
         raise NotFoundException("数据包不存在")
 
     # 检查权限
-    if not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权删除该数据包")
 
-    org_id = package.org_id
+    org_id = cast(int, package.org_id)
 
     # 记录删除历史
     history_service.record_delete(
@@ -1327,7 +1330,7 @@ async def get_package_history(
         raise NotFoundException("数据包不存在")
 
     # 检查权限 - 无权限时返回空历史
-    if not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         return success_response(
             data={"package_id": package_id, "items": [], "total": 0},
             message="成功",
@@ -1340,7 +1343,7 @@ async def get_package_history(
     from app.models.import_export_history import ImportExportHistory
 
     total = (
-        history_service.db.query(ImportExportHistory)
+        cast(Session, history_service.db).query(ImportExportHistory)
         .filter(ImportExportHistory.package_id == package_id)
         .count()
     )
@@ -1530,7 +1533,7 @@ async def upload_encrypted_package(
 
         package = service._create_package_record(
             file_path=temp_file_path,
-            file_name=file.filename,
+            file_name=cast(str, file.filename),
             org_id=org_id,
             created_by=current_user.id,
             status=PackageStatus.pending,
@@ -1542,12 +1545,12 @@ async def upload_encrypted_package(
             safe_commit(service.db)
 
         return DataPackageResponse(
-            id=package.id,
-            package_code=package.package_code,
+            id=cast(int, package.id),
+            package_code=cast(str, package.package_code),
             org_id=package.org_id,
             file_name=package.file_name,
-            file_size=package.file_size,
-            status=package.status,
+            file_size=cast(int, package.file_size),
+            status=cast(str, package.status),
             is_encrypted=is_encrypted,
             created_at=package.created_at,
         )
@@ -1590,7 +1593,7 @@ async def decrypt_and_preview_package(
     """
     # 归属校验：缺此校验时任何登录用户凭 package_id 即可解密预览他组织数据包
     package = service.get_package(package_id)
-    if not package or not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not package or not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         raise NotFoundException("数据包不存在")
 
     try:
@@ -1599,7 +1602,7 @@ async def decrypt_and_preview_package(
         # 与 confirm/preview 一致落操作日志；日志失败不阻断主流程。
         _safe_write_work_log(
             service.db, "decrypt_preview", package_id,
-            package.file_name or package.package_code, current_user,
+            cast(str, package.file_name or package.package_code), current_user,
             detail="解密预览数据包",
         )
         return result
@@ -1642,7 +1645,7 @@ async def confirm_import_with_conflict_resolution(
     """
     # 归属校验：缺此校验时任何登录用户可触发他组织数据包的导入落库（越权写）
     package = service.get_package(package_id)
-    if not package or not permission_service.can_access_organization(current_user.id, package.org_id):
+    if not package or not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
         raise NotFoundException("数据包不存在")
 
     start_time = time.time()
@@ -1667,7 +1670,7 @@ async def confirm_import_with_conflict_resolution(
         # 审计留痕（成功侧）：冲突策略与包归属一并落操作日志
         _safe_write_work_log(
             service.db, "import", package_id,
-            package.file_name or package.package_code, current_user,
+            cast(str, package.file_name or package.package_code), current_user,
             detail=f"确认导入，冲突策略={body.conflict_strategy}",
         )
 
@@ -1688,7 +1691,7 @@ async def confirm_import_with_conflict_resolution(
         # 审计留痕（失败侧）：失败尝试同样要留痕，便于事后追溯
         _safe_write_work_log(
             service.db, "import", package_id,
-            package.file_name or package.package_code, current_user,
+            cast(str, package.file_name or package.package_code), current_user,
             detail=f"确认导入失败，冲突策略={body.conflict_strategy}",
         )
         # W1: 错误细节不出站, 仅日志与操作历史保留内部原因
