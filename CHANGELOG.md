@@ -304,6 +304,21 @@
   → `GET /data-reports/received` 能看到该条 → `POST /{id}/review` 审批通过（`approved`）→ 详情回读
   → 切回下级。两个端点契约记在门禁里：`/data-reports` 的创建/提交/审批同样是 `response_model` 直出
   （无 `{code,data}` 信封，用 `payload_of` 取状态），只有 `received` 是 `ok_list` 信封。
+- **新增 `write_500` 门禁（写端点 5xx 巡检）**：`endpoint_500` 只扫 GET，而全站 845 个 `/api` 端点里
+  有 **417 个写端点**（POST 300 / DELETE 62 / PUT 53 / PATCH 2）——占一半还多，此前零覆盖。
+  写端点最容易 500 的从来不是正常链路（`crud_smoke` 只覆盖主流程），而是「脏输入 + 不存在的路径参数」：
+  请求体校验漏一层、拿 `None` 去查库、关联对象缺失直接取属性，单测用 MagicMock 喂正常数据则永远是绿的。
+  新增 `backend/scripts/check_write_500.py`：在 `.scratch/write500-*` 一次性库（`alembic upgrade head`）
+  上起真实 uvicorn，带管理员令牌 + CSRF 双提交头逐个探测（POST/PUT/PATCH 送空对象 `{}`、DELETE 不带体；
+  路径参数一律代入不存在的值：`*_id`/`id` → 999999、年份类 → 2025、其它 → `smoke-missing`）；
+  4xx 视为「被正确拒绝」，5xx 一律违规，**带令牌仍 401 也算违规**；会停机 / 重置 / 令令牌失效的 14 条端点
+  显式跳过；豁免清单 `scripts/gate_baselines/write_500.json` 键控 `(method,path,status)` 且必须写明理由。
+  首跑 403 条写端点就把真实缺陷逼了出来：`POST /api/v1/system/backup/request-download` **恒 500** ——
+  端点用 `receiver_id=` 调 `MessageService.send_system_message()`，而服务签名第一个形参是 `user_id`，
+  任何存在超管的部署都会 `TypeError`（该端点是「普通用户申请下载备份 → 通知全部超管」的唯一入口）；
+  单测 `test_backup_api_cov2.py` 把整个 `MessageService` 打了 patch、还断言了那个错误的关键字，于是一直是绿的。
+  已修（端点改 `user_id=`，用例同步改断言）。另一条 `POST /api/v1/offline-map/download` 的 501 是单机离线版
+  的显式声明（在线抓图已下线），登记豁免而非放宽 5xx 判定。
 
 
 ### 验证
@@ -322,6 +337,12 @@
   场景清单必须最后一项是「登出」；组织场景必须拿到一次性库路径、绑定 SQL 落库校验、数据包场景
   未绑定组织时 fail-fast、场景顺序「组织 → 数据包 → 上报 → 备份 → 登出」；新增：绑定助手缺库路径
   抛错 / 落库校验、上报场景缺组织 / 上级 / 数据包时逐条 fail-fast）。
+- **`write_500` 门禁实跑通过**：`[gate:write_500] OK (isolation DB, modes=admin, probed 403 write endpoints
+  (188 literal + 215 with path params), exemptions 1, skipped 14)` —— 403 条写端点 × 空体 / 不存在路径参数全扫，
+  仅 1 条豁免（`offline-map/download` 显式 501）；首跑 2 条违规，`request-download` 的 500 修复后复跑转绿。
+- 写端点门禁自测：`backend/tests/unit/test_write_500_gate.py` **20 项通过**（样例值/年份/路径展开、跳过判定、
+  空体构造、白名单与 5xx/401/连接失败判定、豁免键与切分、路由过滤、探测循环、隔离库绝对 URL、豁免清单契约）。
+- 修复回归：`pytest tests/unit/test_backup_api_cov2.py -q` **11 项通过**（通知全部超管、无超管时空发仍成功）。
 
 ### Fixed（组织删除改硬删后 2 个越权用例断言过期）
 

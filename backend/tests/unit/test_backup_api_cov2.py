@@ -93,7 +93,7 @@ class TestRequestDownload:
         send = msvc.return_value.send_system_message
         assert send.call_count == 2
         kwargs = send.call_args_list[0].kwargs
-        assert kwargs["receiver_id"] == 1
+        assert kwargs["user_id"] == 1
         assert "b.zip" in kwargs["content"]
         assert "审计需要" in kwargs["content"]
         assert kwargs["link"] == "/system/backup"

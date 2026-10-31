@@ -367,7 +367,7 @@ async def request_backup_download(
     ]
     for uid in admin_ids:
         svc.send_system_message(
-            receiver_id=uid,
+            user_id=uid,
             title="备份下载申请",
             content=(
                 f"用户 {getattr(current_user, 'username', '?')} 申请下载备份 "

@@ -1,0 +1,8 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/v1/offline-map/download",
+    "status": 501,
+    "reason": "单机离线部署无外网，在线抓取瓦片已下线，端点显式返回 501 而非假成功（app/api/v1/offline_map.py 模块 docstring 已声明）"
+  }
+]
