@@ -1,3 +1,26 @@
+## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+
+### Fixed（安装包可安装但无法启动）
+
+**根因**：`backend/backend_linux_arm64_standalone.spec` 把标准库 `difflib`
+列入 `excludes`，而 `app/services/data_cleaning_service.py` 顶层执行
+`from difflib import SequenceMatcher`。v1.18.29 的 ARM64 Electron 包复用
+standalone 后端产物，安装后后端启动即 `ModuleNotFoundError: No module named
+'difflib'`，Electron 自动重启 3 次后退出。
+
+**修复**：
+- standalone spec 删除标准库排除项，`difflib` 显式加入 `hiddenimports`；
+  统一 spec 同步显式声明，避免未来 excludes 漂移。
+- 新增 `scripts/verify_frozen_modules.py`：直接读取 onedir 产物的
+  CArchive/PYZ 模块表，校验 `difflib`、入口链与**全部 379 个 `app.*` 模块**。
+- Windows、ARM64 Electron、standalone DEB、deb-complete 四条打包链路全部
+  接入该门禁：模块漏收在构建期失败，不再等到装机后启动才暴露。
+- `start.py` 增加 `BACKEND_IMPORT_CHECK=1` 手动自检入口（只 import，不监听端口）。
+
+**验证**：本地重建 Windows 冻结产物，门禁输出 `difflib` 与 379 个 `app.*`
+全部收录；数据质量路由 21 例通过；`vue-tsc`、前端构建、系统管理前端 759 例
+与全量分片测试均通过。
+
 ## [1.18.29] - 2026-10-30 — 全库并发收口：导出线程化/权限边界/初始化门禁/调度器与桌面退出
 
 ### Added（核心链路闭环测试 —— 系统体检第 2 批）
