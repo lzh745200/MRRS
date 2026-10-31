@@ -115,6 +115,18 @@ jobs:
           sudo apt-get install -y --no-install-recommends fakeroot dpkg-dev file
           echo "fakeroot: $(which fakeroot)"
           echo "dpkg-deb: $(which dpkg-deb)"
+          # 2026-10-31 修复：下面的「Prepare resources」会跑 scripts/verify_frozen_modules.py,
+          # 它用 PyInstaller.archive.readers 直接读 ARM64 PYZ 模块表（跨架构、不依赖 QEMU）。
+          # 该脚本假定「CI 构建环境必然安装 PyInstaller」，但本作业此前只在 Docker 里跑
+          # PyInstaller，runner 上没装 → 门禁报 No module named 'PyInstaller' 退出 1，
+          # 表现为 Electron DEB 构建失败（v1.18.30 实测）。
+          # ubuntu-latest 是 PEP 668 externally-managed 环境，须显式 --break-system-packages。
+          # 版本从 backend/requirements-dev.txt 提取（PyInstaller 版本的单一事实源），
+          # 避免在此硬编码后又与 dev 依赖漂移。
+          grep -E '^pyinstaller' backend/requirements-dev.txt > /tmp/pyi-req.txt
+          cat /tmp/pyi-req.txt
+          python3 -m pip install --quiet --break-system-packages -r /tmp/pyi-req.txt
+          python3 -c "from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader as Z; print('PyInstaller 归档读取器可用')"
 
       - name: Download backend artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

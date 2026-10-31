@@ -1,4 +1,31 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Fixed（ARM64 Electron DEB 构建失败：冻结门禁缺 PyInstaller）
+
+**现象**：v1.18.30 的 tag 构建里 `Build Electron DEB Package` 作业失败；`Build Frontend`、
+`standalone-deb`、`windows-smoke` 均 success —— 只有 ARM64 的 Electron 包没产出，
+Release 里因此只有 Windows 资产。
+
+**根因**（CI 日志）：
+
+```
+无法导入 PyInstaller 归档读取器：No module named PyInstaller
+##[error]Process completed with exit code 1.
+```
+
+`7fb5e910` 引入的冻结模块门禁 `scripts/verify_frozen_modules.py`（用
+`PyInstaller.archive.readers` 在 x64 runner 上直接读 ARM64 PYZ 模块表，不依赖 QEMU）
+在 `build-electron-deb` 作业的「Prepare resources」步骤被调用，但**该作业从未安装
+PyInstaller**（此前只有 standalone-deb 在 Docker 里跑 PyInstaller）。脚本按设计在缺依赖时
+SystemExit 退出 1，于是整个 Electron DEB 构建失败。
+
+**修复**：在 `build-electron-deb` 的 `Install DEB packaging tools` 步骤补装 PyInstaller，
+规格从 `backend/requirements-dev.txt` 提取（grep pyinstaller）保持**单一事实源**，
+不在此硬编码版本；装后立即 `from PyInstaller.archive.readers import ...` 自检，
+确保读取器真的可用再进后续步骤。ubuntu-latest 是 PEP 668 externally-managed 环境，
+故用 `--break-system-packages`。
+
+> 说明：v1.18.30 的 tag 已指向 `e20b0631`，本修复不影响已发布的 Windows 包；
+> ARM64 Electron DEB 需下一次 tag 或 workflow_dispatch 才会补产出。
 
 ### Fixed（CI 两处测试未跟上安全守卫 —— 修复后 backend-test 应转绿）
 
