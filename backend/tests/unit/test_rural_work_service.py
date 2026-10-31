@@ -491,11 +491,11 @@ class TestRuralWorkService:
 # 数据权限（2026-08-14）：_apply_work_scope / _can_access_work
 # ---------------------------------------------------------------------------
 
-def _make_user(role="user", organization_id=5, data_scope=None, uid=7):
+def _make_user(role="user", organization_id=5, data_scope=None, uid=7, is_superuser=False):
     user = MagicMock()
     user.id = uid
     user.role = role
-    user.is_superuser = False
+    user.is_superuser = is_superuser
     user.organization_id = organization_id
     user.org_id = organization_id
     if data_scope is not None:
@@ -510,11 +510,21 @@ def rural_svc():
 
 
 class TestWorkScope:
-    def test_admin_not_filtered(self, rural_svc):
+    def test_superuser_not_filtered(self, rural_svc):
         from app.services.rural_work_service import _apply_work_scope
 
         q = MagicMock()
-        assert _apply_work_scope(q, _make_user(role="admin"), rural_svc.db) is q
+        assert _apply_work_scope(q, _make_user(role="super_admin", is_superuser=True), rural_svc.db) is q
+
+    def test_dept_admin_is_filtered_to_subtree(self, rural_svc):
+        """部门级 admin 不是全局管理员，必须按本组织及子树收敛（R27-H8）。"""
+        from app.services.rural_work_service import _apply_work_scope
+
+        with patch("app.core.data_permission._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+            q = MagicMock()
+            result = _apply_work_scope(q, _make_user(role="admin"), rural_svc.db)
+            assert result is q.filter.return_value
+            assert q.filter.call_count == 1
 
     def test_none_user_not_filtered(self, rural_svc):
         from app.services.rural_work_service import _apply_work_scope
@@ -550,11 +560,18 @@ class TestWorkScope:
 
 
 class TestCanAccessWork:
-    def test_admin_always_allowed(self, rural_svc):
+    def test_superuser_always_allowed(self, rural_svc):
         from app.services.rural_work_service import _can_access_work
 
         work = _make_mock_work(organization_id=99, created_by=99)
-        assert _can_access_work(work, _make_user(role="admin"), rural_svc.db) is True
+        assert _can_access_work(work, _make_user(role="super_admin", is_superuser=True), rural_svc.db) is True
+
+    def test_dept_admin_cannot_access_other_org(self, rural_svc):
+        from app.services.rural_work_service import _can_access_work
+
+        work = _make_mock_work(organization_id=99, created_by=99)
+        with patch("app.core.data_permission._get_org_subtree", return_value=([5, 6], ["a", "b"])):
+            assert _can_access_work(work, _make_user(role="admin"), rural_svc.db) is False
 
     def test_none_user_allowed(self, rural_svc):
         from app.services.rural_work_service import _can_access_work
