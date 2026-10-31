@@ -1,4 +1,35 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Fixed（CI 两处红 —— 异常直出 + 列表解包）
+
+**① `app/api/v1/monitoring/secrets.py:56` 异常细节直出（并行会话引入，CI 红线）**
+
+密钥轮换后的 PII 自检失败，原写法把异常消息直接拼进 HTTP 响应：
+
+```python
+detail=f"密钥轮换后 PII 加解密自检失败，请勿继续写入：{exc}",   # ← 违反 W1-T8 不变量
+```
+
+违反「异常细节不直出」安全基线（`test_no_error_detail_leak.py` 静态门禁抓到）。
+自检失败的 `exc` 信息可能含密钥/密文线索，不应给任意登录用户看。
+**修复**：服务端记 `logger.error`（含完整堆栈，保留可诊断性），响应只给可读结论 + 指引。
+
+**验证**：`test_no_error_detail_leak` **4 passed** · secrets 相关 **200 passed** · flake8 0。
+
+**② `frontend/src/layouts/DefaultLayoutSafe.vue:619` 手写 `.data.items` 解包（W5-T5 门禁）**
+
+侧栏「待更新数据包」角标的手动解包写法：
+
+```ts
+const list = (res as {...} | undefined)
+const items = list?.items ?? list?.data?.items ?? []      // ← 禁止手写
+```
+
+**修复**：改用 `unwrapList<{type?: string}>(res).items`（该工具内含裸数组 /
+`{items}` / `{data:[...]}` / `{code,data:{items}}` 四种历史格式兜底，与 AdminDashboard
+等 30+ 文件同一写法）。加 `import { unwrapList } from '@/utils/unwrapList'`。
+
+**验证**：该文件 eslint 0 error · 全 `src` eslint 0 error。
+
 ### Fixed（资助学生导入的年级口径不一致）
 
 **问题**（2026-10-31 巡检）：导入循环里两处口径不一致 ——

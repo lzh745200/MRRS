@@ -3,6 +3,8 @@
 提供密钥轮换、版本管理和安全存储
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional
 
@@ -11,6 +13,8 @@ from app.core.permission_utils import is_admin
 from app.models.user import User
 from app.services.secrets_manager import secrets_manager
 from app.core.response import success_response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/secrets", tags=["密钥管理"])
 
@@ -56,9 +60,12 @@ async def rotate_key(
 
             _pii_self_check()
         except RuntimeError as exc:  # 自检失败是显式 RuntimeError；其余异常照常冒泡
+            # W1-T8 不变量：异常细节不得直出响应（自检失败信息可能含密钥/密文线索），
+            # 只记服务端日志，响应给可读结论。回归 tests/unit/api/test_no_error_detail_leak.py。
+            logger.error("密钥轮换后 PII 加解密自检失败: %s", exc, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"密钥轮换后 PII 加解密自检失败，请勿继续写入：{exc}",
+                detail="密钥轮换后 PII 加解密自检失败，请勿继续写入（详情见服务端日志）",
             ) from exc
         # 批次 3（危险操作强制审计）：密钥轮换会使全部既有密文/令牌受影响
         from app.utils.audit_logger import AuditLogger

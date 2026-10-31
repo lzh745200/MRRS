@@ -353,6 +353,7 @@ import { useMenuStore, type MenuEntry, type MenuKind } from '@/stores/menu'
 import { useMenuFavorites } from '@/composables/useMenuFavorites'
 import { useRecentMenus } from '@/composables/useRecentMenus'
 import { resolveMenuIcon } from '@/components/nav/menuIcons'
+import { unwrapList } from '@/utils/unwrapList'
 import { useConfigStore, THEME_OPTIONS } from '@/stores/config'
 import { cancelAllRequests, freezeRequests } from '@/api/request'
 import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
@@ -615,8 +616,9 @@ async function loadPendingUpdates() {
   try {
     const { get } = await import('@/api/request')
     const res: unknown = await get('/data-packages')
-    const list = (res as { items?: { type?: string }[]; data?: { items?: { type?: string }[] } } | undefined)
-    const items = list?.items ?? list?.data?.items ?? []
+    // W5-T5：列表响应统一走 unwrapList（它内含裸数组 / {items} / {data:[...]} /
+    // {code,data:{items}} 四种历史格式兜底），禁止手写 .data.items 解包。
+    const items = unwrapList<{ type?: string }>(res).items
     pendingUpdates.value = items.filter((p) => p.type === 'update').length
   } catch {
     pendingUpdates.value = 0
