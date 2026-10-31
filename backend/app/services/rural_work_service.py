@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
-from app.core.permission_utils import is_admin
+from app.core.permission_utils import is_superuser
 from app.models.rural_work import RuralWork, WorkStatus, WorkType
 from app.schemas.rural_work import RuralWorkStatistics
 from app.services.work_log_service import write_work_log
@@ -31,7 +31,7 @@ def _safe_enum_value(val: Any) -> Any:
 def _apply_work_scope(query, current_user: Any, db: Any):
     """乡村工作数据权限过滤（与 apply_scope_filter 语义一致，兼容历史数据）
 
-    - 管理员：不过滤
+    - 超级管理员：不过滤；部门级 admin 仍按本组织及子树收敛
     - 部门范围（OWN_DEPT）：本组织 + 下级组织；organization_id 为空的历史记录按创建人可见
     - 仅本人（OWN）：按 created_by 过滤
     """
@@ -39,7 +39,7 @@ def _apply_work_scope(query, current_user: Any, db: Any):
 
     from app.core.data_permission import DataScope, get_data_scope
 
-    if current_user is None or is_admin(current_user):
+    if current_user is None or is_superuser(current_user):
         return query
 
     user_data_scope = getattr(current_user, "data_scope", None)
@@ -50,7 +50,7 @@ def _apply_work_scope(query, current_user: Any, db: Any):
     scope = get_data_scope(current_user)
     # pragma: no cover —— 经论证逻辑不可达的防御性冗余分支：
     # get_data_scope() 仅当 is_superuser=True 或 role==super_admin 时返回 ALL，
-    # 而这两类用户在上方 line 41 已被 is_admin() 判定为管理员并提前 return。
+    # 而这两类用户已在上方被 is_superuser() 判定并提前 return。
     # 故任何能执行到此处的非管理员用户，scope 恒不等于 ALL，此分支永不命中。
     if scope == DataScope.ALL:  # pragma: no cover - 论证见上：能到达此处的非管理员 scope 恒不等于 ALL
         return query
@@ -73,7 +73,7 @@ def _apply_work_scope(query, current_user: Any, db: Any):
 
 def _can_access_work(work, current_user: Any, db: Any) -> bool:
     """单条乡村工作记录访问校验（与 _apply_work_scope 同口径）"""
-    if current_user is None or is_admin(current_user):
+    if current_user is None or is_superuser(current_user):
         return True
     owner_id = getattr(current_user, "id", None)
     if work.created_by == owner_id:
