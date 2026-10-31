@@ -12,6 +12,28 @@ from app.core.constants import ADMIN_ROLES  # noqa: F401 — 单一来源：app.
 # 别名,兼容新代码
 get_current_active_user = get_current_user
 
+
+def authenticated_user_id(current_user) -> int:
+    """当前登录用户主键。
+
+    服务层（审批/经费/权限）一律用 `int`，而 ORM legacy Column 让静态检查把
+    `User.id` 看成 `int | None`。这里做一次 fail-closed 收窄：登录态用户必然已落库，
+    真出现非法认证对象就在入口 401，而不是把 None 写进数据库。
+    """
+    user_id = getattr(current_user, "id", None)
+    if not isinstance(user_id, int):
+        raise HTTPException(status_code=401, detail="认证信息无效，请重新登录")
+    return user_id
+
+
+def authenticated_username(current_user) -> str:
+    """当前登录用户名（服务层 `str` 形参的唯一出口，语义同 authenticated_user_id）。"""
+    username = getattr(current_user, "username", None)
+    if not isinstance(username, str) or not username:
+        raise HTTPException(status_code=401, detail="认证信息无效，请重新登录")
+    return username
+
+
 # 管理角色列表（可执行创建/编辑/删除操作）—— 单一来源 app.core.constants.ADMIN_ROLES
 # 注意：manager/approval_leader 是"管理级业务角色"，仅在 require_manager_role 等业务
 # 入口经 normalize_role() 归一化后放行管理操作；is_admin()（系统管理层）不含它们。

@@ -22,7 +22,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from app.core.money import MoneyField
 from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse
@@ -31,7 +31,13 @@ from pydantic import AfterValidator, BaseModel, Field
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.api.v1.deps import require_funds_operator_role, enforce_admin_include_deleted, build_viewable_because
+from app.api.v1.deps import (
+    authenticated_user_id,
+    authenticated_username,
+    build_viewable_because,
+    enforce_admin_include_deleted,
+    require_funds_operator_role,
+)
 from app.core.database import get_db
 from app.core.async_utils import run_in_thread
 from app.core.config import settings
@@ -100,8 +106,8 @@ def _submit_fund_approval_task(
         service = ApprovalWorkflowService(db)
         task = service.submit_approval(
             entity_type="fund",
-            entity_id=fund.id,
-            submitter_id=user.id,
+            entity_id=cast(int, fund.id),
+            submitter_id=cast(int, user.id),
             change_data=change_data if change_data is not None else _fund_summary(fund),
             original_data=original_data,
             title=title or f"经费申请：{fund.name or fund.code or f'#{fund.id}'}",
@@ -110,8 +116,8 @@ def _submit_fund_approval_task(
             service.ensure_default_workflow("fund", user_id=user.id)
             task = service.submit_approval(
                 entity_type="fund",
-                entity_id=fund.id,
-                submitter_id=user.id,
+                entity_id=cast(int, fund.id),
+                submitter_id=cast(int, user.id),
                 change_data=change_data if change_data is not None else _fund_summary(fund),
                 original_data=original_data,
                 title=title or f"经费申请：{fund.name or fund.code or f'#{fund.id}'}",
@@ -151,18 +157,24 @@ def _resolve_fund_approval_tasks(
         for task in tasks:
             if action == "approve":
                 # 单机版：直接通过所有级别
-                while task and task.status == _AS.PENDING.value:
-                    task = service.approve_task(
-                        task.id, operator.id, "经费板块直接审批通过", standalone=True
+                current: Any = task
+                while current and current.status == _AS.PENDING.value:
+                    current = service.approve_task(
+                        cast(int, current.id),
+                        cast(int, operator.id),
+                        "经费板块直接审批通过",
+                        standalone=True,
                     )
-                if task and task.status == _AS.APPROVED.value:
+                if current and current.status == _AS.APPROVED.value:
                     count += 1
             else:
-                task = service.reject_task(
-                    task.id, operator.id, f"经费板块直接驳回：{reason}" if reason else "经费板块直接驳回",
+                rejected = service.reject_task(
+                    cast(int, task.id),
+                    cast(int, operator.id),
+                    f"经费板块直接驳回：{reason}" if reason else "经费板块直接驳回",
                     standalone=True,
                 )
-                if task and task.status == _AS.REJECTED.value:
+                if rejected and rejected.status == _AS.REJECTED.value:
                     count += 1
         return count
     except Exception:  # pragma: no cover - 防御分支
@@ -213,7 +225,7 @@ def _apply_fund_approval_result(db: Session, task) -> None:
         return
 
     from_status = fund.status
-    target_status = _FUND_APPROVAL_TARGETS.get((task.status, from_status))
+    target_status = _FUND_APPROVAL_TARGETS.get((cast(str, task.status), cast(str, from_status)))
     if target_status is None or target_status == from_status:
         return
 
@@ -396,14 +408,18 @@ def _fund_to_dict(f: Fund) -> Dict[str, Any]:
         result[col.name] = _safe_val(getattr(f, col.name, None))
 
     # 补充关联数据（如果使用了 joinedload 预加载）
-    if hasattr(f, "project") and f.project:
-        result["project_name"] = f.project.name
-    if hasattr(f, "village") and f.village:
-        result["village_name"] = f.village.village_name
-    if hasattr(f, "school") and f.school:
-        result["school_name"] = f.school.name
-    if getattr(f, "organization", None) is not None:
-        result["organization_name"] = f.organization.name
+    project: Any = getattr(f, "project", None)
+    if project:
+        result["project_name"] = project.name
+    village: Any = getattr(f, "village", None)
+    if village:
+        result["village_name"] = village.village_name
+    school: Any = getattr(f, "school", None)
+    if school:
+        result["school_name"] = school.name
+    organization: Any = getattr(f, "organization", None)
+    if organization is not None:
+        result["organization_name"] = organization.name
 
     return result
 
@@ -559,13 +575,15 @@ def create_fund(
     """创建经费记录（需管理员权限）"""
     require_funds_operator_role(current_user)
     from app.services.fund_service import FundService
+    # 本文件 FundCreate 是 API 契约（extra=ignore，含 type/status 等前端字段），
+    # 而 FundService 只消费 model_dump()（鸭子类型）；两者字段集合故意不同，这里按实际传入对象取类型。
     fund = FundService(db).create_fund_for_user(
-        data, current_user.id, current_user.organization_id,
+        cast(Any, data), authenticated_user_id(current_user), current_user.organization_id,
     )
     # 数据变更自动创建审批任务（Requirement 3.2）：经费新增进入待审批板块
     approval_task_id = _submit_fund_approval_task(
         db, fund, current_user,
-        change_data=_fund_summary(fund, {"created_by": current_user.id}),
+        change_data=_fund_summary(fund, {"created_by": authenticated_user_id(current_user)}),
         title=f"经费新增：{fund.name or fund.code or f'#{fund.id}'}",
     )
     return success_response(
@@ -583,17 +601,16 @@ def apply_fund(
     """用户经费申请 — 无需管理员权限，所有登录用户均可提交"""
     from app.services.fund_service import FundService
     fund = FundService(db).create_fund_for_user(
-        data, current_user.id, current_user.organization_id,
+        cast(Any, data), authenticated_user_id(current_user), current_user.organization_id,
         status="pending",
-        applicant=current_user.full_name or current_user.username,
+        applicant=current_user.full_name or authenticated_username(current_user),
     )
     # 经费申请自动创建审批任务：待审批板块立即可见该经费
+    applicant_name = current_user.full_name or authenticated_username(current_user)
     approval_task_id = _submit_fund_approval_task(
         db, fund, current_user,
-        change_data=_fund_summary(
-            fund, {"applicant": current_user.full_name or current_user.username}
-        ),
-        title=f"经费申请：{fund.name or fund.code or f'#{fund.id}'}（{current_user.full_name or current_user.username}）",
+        change_data=_fund_summary(fund, {"applicant": applicant_name}),
+        title=f"经费申请：{fund.name or fund.code or f'#{fund.id}'}（{applicant_name}）",
     )
     return success_response(
         data={"id": fund.id, "approval_task_id": approval_task_id},
@@ -620,7 +637,7 @@ def update_fund(
     original_snapshot = _fund_to_dict(fund)
 
     # exclude_unset: 仅排除客户端未发送的字段，显式传 null 的字段会设为 None（清空）
-    changed_by_name = getattr(current_user, "full_name", None) or current_user.username
+    changed_by_name = getattr(current_user, "full_name", None) or authenticated_username(current_user)
     changed_fields: Dict[str, Any] = {}
 
     # 状态机红线：status 不得经通用更新接口写入（否则可绕过审批/附件/里程碑校验直达 approved）
@@ -646,7 +663,7 @@ def update_fund(
                     field_name=key,
                     old_value=json.dumps(_safe_val(old_value), ensure_ascii=False, default=str),
                     new_value=json.dumps(_safe_val(new_value), ensure_ascii=False, default=str),
-                    changed_by=current_user.id,
+                    changed_by=authenticated_user_id(current_user),
                     changed_by_name=changed_by_name,
                 ))
                 changed_fields[key] = new_value
@@ -796,6 +813,7 @@ def fund_statistics_multi_dimension(
     ]
 
     if group_by == "period":
+        group_col: Any
         if period_type == "quarterly":
             group_col = Fund.year_quarter
         elif period_type == "yearly":
@@ -986,7 +1004,7 @@ def approve_fund(fund_id: int, current_user: User = Depends(get_current_user), d
     _transition_status(db, fund, "approved", ["pending", "planned"],
                        required_attachments=[],  # 至少需要 1 个附件
                        operator=current_user,
-                       approved_by=current_user.full_name or current_user.username,
+                       approved_by=current_user.full_name or authenticated_username(current_user),
                        approval_date=datetime.now(timezone.utc))
     # 同步完结待审批板块中的关联审批任务（闭环）
     resolved = _resolve_fund_approval_tasks(db, fund, "approve", current_user)
@@ -1008,7 +1026,7 @@ def reject_fund(
     _transition_status(db, fund, "rejected", ["pending", "planned"],
                        operator=current_user,
                        remark=reason,
-                       approved_by=current_user.full_name or current_user.username)
+                       approved_by=current_user.full_name or authenticated_username(current_user))
     # 同步驳回待审批板块中的关联审批任务（闭环）
     resolved = _resolve_fund_approval_tasks(db, fund, "reject", current_user, reason=reason)
     return success_response(data={"fund_id": fund.id, "resolved_tasks": resolved}, message="审批驳回")
@@ -1376,11 +1394,11 @@ async def download_fund_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件不存在")
 
     # 数据隔离：校验附件所属经费的访问权限（防止跨组织下载）
-    _get_fund_or_404(db, att.fund_id, current_user)
+    _get_fund_or_404(db, cast(int, att.fund_id), current_user)
 
     return get_attachment_response(
-        file_path=att.file_path,
-        filename=att.file_name,
+        file_path=cast(str, att.file_path),
+        filename=cast(str, att.file_name),
         media_type=att.file_type or "application/octet-stream",
     )
 
@@ -1397,10 +1415,10 @@ async def preview_fund_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件不存在")
 
     # 数据隔离：校验附件所属经费的访问权限（防止跨组织预览）
-    _get_fund_or_404(db, att.fund_id, current_user)
+    _get_fund_or_404(db, cast(int, att.fund_id), current_user)
 
     # 推断 MIME 类型以决定是否内联显示
-    mime_type, _ = mimetypes.guess_type(att.file_path)
+    mime_type, _ = mimetypes.guess_type(cast(str, att.file_path))
     if not mime_type:
         mime_type = att.file_type or "application/octet-stream"
 
@@ -1413,8 +1431,8 @@ async def preview_fund_attachment(
     use_inline = any(mime_type.startswith(t) for t in inline_types)
 
     return get_attachment_response(
-        file_path=att.file_path,
-        filename=att.file_name,
+        file_path=cast(str, att.file_path),
+        filename=cast(str, att.file_name),
         media_type=mime_type,
         inline=use_inline,
     )
@@ -1435,11 +1453,11 @@ async def delete_fund_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="附件不存在")
 
     # 数据隔离：校验附件所属经费的访问权限（防止跨组织删除）
-    _get_fund_or_404(db, att.fund_id, current_user)
+    _get_fund_or_404(db, cast(int, att.fund_id), current_user)
 
     fund_id = att.fund_id
     file_name = getattr(att, "file_name", "unknown")
-    file_path = att.file_path
+    file_path = cast(str, att.file_path)
 
     # 删除数据库记录
     db.delete(att)
@@ -1449,8 +1467,8 @@ async def delete_fund_attachment(
         fund_id=fund_id,
         operation_type="attachment_delete",
         operation_detail=f"删除附件: {file_name}",
-        operator_id=current_user.id,
-        operator_name=getattr(current_user, "full_name", None) or current_user.username,
+        operator_id=authenticated_user_id(current_user),
+        operator_name=getattr(current_user, "full_name", None) or authenticated_username(current_user),
     )
     db.add(op_log)
     safe_commit(db)
@@ -1461,7 +1479,7 @@ async def delete_fund_attachment(
 
     write_work_log(
         db, "fund", "delete_attachment", fund_id, file_name,
-        user_id=current_user.id, username=getattr(current_user, "username", "系统"),
+        user_id=authenticated_user_id(current_user), username=getattr(current_user, "username", "系统"),
     )
     return success_response(message="删除成功")
 
@@ -1505,7 +1523,7 @@ async def upload_fund_attachment(
     )
 
     # 保存数据库记录
-    uploaded_by = getattr(current_user, "full_name", None) or current_user.username
+    uploaded_by = getattr(current_user, "full_name", None) or authenticated_username(current_user)
     attachment = FundAttachment(
         fund_id=fund_id,
         file_name=file_info["file_name"],
@@ -1523,7 +1541,7 @@ async def upload_fund_attachment(
         fund_id=fund_id,
         operation_type="attachment_upload",
         operation_detail=f"上传附件: {file_info['file_name']} (分类: {category or 'other'})",
-        operator_id=current_user.id,
+        operator_id=authenticated_user_id(current_user),
         operator_name=uploaded_by,
     )
     db.add(op_log)
@@ -1534,7 +1552,7 @@ async def upload_fund_attachment(
     write_work_log(
         db, "fund", "upload_attachment", fund_id,
         file_info["file_name"],
-        user_id=current_user.id, username=getattr(current_user, "username", "系统"),
+        user_id=authenticated_user_id(current_user), username=getattr(current_user, "username", "系统"),
         detail=f"分类: {category or 'other'}",
     )
     return success_response(data=attachment.to_dict(), message="上传成功")

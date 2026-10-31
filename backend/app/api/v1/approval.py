@@ -24,7 +24,7 @@ Requirements: 3.2, 3.4, 3.5, 3.6, 3.7, 3.8, 4.1, 4.3, 4.6
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -34,6 +34,7 @@ from app.core.database import get_db
 from app.core.permission_utils import is_admin, is_superuser, require_admin
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
+from app.api.v1.deps import authenticated_user_id, authenticated_username
 from app.models.message import Message
 from app.models.user import User
 from app.services.approval_workflow_service import ApprovalWorkflowService
@@ -114,8 +115,8 @@ async def approval_overview(
         if not is_superuser(current_user):
             return query.filter(
                 or_(
-                    AT.submitter_id == current_user.id,
-                    AT.current_approver_id == current_user.id,
+                    AT.submitter_id == authenticated_user_id(current_user),
+                    AT.current_approver_id == authenticated_user_id(current_user),
                 )
             )
         return query
@@ -143,7 +144,7 @@ async def approval_overview(
         db.query(func.count(AT.id))
         .filter(
             AT.status == AS.PENDING.value,
-            AT.current_approver_id == current_user.id,
+            AT.current_approver_id == authenticated_user_id(current_user),
         )
         .scalar()
         or 0
@@ -153,7 +154,7 @@ async def approval_overview(
             db.query(func.count(AT.id))
             .filter(
                 AT.status == AS.PENDING.value,
-                AT.submitter_id == current_user.id,
+                AT.submitter_id == authenticated_user_id(current_user),
             )
             .scalar()
             or 0
@@ -255,9 +256,9 @@ def create_workflow(
         workflow = service.create_workflow(
             name=data.name,
             entity_type=data.entity_type,
-            description=data.description,
+            description=cast(str, data.description),  # 服务层声明 str，实际允许 None 落 NULL
             nodes=nodes,
-            created_by=current_user.id,
+            created_by=authenticated_user_id(current_user),
         )
         return success_response(
             data={
@@ -285,7 +286,7 @@ def list_workflows(
     service = ApprovalWorkflowService(db)
     workflows = service.list_workflows(entity_type=entity_type, is_active=is_active, skip=skip, limit=limit)
     if not is_admin(current_user):
-        workflows = [w for w in workflows if w.created_by == current_user.id]
+        workflows = [w for w in workflows if w.created_by == authenticated_user_id(current_user)]
     return {
         "code": 200,
         "success": True,
@@ -334,7 +335,7 @@ def get_workflow(
                     "approver_id": n.approver_id,
                     "timeout_hours": n.timeout_hours,
                 }
-                for n in workflow.nodes
+                for n in cast(List[Any], workflow.nodes)
             ],
         },
     }
@@ -356,7 +357,7 @@ def update_workflow(
         workflow = service.update_workflow(
             workflow_id=workflow_id,
             name=data.name,
-            description=data.description,
+            description=cast(str, data.description),  # 服务层声明 str，实际允许 None 落 NULL
             is_active=data.is_active,
         )
 
@@ -453,10 +454,10 @@ def submit_approval(
     task = service.submit_approval(
         entity_type=data.entity_type,
         entity_id=data.entity_id,
-        submitter_id=current_user.id,
+        submitter_id=authenticated_user_id(current_user),
         change_data=data.change_data,
         original_data=data.original_data,
-        title=data.title,
+        title=cast(str, data.title),
     )
 
     if not task:
@@ -494,7 +495,10 @@ def approve_task(
     """
     service = ApprovalWorkflowService(db)
     task = service.approve_task(
-        task_id, current_user.id, data.opinion, standalone=is_superuser(current_user)
+        task_id,
+        authenticated_user_id(current_user),
+        cast(str, data.opinion),
+        standalone=is_superuser(current_user),
     )
 
     if not task:
@@ -535,7 +539,10 @@ def reject_task(
         raise HTTPException(status_code=400, detail="驳回必须填写原因")
     service = ApprovalWorkflowService(db)
     task = service.reject_task(
-        task_id, current_user.id, data.opinion, standalone=is_superuser(current_user)
+        task_id,
+        authenticated_user_id(current_user),
+        cast(str, data.opinion),
+        standalone=is_superuser(current_user),
     )
 
     if not task:
@@ -569,7 +576,7 @@ def retry_apply_entity_change(
     write_work_log(
         db, "approval", "retry_apply", task.id,
         task.title or task.entity_type,
-        user_id=current_user.id, username=current_user.username,
+        user_id=authenticated_user_id(current_user), username=authenticated_username(current_user),
         detail=f"重试审批回写 → {task.status}",
     )
     return {
@@ -596,9 +603,9 @@ def transfer_task(
     service = ApprovalWorkflowService(db)
     task = service.transfer_task(
         task_id,
-        current_user.id,
+        authenticated_user_id(current_user),
         data.transfer_to_id,
-        data.reason,
+        cast(str, data.reason),
         standalone=is_superuser(current_user),
     )
 
@@ -625,7 +632,7 @@ def withdraw_task(
     Requirements: 3.8 - 支持撤回申请
     """
     service = ApprovalWorkflowService(db)
-    task = service.withdraw_task(task_id, current_user.id)
+    task = service.withdraw_task(task_id, authenticated_user_id(current_user))
 
     if not task:
         raise HTTPException(status_code=400, detail="无法撤回该任务，请检查任务状态或提交人权限")
@@ -658,7 +665,7 @@ def resubmit_task(
     """
     service = ApprovalWorkflowService(db)
     change_data = data.change_data if data else None
-    task = service.resubmit_approval(task_id, current_user.id, change_data=change_data)
+    task = service.resubmit_approval(task_id, authenticated_user_id(current_user), change_data=change_data)
 
     if not task:
         raise HTTPException(status_code=400, detail="无法重新提交，请检查任务状态或提交人权限")
@@ -711,7 +718,7 @@ def submit_and_auto_approve(
     task = service.submit_and_auto_approve(
         entity_type=data.entity_type,
         entity_id=data.entity_id,
-        submitter_id=current_user.id,
+        submitter_id=authenticated_user_id(current_user),
         change_data=data.change_data,
         original_data=data.original_data,
     )
@@ -750,11 +757,16 @@ def auto_approve_single_task(
         raise HTTPException(status_code=400, detail="仅待审批任务可执行此操作")
 
     opinion = data.opinion or "单机版快速审批通过"
-    while task and task.status == "pending":
-        task = service.approve_task(task.id, current_user.id, opinion, standalone=True)
+    current: Any = task
+    while current and current.status == "pending":
+        approved = service.approve_task(
+            cast(int, current.id), authenticated_user_id(current_user), opinion, standalone=True
+        )
+        current = approved if approved else None
 
-    if not task:
+    if not current:
         raise HTTPException(status_code=400, detail="审批失败")
+    task = current
 
     return {
         "code": 200,
@@ -778,7 +790,7 @@ def auto_approve_all(
     if not is_superuser(current_user):
         raise HTTPException(status_code=403, detail="仅超级管理员可执行自动审批")
     service = ApprovalWorkflowService(db)
-    results = service.auto_approve_all_pending(current_user.id)
+    results = service.auto_approve_all_pending(authenticated_user_id(current_user))
 
     return {
         "code": 200,
@@ -856,7 +868,7 @@ def get_pending_tasks(
     """
     service = ApprovalWorkflowService(db)
     include_all = is_superuser(current_user)
-    tasks = service.get_pending_tasks(current_user.id, skip, limit, include_all=include_all)
+    tasks = service.get_pending_tasks(authenticated_user_id(current_user), skip, limit, include_all=include_all)
 
     # 单机版兜底：服务返回空时（如审批人未分配），管理员仍能看到所有 pending 任务
     if not tasks:
@@ -868,13 +880,16 @@ def get_pending_tasks(
             from sqlalchemy import or_
 
             query = query.filter(
-                or_(AT.current_approver_id == current_user.id, AT.submitter_id == current_user.id)
+                or_(
+                    AT.current_approver_id == authenticated_user_id(current_user),
+                    AT.submitter_id == authenticated_user_id(current_user),
+                )
             )
         tasks = query.order_by(AT.priority.desc(), AT.created_at.asc()).offset(skip).limit(limit).all()
 
     # 总数（用于前端分页；服务 mocked 时回退为当前页长度）
     try:
-        total_value = service.count_pending_tasks(current_user.id, include_all=include_all)
+        total_value = service.count_pending_tasks(authenticated_user_id(current_user), include_all=include_all)
         # MagicMock 的 __int__ 默认返回 1，必须用 isinstance 校验真实类型
         total = total_value if isinstance(total_value, int) and not isinstance(total_value, bool) else len(tasks)
     except (TypeError, ValueError, AttributeError):
@@ -882,8 +897,8 @@ def get_pending_tasks(
 
     # 提交人姓名映射（前端列表「提交人」列）
     submitter_ids = {t.submitter_id for t in tasks if getattr(t, "submitter_id", None)}
-    name_map = (
-        dict(db.query(User.id, User.username).filter(User.id.in_(submitter_ids)).all())
+    name_map: dict[Any, Any] = (
+        {row[0]: row[1] for row in db.query(User.id, User.username).filter(User.id.in_(submitter_ids)).all()}
         if submitter_ids
         else {}
     )
@@ -939,7 +954,7 @@ def batch_approve(
             for row in db.query(_AT.id)
             .filter(
                 _AT.id.in_(data.task_ids),
-                _AT.current_approver_id == current_user.id,
+                _AT.current_approver_id == authenticated_user_id(current_user),
                 _AT.status == _AS.PENDING.value,
             )
             .all()
@@ -947,7 +962,7 @@ def batch_approve(
         allowed = [tid for tid in data.task_ids if tid in allowed_ids]
         denied = [tid for tid in data.task_ids if tid not in allowed_ids]
         results = (
-            service.batch_approve(allowed, current_user.id, data.opinion)
+            service.batch_approve(allowed, authenticated_user_id(current_user), cast(str, data.opinion))
             if allowed
             else {"success": [], "failed": []}
         )
@@ -956,7 +971,7 @@ def batch_approve(
     else:
         # 超级管理员批量审批：可处理指派给他人的任务（与单任务端点 standalone=is_superuser 一致）
         results = service.batch_approve(
-            data.task_ids, current_user.id, data.opinion, standalone=True
+            data.task_ids, authenticated_user_id(current_user), cast(str, data.opinion), standalone=True
         )
 
     return {
@@ -1013,7 +1028,7 @@ def get_my_tasks(
     """获取当前用户提交的审批任务（我的申请页）"""
     service = ApprovalWorkflowService(db)
     result = service.get_tasks_with_count(
-        submitter_id=current_user.id,
+        submitter_id=authenticated_user_id(current_user),
         status=status,
         date_from=date_from,
         date_to=date_to,
@@ -1041,7 +1056,7 @@ def get_task_history(
 ):
     """审批任务历史（管理员可见全部；普通用户仅可见自己提交的任务）"""
     service = ApprovalWorkflowService(db)
-    submitter_id = None if is_superuser(current_user) else current_user.id
+    submitter_id = None if is_superuser(current_user) else authenticated_user_id(current_user)
     result = service.get_tasks_with_count(
         entity_type=entity_type,
         status=status,
@@ -1084,7 +1099,7 @@ def get_task_diff(
             getattr(task, "submitter_id", None),
             getattr(task, "current_approver_id", None),
         }
-        if current_user.id not in viewable_ids:
+        if authenticated_user_id(current_user) not in viewable_ids:
             raise HTTPException(status_code=403, detail="无权查看该审批任务的变更对比")
 
     diff = service.get_task_diff(task_id)
@@ -1149,6 +1164,28 @@ def remind_task(
     return {"code": 200, "success": True, "message": "提醒已发送"}
 
 
+def _history_item(record) -> dict:
+    """审批历史一行。
+
+    legacy Column 下关系属性被静态检查看成 Mapped[Any]，这里集中取值。
+    """
+    approver: Any = record.approver
+    task: Any = record.task
+    return {
+        "id": record.id,
+        "task_id": record.task_id,
+        "action": record.action,
+        "opinion": record.opinion,
+        "level": record.level,
+        "approver": approver.username if approver else None,
+        "title": task.title if task else None,
+        "entity_type": task.entity_type if task else None,
+        "entity_id": task.entity_id if task else None,
+        "status": task.status if task else None,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+    }
+
+
 @router.get("/history", summary="审批历史")
 def get_approval_history(
     entity_type: Optional[str] = Query(None, description="实体类型"),
@@ -1167,7 +1204,7 @@ def get_approval_history(
     """
     # 非管理员只能查看自己提交的历史
     if submitter_id is None and current_user.role not in ("admin", "super_admin"):
-        submitter_id = current_user.id
+        submitter_id = authenticated_user_id(current_user)
 
     service = ApprovalWorkflowService(db)
     # 所有过滤在 DB 层执行，保证分页正确（不会因为 Python 过滤导致少返回记录）
@@ -1183,20 +1220,5 @@ def get_approval_history(
     return {
         "code": 200,
         "success": True,
-        "data": [
-            {
-                "id": r.id,
-                "task_id": r.task_id,
-                "action": r.action,
-                "opinion": r.opinion,
-                "level": r.level,
-                "approver": r.approver.username if r.approver else None,
-                "title": t.title if (t := r.task) else None,
-                "entity_type": t.entity_type if t else None,
-                "entity_id": t.entity_id if t else None,
-                "status": t.status if t else None,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in records
-        ],
+        "data": [_history_item(r) for r in records],
     }

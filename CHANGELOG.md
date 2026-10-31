@@ -35,6 +35,7 @@
   `list[FundTransferVoucher]`（实际存的是 `FundTransaction`）、`fund` 在 `fund_id` 分支内显式 `cast`，
   该文件 mypy **67 → 58 条**，运行期行为零变化（219 项经费用例全绿）。
 - `backend/app/api/v1/{todos,pairing,permission_packs,machine_code}.py`、`backend/app/api/v1/system/help.py`、  `backend/app/api/v1/map.py`、`backend/app/services/machine_code_permission_service.py` 类型注解收敛：  待办/配对/权限包/机器码响应构造统一走显式 `cast` 或模块级转换函数（`todos._to_response`），  help 文章表落 `TypedDict`、map 的 bbox 校验改 `TypeGuard` 并把三态缓存哨兵标注 `Any`；  `MachineCodePermissionService.batch_grant_permissions/batch_revoke_permissions` 形参由 `List[str]` 放宽为  `Sequence[str]`（`Permission(str, Enum)` 可直接传入，契约与实参一致）。共减少 mypy 101 条，运行期行为零变化。
+- 认证主体取值收缩：`backend/app/api/v1/deps.py` 新增 `authenticated_user_id()` / `authenticated_username()`（登录态已知的 ORM legacy `Column` 让静态检查把 `User.id` 看成 `int | None`；真出现非法认证对象就在入口 401 封口），`approval.py` / `funds.py` 共 43 处 `current_user.id` / `current_user.username` 改走该入口；两个文件的 mypy 分别 **28 → 0**、**26 → 0** 条（审批 auto-approve 循环改用 `current: Any` 变量收敛、费用 `_fund_to_dict` 的关联对象从直接访问改为 `getattr` 取值以保留模拟对象用例兼容性），运行期行为零变化。
 
 ### 验证
 
