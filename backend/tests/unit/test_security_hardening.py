@@ -127,7 +127,9 @@ class TestBackupDownloadGuard:
         src = _read("backend/app/api/v1/system/backup.py")
         idx = src.find('@router.get("/download/{filename}"')
         assert idx > 0
-        assert "require_admin" in src[idx : idx + 900]
+        # SEC-2（2026-10-31）：全库备份下载改为仅超级管理员（备份含全部组织数据），
+        # 原断言只查 require_admin 正是「部门级 admin 可下载全库备份」的漏检点。
+        assert "require_superuser" in src[idx : idx + 900]
 
 
 class TestDataSyncGuard:

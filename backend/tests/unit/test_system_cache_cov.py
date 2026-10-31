@@ -62,7 +62,9 @@ class TestClearCache:
         with pytest.raises(HTTPException) as exc_info:
             await m.clear_cache(db=MagicMock(), current_user=NORMAL)
         assert exc_info.value.status_code == 403
-        assert "仅超级管理员可清除缓存" in exc_info.value.detail
+        # SEC-2（2026-10-31）：清缓存由 require_admin 把关（部门级 admin 可执行），
+        # 原文案「仅超级管理员可清除缓存」与实现不符，已改为「需要管理员权限」。
+        assert "需要管理员权限" in exc_info.value.detail
 
     async def test_admin_clears_and_resets_counters(self):
         backend = SimpleCache()

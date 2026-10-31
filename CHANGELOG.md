@@ -443,6 +443,16 @@
   内**实测已跑起来**的那份完全相同；该载荷在默认缓存目录下 `/api/v1/health/liveness` 200、
   `/health` 报 `version=1.18.31` / `migration.at_head=true`、`POST /api/v1/auth/login` 200、
   桌面窗口标题「登录」——「打包产物 = 已实测运行产物」闭环成立。
+
+### Fixed（2026-11-01 前端两处测试假红）
+
+- `frontend/tests/unit/stores/auth-store.test.ts`：`vi.mock('@/utils/authStorage')` 只桩了旧版 8 个方法，
+  缺 `setLocked/clearLock/isLocked`；`login() → persistAuth() → unlockSession()` 调到 `undefined` 被 catch 吞掉，
+  login 用例整体误报 `expected 'error' to be 'success'`。补齐三个方法后两文件 **68 passed**（提交 `4cd349a9`）。
+- `frontend/tests/unit/views/auth/LoginEnhanced.test.ts:822/837`：`expect(text).toContain(x).toBe(false)`
+  是**恒失败**写法（文本不含 x 时第一个匹配器先抛错；含 x 时链式结果又是 `undefined`），
+  原意是「文本不应包含」，改 `.not.toContain(x)`，该文件 **89 passed**（提交 `b4662a49`）。
+
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
 ### Fixed（CI 两处红 —— 异常直出 + 列表解包）
 
