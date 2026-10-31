@@ -561,6 +561,9 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     expect(mocks.pushSafe).toHaveBeenCalledWith('/change-password')
 
     userDropdown.vm.$emit('command', 'logout')
+    // F3（2026-10-31）：logout 分支先 await authStore.logout() 吊销令牌，再冻结/取消请求，
+    // 断言必须等微任务队列清空，否则读出的是 await 之前的中间态。
+    await flushPromises()
     expect(mocks.freezeRequests).toHaveBeenCalledTimes(1)
     expect(mocks.cancelAllRequests).toHaveBeenCalledTimes(1)
     expect(mocks.auth.logout).toHaveBeenCalledTimes(1)

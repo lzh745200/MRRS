@@ -129,6 +129,10 @@ def admin_user(_db):
         full_name="测试管理员",
         hashed_password=hash_password("Admin@123"),
         role="admin",
+        # 2026-10-31 SEC-2：审计日志的批量删除 / 单条删除已收紧为「仅超级管理员」，
+        # 本文件验证的是审计 CRUD 本身（不是权限），故这里给足超级管理员身份；
+        # 越权行为由 tests/unit/test_superuser_only_sec2.py 单独钉死。
+        is_superuser=True,
         is_active=True,
         failed_login_count=0,
     )

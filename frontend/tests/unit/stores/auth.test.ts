@@ -36,6 +36,36 @@ vi.mock('@/utils/authStorage', () => ({
     setUser: (...args: any[]) => mockAuthStorageSetUser(...args),
     clear: (...args: any[]) => mockAuthStorageClear(...args),
     clearSession: vi.fn(),
+    // 锁屏标记（AuthStorage.setLocked / clearLock，06a9e994 起 login 与 lockSession 会调用）。
+    // 真实实现经 safeSetItem/safeRemoveItem 吞掉存储异常，mock 必须保持同一契约，
+    // 否则「storage 抛异常仍静默」的用例会被 mock 的裸调用打破。
+    setLocked: () => {
+      try {
+        localStorage.setItem('auto_lock_active', '1')
+      } catch {
+        /* storage denied */
+      }
+      try {
+        sessionStorage.setItem('auto_lock_active', '1')
+      } catch {
+        /* storage denied */
+      }
+    },
+    clearLock: () => {
+      try {
+        localStorage.removeItem('auto_lock_active')
+      } catch {
+        /* storage denied */
+      }
+      try {
+        sessionStorage.removeItem('auto_lock_active')
+      } catch {
+        /* storage denied */
+      }
+    },
+    isLocked: () =>
+      localStorage.getItem('auto_lock_active') === '1' ||
+      sessionStorage.getItem('auto_lock_active') === '1',
   },
 }))
 
