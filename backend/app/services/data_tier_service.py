@@ -108,7 +108,7 @@ class DataTierService:
         Returns:
             统计数据
         """
-        stats = {
+        stats: Dict[str, Any] = {
             "total_records": 0,
             "by_tier": {
                 DataTier.HOT: {"count": 0, "oldest": None, "newest": None},
@@ -402,7 +402,7 @@ class DataTierService:
         Returns:
             存储摘要
         """
-        summary = {
+        summary: Dict[str, Any] = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "tiers": {
                 DataTier.HOT: {

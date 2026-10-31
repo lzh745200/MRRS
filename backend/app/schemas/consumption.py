@@ -7,7 +7,7 @@
 """
 
 from datetime import date
-from typing import Optional
+from typing import Optional, cast
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -48,7 +48,9 @@ class ConsumptionRecordCreate(BaseModel):
     @field_validator("category")
     @classmethod
     def validate_category(cls, value: str) -> str:
-        return _check_category(value)
+        # _check_category 同时服务 Update 模型（字段可为 None）；此处 value 必为 str，
+        # 非 None 分支只会返回原值或抛 ValueError，cast 只让静态类型跟上运行期事实。
+        return cast(str, _check_category(value))
 
     @field_validator("seller_type")
     @classmethod

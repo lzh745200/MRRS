@@ -2,7 +2,7 @@
 
 import logging
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -327,7 +327,7 @@ async def get_budget_summary(
     total_executed = sum(float(b.executed_amount or 0) for b in budgets)
 
     # 按科目汇总
-    by_category = {}
+    by_category: dict[str, dict[str, float]] = {}
     for b in budgets:
         cat = b.category or "其他"
         if cat not in by_category:
@@ -466,14 +466,17 @@ async def delete_transaction(
     if tx.budget_id:
         budget = db.query(FundBudget).filter(FundBudget.id == tx.budget_id).first()
         if budget:
-            budget.executed_amount = max(0, float(budget.executed_amount or 0) - float(tx.amount or 0))
+            # Numeric 列静态类型是 TypeVar 化的 _N | None，业务值一律 float；cast 只影响静态检查。
+            deducted = max(0, float(budget.executed_amount or 0) - float(tx.amount or 0))
+            budget.executed_amount = cast(Any, deducted)
 
     # 如果关联了 Fund，减回 Fund.used_amount
     if tx.fund_id:
         fund = db.query(Fund).filter(Fund.id == tx.fund_id).first()
         if fund:
-            fund.used_amount = max(0, float(fund.used_amount or 0) - float(tx.amount or 0))
-            fund.remaining_amount = float(fund.allocated_amount or 0) - float(fund.used_amount or 0)
+            refunded = max(0, float(fund.used_amount or 0) - float(tx.amount or 0))
+            fund.used_amount = cast(Any, refunded)
+            fund.remaining_amount = cast(Any, float(fund.allocated_amount or 0) - float(fund.used_amount or 0))
 
     db.delete(tx)
     safe_commit(db)
@@ -554,7 +557,7 @@ def _apply_budget_execution(db: Session, budget, amount: float) -> None:
         stmt = stmt.where(executed_col + amount <= budget_total + 1e-9)
 
     result = db.execute(stmt)
-    if result.rowcount == 0:
+    if cast(Any, result).rowcount == 0:
         projected = quantize_money(float(budget.executed_amount or 0) + amount)
         raise HTTPException(
             status_code=400,

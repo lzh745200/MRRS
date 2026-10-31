@@ -8,7 +8,7 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -426,7 +426,7 @@ async def get_category_tree(current_user=Depends(get_current_user), db: Session 
         )
 
         cat_map: Dict[int, Dict[str, Any]] = {
-            cat.id: {
+            cast(int, cat.id): {
                 "id": cat.id,
                 "name": cat.name,
                 "code": cat.code,
@@ -438,7 +438,7 @@ async def get_category_tree(current_user=Depends(get_current_user), db: Session 
 
         tree: List[Dict[str, Any]] = []
         for cat in categories:
-            node = cat_map[cat.id]
+            node = cat_map[cast(int, cat.id)]
             if cat.parent_id and cat.parent_id in cat_map:
                 cat_map[cat.parent_id]["children"].append(node)
             else:
@@ -522,6 +522,34 @@ async def delete_category(
 # ==================== 统计 API ====================
 
 
+def _accumulate_policy_stats(rows) -> tuple[Dict[str, int], Dict[str, int], int, int]:
+    """把「分类 x 级别」聚合行累加成军事/地方两组计数。
+
+    统计列以 count 为标签，而 SQLAlchemy 2.0 的 Row.count 是保留名字（返回 tuple.count
+    的提示访问器，不是列值）；历史实现直接读 stat.count，在库里有政策的真实环境下会
+    TypeError 导致该端点恒 500（单测用 MagicMock 喂 count 属性把问题掩盖了）。
+    这里改走 row._mapping 取列值。
+    """
+    military_levels: Dict[str, int] = {}
+    local_levels: Dict[str, int] = {}
+    military_total = 0
+    local_total = 0
+
+    for stat in rows:
+        cat = str(stat.category) if stat.category else ""
+        lvl = str(stat.level) if stat.level else "unknown"
+        count = int(stat._mapping["count"])
+
+        if cat == "military":
+            military_total += count
+            military_levels[lvl] = military_levels.get(lvl, 0) + count
+        else:
+            local_total += count
+            local_levels[lvl] = local_levels.get(lvl, 0) + count
+
+    return military_levels, local_levels, military_total, local_total
+
+
 @router.get("/statistics")
 async def get_policy_statistics(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取政策统计数据（前端 Category.vue 使用）
@@ -537,22 +565,7 @@ async def get_policy_statistics(current_user=Depends(get_current_user), db: Sess
         .all()
     )
 
-    military_levels: Dict[str, int] = {}
-    local_levels: Dict[str, int] = {}
-    military_total = 0
-    local_total = 0
-
-    for stat in stats:
-        cat = str(stat.category) if stat.category else ""
-        lvl = str(stat.level) if stat.level else "unknown"
-        count = int(stat.count)
-
-        if cat == "military":
-            military_total += count
-            military_levels[lvl] = military_levels.get(lvl, 0) + count
-        else:
-            local_total += count
-            local_levels[lvl] = local_levels.get(lvl, 0) + count
+    military_levels, local_levels, military_total, local_total = _accumulate_policy_stats(stats)
 
     return success_response(
         data={
@@ -939,7 +952,7 @@ async def export_policies_wps(
 async def get_policy_types(db: Session = Depends(get_db)):
     """获取政策类型选项 — 合并预定义类型与数据库中的实际分类"""
     # 预定义政策类型
-    types = [
+    types: List[Dict[str, Any]] = [
         {"value": "military", "label": "专项政策"},
         {"value": "local", "label": "地方政策"},
         {"value": "national", "label": "国家政策"},
@@ -953,7 +966,9 @@ async def get_policy_types(db: Session = Depends(get_db)):
     try:
         categories = db.query(PolicyCategory).filter(PolicyCategory.is_active == True).all()  # noqa: E712
         if categories:
-            db_types = [{"value": c.code or c.name, "label": c.name} for c in categories]
+            db_types: List[Dict[str, Any]] = [
+                {"value": c.code or c.name, "label": c.name} for c in categories
+            ]
             # 合并去重：数据库分类优先
             existing_codes = {t["value"] for t in types}
             for dt in db_types:
@@ -1453,7 +1468,7 @@ async def create_policy(  # noqa: C901
         except Exception:
             logger.warning("FTS 表初始化失败", exc_info=True)
         try:
-            sync_policy_to_fts(db, policy.id)
+            sync_policy_to_fts(db, cast(int, policy.id))
         except Exception:
             logger.warning("政策 FTS 索引同步失败（不影响主流程）", exc_info=True)
         # 审计日志
@@ -1539,7 +1554,7 @@ async def update_policy(
         except Exception:
             logger.warning("FTS 表初始化失败", exc_info=True)
         try:
-            sync_policy_to_fts(db, policy.id)
+            sync_policy_to_fts(db, cast(int, policy.id))
         except Exception:
             logger.warning("政策 FTS 索引同步失败（不影响主流程）", exc_info=True)
         # 审计日志

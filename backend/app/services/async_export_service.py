@@ -17,7 +17,7 @@ import os
 import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy.orm import Session
 
@@ -372,7 +372,8 @@ def _run_export_task(task_id: str) -> None:
 
         user = _load_user(db, task.user_id)
         params = task.query_params or {}
-        entity_type = _REPORT_TYPE_TO_ENTITY.get(task.export_type, task.export_type)
+        export_type = cast(str, task.export_type)
+        entity_type = _REPORT_TYPE_TO_ENTITY.get(export_type, export_type)
 
         if entity_type == "comprehensive":
             content = _build_comprehensive_workbook(db, user)
@@ -498,7 +499,7 @@ def purge_expired_exports(db: Session) -> Dict[str, int]:
         .all()
     )
     for task in candidates:
-        if _as_utc(task.expires_at) >= now:
+        if cast(datetime, _as_utc(task.expires_at)) >= now:
             continue
         if task.file_path:
             try:
@@ -637,7 +638,7 @@ class AsyncExportService:
             return None
         try:
             with open(task.file_path, "rb") as f:
-                return f.read(), task.file_name
+                return f.read(), cast(str, task.file_name)
         except FileNotFoundError:
             return None
 

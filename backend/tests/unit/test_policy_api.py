@@ -313,7 +313,9 @@ class TestPolicyAPI:
     def test_get_statistics(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
         row1 = MagicMock(); row1.category = "military"; row1.level = "national"; row1.count = 3
+        row1._mapping = {"count": 3}
         row2 = MagicMock(); row2.category = "local"; row2.level = "provincial"; row2.count = 2
+        row2._mapping = {"count": 2}
         mock_db.query.return_value.group_by.return_value.all.return_value = [row1, row2]
         resp = client.get("/api/v1/policies/statistics")
         assert resp.status_code == 200
@@ -925,3 +927,26 @@ class TestPolicyAPI:
              patch("app.core.cache.cache_manager.set", AsyncMock()):
             resp = client.get("/api/v1/policies?limit=5")
         assert resp.status_code == 200
+
+
+def test_accumulate_policy_stats_reads_real_row_mapping():
+    """回归：真实 SQLAlchemy Row 的 .count 是保留名（返回 tuple.count 提示访问器，不是列值），
+    必须从 _mapping 取列值；历史实现 int(stat.count) 在真库有政策时抛 TypeError 导致端点恒 500。
+    """
+    from sqlalchemy import create_engine, text
+
+    from app.api.v1.policy import _accumulate_policy_stats
+
+    engine = create_engine("sqlite://")
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT 'military' AS category, 'national' AS level, 3 AS count"
+                " UNION ALL SELECT 'local', 'provincial', 2"
+            )
+        ).all()
+    assert int(rows[0]._mapping["count"]) == 3
+    military_levels, local_levels, military_total, local_total = _accumulate_policy_stats(rows)
+    assert military_levels == {"national": 3}
+    assert local_levels == {"provincial": 2}
+    assert (military_total, local_total) == (3, 2)

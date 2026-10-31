@@ -106,7 +106,7 @@ def _get_item_or_404(db: Session, item_id: int, current_user, error_message: str
 
 
 def _write_log(
-    db: Session, action: str, entity_id: int, title: str, current_user, detail: str = ""
+    db: Session, action: str, entity_id: Optional[int], title: Optional[str], current_user, detail: str = ""
 ) -> None:
     write_work_log(
         db,

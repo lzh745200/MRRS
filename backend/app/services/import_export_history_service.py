@@ -6,7 +6,7 @@
 """
 import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,7 +84,7 @@ class ImportExportHistoryService:
         )
         self.db.add(record)
         try:
-            safe_commit(self.db)
+            safe_commit(cast(Session, self.db))
             self.db.refresh(record)
         except Exception:
             self.db.rollback()
@@ -252,7 +252,7 @@ class ImportExportHistoryService:
     ) -> List[ImportExportHistory]:
         """获取指定数据包的操作历史（同步）"""
         query = (
-            self.db.query(ImportExportHistory)
+            cast(Session, self.db).query(ImportExportHistory)
             .filter(ImportExportHistory.package_id == package_id)
             .order_by(desc(ImportExportHistory.created_at))
             .offset(skip)
@@ -271,14 +271,16 @@ class ImportExportHistoryService:
         if user_id:
             query = query.where(ImportExportHistory.user_id == user_id)
             count_q = count_q.where(ImportExportHistory.user_id == user_id)
-        total = (await self.db.execute(count_q)).scalar() or 0
+        db = cast(AsyncSession, self.db)
+        total = (await db.execute(count_q)).scalar() or 0
         query = query.offset((page - 1) * page_size).limit(page_size)
-        result = await self.db.execute(query)
+        result = await db.execute(query)
         return {"items": result.scalars().all(), "total": total, "page": page, "page_size": page_size}
 
     async def record(self, **kwargs) -> ImportExportHistory:
         record = ImportExportHistory(**kwargs)
-        self.db.add(record)
-        await self.db.commit()
-        await self.db.refresh(record)
+        db = cast(AsyncSession, self.db)
+        db.add(record)
+        await db.commit()
+        await db.refresh(record)
         return record

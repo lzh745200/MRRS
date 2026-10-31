@@ -4,7 +4,7 @@
 
 # security-audit: exempt work_log — 数据质量校验/清洗/去重均在请求内存态变换并回传，不落库
 
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -176,11 +176,12 @@ async def validate_rules(  # noqa: C901 - 规则引擎分支多属正常
         raise HTTPException(status_code=400, detail=f"不支持的模块: {request.entity_type}")
 
     model, label_field = model_map[request.entity_type]
-    query = db.query(model).filter(getattr(model, "is_active", True) == True)  # noqa: E712
+    is_active_col: Any = getattr(model, "is_active", True)
+    query = db.query(model).filter(is_active_col == True)  # noqa: E712
     records = scoped_filter(query, model, current_user, ).all()
 
     def _match(record, rule: ValidateRuleItem) -> bool:
-        value = getattr(record, rule.field, None)
+        value: Any = getattr(record, rule.field, None)
         op = rule.operator
         if op == "eq":
             return str(value) == str(rule.value)
@@ -190,12 +191,12 @@ async def validate_rules(  # noqa: C901 - 规则引擎分支多属正常
             return rule.value is not None and str(rule.value) in str(value or "")
         if op == "gt":
             try:
-                return float(value) > float(rule.value)
+                return float(value) > float(cast(Any, rule.value))
             except (TypeError, ValueError):
                 return False
         if op == "lt":
             try:
-                return float(value) < float(rule.value)
+                return float(value) < float(cast(Any, rule.value))
             except (TypeError, ValueError):
                 return False
         if op == "not_empty":

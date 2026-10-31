@@ -97,6 +97,25 @@
   `log()` 内部本就 `str()` 落库。全量 `mypy app` **340 → 306 条 / 101 → 97 个文件**。
   回归：审批 183 项 + 备份 240 项 + 双因子/审计日志 107 项全部通过，flake8 rc=0。
 
+- `backend/app/api/v1/{data_quality,policy,fund_budgets,donation,consumption}.py`、
+  `backend/app/api/v1/data/data/{data_quality,data_reports}.py`、
+  `backend/app/services/{data_tier_service,smart_conflict_resolver,async_export_service,import_export_history_service}.py`、
+  `backend/app/schemas/consumption.py` 类型收敛（本批 12 个文件 mypy 归零）：校验规则的比较值
+  `ValidateRuleItem.value` 是 `Optional[Any]`（`float(rule.value)` 报 `Any | None`，与同行的 `float(value)` 同列容易误判），
+  校验规则查询的 `is_active` 列、政策统计聚合行、组织主键（`can_access_organization` / `cast(int, report.source_org_id)`）、
+  资料包主键、经费预算的金额回填与 `rowcount` 一律显式 `cast`；数据分级统计、冲突合并的类型映射、
+  异步导出任务、导入导出历史的「首个赋值即定型」窄容器（`stats` / `summary` / `by_category` / `id_mapping`）
+  改为显式 `Dict[str, Any]` 一类宽注解，冲突合并的预取键先落地为 `prefetch_key` 并同时判 `key_attr is not None`
+  （只判前者时 `key_attr.in_(...)` 仍报 `Any | None` 无 `in_`）；异步导出任务过期时间与历史服务的
+  `Session | AsyncSession` 会话按调用面 `cast` 收窄。**顺带修一处真实缺陷**：`GET /api/v1/policies/statistics`
+  的聚合列标签是 `count`，而 **SQLAlchemy 2.0 的 `Row.count` 是保留名**（属性访问返回 `tuple.count` 提示访问器，
+  不是列值），历史实现 `int(stat.count)` 在库里有政策时必抛 `TypeError` → 该端点恒 500；单测用 MagicMock 喂
+  `count` 属性把问题掩盖了。现抽出 `_accumulate_policy_stats()` 改从 `row._mapping["count"]` 取值，并补一条用
+  真实 SQLite `Row` 的回归用例（`create_engine("sqlite://")` + `text(...)`）。
+  回归：消费帮扶/捐赠/经费预算/数据上报/数据校验/数据分级/冲突合并/异步导出/导入导出历史/政策
+  共 **46 个用例文件 824 项通过**（含新增回归 1 项），`flake8 --max-line-length=120 --max-complexity=16` rc=0；
+  全量 `mypy app` **306 → 242 条 / 97 → 85 个文件**。
+
 ### 验证
 
 - `verify_tiles.py` 支持 **MANIFEST 声明的稀疏层级**（`[5,6,7,8,13]` / `[5,6,7,8,14]`），

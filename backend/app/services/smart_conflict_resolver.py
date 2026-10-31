@@ -6,7 +6,7 @@ Smart Conflict Resolver
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import and_, inspect as sa_inspect
 from sqlalchemy.orm import Session
@@ -204,11 +204,12 @@ class SmartConflictResolver:
         # 列描述符具备 in_ 能力时才走预取（真实模型必然具备；探针/替身类
         # 退回逐条查询，语义不变）。
         use_prefetch = single_key is not None and hasattr(key_attr, "in_")
-        if use_prefetch:
+        prefetch_key = single_key if use_prefetch else None
+        if prefetch_key is not None and key_attr is not None:
             candidate_values = {
-                record.get(single_key)
+                record.get(prefetch_key)
                 for record in import_records
-                if record.get(single_key) is not None
+                if record.get(prefetch_key) is not None
             }
             if candidate_values:
                 prefetch_conditions = [key_attr.in_(candidate_values)]
@@ -217,7 +218,7 @@ class SmartConflictResolver:
                         getattr(model_class, _TENANT_COLUMN) == self.organization_id
                     )
                 for row in self.db.query(model_class).filter(and_(*prefetch_conditions)).all():
-                    prefetched.setdefault(getattr(row, single_key, None), row)
+                    prefetched.setdefault(getattr(row, prefetch_key, None), row)
 
         for import_record in import_records:
             # 构建业务键查询条件（仅使用code字段）
@@ -237,8 +238,8 @@ class SmartConflictResolver:
                 new_records.append(import_record)
                 continue
 
-            if use_prefetch and business_key.get(single_key) is not None:
-                local_record = prefetched.get(business_key[single_key])
+            if prefetch_key is not None and business_key.get(prefetch_key) is not None:
+                local_record = prefetched.get(business_key[prefetch_key])
             else:
                 local_record = self.db.query(model_class).filter(and_(*query_conditions)).first()
 
@@ -447,7 +448,7 @@ class SmartConflictResolver:
         new_record = model_class(**new_data)
         self.db.add(new_record)
         self.db.flush()
-        id_mapping.setdefault(data_type, {})[old_id] = new_record.id
+        id_mapping.setdefault(data_type, {})[cast(int, old_id)] = cast(int, new_record.id)
 
     def _get_code_field(self, data_type: str) -> Optional[str]:
         """获取数据类型的编码字段名"""
@@ -576,7 +577,7 @@ class SmartConflictResolver:
             新记录的ID映射
         """
         model_class = DATA_TYPE_MODELS[data_type]
-        type_id_mapping = {}
+        type_id_mapping: Dict[int, int] = {}
 
         for record in new_records:
             old_id = record.get("id")
@@ -590,7 +591,7 @@ class SmartConflictResolver:
             self.db.add(new_record)
             self.db.flush()
 
-            type_id_mapping[old_id] = new_record.id
+            type_id_mapping[cast(int, old_id)] = cast(int, new_record.id)
 
         return {data_type: type_id_mapping}
 

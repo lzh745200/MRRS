@@ -10,6 +10,7 @@
 import logging
 from collections import defaultdict
 from datetime import datetime
+from typing import Any, Dict, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
@@ -138,7 +139,9 @@ def _detect_income_anomalies(db: Session) -> list:
         by_village[vid].append((yr, float(pci or 0)))
 
     # 获取村名映射
-    village_names = dict(db.query(SupportedVillage.id, SupportedVillage.village_name).all())
+    village_names: Dict[Any, Any] = {
+        vid: name for vid, name in db.query(SupportedVillage.id, SupportedVillage.village_name).all()
+    }
 
     anomalies = []
     for vid, yearly in by_village.items():
@@ -206,7 +209,10 @@ async def run_full_check(
             col = getattr(model, col_name, None)
             if col is None:
                 continue
-            cnt = db.query(func.count(model.id)).filter((col == None) | (col == "")).scalar() or 0  # noqa: E711
+            id_col = getattr(model, "id")
+            cnt = (
+                db.query(func.count(id_col)).filter((col == None) | (col == "")).scalar() or 0  # noqa: E711
+            )
             if cnt > 0:
                 issues.append(
                     {
@@ -352,9 +358,12 @@ def _calc_filing_progress(db: Session) -> dict:
     expected_years = list(range(_DATA_START_YEAR, current_year + 1))
 
     # 各县村庄数量
-    county_counts = dict(
-        db.query(SupportedVillage.county, func.count(SupportedVillage.id)).group_by(SupportedVillage.county).all()
+    county_rows = (
+        db.query(SupportedVillage.county, func.count(SupportedVillage.id))
+        .group_by(SupportedVillage.county)
+        .all()
     )
+    county_counts: Dict[Any, Any] = dict(cast(Any, county_rows))
 
     # 各县×年份已填报数
     filled = (
@@ -368,7 +377,7 @@ def _calc_filing_progress(db: Session) -> dict:
         .all()
     )
 
-    filled_map = defaultdict(dict)
+    filled_map: Dict[Any, Dict[Any, Any]] = defaultdict(dict)
     for county, yr, cnt in filled:
         filled_map[county or "未知"][yr] = cnt
 

@@ -6,7 +6,7 @@ import io
 import json
 import os as _os
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -205,7 +205,7 @@ async def get_data_report(
     user_org_id = getattr(current_user, "org_id", None)
     if user_org_id not in [report.source_org_id, report.target_org_id]:
         # 检查是否是上级组织
-        if not permission_service.can_access_organization(current_user.id, report.source_org_id):
+        if not permission_service.can_access_organization(current_user.id, cast(int, report.source_org_id)):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权查看该上报")
 
     return DataReportResponse.model_validate(report)
@@ -375,7 +375,7 @@ async def approve_data_report(
     if package:
         try:
             import_result = await package_service.confirm_import(
-                package_id=package.id, confirmed_by=current_user.id, overwrite_existing=False
+                package_id=cast(int, package.id), confirmed_by=current_user.id, overwrite_existing=False
             )
         except Exception:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="导入数据包失败，请稍后重试或联系管理员")
@@ -418,7 +418,7 @@ async def get_report_package(
     # 检查权限
     user_org_id = get_user_org_id(current_user)
     if user_org_id not in [report.source_org_id, report.target_org_id]:
-        if not permission_service.can_access_organization(current_user.id, report.source_org_id):
+        if not permission_service.can_access_organization(current_user.id, cast(int, report.source_org_id)):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权查看该上报的数据包")
 
     # 获取数据包信息
@@ -444,7 +444,7 @@ async def preview_data_report(
     # 检查权限
     user_org_id = get_user_org_id(current_user)
     if user_org_id not in [report.source_org_id, report.target_org_id]:
-        if not permission_service.can_access_organization(current_user.id, report.source_org_id):
+        if not permission_service.can_access_organization(current_user.id, cast(int, report.source_org_id)):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权查看该上报")
 
     # 获取关联的数据包信息
@@ -473,7 +473,7 @@ async def preview_data_report(
             "record_count": package.record_count,
             # R28：JSON 列可能是历史双重编码字符串，必须归一为列表再出站
             "data_types": _normalize_data_types(package.data_types),
-            "status": package.status.value if hasattr(package.status, "value") else str(package.status),
+            "status": getattr(package.status, "value", None) or str(package.status),
         }
 
     return success_response(data=preview_data)
@@ -496,7 +496,7 @@ async def download_data_report(
     # 检查权限
     user_org_id = get_user_org_id(current_user)
     if user_org_id not in [report.source_org_id, report.target_org_id]:
-        if not permission_service.can_access_organization(current_user.id, report.source_org_id):
+        if not permission_service.can_access_organization(current_user.id, cast(int, report.source_org_id)):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权下载该上报")
 
     # 获取数据包文件
