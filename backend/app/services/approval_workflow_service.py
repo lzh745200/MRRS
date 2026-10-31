@@ -8,13 +8,14 @@ Requirements: 3.1, 3.2, 3.4 - Multi-level approval workflow
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.transaction import safe_commit
+from app.utils.time_utils import to_utc_naive
 from app.models.approval import (
     ApprovalAction,
     ApprovalNode,
@@ -429,14 +430,20 @@ class ApprovalWorkflowService:
             query = query.filter(ApprovalTask.submitter_id == submitter_id)
         if date_from:
             try:
-                start_dt = datetime.fromisoformat(date_from)
-                query = query.filter(ApprovalTask.created_at >= start_dt)
+                start_local = datetime.fromisoformat(date_from)
+                query = query.filter(
+                    ApprovalTask.created_at >= to_utc_naive(start_local)
+                )
             except ValueError:
                 logger.warning("忽略非法 date_from: %s", date_from)
         if date_to:
             try:
-                end_dt = datetime.fromisoformat(date_to)
-                query = query.filter(ApprovalTask.created_at <= end_dt)
+                end_local = datetime.fromisoformat(date_to)
+                if end_local.time() == time.min:
+                    end_local = datetime.combine(end_local.date(), time.max)
+                query = query.filter(
+                    ApprovalTask.created_at <= to_utc_naive(end_local)
+                )
             except ValueError:
                 logger.warning("忽略非法 date_to: %s", date_to)
 
@@ -979,3 +986,26 @@ def submit_entity_change_approval(
             exc_info=True,
         )
         return None
+
+
+def history_item(record: Any) -> Dict[str, Any]:
+    """审批历史一行（GET /approval/history 的行序列化）。
+
+    legacy Column 下关系属性被静态检查看成 Mapped[Any]，这里集中取值，
+    避免路由层到处写 `record.approver.username if record.approver else None`。
+    """
+    approver: Any = record.approver
+    task: Any = record.task
+    return {
+        "id": record.id,
+        "task_id": record.task_id,
+        "action": record.action,
+        "opinion": record.opinion,
+        "level": record.level,
+        "approver": approver.username if approver else None,
+        "title": task.title if task else None,
+        "entity_type": task.entity_type if task else None,
+        "entity_id": task.entity_id if task else None,
+        "status": task.status if task else None,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
+    }

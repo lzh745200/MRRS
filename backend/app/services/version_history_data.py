@@ -3831,13 +3831,13 @@ VERSION_HISTORY_DATA = [
                 "解收敛： 待办/配对/权限包/机器码响应构造统一走显式 cast…"
             ),
             (
-                "endpoint_500 门禁硬化（隔离库 + 双登录态）：backend/scripts/check_endpoint_500.py 原先只做匿名扫描、且复用本机开发库。实测匿名态 29"
-                "3 个 GET 里有 277 个死在 401（鉴权中间件直接短路，处理函数体一行没跑），门禁深度近乎为零；复用开发库还让结果随本机脏数据漂移、CI 跑不了。"
+                "认证主体取值收缩：backend/app/api/v1/deps.py 新增 authenticated_user_id() / authenticated_username()（登录态已"
+                "知的 ORM legacy Column 让静态检查把 User.id 看成 int | None；"
             ),
             (
-                "13acd413 把组织 DELETE 从软删改为物理删除（OrganizationService.delete_organization三重守卫后 db.delete + safe_co"
-                "mmit，响应 type=hard_delete），但backend/tests/unit/test_org_write_scope_r27.py 的两个用例仍断言旧软删语义is_acti"
-                "ve is False…"
+                "backend/app/api/v1/data/data/data_packages.py 类型注解收敛（mypy 32 → 0）：资料包权限校验 / 历史记录的 package.org_"
+                "id、_safe_write_work_log 的包名与 DataPackageResponse 字段均显式 cast；导入校验结果 result.validation 取一次局部引用（避"
+                "免 Optional 属性报错，运行期不变）；"
             ),
         ],
     },

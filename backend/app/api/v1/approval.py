@@ -37,7 +37,7 @@ from app.core.security import get_current_user
 from app.api.v1.deps import authenticated_user_id, authenticated_username
 from app.models.message import Message
 from app.models.user import User
-from app.services.approval_workflow_service import ApprovalWorkflowService
+from app.services.approval_workflow_service import ApprovalWorkflowService, history_item
 from app.core.transaction import safe_commit
 from app.services.work_log_service import write_work_log
 
@@ -1164,28 +1164,6 @@ def remind_task(
     return {"code": 200, "success": True, "message": "提醒已发送"}
 
 
-def _history_item(record) -> dict:
-    """审批历史一行。
-
-    legacy Column 下关系属性被静态检查看成 Mapped[Any]，这里集中取值。
-    """
-    approver: Any = record.approver
-    task: Any = record.task
-    return {
-        "id": record.id,
-        "task_id": record.task_id,
-        "action": record.action,
-        "opinion": record.opinion,
-        "level": record.level,
-        "approver": approver.username if approver else None,
-        "title": task.title if task else None,
-        "entity_type": task.entity_type if task else None,
-        "entity_id": task.entity_id if task else None,
-        "status": task.status if task else None,
-        "created_at": record.created_at.isoformat() if record.created_at else None,
-    }
-
-
 @router.get("/history", summary="审批历史")
 def get_approval_history(
     entity_type: Optional[str] = Query(None, description="实体类型"),
@@ -1220,5 +1198,5 @@ def get_approval_history(
     return {
         "code": 200,
         "success": True,
-        "data": [_history_item(r) for r in records],
+        "data": [history_item(r) for r in records],
     }
