@@ -39,12 +39,16 @@ RUN python3 -m venv backend/.venv && \
     backend/.venv/bin/pip install -r backend/requirements.txt pyinstaller
 
 COPY backend/ backend/
+COPY scripts/verify_frozen_modules.py /tmp/verify_frozen_modules.py
 COPY resources/ resources/
 COPY .env.example ./
 
 RUN cd backend && .venv/bin/pyinstaller assistance-backend.spec --clean --noconfirm && \
     mkdir -p /project/dist/backend/linux && \
     cp backend/dist/assistance-backend /project/dist/backend/linux/assistance-backend
+
+# 冻结产物模块完整性门禁（2026-10-31）：防止 spec 漏收模块导致装机后启动即崩
+RUN backend/.venv/bin/python /tmp/verify_frozen_modules.py --backend-dir backend/dist/assistance-backend
 
 # 复制 Electron 和构建资源
 COPY electron/ electron/

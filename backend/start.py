@@ -590,5 +590,54 @@ def _auto_open_browser(host: str, port: int):
     threading.Thread(target=_open, daemon=True).start()
 
 
+def _run_import_selfcheck() -> int:
+    """冻结产物导入自检（构建期使用，不启动 HTTP 服务）。
+
+    背景（2026-10-31 v1.18.29 ARM64 事故）：standalone spec 把标准库 difflib
+    误列进 excludes，安装包能装但后端一启动就 ModuleNotFoundError。PyInstaller
+    构建成功 ≠ 产物可运行，必须在打包后真正加载一次完整路由链。
+
+    只 import，不 bind 端口、不初始化调度器；任何缺失模块立即非零退出，
+    让 CI 在出包前失败。
+    """
+    import importlib
+    import traceback
+
+    result_path = os.environ.get("BACKEND_IMPORT_CHECK_RESULT", "").strip()
+
+    def _write_result(text: str) -> None:
+        # windowed 打包（console=False）下 stdout 可能是 devnull/无控制台；
+        # 构建脚本以结果文件为准，避免"进程退出码被 GUI 启动方式吞掉"。
+        if not result_path:
+            return
+        try:
+            Path(result_path).write_text(text, encoding="utf-8")
+        except OSError:
+            pass
+
+    modules = [
+        "app.main",
+        "app.api.v1",
+        "app.api.v1.data_quality",
+        "app.services.data_cleaning_service",
+    ]
+    try:
+        for name in modules:
+            importlib.import_module(name)
+            print(f"[IMPORT_CHECK] OK: {name}", flush=True)
+    except BaseException:
+        detail = traceback.format_exc()
+        print(detail, flush=True)
+        _write_result("FAIL\n" + detail)
+        return 1
+    print("IMPORT_CHECK_OK", flush=True)
+    _write_result("OK")
+    return 0
+
+
 if __name__ == "__main__":
+    # 构建流水线用 `BACKEND_IMPORT_CHECK=1` 对冻结二进制做启动前自检；
+    # 普通运行不受影响。
+    if os.environ.get("BACKEND_IMPORT_CHECK") == "1":
+        raise SystemExit(_run_import_selfcheck())
     main()

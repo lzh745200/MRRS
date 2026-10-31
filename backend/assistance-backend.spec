@@ -131,6 +131,9 @@ hiddenimports = [
     'pyotp',
     'qrcode.image.svg',
 
+    # 数据清洗服务顶层依赖（标准库；显式声明防 specs 漂移）
+    'difflib',
+
     # 工具库
     'python_multipart',
     'dotenv',

@@ -179,6 +179,7 @@ RUN python /tmp/ocr_smoke_arm64.py --require-headless > /tmp/ocr-smoke.log 2>&1;
 
 # 复制后端源码
 COPY backend/ .
+COPY scripts/verify_frozen_modules.py /tmp/verify_frozen_modules.py
 
 # 诊断：确认关键文件存在（避免 PyInstaller 因找不到文件而失败）
 RUN echo "=== 诊断 alembic 目录 ===" && \
@@ -206,6 +207,12 @@ RUN test -d dist/assistance-management-backend || (echo "ERROR: PyInstaller 打�
     (test -f dist/assistance-management-backend/alembic/script.py.mako && echo "OK: mako 模板已打包" || echo "WARN: mako 模板未找到") && \
     (test -f dist/assistance-management-backend/alembic.ini && echo "OK: alembic.ini 已打包" || echo "WARN: alembic.ini 未找到") && \
     echo "后端打包成功"
+
+# 冻结产物模块完整性门禁（2026-10-31）：standalone spec 曾把 difflib 放入
+# excludes，安装包可安装但后端启动即 ModuleNotFoundError。直接读 PYZ 模块表，
+# 不依赖运行 windowed 产物，构建期即可拦截。
+RUN echo "=== 冻结产物模块完整性检查 ===" && \
+    python /tmp/verify_frozen_modules.py --backend-dir dist/assistance-management-backend --app-source app
 
 # 冻结产物 OCR 载荷断言（E 区 · v1.16.0）：
 # spec 里的 collect_data_files('rapidocr_onnxruntime') / collect_dynamic_libs('onnxruntime')

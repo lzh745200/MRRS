@@ -66,6 +66,7 @@ RUN pip install --retries 5 --timeout 180 \
 
 # 复制后端源码
 COPY backend/ .
+COPY scripts/verify_frozen_modules.py /tmp/verify_frozen_modules.py
 
 # 验证关键文件
 RUN test -f alembic.ini && test -f start.py && test -d app && test -d alembic && \
@@ -84,6 +85,10 @@ RUN test -d dist/assistance-backend && \
     ls -lh dist/assistance-backend/assistance-backend && \
     du -sh dist/assistance-backend/_internal && \
     file dist/assistance-backend/assistance-backend
+
+# 冻结产物模块完整性门禁（2026-10-31）：防止 spec 漏收模块导致装机后启动即崩
+RUN echo "=== 冻结产物模块完整性检查 ===" && \
+    python /tmp/verify_frozen_modules.py --backend-dir dist/assistance-backend --app-source app
 
 # GLIBC 兼容性验证（引导器 exe 直接链接 libc，代表性最高）
 RUN echo "=== GLIBC 兼容性验证 ===" && \

@@ -293,12 +293,19 @@ jobs:
           $internal = Get-ChildItem backend/dist/assistance-backend/_internal -Recurse -File | Measure-Object -Property Length -Sum
           Write-Host ("_internal: {0} files, {1}MB" -f $internal.Count, [math]::Round($internal.Sum / 1MB, 1))
 
-      # 8a. 打包卫生门禁：产物不得包含测试文件/测试目录/测试依赖（2026-09-12）
+      # 8a. 冻结产物模块完整性门禁（2026-10-31）：PyInstaller 成功不等于产物可运行。
+      #     直接读 onedir 的 CArchive/PYZ 模块表，捕获 spec excludes 漏收
+      #     （v1.18.29 ARM64 即因排除 difflib 导致装后启动即崩）。
+      - name: Verify frozen backend modules
+        shell: bash
+        run: python scripts/verify_frozen_modules.py --backend-dir backend/dist/assistance-backend
+
+      # 8b. 打包卫生门禁：产物不得包含测试文件/测试目录/测试依赖（2026-09-12）
       - name: Verify no test files in package
         shell: bash
         run: python scripts/verify_package_no_tests.py --backend-dir backend/dist/assistance-backend --frontend-dir frontend/dist
 
-      # 8b. 构建指纹门禁（H12，2026-10-14）：onedir 产物必须包含 CI 生成的
+      # 8c. 构建指纹门禁（H12，2026-10-14）：onedir 产物必须包含 CI 生成的
       #     app/core/_build_info.json（builder=ci），否则冻结后端 /health/full
       #     永远上报 dev 指纹，分发溯源失效。脚本输出全 ASCII（en-US 运行器
       #     cp1252 stdout 兜底，见 job 级 PYTHONUTF8 注释）。

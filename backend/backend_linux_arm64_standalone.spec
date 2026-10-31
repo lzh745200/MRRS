@@ -84,7 +84,8 @@ hiddenimports = [
     'diskcache',
 
     # ── 数据处理 ──
-    'pandas', 'numpy', 'openpyxl', 'xlsxwriter', 'xlrd',
+    # difflib 被 data_cleaning_service 顶层导入；显式列入防 excludes 回归
+    'difflib', 'pandas', 'numpy', 'openpyxl', 'xlsxwriter', 'xlrd',
 
     # ── 文档生成 ──
     'reportlab', 'docx', 'pptx', 'mammoth',
@@ -182,9 +183,9 @@ a = Analysis(
         # Windows 专用
         'pywin32_ctypes', 'win32api', 'win32com',
 
-        # 其他不需要的标准库
-        'curses', 'distutils', 'setuptools',
-        'xmlrpc', 'pydoc', 'difflib', 'ftplib',
+        # 标准库不得排除：difflib 被 data_cleaning_service 顶层导入，
+        # 2026-10-31 ARM64 安装包即因排除 difflib 启动即崩（v1.18.29 事故）。
+        # curses/ftplib 等标准库体积很小，统一保留，避免再次漏收。
     ],
     runtime_hooks=[],
     noarchive=False,
