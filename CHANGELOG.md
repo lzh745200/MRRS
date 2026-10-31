@@ -1,4 +1,32 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+### Added（外键索引棘轮门禁 —— 数据库层巡检）
+
+**巡检发现**：SQLite（及多数库）**不会为外键列自动建索引**。缺索引时 `WHERE fk = ?`、
+`JOIN ... ON parent.id = child.fk`、以及 `ON DELETE CASCADE/SET NULL` 的级联删除都会**全表扫描**。
+
+实测（纯 SQLAlchemy metadata，不建库）：**44 处外键列未被「索引首列」覆盖，分布在 31 张表**。
+
+**为什么没有直接补索引**：把 44 处按「代码里的查询频次」排序后发现，
+真正被查询的只有约 13 处（`user_id` 76 次、`project_id` 66、`school_id` 30、`organization_id` 30、
+`village_id` 21 + 14 次 join、`fund_id` 17、`created_by` 12、`role_id` 12、`package_id` 8 …），
+其余（`reviewed_by`/`imported_by`/`uploaded_by`/`resolved_by`/`evaluated_by`/`changed_by` 等）
+在代码里**零查询**，属审计字段。
+
+给零查询列加索引只增加写开销；而**没有慢查询基线**就动 schema 属于猜测性变更，
+还会与并行开发中的迁移冲突。因此本项**不做 schema 变更**，改为棘轮门禁。
+
+**新增门禁 `scripts/check_fk_indexes.py`**：对每张表每个外键列，检查是否存在**以该列为首列**的
+索引/主键/唯一约束（首列语义关键：复合索引 `(a, b)` 服务不了 `WHERE b = ?`）。
+基线登记 44 项**只许减少**，新增外键未加索引即红。
+
+**单测** `test_fk_indexes_gate.py`（9 例，含负向）：无索引外键报出、有索引不报、
+**复合索引非首位不覆盖**、唯一约束覆盖、无外键不报、基线外新增必失败、基线内通过、
+`--json` 机器可读、真实仓库基线与实测一致。
+CI：`pr-checks.yml` static-analysis 增加 `FK index ratchet` 步骤。
+
+> 后续若确有性能需求：先取慢查询基线，再针对高频列的**具体表**补索引迁移，
+> 并同步 `--update` 收紧本门禁基线。
+
 ### Added（前端 API 使用率棘轮门禁 —— 全量巡检发现「覆盖率虚高」）
 
 **巡检发现**：`frontend/src/api/*.ts` 里 303 个具名导出函数中，186 个被 `src/` 直接引用、
