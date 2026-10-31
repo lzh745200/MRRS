@@ -19,6 +19,12 @@
    anon（未登录，覆盖越权路径的降级）+ auth（管理员令牌，真正进入处理函数）。
    auth 态下额外把 401 视为违规：令牌有效却被拒说明鉴权链路本身坏了。
 
+③ 带路径参数的 GET（同日追加）：/api/v1/xxx/{id} 这类端点原先完全没扫 —— 只扫无参路径
+   等于放掉近三分之一路由。现在按参数名代入样例值（*_id/id → 1，年份类 → 2025，
+   其它 → 1）再扫一遍，并额外允许 400：样例值不是合法枚举值时，参数校验主动拒绝
+   属正常业务响应，不是服务端错误。通配 catch-all 路由（{full_path:path}）不代入，
+   免得把 SPA 兜底当 API 探测。
+
 用法:
     python backend/scripts/check_endpoint_500.py               # 隔离库 + 两种登录态全扫
     python backend/scripts/check_endpoint_500.py --update      # 人工确认后写回已知豁免（慎用）
@@ -32,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import sqlite3
@@ -63,20 +70,41 @@ ALLOWED_STATUSES = {200, 204, 301, 302, 304, 307, 308, 401, 403, 404, 405, 422, 
 MODE_ANON = "anon"
 MODE_AUTH = "auth"
 
+SAMPLE_ID = "1"
+SAMPLE_YEAR = "2025"
+YEAR_PARAMS = {"year", "annual", "annual_year"}
 
-def classify(status: int, mode: str) -> str | None:
+
+def sample_value(param: str) -> str:
+    """给路径参数挑一个样例值（只求进入处理函数，不求语义正确）。"""
+    name = param.split(":")[0].strip().lower()
+    if name in YEAR_PARAMS:
+        return SAMPLE_YEAR
+    return SAMPLE_ID
+
+
+def expand_path(path: str) -> str:
+    """把 /api/v1/foo/{item_id} 展开成可请求的具体路径；catch-all 原样保留。"""
+    return re.sub(r"\{([^}]+)\}", lambda m: sample_value(m.group(1)), path)
+
+
+def classify(status: int, mode: str, allow_bad_request: bool = False) -> str | None:
     """判定一次探测是否违规；返回违规说明，None 表示合法。
 
     - 连接失败：两种登录态都算违规；
     - auth 态下的 401：令牌有效却被拒 → 鉴权链路坏了，算违规；
       匿名态的 401 是正常的越权拦截，不算；
     - 其余不在 ALLOWED_STATUSES 里的状态（含 500/502 等 5xx）都算违规。
+    - allow_bad_request=True（带路径参数的扫描）：400 放行 —— 样例值不是合法枚举值时，
+      参数校验的主动拒绝属正常业务响应。
       注意 503 在白名单内：它是维护窗口中间件对写请求的合法降级响应，不是服务端错误。
     """
     if status < 0:
         return "连接失败"
     if mode == MODE_AUTH and status == 401:
         return "带管理员令牌仍返回 401"
+    if allow_bad_request and status == 400:
+        return None
     if status in ALLOWED_STATUSES:
         return None
     return f"HTTP {status}"
@@ -156,8 +184,30 @@ def collect_get_paths() -> list[str]:
     return sorted(set(paths))
 
 
+def collect_expanded_paths() -> list[str]:
+    """带路径参数的 GET：代入样例值后的具体路径（catch-all 路由不代入）。"""
+    if str(BACKEND) not in sys.path:
+        sys.path.insert(0, str(BACKEND))
+    from app.main import app as fastapi_app
+
+    expanded: list[str] = []
+    for route in getattr(fastapi_app, "routes", []):
+        methods = getattr(route, "methods", None) or set()
+        route_path = getattr(route, "path", None)
+        if "GET" not in methods or not route_path or "{" not in route_path:
+            continue
+        if ":path}" in route_path:  # SPA catch-all，不是 API
+            continue
+        expanded.append(expand_path(route_path))
+    return sorted(set(expanded))
+
+
 def probe_all(
-    base_url: str, paths: list[str], mode: str, token: str | None = None
+    base_url: str,
+    paths: list[str],
+    mode: str,
+    token: str | None = None,
+    allow_bad_request: bool = False,
 ) -> list[tuple[str, int, str]]:
     """逐个 GET 探测，返回违规三元组 (path, status, mode)。"""
     violations: list[tuple[str, int, str]] = []
@@ -166,7 +216,7 @@ def probe_all(
             status, _ = http_get(base_url + probe_path, token=token)
         except RuntimeError as exc:
             raise RuntimeError(f"{probe_path}: {exc}") from exc
-        if classify(status, mode):
+        if classify(status, mode, allow_bad_request=allow_bad_request):
             violations.append((probe_path, status, mode))
     return violations
 
@@ -176,6 +226,20 @@ def _scratch_dir() -> Path:
     base = ROOT / ".scratch"
     base.mkdir(parents=True, exist_ok=True)
     return Path(tempfile.mkdtemp(prefix="endpoint500-", dir=str(base)))
+
+
+def cleanup_scratch(scratch: Path, attempts: int = 5, delay_s: float = 0.5) -> bool:
+    """删掉一次性目录；Windows 上子进程刚退出时句柄可能还没释放，重试几次。
+
+    ignore_errors 的 rmtree 会静默留下半删目录（实测出现过），所以这里显式重试 +
+    兜底返回 False，由调用方打印残留路径给排查者。
+    """
+    for i in range(attempts):
+        shutil.rmtree(scratch, ignore_errors=True)
+        if not scratch.exists():
+            return True
+        time.sleep(delay_s * (i + 1))
+    return not scratch.exists()
 
 
 def isolated_env(scratch: Path) -> dict[str, str]:
@@ -299,10 +363,19 @@ def main(argv: list[str] | None = None) -> int:
             if not paths:
                 print("[FAIL] 未解析到任何 GET 端点", file=sys.stderr)
                 return 1
+            param_paths = collect_expanded_paths()
             violations = probe_all(base, paths, MODE_ANON)
+            violations.extend(
+                probe_all(base, param_paths, MODE_ANON, allow_bad_request=True)
+            )
             if not args.skip_auth:
                 token = grant_admin_token(base, database_file(env))
                 violations.extend(probe_all(base, paths, MODE_AUTH, token=token))
+                violations.extend(
+                    probe_all(
+                        base, param_paths, MODE_AUTH, token=token, allow_bad_request=True
+                    )
+                )
                 auth_checked = True
         except RuntimeError as exc:
             print(f"[FAIL] {exc}", file=sys.stderr)
@@ -338,9 +411,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         modes = "anon+auth" if auth_checked else "anon"
         sweeps = 2 if auth_checked else 1
+        total_routes = len(paths) + len(param_paths)
         print(
             f"[gate:endpoint_500] OK (isolation DB, modes={modes}, "
-            f"probed {len(paths)} GET endpoints x {sweeps}, exemptions {len(excused)})"
+            f"probed {total_routes} GET endpoints ({len(paths)} literal + "
+            f"{len(param_paths)} with path params) x {sweeps}, "
+            f"exemptions {len(excused)})"
         )
         return 0
     finally:
@@ -351,7 +427,8 @@ def main(argv: list[str] | None = None) -> int:
             except subprocess.TimeoutExpired:
                 proc.kill()
         if not keep:
-            shutil.rmtree(scratch, ignore_errors=True)
+            if not cleanup_scratch(scratch):
+                print(f"[warn] 临时目录未能删除: {scratch}", file=sys.stderr)
 
 
 if __name__ == "__main__":

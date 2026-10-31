@@ -112,3 +112,47 @@ def test_collect_get_paths_skips_parametrized_routes():
     assert "/health" in paths
     assert paths == sorted(set(paths))
     assert not [p for p in paths if "{" in p]
+
+
+def test_expand_path_substitutes_sample_values():
+    assert gate.expand_path("/api/v1/projects/{project_id}") == "/api/v1/projects/1"
+    assert gate.expand_path("/api/v1/stats/year/{year}") == "/api/v1/stats/year/2025"
+    assert gate.expand_path("/api/v1/x/{annual_year}/detail") == "/api/v1/x/2025/detail"
+    assert gate.expand_path("/api/v1/plain") == "/api/v1/plain"
+
+
+def test_collect_expanded_paths_skips_spa_catch_all():
+    """路径参数扫描必须代入样例值，且不把 SPA catch-all 当 API。"""
+    expanded = gate.collect_expanded_paths()
+    assert expanded, "带路径参数的 GET 应当非空"
+    assert expanded == sorted(set(expanded))
+    assert not [p for p in expanded if "{" in p]
+    assert not [p for p in expanded if "missing.txt" in p]
+
+
+def test_classify_allows_400_only_for_path_param_sweep():
+    """样例值不是合法枚举值时，400 是参数校验的主动拒绝，只在带参扫描里放行。"""
+    assert gate.classify(400, gate.MODE_AUTH, allow_bad_request=True) is None
+    assert gate.classify(400, gate.MODE_ANON, allow_bad_request=True) is None
+    assert gate.classify(400, gate.MODE_AUTH) == "HTTP 400"
+    # 放行 400 不能顺手放行 5xx
+    assert gate.classify(500, gate.MODE_AUTH, allow_bad_request=True) == "HTTP 500"
+
+
+def test_cleanup_scratch_removes_the_throwaway_dir(tmp_path):
+    """一次性库目录必须真被删掉，不能静默留残骸（Windows 句柄释放慢，故重试）。"""
+    scratch = tmp_path / "endpoint500-clean"
+    (scratch / "data").mkdir(parents=True)
+    (scratch / "data" / "endpoint500.db").write_text("x", encoding="utf-8")
+    assert gate.cleanup_scratch(scratch, attempts=3, delay_s=0) is True
+    assert not scratch.exists()
+
+
+def test_probe_all_allow_bad_request_flag(monkeypatch):
+    _patch_http(monkeypatch, {"/tier/1": 400, "/bad": 500})
+    assert gate.probe_all(
+        "http://x", ["/tier/1"], gate.MODE_ANON, allow_bad_request=True
+    ) == []
+    assert gate.probe_all("http://x", ["/bad"], gate.MODE_ANON, allow_bad_request=True) == [
+        ("/bad", 500, "anon")
+    ]

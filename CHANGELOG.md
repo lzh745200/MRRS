@@ -56,14 +56,15 @@
   现改为：① `.scratch/endpoint500-*` 一次性库（`alembic upgrade head` 建 schema，结束 `rmtree`），
   同一 commit 在任何机器结果一致；② 扫两遍 —— 匿名（覆盖越权降级）+ 管理员令牌（真正进入处理函数），
   `auth` 态下 **401 也算违规**（令牌有效却被拒 = 鉴权链路坏了）；③ 豁免清单键控从 `(path,status)`
-  升级为 `(mode,path,status)`，历史条目缺 `mode` 按匿名态解释；④ 新增 `--skip-auth` / `--keep-server`。
+  升级为 `(mode,path,status)`，历史条目缺 `mode` 按匿名态解释；④ 新增 `--skip-auth` / `--keep-server`；⑤ **带路径参数的 GET 也纳入扫描** —— `/api/v1/xxx/{id}` 这类共 **138 条**路由原先完全空白：按参数名代入样例值（`*_id`/`id` → 1、年份类 → 2025）补扫，并额外允许 **400**（样例值不是合法枚举值时，参数校验主动拒绝属正常业务响应），通配 catch-all（`{full_path:path}`）不代入，免得把 SPA 兜底当 API；⑥ 一次性目录删除改为**重试 + 残留告警** —— Windows 上子进程刚退出时句柄未释放，`shutil.rmtree(ignore_errors=True)` 曾静默留下半删目录。
   维护窗口的 503 仍在白名单（它是写请求的合法降级响应，不是服务端错误）。
 
 ### 验证
 
-- 门禁实跑：`modes=anon+auth, probed 293 GET endpoints x 2, exemptions 0` → **0 处违规**，进程正常退出并清理临时库。
-- 判定语义回归：`backend/tests/unit/test_endpoint_500_gate.py` **12 项通过**
-  （5xx 双态判红、匿名 401 放行/带令牌 401 必红、503 白名单、三元组豁免不跨态顶替、隔离库绝对 URL）。
+- 门禁实跑：`modes=anon+auth, probed 431 GET endpoints (293 literal + 138 with path params) x 2, exemptions 0` → **0 处违规**（862 次真实探测），进程正常退出且 `.scratch/endpoint500-*` 残留计数归 0。
+- 判定语义回归：`backend/tests/unit/test_endpoint_500_gate.py` **17 项通过**
+  （5xx 双态判红、匿名 401 放行/带令牌 401 必红、503 白名单、三元组豁免不跨态顶替、隔离库绝对 URL；
+  新增：路径参数代入样例值、400 仅在带参扫描放行且不影响 5xx 判定、catch-all 不代入、清理重试成功）。
 
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
 ### Fixed（CI 两处红 —— 异常直出 + 列表解包）
