@@ -304,6 +304,13 @@
   → `GET /data-reports/received` 能看到该条 → `POST /{id}/review` 审批通过（`approved`）→ 详情回读
   → 切回下级。两个端点契约记在门禁里：`/data-reports` 的创建/提交/审批同样是 `response_model` 直出
   （无 `{code,data}` 信封，用 `payload_of` 取状态），只有 `received` 是 `ok_list` 信封。
+- **新增 `crud_smoke` 「备份恢复」场景（用户可见主链路最后一块补上）**：此前门禁覆盖了登录/设置/
+  增删改查/上传下载/导出/数据包往返/上报接收/备份，唯独「恢复」没验 —— 恢复会进维护窗口、覆盖数据库文件
+  并重建连接池，单测只能打桩。现场景：建标记村 → 创建备份 → 改名并回读确认 → `POST /api/v1/system/backup/restore`
+  （真实恢复；维护窗口的 `wait_for_idle` 会排除本请求，不会自己等自己）→ **恢复后进程不重启，直接 GET 详情
+  必须读回改名前的名字** → `GET /auth/me` 仍可用（证明 `engine.dispose()` 之后新连接指向被替换的库文件）
+  → 清理。首跑还证实一个容易误判的口径：恢复把整库回滚到备份时点，**这个备份自己的 DB 记录也随库消失**，
+  所以收尾 `DELETE` 备份返回 404 属预期（文件仍在隔离目录、随 scratch 一起删除），门禁显式记录该分支而非判红。
 - **新增 `write_500` 门禁（写端点 5xx 巡检）**：`endpoint_500` 只扫 GET，而全站 845 个 `/api` 端点里
   有 **417 个写端点**（POST 300 / DELETE 62 / PUT 53 / PATCH 2）——占一半还多，此前零覆盖。
   写端点最容易 500 的从来不是正常链路（`crud_smoke` 只覆盖主流程），而是「脏输入 + 不存在的路径参数」：
@@ -327,16 +334,16 @@
 - 判定语义回归：`backend/tests/unit/test_endpoint_500_gate.py` **17 项通过**
   （5xx 双态判红、匿名 401 放行/带令牌 401 必红、503 白名单、三元组豁免不跨态顶替、隔离库绝对 URL；
   新增：路径参数代入样例值、400 仅在带参扫描放行且不影响 5xx 判定、catch-all 不代入、清理重试成功）。
-- **`crud_smoke` 门禁实跑通过**：`[gate:crud_smoke] OK (isolation DB, modes=admin, 40 steps)` ——
+- **`crud_smoke` 门禁实跑通过**：`[gate:crud_smoke] OK (isolation DB, modes=admin, 48 steps)` ——
   登录 / CSRF / 两级组织创建与管理员绑定 / 设置保存 / 三类增删改查 / 上传下载（字节一致）/ 报表导出
   （xlsx `PK` 魔数与体积）/ **数据包导出 → 下载 → 导入 → 确认闭环**（`imported={'villages': 1}
   skipped={'villages': 1}`）/ **上报创建 → 提交 → 上级接收列表 → 审批通过 → 详情回读** / 备份
-  （创建 → 列表 → `database_verified` → 删除）/ 登出令牌失效，**40 步全绿**；临时目录退出即删。
-- 门禁自测：`backend/tests/unit/test_crud_smoke_gate.py` **27 项通过**（信封解包三形态、状态断言文案、
+  （创建 → 列表 → `database_verified` → 删除）/ **备份恢复**（改名 → 从备份恢复 → 回读原名、恢复后会话仍可用）/ 登出令牌失效，**48 步全绿**；临时目录退出即删。
+- 门禁自测：`backend/tests/unit/test_crud_smoke_gate.py` **30 项通过**（信封解包三形态、状态断言文案、
   CSRF 头与 Cookie 绑定、multipart 构造、失败不中断后续场景、隔离库绝对 URL、`--verbose` 输出格式、
   场景清单必须最后一项是「登出」；组织场景必须拿到一次性库路径、绑定 SQL 落库校验、数据包场景
   未绑定组织时 fail-fast、场景顺序「组织 → 数据包 → 上报 → 备份 → 登出」；新增：绑定助手缺库路径
-  抛错 / 落库校验、上报场景缺组织 / 上级 / 数据包时逐条 fail-fast）。
+  抛错 / 落库校验、上报场景缺组织 / 上级 / 数据包时逐条 fail-fast；新增：备份恢复场景顺序（备份 → 备份恢复 → 登出）、回滚证据与「备份记录随库回滚 404」分支、回滚失败必须判红）。
 - **`write_500` 门禁实跑通过**：`[gate:write_500] OK (isolation DB, modes=admin, probed 403 write endpoints
   (188 literal + 215 with path params), exemptions 1, skipped 14)` —— 403 条写端点 × 空体 / 不存在路径参数全扫，
   仅 1 条豁免（`offline-map/download` 显式 501）；首跑 2 条违规，`request-download` 的 500 修复后复跑转绿。

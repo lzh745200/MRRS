@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""隔离库端到端 CRUD 冒烟：登录/退出、设置保存、增删改查、上传下载、导出、备份。
+"""隔离库端到端 CRUD 冒烟：登录/退出、设置保存、增删改查、上传下载、导出、备份/恢复。
 
 ## 为什么需要
 
@@ -17,6 +17,7 @@ check_endpoint_500.py 只发 GET，且大量端点在鉴权通过后就立刻返
 - 文件上传 → 静态路径回读（字节级一致）；
 - 报表导出（真实 xlsx，校验 ZIP 魔数）；
 - 备份 创建 → 列表可见 → 完整性校验（database_verified）→ 删除 → 列表消失；
+- 备份恢复 建标记村 → 备份 → 改名 → 从该备份恢复（维护窗口）→ 回读原名（备份恢复闭环）；
 - 组织 创建（行政区划编码校验）→ 管理员绑定组织（数据包按组织隔离的前提）；
 - 数据包 导出 → 下载 zip（PK 魔数）→ 回传导入（校验通过）→ 确认导入（导入导出闭环）；
 - 上报 创建（携带数据包）→ 提交 → 上级单位接收列表 → 审批通过 → 状态回读（上报接收闭环）。
@@ -765,6 +766,92 @@ def scenario_backup(client: HttpClient, steps: List[Step]) -> None:
     record(steps, "备份删除 + 列表消失")
 
 
+def scenario_restore(client: HttpClient, steps: List[Step]) -> None:
+    """备份恢复：建标记村 -> 备份 -> 改名 -> 从该备份恢复 -> 回读原名 -> 清理。
+
+    恢复端点会进维护窗口并覆盖数据库文件（engine.dispose() 后由后续请求重开），
+    这里断言的是「恢复完成后进程无需重启就能读到回滚后的数据」——
+    这正是「备份恢复是否正常」里最关键、也最容易被单测掩盖的一环。
+    """
+    original = "恢复验证村-" + stamp()
+    created = expect_status(
+        client.post("/api/v1/supported-villages", {"village_name": original}),
+        (200, 201),
+        "恢复标记村创建",
+    )
+    village_id = created_id(created, "恢复标记村")
+    record(steps, "恢复标记创建", "village_id=%d" % village_id)
+
+    backup = expect_status(
+        client.post(
+            "/api/v1/system/backup",
+            {"description": "恢复回滚验证备份", "include_uploads": True, "trigger": "manual"},
+            timeout=600,
+        ),
+        (200,),
+        "恢复用备份创建",
+    )
+    backup_data = data_of(backup)
+    expect(isinstance(backup_data, dict), "恢复用备份响应缺少 data：%s" % backup.text[:200])
+    filename = backup_data.get("file_name")
+    expect(isinstance(filename, str) and filename, "恢复用备份响应缺少 file_name：%s" % backup.text[:200])
+    record(steps, "恢复用备份创建", str(filename))
+
+    renamed = original + "-已改名"
+    expect_status(
+        client.put("/api/v1/supported-villages/%d" % village_id, {"village_name": renamed}),
+        (200,),
+        "恢复前改名",
+    )
+    changed = expect_status(client.get("/api/v1/supported-villages/%d" % village_id), (200,), "改名回读")
+    changed_data = data_of(changed)
+    expect(
+        isinstance(changed_data, dict) and changed_data.get("village_name") == renamed,
+        "改名后详情回读不符：%s" % changed.text[:200],
+    )
+    record(steps, "恢复前改名 + 回读", renamed)
+
+    restored = expect_status(
+        client.post("/api/v1/system/backup/restore", {"filename": str(filename)}, timeout=900),
+        (200,),
+        "从备份恢复",
+    )
+    restored_payload = payload_of(restored)
+    expect(restored_payload.get("success") is True, "恢复响应未报告成功：%s" % restored.text[:300])
+    record(steps, "从备份恢复（维护窗口 + 连接池重建）")
+
+    after = expect_status(client.get("/api/v1/supported-villages/%d" % village_id), (200,), "恢复后详情回读")
+    after_data = data_of(after)
+    expect(
+        isinstance(after_data, dict) and after_data.get("village_name") == original,
+        "恢复后数据未回滚（期望 %s）：%s" % (original, after.text[:200]),
+    )
+    record(steps, "恢复后数据回滚到备份时点", original)
+
+    me = expect_status(client.get("/api/v1/auth/me"), (200,), "恢复后当前用户可用")
+    me_data = data_of(me)
+    expect(
+        isinstance(me_data, dict) and str(me_data.get("username") or "") == ep.FACTORY_ADMIN_USERNAME,
+        "恢复后当前用户异常：%s" % me.text[:200],
+    )
+    record(steps, "恢复后会话仍可用（GET /auth/me）")
+
+    quoted = urllib.parse.quote(str(filename))
+    cleanup = expect_status(
+        client.delete("/api/v1/system/backup/" + quoted, timeout=180), (200, 404), "删除恢复用备份"
+    )
+    if cleanup.status == 404:
+        # 恢复把整库回滚到备份时点，这个备份的 DB 记录也随库一并消失（文件仍在隔离目录，
+        # 随 scratch 目录一起删除）。因此这里的 404 恰恰是恢复生效的又一个证据。
+        record(steps, "恢复用备份记录随库回滚（DELETE 404 属预期）")
+    else:
+        record(steps, "恢复用备份已删除")
+    expect_status(
+        client.delete("/api/v1/supported-villages/%d" % village_id), (200, 409), "清理恢复标记村"
+    )
+    record(steps, "恢复场景清理")
+
+
 def _backup_names(client: HttpClient) -> List[str]:
     listing = expect_status(client.get("/api/v1/system/backup"), (200,), "备份列表")
     return [str(item.get("file_name")) for item in items_of(listing) if isinstance(item, dict)]
@@ -791,6 +878,7 @@ SCENARIOS: List[Tuple[str, Any]] = [
     ("数据包导入导出", scenario_data_package),
     ("上报接收", scenario_report),
     ("备份", scenario_backup),
+    ("备份恢复", scenario_restore),
     ("登出", scenario_logout),
 ]
 
@@ -881,7 +969,7 @@ def print_report(steps: List[Step], verbose: bool) -> None:
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="隔离库端到端 CRUD 冒烟（登录/设置/增删改查/上传/导出/数据包导入导出/备份/登出）")
+    parser = argparse.ArgumentParser(description="隔离库端到端 CRUD 冒烟（登录/设置/增删改查/上传/导出/数据包导入导出/备份恢复/登出）")
     parser.add_argument("--port", type=int, default=8801)
     parser.add_argument("--verbose", action="store_true", help="打印每一步（含通过项）")
     parser.add_argument("--keep-server", action="store_true", help="调试：结束后不杀进程、不删目录")

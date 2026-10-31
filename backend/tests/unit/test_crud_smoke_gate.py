@@ -257,6 +257,7 @@ def test_scenarios_cover_user_visible_capabilities_and_logout_is_last():
     assert "登出" in names
     assert gate.SCENARIOS[-1][0] == "登出", "登出会让令牌失效，必须最后执行"
 
+
 class _StubClient:
     """只回固定响应的客户端替身：用于测场景的前置校验与数据库绑定。"""
 
@@ -431,3 +432,89 @@ def test_report_scenario_requires_parent_and_package():
     with pytest.raises(gate.SmokeFailure) as excinfo:
         gate.scenario_report(client, [])
     assert "缺少数据包 ID" in str(excinfo.value)
+
+
+class _RestoreStub:
+    """scenario_restore 的替身：按调用语义返回固定响应，不起真实实例。"""
+
+    def __init__(self, restored_name=None):
+        self.restored_name = restored_name
+        self.original = ""
+        self.renamed = ""
+        self.village_reads = 0
+        self.deleted = []
+
+    def post(self, path, payload=None, timeout=None):
+        if path == "/api/v1/supported-villages":
+            self.original = payload["village_name"]
+            return _json_response(200, {"code": 200, "data": {"id": 42}, "message": "ok"})
+        if path == "/api/v1/system/backup":
+            return _json_response(200, {"code": 200, "data": {"file_name": "backup_x.zip", "file_size": 10}})
+        if path == "/api/v1/system/backup/restore":
+            assert payload == {"filename": "backup_x.zip"}
+            return _json_response(200, {"success": True, "message": "系统恢复成功", "data": {"success": True}})
+        raise AssertionError("unexpected POST " + path)
+
+    def put(self, path, payload=None, timeout=None):
+        assert path == "/api/v1/supported-villages/42"
+        self.renamed = payload["village_name"]
+        return _json_response(200, {"code": 200, "data": {"id": 42}, "message": "ok"})
+
+    def get(self, path, timeout=None):
+        if path == "/api/v1/supported-villages/42":
+            self.village_reads += 1
+            if self.village_reads == 1:
+                name = self.renamed
+            else:
+                name = self.restored_name or self.original
+            return _json_response(200, {"code": 200, "data": {"id": 42, "village_name": name}, "message": "ok"})
+        if path == "/api/v1/auth/me":
+            return _json_response(
+                200,
+                {"code": 200, "data": {"username": gate.ep.FACTORY_ADMIN_USERNAME}, "message": "ok"},
+            )
+        raise AssertionError("unexpected GET " + path)
+
+    def delete(self, path, timeout=None):
+        self.deleted.append(path)
+        if path.startswith("/api/v1/system/backup/"):
+            return _json_response(404, {"detail": "备份文件不存在"})
+        return _json_response(200, {"code": 200, "data": None, "message": "ok"})
+
+
+def test_scenarios_place_backup_restore_between_backup_and_logout():
+    names = [name for name, _scenario in gate.SCENARIOS]
+    assert "备份恢复" in names
+    # 恢复会把整库回滚到备份时点，必须排在所有写场景之后；登录令牌属于库内数据，所以登出仍在最后。
+    assert names.index("备份") < names.index("备份恢复")
+    assert names.index("备份恢复") < names.index("登出")
+    assert gate.SCENARIOS[-1][0] == "登出"
+
+
+def test_restore_scenario_records_rollback_proof():
+    client = _RestoreStub()
+    steps = []
+    gate.scenario_restore(client, steps)
+
+    assert [step.name for step in steps] == [
+        "恢复标记创建",
+        "恢复用备份创建",
+        "恢复前改名 + 回读",
+        "从备份恢复（维护窗口 + 连接池重建）",
+        "恢复后数据回滚到备份时点",
+        "恢复后会话仍可用（GET /auth/me）",
+        "恢复用备份记录随库回滚（DELETE 404 属预期）",
+        "恢复场景清理",
+    ]
+    rollback = [step for step in steps if step.name.startswith("恢复后数据回滚")][0]
+    assert rollback.detail == client.original
+    # 回滚后这个备份的 DB 记录也随库消失 → DELETE 404 是恢复生效的证据，不能判失败
+    assert any(path.startswith("/api/v1/system/backup/") for path in client.deleted)
+    assert client.deleted[-1] == "/api/v1/supported-villages/42"
+
+
+def test_restore_scenario_flags_missing_rollback():
+    client = _RestoreStub(restored_name="恢复失败后的名字")
+    with pytest.raises(gate.SmokeFailure) as excinfo:
+        gate.scenario_restore(client, [])
+    assert "未回滚" in str(excinfo.value)
