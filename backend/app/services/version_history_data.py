@@ -3749,6 +3749,20 @@ VERSION_HISTORY_DATA = [
         "description": "修复 ARM64 安装后后端启动即崩（difflib 打包漏收）",
         "features": [
             (
+                "P1-U3：系统自检「去处理」直达落点：SelfCheckCard.vue 给每个自检项锚到它该被修的页面（组织单位码/组织层级 → org?tab=organizations；待审核账号"
+                "/账号锁定 → org?tab=users-orgs；PII 密钥 → security?tab=secrets；介质导入近况 → /data-package）。仅非正常项显示入口，ok "
+                "项不给（避免噪音）。"
+            ),
+            (
+                "P1-U4：顶栏「待导入更新包」角标：离线场景上级送来的介质里可能有增量包，「到了没导出」过去只能靠人记得去看。现进入应用时只读 GET /data-packages 数 type=upd"
+                "ate 的包，>0 才出现角标，点击跳 /data-package/update；无权限/404 一律归 0，不影响布局（不轮询）。"
+            ),
+            (
+                "P1/P3 已核实无需新做（记录以免重复投入）：① 恢复演练早就在跑：backup_scheduler.py 每日拉起 restore_drill_job（is_drill_due 默认 "
+                "30 天）；② time.sleep 没有阻塞事件循环的实例：全部位于同步上下文（logging 轮转重试、端口探测的启动前循环、Starlette BackgroundTasks 线程池"
+                "、模拟任务后台线程）…"
+            ),
+            (
                 "P0 三道棘轮（发版前必跑）：① frozen_smoke（check_frozen_smoke.py）—— 冻结产物必须通过 BACKEND_IMPORT_CHECK=1导入自检，并用随"
                 "机端口真实起服务（/health 200 + 受保护端点 401）；产物不存在自动 SKIP。这正是 v1.18.23~26 连红 3 次 tag 的根因门禁。"
             ),
@@ -3770,16 +3784,10 @@ VERSION_HISTORY_DATA = [
                 "or/warning，只是注释没写理由。"
             ),
             "后端全量 GET 巡检：432 个路由 → 发现并修复 1 个真缺陷（/menus/accessible 的 user 形态健壮性，见上一条）；修复后 0 个 5xx。",
-            "后端写端点巡检：255 个 POST/PUT/PATCH（排除危险操作）→ 0 个 5xx。",
-            "债务标记：后端 TODO/FIXME 0 处（1 处为注释误报）、前端 0 处。",
             (
-                "静默吞异常：前端空 catch 0 处；50 处「仅注释 catch」抽样均为有说明的合理降级（401 由拦截器处理 / 配额降级 / 逐项隔离），后端 35 处 except: pass"
-                " 均为窄异常 + 明确兜底。"
-            ),
-            (
-                "空壳页面：13 个「有表格/表单但零 API 关联」的页面/组件，逐个核实后确认均为展示组件（props/emit）或使用 store/localStorage 的合理设计，无真空壳。te"
-                "st_cov_final_organization.py::test_is_active_defaulted_when_absent 仍用is_superuser=False 的用户建根（"
-                "520000），被 403 拦截。"
+                "后端写端点巡检：255 个 POST/PUT/PATCH（排除危险操作）→ 0 个 5xx。test_cov_final_organization.py::test_is_active_d"
+                "efaulted_when_absent 仍用is_superuser=False 的用户建根（520000），被 403 拦截。该用例意图是验证 is_active 默认值而非建根权限 "
+                "→ 用户改为超管，守卫另测。"
             ),
         ],
     },

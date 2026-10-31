@@ -1,4 +1,18 @@
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
+- **P1-U3：系统自检「去处理」直达落点**：`SelfCheckCard.vue` 给每个自检项锚到它该被修的页面
+  （组织单位码/组织层级 → `org?tab=organizations`；待审核账号/账号锁定 → `org?tab=users-orgs`；
+  PII 密钥 → `security?tab=secrets`；介质导入近况 → `/data-package`）。仅**非正常**项显示入口，
+  ok 项不给（避免噪音）。原来「诊断出问题」后还得自己在 30 个 tab 里找入口。
+  用例走真实点击路径（模板内联处理器也计入函数覆盖率，否则会缺一角）。
+- **P1-U4：顶栏「待导入更新包」角标**：离线场景上级送来的介质里可能有增量包，「到了没导出」
+  过去只能靠人记得去看。现进入应用时只读 `GET /data-packages` 数 `type=update` 的包，>0 才出现
+  角标，点击跳 `/data-package/update`；无权限/404 一律归 0，不影响布局（不轮询）。
+- **P1/P3 已核实无需新做（记录以免重复投入）**：
+  ① 恢复演练**早就在跑**：`backup_scheduler.py` 每日拉起 `restore_drill_job`（`is_drill_due` 默认 30 天）；
+  ② `time.sleep` **没有阻塞事件循环的实例**：全部位于同步上下文（logging 轮转重试、端口探测的启动前循环、
+  Starlette `BackgroundTasks` 线程池、模拟任务后台线程），没有一处在 `async def` 的请求路径上；
+  ③ 「备份增量」已由**增量数据包**承接：`views/dataPackage/IncrementalUpdate.vue`（detect-changes/export/import）
+  与 `dataSync/Export.vue` 的「增量导出」已具备，另建一条并行备份增量只会引入第二套口径。
 - **P0 三道棘轮（发版前必跑）**：
   ① `frozen_smoke`（`check_frozen_smoke.py`）—— 冻结产物必须通过 `BACKEND_IMPORT_CHECK=1`
   导入自检，并用随机端口真实起服务（/health 200 + 受保护端点 401）；产物不存在自动 SKIP。

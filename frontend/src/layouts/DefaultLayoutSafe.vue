@@ -229,6 +229,25 @@
             </span>
           </el-tooltip>
 
+          <!-- 待导入更新包（P1-U4）：离线场景里介质已送到、但还没导入 -->
+          <el-tooltip
+            v-if="pendingUpdates > 0"
+            :content="'有 ' + pendingUpdates + ' 个更新包待导入'"
+            placement="bottom"
+          >
+            <span
+              class="theme-trigger update-bell"
+              role="button"
+              tabindex="0"
+              aria-label="待导入更新包"
+              @click="goUpdatePackages"
+            >
+              <el-badge :value="pendingUpdates" :max="99" class="bell-badge">
+                <el-icon><Download /></el-icon>
+              </el-badge>
+            </span>
+          </el-tooltip>
+
           <!-- 消息中心铃铛（未读角标） -->
           <el-tooltip content="消息中心" placement="bottom">
             <span class="theme-trigger message-bell" role="button" tabindex="0" @click="goMessages">
@@ -355,6 +374,7 @@ import {
   Clock,
   Search,
   Setting,
+  Download,
 } from '@element-plus/icons-vue'
 
 /** 侧栏普通链接（page / group children / 聚合页共用） */
@@ -582,6 +602,27 @@ function openAppearanceSettings(): void {
   appearanceVisible.value = true
 }
 
+// ── 待导入更新包角标（P1-U4）──
+// 离线场景：上级送来的介质里可能有增量包，但“到了没有导入”原来只能靠人记得去看。
+// 这里只读列表（GET /data-packages）数 update 类型的包；无权限/404 一律归 0，不影响布局。
+const pendingUpdates = ref(0)
+
+function goUpdatePackages() {
+  pushSafe('/data-package/update')
+}
+
+async function loadPendingUpdates() {
+  try {
+    const { get } = await import('@/api/request')
+    const res: unknown = await get('/data-packages')
+    const list = (res as { items?: { type?: string }[]; data?: { items?: { type?: string }[] } } | undefined)
+    const items = list?.items ?? list?.data?.items ?? []
+    pendingUpdates.value = items.filter((p) => p.type === 'update').length
+  } catch {
+    pendingUpdates.value = 0
+  }
+}
+
 // ── 消息中心未读角标 ──
 const unreadCount = ref(0)
 
@@ -619,6 +660,8 @@ let unreadTimer: number | null = null
 
 onMounted(() => {
   loadUnreadCount()
+  // 待导入更新包只在进入时查一次（介质到达不频繁，无需轮询）
+  loadPendingUpdates()
   // 每 60 秒轮询未读数（单机版无 WebSocket）
   unreadTimer = window.setInterval(loadUnreadCount, 60000)
 })

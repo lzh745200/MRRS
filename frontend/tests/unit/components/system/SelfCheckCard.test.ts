@@ -4,13 +4,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { ElMessage, mockSelfCheck } = vi.hoisted(() => ({
+const { ElMessage, mockSelfCheck, mockPushSafe } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   mockSelfCheck: vi.fn(),
+  mockPushSafe: vi.fn(),
 }))
 
 vi.mock('element-plus', () => ({ ElMessage }))
 vi.mock('@/api/selfCheck', () => ({ getSelfCheck: mockSelfCheck }))
+vi.mock('@/composables/useRouterSafe', () => ({
+  useRouterSafe: () => ({ pushSafe: mockPushSafe }),
+}))
 
 import SelfCheckCard from '@/components/system/SelfCheckCard.vue'
 
@@ -41,6 +45,7 @@ function factory() {
 describe('components/system/SelfCheckCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPushSafe.mockClear()
   })
 
   it('挂载即执行自检并渲染结论', async () => {
@@ -117,3 +122,40 @@ describe('components/system/SelfCheckCard', () => {
     expect(mockSelfCheck.mock.calls.length).toBeGreaterThan(before)
   })
 })
+
+  it('非正常项给出直达入口并跳转到对应 console tab', async () => {
+    mockSelfCheck.mockResolvedValue(OK_REPORT)
+    const wrapper = factory()
+    await flushPromises()
+    const warn = wrapper.vm.report!.checks[1]
+    expect(wrapper.vm.actionLink(warn)).toBe('/system/console/org?tab=organizations')
+    // 走真实点击路径（模板内联处理器也要被执行，否则函数覆盖率会缺一角）
+    const btn = wrapper.findAll('button').find((b) => b.text().includes('去处理'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect(mockPushSafe).toHaveBeenCalledWith('/system/console/org?tab=organizations')
+  })
+
+  it('正常项不给入口（避免噪音），未知项也不给', async () => {
+    mockSelfCheck.mockResolvedValue(OK_REPORT)
+    const wrapper = factory()
+    await flushPromises()
+    const ok = wrapper.vm.report!.checks[0]
+    expect(wrapper.vm.actionLink(ok)).toBe('')
+    const before = mockPushSafe.mock.calls.length
+    wrapper.vm.goFix({ name: '未登记项', level: 'warn', detail: '', count: 1 })
+    expect(mockPushSafe.mock.calls.length).toBe(before)
+  })
+
+  it('PII 密钥异常项锚到密钥管理页', async () => {
+    mockSelfCheck.mockResolvedValue({
+      ...OK_REPORT,
+      status: 'error',
+      checks: [{ name: 'PII 密钥', level: 'error', detail: '指纹为空', count: 1 }],
+    })
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.vm.actionLink(wrapper.vm.report!.checks[0])).toBe(
+      '/system/console/security?tab=secrets'
+    )
+  })

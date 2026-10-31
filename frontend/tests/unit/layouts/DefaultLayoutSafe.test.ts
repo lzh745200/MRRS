@@ -1007,3 +1007,40 @@ describe('面包屑最长路径优先（v1.15.0 收口）', () => {
     expect(wrapper.find('.breadcrumb-current').text()).toBe('工作列表')
   })
 })
+
+  it('待导入更新包角标：列表含 update 类型时显示并跳转 /data-package/update', async () => {
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/data-packages') {
+        return Promise.resolve({
+          items: [
+            { type: 'update' },
+            { type: 'update' },
+            { type: 'report' },
+          ],
+        })
+      }
+      return Promise.resolve({})
+    })
+    const wrapper = await mountLayout()
+    const bell = wrapper.find('.update-bell')
+    expect(bell.exists()).toBe(true)
+    expect(bell.find('.badge-stub').attributes('data-value')).toBe('2')
+    await bell.trigger('click')
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/data-package/update')
+  })
+
+  it('待导入更新包角标：无 update 包或接口失败时不显示（不影响布局）', async () => {
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/data-packages') return Promise.resolve({ items: [{ type: 'report' }] })
+      return Promise.resolve({})
+    })
+    const wrapper = await mountLayout()
+    expect(wrapper.find('.update-bell').exists()).toBe(false)
+
+    mocks.get.mockImplementation((url: string) => {
+      if (url === '/data-packages') return Promise.reject(new Error('403'))
+      return Promise.resolve({})
+    })
+    const wrapper2 = await mountLayout()
+    expect(wrapper2.find('.update-bell').exists()).toBe(false)
+  })

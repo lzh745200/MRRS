@@ -28,6 +28,16 @@
           }}</el-tag>
           <span class="self-check-name">{{ item.name }}</span>
           <span class="self-check-detail">{{ item.detail }}</span>
+          <el-button
+            v-if="actionLink(item)"
+            link
+            type="primary"
+            size="small"
+            class="self-check-action"
+            @click="goFix(item)"
+          >
+            去处理
+          </el-button>
         </li>
       </ul>
     </template>
@@ -45,10 +55,39 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CircleCheck } from '@element-plus/icons-vue'
 
-import { getSelfCheck, type SelfCheckReport } from '@/api/selfCheck'
+import { getSelfCheck, type SelfCheckItem, type SelfCheckReport } from '@/api/selfCheck'
+import { useRouterSafe } from '@/composables/useRouterSafe'
 
 const report = ref<SelfCheckReport | null>(null)
 const loading = ref(false)
+const { pushSafe } = useRouterSafe()
+
+/**
+ * 自检项 → 可直接处理的落点（P1-U3）。
+ *
+ * 背景：自检只报「哪里不对」，值班的人还得自己在 30 个 tab 里找入口；
+ * 这里把每个检查项锚到它该被修的那一页，把「诊断」变成「一键到现场」。
+ * 键是后端 self_check_service 的 item.name，改动需同步（见该服务单测）。
+ */
+const SELF_CHECK_LINKS: Record<string, string> = {
+  组织单位码: '/system/console/org?tab=organizations',
+  组织层级: '/system/console/org?tab=organizations',
+  待审核账号: '/system/console/org?tab=users-orgs',
+  账号锁定: '/system/console/org?tab=users-orgs',
+  'PII 密钥': '/system/console/security?tab=secrets',
+  介质导入近况: '/data-package',
+}
+
+/** 仅「非正常」项给出直达入口：ok 项点击无意义，只会增加噪音 */
+function actionLink(item: SelfCheckItem): string {
+  if (item.level === 'ok') return ''
+  return SELF_CHECK_LINKS[item.name] || ''
+}
+
+function goFix(item: SelfCheckItem): void {
+  const link = actionLink(item)
+  if (link) pushSafe(link)
+}
 
 const LEVEL_LABELS: Record<string, string> = {
   ok: '正常',
@@ -99,7 +138,7 @@ onMounted(() => {
   runCheck()
 })
 
-defineExpose({ runCheck, levelLabel, levelTagType, report })
+defineExpose({ runCheck, levelLabel, levelTagType, actionLink, goFix, report })
 </script>
 
 <style scoped>
