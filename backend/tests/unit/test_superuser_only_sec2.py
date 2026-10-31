@@ -54,12 +54,15 @@ def test_require_superuser_rejects_department_admin():
 
 
 def test_require_superuser_accepts_super_admin():
-    # 不抛异常即通过
-    require_superuser(SUPER_ADMIN)
+    assert is_superuser(SUPER_ADMIN) is True
+    # 直接调用模式通过时不返回 wrapper（None）；不抛异常即代表放行
+    assert require_superuser(SUPER_ADMIN) is None
 
 
 def test_require_superuser_accepts_role_flag_without_is_superuser():
-    require_superuser(SimpleNamespace(role="super_admin", is_superuser=False))
+    role_flag_user = SimpleNamespace(role="super_admin", is_superuser=False)
+    assert is_superuser(role_flag_user) is True
+    assert require_superuser(role_flag_user) is None
 
 
 def test_require_superuser_fails_closed_for_none_and_plain_user():
@@ -121,7 +124,9 @@ def test_require_superuser_factory_mode():
 
 def test_require_admin_unchanged_for_department_admin():
     """回归保护：require_admin 不得被顺手收紧（40+ 端点依赖部门级 admin）。"""
-    require_admin(DEPT_ADMIN)
+    assert is_admin(DEPT_ADMIN) is True
+    assert is_superuser(DEPT_ADMIN) is False
+    assert require_admin(DEPT_ADMIN) is None
 
 
 # ---------------- 端点级：全库 / 密钥 / 进程控制 ----------------
