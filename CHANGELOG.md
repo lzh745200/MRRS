@@ -1,3 +1,74 @@
+## [1.18.32] - 2026-11-01 — 时间口径 / 数据归属 / 越权读取三条主线收口（8 项缺陷）
+
+> 本轮来自现场与代码复核的混合缺陷，共同点是「静默错」：接口不报错、页面不白屏，
+> 但数字与可见范围是错的。逐条给出根因，便于后续同类型问题定位。
+
+### Fixed
+
+- **「今日操作数」按 UTC 零点清零**（`AuditService.get_audit_stats`，审计页统计卡）：
+  `AuditLog.created_at` 存 UTC 墙钟，统计却用 `utcnow().replace(hour=0)` 当边界 ——
+  UTC+8 下统计日要到**北京时间 08:00** 才切换，0–8 点的窗口实际是「昨天 08:00 → 现在」：
+  既把昨天的操作算进今天，又漏掉当天 0–8 点的操作。
+  改为「本地零点 → `to_utc_naive()` 换算」后再比较。
+- **同步仪表盘趋势日期按 UTC 分桶**（`api/v1/sync.py`）：`log.created_at.strftime("%Y-%m-%d")`
+  直接切 UTC 日期，UTC+8 的 00:00–08:00 记录会被算到前一天；改走 `to_local()`。
+- **`/auth/me` 的 `lastLoginTime` 少 8 小时**：`user.last_login` 是 UTC 列，直接 `strftime`
+  拼字符串返回，前端按本地时间显示 → 永远比实际早 8 小时；改走 `to_local()`。
+- **90 天未走访预警晚一天**（`household_service._today`）：`last_visit_date` 是本地日历语义的
+  Date 列，参照日却取 `datetime.now(timezone.utc).date()`；UTC+8 的 00:00–08:00 参照日比本地少一天。
+  改为 `datetime.now().date()`。
+- **批量导出可整库导出**（`batch_service.batch_export`）：组织过滤条件写成
+  `not is_superuser and organization_id is not None and ...` —— 账号未绑定组织时
+  `organization_id` 为 `None`，条件整体为假，**过滤被跳过**，非超管可导出全库数据（S2 审计红线）。
+  改为 fail-closed：非超管 + 模型有组织列 + 账号无组织 → 直接返回
+  「账号未绑定组织，禁止批量导出」。`validate_batch` 同口径收口。
+- **Excel 导入产生"幽灵台账"**（`excel_importer_service`）：项目 / 资金 / 学校三条导入路径
+  只写业务字段，未写 `organization_id` / `created_by`（帮扶村路径一直有写）。
+  非超管用户导入后，列表按组织过滤 → **导入"成功"但一条都看不到**。
+  现与手工创建一致：模板未填组织编码时回落到调用者本组织，并记录创建者。
+- **同步日志历史不按类型过滤、分页失效**（`views/dataSync/{Export,Import}.vue`）：
+  前端传 `{action, page, page_size}`，而 `/data-sync/logs` 实际契约是 `{sync_type, limit}` ——
+  三个参数全被忽略，导出页看到的是全部日志、`limit` 走默认 50。
+- **包体积显示 NaN MB**（`Export.vue::formatSize`）：`DataSyncLog` 没有 `size` 字段，
+  缺值参与除法得 `NaN`；改为缺失显示 `-`。
+
+### Changed
+
+- **`/sync/status`、`/sync/dashboard` 收敛为管理员专属**：两者返回包名、记录数、操作人、
+  磁盘余量与审计统计，属运维信息，此前任意登录用户可读（信息泄露）。非管理员现返回 403。
+- **资金审批「核定金额」不再吞 0**（`views/funds/Detail.vue`）：`approved_amount || amount || 0`
+  在核定金额为 `0`（审批通过但不予拨付）时会回落到 `amount`，把 0 覆盖成申请额；改 `??`。
+- **政策搜索状态列不再把空值当"禁用"**（`views/policies/Search.vue`）：`status` 缺失时
+  三元表达式落到 `danger`，显示红色「禁用」——把"字段没返回"误报成"政策被停用"；
+  改为缺失渲染占位 `—`，同时按 FTS 实际返回字段映射分类 / 发布部门 / 发布日期。
+- **登录页步骤文案自相矛盾**（`views/auth/LoginEnhanced.vue`）：未开自助注册时，
+  第 1 步仍让用户取机器码、第 3 步标题却是"用通行码注册账号"。现按
+  `self_register_enabled` 切换第 3 步标题，并说明机器码用于设备绑定 / 换机重置。
+
+### Tests
+
+- 新增 7 例后端用例：导入归属字段（项目 / 资金 / 学校 × 有组织 / 无组织，6 例）、
+  超管跳过组织过滤（导出 + 校验）；`sync_api_cov` 夹具改为管理员身份（端点已收紧）。
+- 新增 1 例前端用例：政策状态缺失渲染占位；资金核定金额补「两级均 null → 0」分支。
+- 5 个改动视图的行 / 分支覆盖率复测均为 **100%**。
+
+### Tests（2026-11-01 CI 三处假红的成因与修法）
+
+- `frontend/tests/unit/stores/auth-store.test.ts`：`vi.mock('@/utils/authStorage')` 只桩了旧版 8 个方法，
+  缺 `setLocked/clearLock/isLocked`；`login() → persistAuth() → unlockSession()` 调到 `undefined` 被 catch 吞掉，
+  login 用例整体误报 `expected 'error' to be 'success'`。补齐三个方法后两文件 **68 passed**（提交 `4cd349a9`）。
+- `frontend/tests/unit/views/auth/LoginEnhanced.test.ts:822/837`：`expect(text).toContain(x).toBe(false)`
+  是**恒失败**写法（文本不含 x 时第一个匹配器先抛错；含 x 时链式结果又是 `undefined`），
+  原意是「文本不应包含」，改 `.not.toContain(x)`，该文件 **89 passed**（提交 `b4662a49`）。
+- **覆盖率双红线**（CI 门禁 100%，测试全绿但覆盖率差一点也是红）：
+  - 前端 `ERROR: Coverage for lines (99.92%) does not meet "src/composables/**/*.ts" threshold`，
+    缺口是 `src/composables/useFormDraft.ts:127`（`clearAllDrafts` 的 catch）。新增「存储存在但
+    `key()` 抛 SecurityError」用例后单文件 **100/100/100/100**（提交 `4683a757`）。
+  - 后端 `Coverage failure: total of 99.99 is less than fail-under=100.00`，`coverage-gaps-backend`
+    指认唯一缺口 `app/api/v1/machine_code.py:886`（导出端点的 `assert_org_reachable`）。SEC-3 收紧时
+    只给列表端点写了跨组织 403 用例，导出端点漏测——它正是「按组织批量导出通行码」的数据出口。
+    补用例后 **9 passed**（提交 `fe66a2ee`）。
+
 ## [1.18.31] - 2026-10-31 — 瓦片地图“缩放看不到全省、没有图注”：内置概览层 + 视图范围解耦 + 右侧图例
 
 > 现场反馈：导入 z13/z14 后地图缩放看不到全貌、右侧没有图注。
@@ -444,14 +515,6 @@
   `/health` 报 `version=1.18.31` / `migration.at_head=true`、`POST /api/v1/auth/login` 200、
   桌面窗口标题「登录」——「打包产物 = 已实测运行产物」闭环成立。
 
-### Fixed（2026-11-01 前端两处测试假红）
-
-- `frontend/tests/unit/stores/auth-store.test.ts`：`vi.mock('@/utils/authStorage')` 只桩了旧版 8 个方法，
-  缺 `setLocked/clearLock/isLocked`；`login() → persistAuth() → unlockSession()` 调到 `undefined` 被 catch 吞掉，
-  login 用例整体误报 `expected 'error' to be 'success'`。补齐三个方法后两文件 **68 passed**（提交 `4cd349a9`）。
-- `frontend/tests/unit/views/auth/LoginEnhanced.test.ts:822/837`：`expect(text).toContain(x).toBe(false)`
-  是**恒失败**写法（文本不含 x 时第一个匹配器先抛错；含 x 时链式结果又是 `undefined`），
-  原意是「文本不应包含」，改 `.not.toContain(x)`，该文件 **89 passed**（提交 `b4662a49`）。
 
 ## [1.18.30] - 2026-10-31 — 修复 ARM64 安装后后端启动即崩（difflib 打包漏收）
 ### Fixed（CI 两处红 —— 异常直出 + 列表解包）
