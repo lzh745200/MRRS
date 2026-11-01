@@ -755,10 +755,13 @@ def household_export_data(
 
 def build_csv_bytes(headers: list, rows: list) -> bytes:
     """生成 CSV（utf-8-sig，便于 Excel 直接打开中文）。"""
+    from app.utils.export_safety import sanitize_row
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(headers)
-    writer.writerows(rows)
+    # SEC（2026-11-01）：台账字段来自用户录入，导出前统一净化公式前缀
+    writer.writerows(sanitize_row(row) for row in rows)
     return buffer.getvalue().encode("utf-8-sig")
 
 
@@ -767,12 +770,14 @@ def build_xlsx_bytes(headers: list, rows: list) -> bytes:
     # P2-4 启动优化：openpyxl（连带 numpy）不得在 import 期加载 → 函数内惰性导入
     from openpyxl import Workbook
 
+    from app.utils.export_safety import sanitize_row
+
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "一户一档"
     sheet.append(headers)
     for row in rows:
-        sheet.append(row)
+        sheet.append(sanitize_row(row))
     buffer = io.BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()

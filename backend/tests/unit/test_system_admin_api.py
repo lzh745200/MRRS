@@ -110,62 +110,52 @@ class TestGetSystemInfo:
 
 
 class TestCreateBackup:
+    """立即项（2026-11-01）：改为复用 BackupService，默认平台密钥加密 + 审计。"""
+
     def test_success(self, auth_client, mock_db):
+        from datetime import datetime
+        from types import SimpleNamespace
+
         from app.core.database import get_db
+
         auth_client.app.dependency_overrides[get_db] = lambda: mock_db
+        record = SimpleNamespace(
+            file_name="backup_20261101_120000_000_abc123.zip",
+            file_size=512,
+            created_at=datetime(2026, 11, 1, 12, 0, 0),
+        )
+        svc = MagicMock()
+        svc.create_backup.return_value = record
 
-        with patch("app.api.v1.system.admin.get_database_path") as gdp, \
-             patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
-             patch("shutil.copy2") as copy2:
-            db_p = MagicMock(spec=Path)
-            db_p.exists.return_value = True
-            bk_dir = MagicMock(spec=Path)
-            bk_file = MagicMock(spec=Path)
-            bk_file.stat.return_value.st_size = 512
-            bk_dir.__truediv__.return_value = bk_file
-            gdp.return_value = db_p
-            gbdir.return_value = bk_dir
-
+        with patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
+             patch("app.services.backup_service.BackupService", return_value=svc), \
+             patch("app.api.v1.system.backup._resolve_auto_backup_password", return_value="platform-key"):
+            gbdir.return_value = MagicMock(spec=Path)
             resp = auth_client.post("/api/v1/system/admin/backup")
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["success"] is True
-            assert data["data"]["size"] == 512
-            copy2.assert_called_once()
 
-    def test_file_not_found(self, auth_client, mock_db):
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["data"]["filename"] == record.file_name
+        assert data["data"]["size"] == 512
+        # 缺省口令时必须走平台密钥加密（不再明文落盘）
+        assert svc.create_backup.call_args.kwargs["password"] == "platform-key"
+
+    def test_failure_returns_500(self, auth_client, mock_db):
         from app.core.database import get_db
+
         auth_client.app.dependency_overrides[get_db] = lambda: mock_db
+        svc = MagicMock()
+        svc.create_backup.side_effect = RuntimeError("disk full")
 
-        with patch("app.api.v1.system.admin.get_database_path") as gdp, \
-             patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
-             patch("shutil.copy2", side_effect=FileNotFoundError):
-            db_p = MagicMock(spec=Path)
-            db_p.exists.return_value = True
-            bk_dir = MagicMock(spec=Path)
-            gdp.return_value = db_p
-            gbdir.return_value = bk_dir
-
+        with patch("app.api.v1.system.admin.get_backup_directory") as gbdir, \
+             patch("app.services.backup_service.BackupService", return_value=svc), \
+             patch("app.api.v1.system.backup._resolve_auto_backup_password", return_value="platform-key"):
+            gbdir.return_value = MagicMock(spec=Path)
             resp = auth_client.post("/api/v1/system/admin/backup")
-            assert resp.status_code == 500
-            assert "备份失败" in resp.json()["detail"]
 
-    def test_general_exception(self, auth_client, mock_db):
-        from app.core.database import get_db
-        auth_client.app.dependency_overrides[get_db] = lambda: mock_db
-
-        with patch("app.api.v1.system.admin.get_database_path") as gdp, \
-             patch("app.api.v1.system.admin.get_backup_directory") as gbdir:
-            db_p = MagicMock(spec=Path)
-            db_p.exists.return_value = True
-            bk_dir = MagicMock(spec=Path)
-            bk_dir.mkdir.side_effect = PermissionError("access denied")
-            gdp.return_value = db_p
-            gbdir.return_value = bk_dir
-
-            resp = auth_client.post("/api/v1/system/admin/backup")
-            assert resp.status_code == 500
-            assert "备份失败" in resp.json()["detail"]
+        assert resp.status_code == 500
+        assert "备份失败" in resp.json()["detail"]
 
 
 class TestListBackups:

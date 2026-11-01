@@ -156,6 +156,17 @@ class JsonFormatter(logging.Formatter):
             # 的脱敏（身份证/手机号随异常消息原样落盘 —— LOG_FORMAT=json 为默认值，
             # 即默认部署就中招）。CPython 标准 Formatter 同样优先复用 exc_text。
             log_entry["exception"] = record.exc_text or self.formatException(record.exc_info)
+        # 短期项 7（2026-11-01 审计）：结构化日志缺请求关联 ID —— 一次请求的多条
+        # 日志无法串联（响应头有 X-Request-ID，日志里却没有）。request_id 由
+        # RequestIDMiddleware 写入 ContextVar，取不到时省略该字段（后台线程/启动期日志）。
+        try:
+            from app.middleware.request_id import request_id_var
+        except ImportError:  # pragma: no cover - 模块初始化期循环导入兜底
+            request_id = ""
+        else:
+            request_id = request_id_var.get("") or ""
+        if request_id:
+            log_entry["request_id"] = request_id
         return _json.dumps(log_entry, ensure_ascii=False)
 
 

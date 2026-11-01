@@ -22,27 +22,32 @@ class TestSystemAdmin:
         assert "user_count" in data
 
     def test_create_backup(self, client: TestClient, admin_token_headers: dict, tmp_path: Path):
-        """测试创建备份（使用临时目录，避免产生真实备份文件）"""
+        """测试创建备份（复用 BackupService：默认平台密钥加密 + 审计）。"""
+        from datetime import datetime
+        from types import SimpleNamespace
         from unittest.mock import patch
 
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
-        db_file = tmp_path / "test.db"
-        db_file.write_bytes(b"mock database content")
 
-        with patch("app.api.v1.system.admin.get_database_path", return_value=db_file), \
-             patch("app.api.v1.system.admin.get_backup_directory", return_value=backup_dir):
+        record = SimpleNamespace(
+            file_name="backup_20261101_120000_000_abc123.zip",
+            file_size=1024,
+            created_at=datetime(2026, 11, 1, 12, 0, 0),
+        )
+        with patch("app.api.v1.system.admin.get_backup_directory", return_value=backup_dir), \
+             patch("app.services.backup_service.BackupService") as backup_service, \
+             patch("app.api.v1.system.backup._resolve_auto_backup_password", return_value="platform-key"):
+            backup_service.return_value.create_backup.return_value = record
             response = client.post(
                 "/api/v1/system/admin/backup", headers=admin_token_headers
             )
-        # W4-T3：mock 环境下创建备份必须成功
         assert response.status_code == 200, response.text
         data = response.json()
         assert data.get("success") is True
-        assert "filename" in data.get("data", {})
-        # 清理临时备份文件
-        for f in backup_dir.glob("backup_*.db"):
-            f.unlink(missing_ok=True)
+        assert data.get("data", {}).get("filename") == record.file_name
+        # 缺省口令必须使用平台密钥（不再 shutil.copy2 明文落盘）
+        assert backup_service.return_value.create_backup.call_args.kwargs["password"] == "platform-key"
 
     def test_list_backups(self, client: TestClient, admin_token_headers: dict):
         """测试获取备份列表"""

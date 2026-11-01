@@ -301,13 +301,39 @@ async def create_backup(
             svc.create_backup,
             description=body.description,
             include_uploads=body.include_uploads,
-            password=body.password,
+            # 立即项（2026-11-01）：手动备份默认加密。历史行为「不传密码即明文落盘」
+            # 使全库数据（含 9 类 PII 密文之外的组织/账号信息）以可直读 ZIP 存放。
+            # 未显式设置口令时统一用本机平台密钥（与自动备份同一把），
+            # 恢复侧 _resolve_auto_backup_password 会自动尝试同一密钥，单机灾难恢复不受影响；
+            # 需要跨机拷贝时请显式设置口令。
+            password=_resolve_auto_backup_password(body.password),
         )
 
         logger.info(
             "备份已创建: %s，操作人: %s",
             record.file_name, operator,
         )
+
+        # 立即项（2026-11-01）：备份创建写审计（此前创建/删除都没有痕迹，
+        # 只剩 app.log 文本，无法回答"谁在何时拷走了全库"）。
+        try:
+            from app.utils.audit_logger import AuditLogger
+
+            AuditLogger.log(
+                action="backup_create",
+                user_id=None,
+                username=operator,
+                resource_type="backup",
+                resource_id=record.file_name,
+                details={
+                    "file_name": record.file_name,
+                    "file_size": record.file_size,
+                    "include_uploads": body.include_uploads,
+                    "encrypted": True,
+                },
+            )
+        except Exception:
+            logger.warning("备份审计写入失败（不影响备份结果）", exc_info=True)
 
         # 保留策略在此统一执行（单一事实源）。
         # 触发方可能是 Electron 定时任务（X-Internal-Backup）或前端手动备份，
@@ -331,6 +357,8 @@ async def create_backup(
                 "file_size": record.file_size,
                 "description": record.description,
                 "created_at": record.created_at.isoformat(),
+                # 默认加密（平台密钥）已成为产品行为，前端据此提示"跨机拷贝请设置口令"
+                "encrypted": True,
             },
         }
     except HTTPException:
@@ -663,6 +691,21 @@ async def delete_backup(
             "备份已删除: %s，操作人: %s",
             filename, operator,
         )
+
+        # 立即项（2026-11-01）：删除备份写审计（全库备份的销毁需要可追溯）
+        try:
+            from app.utils.audit_logger import AuditLogger
+
+            AuditLogger.log(
+                action="backup_delete",
+                user_id=None,
+                username=operator,
+                resource_type="backup",
+                resource_id=filename,
+                details={"file_name": filename, "backup_id": target.backup_id},
+            )
+        except Exception:
+            logger.warning("备份删除审计写入失败（不影响删除结果）", exc_info=True)
 
         return {"success": True, "message": f"备份文件 '{filename}' 已删除"}
     except HTTPException:

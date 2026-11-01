@@ -256,3 +256,150 @@ def test_delete_skips_guard_when_target_missing(monkeypatch):
         )
     assert exc.value.status_code == 404
     assert guard_calls == []
+
+
+# ---------------------------------------------------------------------------
+#  立即项 2026-11-01：/admin/list 与 /admin/revoke 的组织收敛
+#  历史缺陷：两处只判角色即查全表 / 按 id 撤销，机器码携带通行码与绑定用户名，
+#  部门级 admin 可读到其它组织的通行码并使其失效。
+# ---------------------------------------------------------------------------
+
+
+def test_admin_list_passes_scoped_org_ids(monkeypatch):
+    captured = {}
+
+    class _Svc:
+        def __init__(self, db):
+            pass
+
+        def list_machine_codes(self, **kwargs):
+            captured.update(kwargs)
+            return [], 0
+
+    monkeypatch.setattr(mc_api, "MachineCodeService", _Svc)
+    monkeypatch.setattr(mc_api, "_scoped_org_ids", lambda db, user: [10, 11])
+
+    result = asyncio.run(
+        mc_api.admin_list_machine_codes(
+            status_filter=None, skip=0, limit=100, db=object(), current_user=DEPT_ADMIN
+        )
+    )
+    assert captured["organization_ids"] == [10, 11]
+    assert result["data"]["items"] == []
+    assert result["data"]["total"] == 0
+
+
+def test_service_list_machine_codes_org_filter_and_fail_closed():
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    q = db.query.return_value
+    q.filter.return_value = q
+    q.options.return_value = q
+    q.order_by.return_value = q
+    q.offset.return_value = q
+    q.limit.return_value = q
+    q.all.return_value = []
+    q.count.return_value = 0
+
+    service = MachineCodeService(db)
+    assert service.list_machine_codes(organization_ids=[]) == ([], 0)  # fail-closed 空集
+
+    service.list_machine_codes(organization_ids=[10, 11])
+    assert q.filter.called
+    assert "organization_id IN" in str(q.filter.call_args[0][0])
+
+
+def test_admin_revoke_rejects_unreachable_org(monkeypatch):
+    class _Db:
+        def query(self, *args, **kwargs):
+            return self
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return SimpleNamespace(organization_id=99)
+
+    def _deny(db, user, org_id, *, action):
+        raise HTTPException(status_code=403, detail="无权撤销其它组织的机器码")
+
+    monkeypatch.setattr(mc_api, "assert_org_reachable", _deny)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            mc_api.admin_revoke_machine_code(
+                machine_code_id=7, db=_Db(), current_user=DEPT_ADMIN
+            )
+        )
+    assert exc.value.status_code == 403
+
+
+def test_admin_revoke_unknown_record_returns_404_and_skips_guard(monkeypatch):
+    guard_calls = []
+    monkeypatch.setattr(mc_api, "assert_org_reachable", lambda *a, **kw: guard_calls.append(a))
+
+    class _Db:
+        def query(self, *args, **kwargs):
+            return self
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return None
+
+    monkeypatch.setattr(MachineCodeService, "revoke_machine_code", lambda self, mid: False)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            mc_api.admin_revoke_machine_code(
+                machine_code_id=7, db=_Db(), current_user=DEPT_ADMIN
+            )
+        )
+    assert exc.value.status_code == 404
+    assert guard_calls == []
+
+
+def test_admin_revoke_same_org_allowed(monkeypatch):
+    guard_calls = []
+    monkeypatch.setattr(
+        mc_api, "assert_org_reachable", lambda db, user, org_id, *, action: guard_calls.append(org_id)
+    )
+
+    class _Db:
+        def query(self, *args, **kwargs):
+            return self
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return SimpleNamespace(organization_id=10)
+
+    monkeypatch.setattr(MachineCodeService, "revoke_machine_code", lambda self, mid: True)
+    result = asyncio.run(
+        mc_api.admin_revoke_machine_code(
+            machine_code_id=7, db=_Db(), current_user=DEPT_ADMIN
+        )
+    )
+    assert result["success"] is True
+    assert guard_calls == [10]
+
+
+def test_admin_list_requires_admin():
+    outsider = SimpleNamespace(id=9, username="u", role="user", is_superuser=False, organization_id=10)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            mc_api.admin_list_machine_codes(
+                db=object(), current_user=outsider
+            )
+        )
+    assert exc.value.status_code == 403
+
+
+def test_admin_revoke_requires_admin():
+    outsider = SimpleNamespace(id=9, username="u", role="user", is_superuser=False, organization_id=10)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            mc_api.admin_revoke_machine_code(db=object(), current_user=outsider, machine_code_id=1)
+        )
+    assert exc.value.status_code == 403

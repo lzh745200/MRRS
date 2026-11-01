@@ -26,6 +26,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import enforce_admin_include_deleted
+from app.core.async_utils import run_in_thread
 from app.core.data_permission import OrgScopeFilter, get_org_scope
 from app.core.database import get_db
 from app.core.exceptions import AppError
@@ -132,10 +133,15 @@ async def export_households(
     data_scope: OrgScopeFilter = Depends(get_org_scope),
     db: Session = Depends(get_db),
 ):
-    """导出一户一档台账（当前筛选范围；xlsx 或 csv）。"""
+    """导出一户一档台账（当前筛选范围；xlsx 或 csv）。
+
+    API-02（2026-11-01 审计）：查询与工作簿构建都是同步重活，原实现在事件循环
+    线程里跑，导出上万行时会冻结整个服务；现统一交给共享线程池。
+    """
     if format not in _EXPORT_FORMATS:
         raise AppError.bad_request(f"不支持的导出格式: {format}（仅支持 xlsx/csv）")
-    headers, rows = household_service.household_export_data(
+    headers, rows = await run_in_thread(
+        household_service.household_export_data,
         db,
         data_scope,
         village_id=village_id,
@@ -143,10 +149,10 @@ async def export_households(
         include_deleted=include_deleted,
     )
     if format == "xlsx":
-        content = household_service.build_xlsx_bytes(headers, rows)
+        content = await run_in_thread(household_service.build_xlsx_bytes, headers, rows)
         media_type = _XLSX_MEDIA_TYPE
     else:
-        content = household_service.build_csv_bytes(headers, rows)
+        content = await run_in_thread(household_service.build_csv_bytes, headers, rows)
         media_type = _CSV_MEDIA_TYPE
     filename = f"households_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.{format}"
     return StreamingResponse(

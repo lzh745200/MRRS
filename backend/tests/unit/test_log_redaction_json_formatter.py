@@ -50,3 +50,23 @@ def test_json_formatter_renders_exception_without_filter():
     output = json.loads(JsonFormatter().format(record))
     assert "exception" in output
     assert "ValueError" in output["exception"]
+
+
+def test_json_formatter_includes_request_id():
+    """短期项 7：同一请求的多条日志必须带同一 request_id（此前只有响应头有）。"""
+    from app.middleware.request_id import request_id_var
+
+    record = logging.LogRecord("test", logging.INFO, __file__, 1, "hello", None, None)
+    token = request_id_var.set("req-abc123")
+    try:
+        output = json.loads(JsonFormatter().format(record))
+    finally:
+        request_id_var.reset(token)
+    assert output["request_id"] == "req-abc123"
+
+
+def test_json_formatter_omits_request_id_outside_request():
+    """无请求上下文（启动期/后台线程）不写空 request_id，避免日志字段噪声。"""
+    record = logging.LogRecord("test", logging.INFO, __file__, 1, "hello", None, None)
+    output = json.loads(JsonFormatter().format(record))
+    assert "request_id" not in output

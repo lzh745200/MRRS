@@ -26,6 +26,8 @@ from typing import Any, Dict, Optional, Sequence
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
+
+from app.utils.export_safety import sanitize_cell
 from openpyxl.worksheet.properties import PageSetupProperties
 
 logger = logging.getLogger(__name__)
@@ -80,9 +82,16 @@ _ALIGN_MAP = {"left": _left, "center": _center, "right": _right}
 
 
 def _coerce(value: Any) -> Any:
-    """将任意值转换为 openpyxl 可安全写入的类型。"""
-    if value is None or isinstance(value, (bool, int, float, str)):
+    """将任意值转换为 openpyxl 可安全写入的类型。
+
+    SEC（2026-11-01，立即项 CSV/Excel 公式注入）：字符串统一经
+    :func:`app.utils.export_safety.sanitize_cell` 净化，避免用户录入的
+    ``=HYPERLINK(...)`` 一类文本在 Excel/WPS 中变成可执行公式；数字/日期不受影响。
+    """
+    if value is None or isinstance(value, (bool, int, float)):
         return value
+    if isinstance(value, str):
+        return sanitize_cell(value)
     if isinstance(value, _dt.datetime):
         # 库中时间为 aware UTC（models.base.UtcDateTime）；Excel 面向用户阅读，
         # 换算成本地墙钟写入，避免单元格里出现 UTC 时刻或 +00:00 文本。

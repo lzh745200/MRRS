@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.32"
+    PROJECT_VERSION: str = "1.18.33"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -192,6 +192,16 @@ class Settings(BaseSettings):
     # R33 单位授权守卫模式：off-关闭(默认) / shadow-只记日志 / enforce-越权 403。
     # 默认 off 保证升级零行为变化；上线时先切 shadow 收集"将被拦"清单，确认后再 enforce。
     GRANT_GUARD_MODE: str = "off"
+
+    # 组织模块策略执行模式（短期改进第 5 项，2026-10-31 全面审查报告）：
+    # 按 org_module_policies.edit_mode 对写接口（POST/PUT/PATCH/DELETE）收窄：
+    #   off     - 不拦截（零额外行为）；
+    #   shadow  - 只记 WARNING 并加响应头 X-Org-Module-Policy: would-block，不拦截
+    #             （默认；上线观察期用，不改变现有行为）；
+    #   enforce - 403，detail 说明模块与组织。
+    # 合法值校验在 app/middleware/org_module_policy_gate.py::current_mode()，
+    # 非法/空值回退 shadow（与默认值一致，避免配置笔误把全站写接口锁死）。
+    ORG_MODULE_POLICY_MODE: str = "shadow"
 
     # R33 授权包签名（Ed25519，32 字节 hex）。
     # 上级配置 GRANT_SIGNING_KEY（签发），下级配置 GRANT_PUBKEY（验签）；

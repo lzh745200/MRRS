@@ -325,6 +325,21 @@ request.interceptors.response.use(
     )
     pendingRequests.delete(requestKey)
 
+    // ── 导出截断提示（短期项 1，2026-11-01）──
+    // 后端命中导出上限时返回 X-Export-Truncated / X-Export-Total / X-Export-Returned。
+    // 静默截断在现场最常被当成 bug（用户以为导出成功，但少了数据），统一在这里提示。
+    if (
+      response.config.responseType === 'blob' &&
+      response.headers?.['x-export-truncated'] === 'true'
+    ) {
+      const returned = response.headers['x-export-returned']
+      const total = response.headers['x-export-total']
+      ElMessage.warning({
+        message: `本次仅导出前 ${returned ?? '?'} 条（共 ${total ?? '?'} 条），请缩小筛选范围后重试`,
+        grouping: true,
+      })
+    }
+
     // ── 统一响应格式：自动展开 {data: payload} → 顶层字段 ──
     // 保持 data 键不变以兼容旧代码（res.data / res.data.data），同时将内部字段提升到顶层
     // 注意：不覆盖 code/message/data 顶层键（若 payload 内同名字段需通过 .data.xxx 访问）

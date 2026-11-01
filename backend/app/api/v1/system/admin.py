@@ -6,14 +6,12 @@
 # security-audit: exempt data_scope — 超级管理员全局系统管理域（用户/项目/村计数、强制下线、2FA 重置），无组织隔离主体
 
 import logging
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.async_utils import run_in_thread
@@ -117,39 +115,57 @@ async def get_system_info(current_user=Depends(get_current_user), db: Session = 
 
 @router.post("/backup")
 async def create_backup(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """创建数据库备份"""
+    """创建数据库备份（加密 ZIP，走统一备份服务）。
+
+    历史实现直接用 ``shutil.copy2`` 复制 ``.db`` 主库文件：明文落盘、绕过
+    WAL 快照/完整性校验/保留策略，也没有任何审计痕迹（审计报告 2026-10-31
+    立即项）。现改为复用 ``BackupService.create_backup``：一致性快照、
+    zip CRC + integrity_check 恢复性校验、默认平台密钥加密、保留策略统一收敛，
+    并写 ``backup_create`` 审计。返回值字段保持不变（filename/size/created_at），
+    前端零调用方无需调整。
+    """
     require_superuser(current_user, error_message="仅超级管理员可创建系统备份")
 
+    from app.api.v1.system.backup import _resolve_auto_backup_password
+    from app.services.backup_service import BackupService
+
     try:
-        db_path = get_database_path()
         backup_dir = get_backup_directory()
         backup_dir.mkdir(parents=True, exist_ok=True)
 
-        # 生成备份文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_filename = f"backup_{timestamp}.db"
-        backup_path = backup_dir / backup_filename
+        record = await run_in_thread(
+            BackupService(db, backup_dir=str(backup_dir)).create_backup,
+            description="管理员手工备份",
+            include_uploads=True,
+            password=_resolve_auto_backup_password(None),
+        )
 
-        # 先 checkpoint 把 WAL 中已提交页合并进主库，再复制；否则只复制主库会
-        # 丢掉最新事务。复制本身仍是一次快照，期间新增写入不保证进入本次备份。
-        db.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
-        db.commit()
-
-        # 复制数据库文件（直接操作，让异常自然抛出）
         try:
-            await run_in_thread(shutil.copy2, str(db_path), str(backup_path))
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="数据库文件不存在")
+            from app.utils.audit_logger import AuditLogger
+
+            AuditLogger.log(
+                action="backup_create",
+                user_id=getattr(current_user, "id", None),
+                username=getattr(current_user, "username", "unknown"),
+                resource_type="backup",
+                resource_id=record.file_name,
+                details={"file_name": record.file_name, "encrypted": True, "source": "system/admin/backup"},
+            )
+        except Exception:
+            logger.warning("备份审计写入失败（不影响备份结果）", exc_info=True)
 
         return success_response(
             data={
-                "filename": backup_filename,
-                "size": backup_path.stat().st_size,
-                "created_at": datetime.now().isoformat(),
+                "filename": record.file_name,
+                "size": record.file_size,
+                "created_at": record.created_at.isoformat() if record.created_at else None,
             },
             message="备份创建成功",
         )
-    except Exception:  # pragma: no cover - 未知异常兜底：业务分支未列明的意外异常统一转 500，正常路径不可达
+    except HTTPException:
+        raise
+    except Exception:
+        logger.error("创建备份失败", exc_info=True)
         raise HTTPException(status_code=500, detail="备份失败，请稍后重试或联系管理员")
 
 

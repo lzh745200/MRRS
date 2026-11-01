@@ -279,7 +279,14 @@ async def admin_list_machine_codes(
         service = MachineCodeService(db)
         # 钳制分页（limit=-1 在 SQLite 下等同不限量）
         offset, lim = clamp_offset_limit(skip, limit)
-        records, total = service.list_machine_codes(status=status_filter, skip=offset, limit=lim)
+        # SEC（立即项 2026-11-01）：机器码携带通行码与绑定用户名，属组织级敏感数据；
+        # 部门级管理员只能看到本组织及子树，超管不限制（_scoped_org_ids 返回 None）。
+        records, total = service.list_machine_codes(
+            status=status_filter,
+            skip=offset,
+            limit=lim,
+            organization_ids=_scoped_org_ids(db, current_user),
+        )
 
         items = []
         for record in records:
@@ -325,6 +332,15 @@ async def admin_revoke_machine_code(
 
     try:
         service = MachineCodeService(db)
+        # SEC（立即项 2026-11-01）：按 id 撤销前先取归属组织做可达性校验，
+        # 否则部门级管理员可撤销其它组织的机器码（其通行码随之永久失效）。
+        from app.models.machine_code import MachineCode as MachineCodeModel
+
+        target = db.query(MachineCodeModel).filter(MachineCodeModel.id == machine_code_id).first()
+        if target is not None and target.organization_id is not None:
+            assert_org_reachable(
+                db, current_user, target.organization_id, action="撤销机器码"
+            )
         success = service.revoke_machine_code(machine_code_id)
 
         if not success:

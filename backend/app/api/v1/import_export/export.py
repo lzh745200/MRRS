@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 from urllib.parse import quote
 import csv
 import io
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app.core.async_utils import run_in_thread
 from app.core.database import get_db
 from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from app.core.permission_utils import require_admin
@@ -24,6 +25,27 @@ router = APIRouter(prefix="/export", tags=["数据导出"])
 _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _CSV_MEDIA_TYPE = "text/csv"
 MAX_EXPORT_ROWS = 10000
+
+
+def _truncation_headers(total: int, returned: int) -> Dict[str, str]:
+    """导出被上限截断时返回提示响应头（短期项 1，2026-11-01）。
+
+    前端 ``request.ts`` 的响应拦截器对 blob 响应读这几个头并弹提示——
+    「静默截断」在现场最常被当成 bug（用户以为导出成功但少了数据）。
+    返回空字典表示未截断，不改变既有响应。
+    """
+    if not isinstance(total, int) or not isinstance(returned, int):
+        # 防御：单测里 query 常被整体 mock，`.count()` 会返回 MagicMock/None。
+        # 导出响应不应因为「统计不到总数」而失败（不能为了提示把成功导出变成 500）。
+        return {}
+    if total <= returned:
+        return {}
+    return {
+        "X-Export-Truncated": "true",
+        "X-Export-Total": str(total),
+        "X-Export-Returned": str(returned),
+        "X-Export-Limit": str(MAX_EXPORT_ROWS),
+    }
 
 
 def format_datetime(dt):
@@ -49,10 +71,13 @@ def _latest_population(v) -> int:
 
 
 def _safe_cell(value):
-    """防 CSV/Excel 公式注入：仅对字符串危险前缀加单引号，数值/日期不变。"""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
-        return "'" + value
-    return value
+    """防 CSV/Excel 公式注入：统一走 ``app.utils.export_safety``（含 \\t/\\r 前缀）。
+
+    保留本函数名以免影响既有调用方与测试；规则变更只需改共享工具。
+    """
+    from app.utils.export_safety import sanitize_cell
+
+    return sanitize_cell(value)
 
 
 def _to_csv(data: list) -> bytes:
@@ -67,15 +92,26 @@ def _to_csv(data: list) -> bytes:
     return buf.getvalue().encode("utf-8-sig")
 
 
-def _export_file_response(data: list, format: str, base_name: str, xlsx_exporter: Callable[[], bytes]):
-    """按 format 构造导出文件响应（xlsx 延迟生成，csv 即时序列化）。"""
+async def _export_file_response(
+    data: list,
+    format: str,
+    base_name: str,
+    xlsx_exporter: Callable[[], bytes],
+    truncation: Optional[Dict[str, str]] = None,
+):
+    """按 format 构造导出文件响应（xlsx 延迟生成，csv 即时序列化）。
+
+    API-02（2026-11-01 审计）：xlsx/csv 序列化是 CPU 重活（单次上限
+    ``MAX_EXPORT_ROWS`` 行），原实现在事件循环线程里跑，导出期间整个服务卡住；
+    现交给共享线程池，端点只 await 结果。
+    """
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     if format == "xlsx":
-        content = xlsx_exporter()
+        content = await run_in_thread(xlsx_exporter)
         filename = f"{base_name}_{ts}.xlsx"
         media_type = _XLSX_MEDIA_TYPE
     elif format == "csv":
-        content = _to_csv(data)
+        content = await run_in_thread(_to_csv, data)
         filename = f"{base_name}_{ts}.csv"
         media_type = _CSV_MEDIA_TYPE
     else:
@@ -83,7 +119,10 @@ def _export_file_response(data: list, format: str, base_name: str, xlsx_exporter
     return Response(
         content=content,
         media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+            **(truncation or {}),
+        },
     )
 
 
@@ -104,6 +143,8 @@ async def export_users(
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
 
+    users_total = query.count()
+
     users = query.limit(MAX_EXPORT_ROWS).all()
 
     user_data = [
@@ -119,8 +160,9 @@ async def export_users(
         for u in users
     ]
 
-    return _export_file_response(
-        user_data, format, "用户列表", lambda: export_service.export_user_list(user_data)
+    return await _export_file_response(
+        user_data, format, "用户列表", lambda: export_service.export_user_list(user_data),
+        truncation=_truncation_headers(users_total, len(users)),
     )
 
 
@@ -143,6 +185,8 @@ async def export_villages(
     if status:
         query = query.filter(SupportedVillage.transition_status == status)
 
+    villages_total = query.count()
+
     villages = query.order_by(SupportedVillage.id).limit(MAX_EXPORT_ROWS).all()
 
     village_data = [
@@ -160,8 +204,9 @@ async def export_villages(
         for v in villages
     ]
 
-    return _export_file_response(
-        village_data, format, "村庄列表", lambda: export_service.export_village_list(village_data)
+    return await _export_file_response(
+        village_data, format, "村庄列表", lambda: export_service.export_village_list(village_data),
+        truncation=_truncation_headers(villages_total, len(villages)),
     )
 
 
@@ -184,6 +229,8 @@ async def export_schools(
     if school_type:
         query = query.filter(School.type == school_type)
 
+    schools_total = query.count()
+
     schools = query.limit(MAX_EXPORT_ROWS).all()
 
     school_data = [
@@ -200,8 +247,9 @@ async def export_schools(
         for s in schools
     ]
 
-    return _export_file_response(
-        school_data, format, "学校列表", lambda: export_service.export_school_list(school_data)
+    return await _export_file_response(
+        school_data, format, "学校列表", lambda: export_service.export_school_list(school_data),
+        truncation=_truncation_headers(schools_total, len(schools)),
     )
 
 
@@ -226,6 +274,8 @@ async def export_projects(
     if status:
         query = query.filter(Project.status == status)
 
+    projects_total = query.count()
+
     projects = query.limit(MAX_EXPORT_ROWS).all()
 
     project_data = [
@@ -243,8 +293,9 @@ async def export_projects(
         for p in projects
     ]
 
-    return _export_file_response(
-        project_data, format, "项目列表", lambda: export_service.export_project_list(project_data)
+    return await _export_file_response(
+        project_data, format, "项目列表", lambda: export_service.export_project_list(project_data),
+        truncation=_truncation_headers(projects_total, len(projects)),
     )
 
 
@@ -270,6 +321,8 @@ async def export_funds(
     if status:
         query = query.filter(Fund.status == status)
 
+    funds_total = query.count()
+
     funds = query.limit(MAX_EXPORT_ROWS).all()
 
     fund_data = [
@@ -287,8 +340,9 @@ async def export_funds(
         for f in funds
     ]
 
-    return _export_file_response(
-        fund_data, format, "经费列表", lambda: export_service.export_fund_list(fund_data)
+    return await _export_file_response(
+        fund_data, format, "经费列表", lambda: export_service.export_fund_list(fund_data),
+        truncation=_truncation_headers(funds_total, len(funds)),
     )
 
 

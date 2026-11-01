@@ -601,9 +601,11 @@ async def export_projects(
             "结束日期",
         ]
         ws.append(headers)
+        from app.utils.export_safety import sanitize_row
+
         for idx, p in enumerate(projects, 1):
             ws.append(
-                [
+                sanitize_row([
                     idx,
                     p.code or "",
                     p.name or "",
@@ -616,7 +618,7 @@ async def export_projects(
                     p.responsible_unit or "",
                     p.start_date.isoformat() if p.start_date else "",
                     p.end_date.isoformat() if p.end_date else "",
-                ]
+                ])
             )
         buf = BytesIO()
         wb.save(buf)
@@ -636,10 +638,12 @@ async def export_projects(
 
         output = StringIO()
         writer = csv.writer(output)
+        from app.utils.export_safety import sanitize_row as _sanitize_row
+
         writer.writerow(["项目编号", "项目名称", "类型", "状态", "预算", "进度", "负责人"])
         for p in projects:
             writer.writerow(
-                [
+                _sanitize_row([
                     p.code,
                     p.name,
                     p.type,
@@ -647,7 +651,7 @@ async def export_projects(
                     float(p.budget) if p.budget else 0,
                     p.progress or 0,
                     p.responsible_person or "",
-                ]
+                ])
             )
         buf = BytesIO(output.getvalue().encode("utf-8-sig"))
         buf.seek(0)

@@ -967,9 +967,26 @@ def _project_prepare_import(
     return deleted, existing_names
 
 
+def _import_scope_org_id(current_user: Any) -> Optional[int]:
+    """导入按名解析关联对象时的组织范围（短期项 3，2026-11-01 审计）。
+
+    - 超管 / 无 current_user：None = 不限制（保持历史行为）；
+    - 有组织归属的普通用户/部门管理员：只允许命中本组织的村/校，避免同名的他村
+      记录被错挂（历史缺陷：按村名裸查，重名村静默挂错且 success=True）。
+    """
+    if current_user is None:
+        return None
+    from app.core.permission_utils import is_superuser
+
+    if is_superuser(current_user):
+        return None
+    return getattr(current_user, "organization_id", None)
+
+
 def _project_process_rows(
     db: Session, parsed_data: List[Dict[str, Any]], mode: str,
     existing_names: set, user_id: Optional[int],
+    organization_id: Optional[int] = None,
 ) -> Tuple[int, int, list]:
     """Process project data rows, returning (created, skipped, errors)."""
     from app.models.project import Project
@@ -998,11 +1015,22 @@ def _project_process_rows(
                 code = f"PRJ-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
             village_id = None
+            row_org_id = organization_id
             if data.get("village_name"):
                 from app.models.supported_village import SupportedVillage as SVImport
-                v = db.query(SVImport).filter(SVImport.village_name == data["village_name"]).first()
+
+                # 短期项 3：按组织 + is_active 解析，禁止跨组织同名错挂
+                village_q = db.query(SVImport).filter(
+                    SVImport.village_name == data["village_name"],
+                    SVImport.is_active == True,  # noqa: E712
+                )
+                if organization_id is not None:
+                    village_q = village_q.filter(SVImport.organization_id == organization_id)
+                v = village_q.first()
                 if v:
                     village_id = v.id
+                    if row_org_id is None:
+                        row_org_id = getattr(v, "organization_id", None)
 
             record = Project(
                 name=name,
@@ -1040,6 +1068,7 @@ def _project_process_rows(
                 payee_handler=_safe_str(data.get("payee_handler")),
                 payee_contact=_safe_str(data.get("payee_contact")),
                 village_id=village_id,
+                organization_id=row_org_id,
                 created_by=user_id,
             )
             db.add(record)
@@ -1058,6 +1087,7 @@ def _import_project_data(
     deleted, existing_names = _project_prepare_import(db, parsed_data, mode, current_user)
     created, skipped, errors = _project_process_rows(
         db, parsed_data, mode, existing_names, user_id,
+        organization_id=_import_scope_org_id(current_user),
     )
 
     safe_commit(db)
@@ -1146,6 +1176,7 @@ def _rural_work_prepare_import(
 def _rural_work_process_rows(
     db: Session, parsed_data: List[Dict[str, Any]], mode: str,
     existing_names: set, user_id: Optional[int],
+    organization_id: Optional[int] = None,
 ) -> Tuple[int, int, list]:
     """Process rural work data rows, returning (created, skipped, errors)."""
     from app.models.rural_work import RuralWork, WorkStatus, WorkType
@@ -1173,14 +1204,19 @@ def _rural_work_process_rows(
                 # W22：乡村工作关联表改为 supported_villages（遗留 villages 已删除）
                 from app.models.supported_village import SupportedVillage
 
-                v = (
+                # 短期项 3：同名的他村不得被错挂（按组织限定，超管不限）
+                village_q = (
                     db.query(SupportedVillage)
                     .filter(
                         SupportedVillage.village_name == data["village_name"],
                         SupportedVillage.is_active == True,  # noqa: E712
                     )
-                    .first()
                 )
+                if organization_id is not None:
+                    village_q = village_q.filter(
+                        SupportedVillage.organization_id == organization_id
+                    )
+                v = village_q.first()
                 if v:
                     village_id = v.id
 
@@ -1216,6 +1252,7 @@ def _import_rural_work_data(
     deleted, existing_names = _rural_work_prepare_import(db, parsed_data, mode, current_user)
     created, skipped, errors = _rural_work_process_rows(
         db, parsed_data, mode, existing_names, user_id,
+        organization_id=_import_scope_org_id(current_user),
     )
 
     safe_commit(db)
@@ -1528,13 +1565,15 @@ def _template_export_xlsx(template: ReportTemplate, headers: list, data_rows: li
     from openpyxl import Workbook
 
     from app.utils.excel_report_style import setup_print
+    from app.utils.export_safety import sanitize_row
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = (template.name or "报表")[:31]
     sheet.append(headers)
     for row in data_rows:
-        sheet.append(row)
+        # SEC（2026-11-01）：模板数据来自用户录入，导出前阻断公式注入
+        sheet.append(sanitize_row(row))
     setup_print(
         sheet,
         col_count=max(len(headers), 1),
@@ -1553,10 +1592,12 @@ def _template_export_csv(headers: list, data_rows: list) -> bytes:
     """生成 csv 字节（带 BOM，Excel 直接打开中文不乱码）。"""
     import csv
 
+    from app.utils.export_safety import sanitize_row
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(headers)
-    writer.writerows(data_rows)
+    writer.writerows(sanitize_row(row) for row in data_rows)
     return ("\ufeff" + buffer.getvalue()).encode("utf-8")
 
 
@@ -1597,14 +1638,21 @@ async def export_template_data(
         raise HTTPException(status_code=400, detail=f"不支持的导出格式: {format}")
 
     template = _get_template_or_404(db, template_id)
-    headers, _columns, data_rows = _template_export_rows(db, template, year, current_user)
+    # API-02（2026-11-01 审计）：数据查询 + 工作簿/文档生成都是同步重活
+    # （单次上限 5000 行），原实现在事件循环线程里跑，导出期间整个服务卡住；
+    # 现统一交给共享线程池。
+    headers, _columns, data_rows = await run_in_thread(
+        _template_export_rows, db, template, year, current_user
+    )
 
     if format == "xlsx":
-        content = _template_export_xlsx(template, headers, data_rows)
+        content = await run_in_thread(_template_export_xlsx, template, headers, data_rows)
     elif format == "csv":
-        content = _template_export_csv(headers, data_rows)
+        content = await run_in_thread(_template_export_csv, headers, data_rows)
     else:
-        content = _template_export_document(template, headers, data_rows, year, current_user, format)
+        content = await run_in_thread(
+            _template_export_document, template, headers, data_rows, year, current_user, format
+        )
 
     media_type = {
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

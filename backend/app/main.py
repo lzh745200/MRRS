@@ -153,6 +153,16 @@ app.add_middleware(
 
 app.add_middleware(MetricsMiddleware)
 
+# 1a-2. 组织模块策略闸门（短期改进第 5 项，2026-11-01）：按 org_module_policies
+# 的 edit_mode 收窄写接口（POST/PUT/PATCH/DELETE），默认 shadow：只记 WARNING 并加
+# 响应头 X-Org-Module-Policy: would-block，不拦截；enforce 才 403。
+# 注册在本行 → 执行顺序位于 CSRF / RequestLogger / Audit / ViewerReadOnly /
+# MaintenanceGate 之内（更便宜的 403/503 先返回；被拒请求仍进访问日志与审计），
+# 位于 Metrics / QueryCounter 与业务路由之外（被拒请求不进入指标采集与 DB 业务路径）。
+# 模式配置项：settings.ORG_MODULE_POLICY_MODE（off / shadow / enforce）。
+from app.middleware.org_module_policy_gate import OrgModulePolicyGateMiddleware  # noqa: E402
+app.add_middleware(OrgModulePolicyGateMiddleware)
+
 # 1b. 维护模式闸门（R7）：恢复备份期间拒绝新的写请求（503），读放行。
 # 位置在本行之后添加 → 位于 Audit/RequestLogger 之内、Metrics 之外：
 # 被拒请求仍进审计与访问日志，但不占用数据库与指标采集路径。

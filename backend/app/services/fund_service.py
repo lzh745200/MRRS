@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.fund import Fund, FundStatus
 from app.core.transaction import safe_commit
+from app.services.fund_settlement_service import refresh_project_settlements
 from app.utils.helpers import FUND_MONEY_FIELDS, quantize_money_fields
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,9 @@ class FundService:
         # 编号写入与记录落库同生同死。
         self.db.flush()
         self._ensure_zj_code(fund)
+        # 短期项 2（2026-11-01 审计）：新增经费会改变所属项目的决算口径，
+        # 同一事务内重算未审批决算，避免结余停在旧值后被审批固化。
+        refresh_project_settlements(self.db, getattr(fund, "project_id", None))
         if auto_commit:
             safe_commit(self.db)
             self.db.refresh(fund)
@@ -212,9 +216,17 @@ class FundService:
         if not fund:
             return None
 
+        # 短期项 2：项目归属可能在本次更新中变化，重算要同时覆盖「原项目」与「新项目」
+        previous_project_id = getattr(fund, "project_id", None)
         for key, value in kwargs.items():
             if hasattr(fund, key) and value is not None:
                 setattr(fund, key, value)
+
+        self.db.flush()
+        refresh_project_settlements(self.db, previous_project_id)
+        current_project_id = getattr(fund, "project_id", None)
+        if current_project_id != previous_project_id:
+            refresh_project_settlements(self.db, current_project_id)
 
         if auto_commit:
             safe_commit(self.db)
@@ -229,7 +241,11 @@ class FundService:
         if not fund:
             return False
 
+        project_id = getattr(fund, "project_id", None)
         self.db.delete(fund)
+        self.db.flush()
+        # 短期项 2：删除经费后项目决算口径同样变化（flush 后查询才不含该行）
+        refresh_project_settlements(self.db, project_id)
         if auto_commit:
             safe_commit(self.db)
         else:

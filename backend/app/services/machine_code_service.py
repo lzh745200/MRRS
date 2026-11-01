@@ -907,6 +907,7 @@ class MachineCodeService:
         status: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
+        organization_ids: Optional[list[int]] = None,
     ) -> tuple[list[MachineCode], int]:
         """查询机器码列表
 
@@ -914,6 +915,9 @@ class MachineCodeService:
             status: 状态筛选（pending/active/revoked）
             skip: 跳过记录数
             limit: 返回记录数
+            organization_ids: 组织范围（None=不限，仅超级管理员使用）。
+                空列表按 fail-closed 处理，返回空集——历史缺陷：不传参即查全表，
+                部门级管理员可读到其它组织的机器码与通行码（SEC 立即项 2026-11-01）。
 
         Returns:
             tuple[list[MachineCode], int]: (机器码列表, 总数)
@@ -925,6 +929,11 @@ class MachineCodeService:
             raise ValueError("数据库会话未初始化")
 
         query = self.db.query(MachineCode)
+
+        if organization_ids is not None:
+            if not organization_ids:
+                return [], 0
+            query = query.filter(MachineCode.organization_id.in_(organization_ids))
 
         if status:
             query = query.filter(MachineCode.status == status)

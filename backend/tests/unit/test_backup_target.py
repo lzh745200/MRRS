@@ -161,9 +161,12 @@ def test_create_backup_with_target_dir(bk_client, monkeypatch):
             assert resp.status_code == 200
             _, kwargs = mk.call_args
             assert kwargs["backup_dir"] == tmp
-            svc.create_backup.assert_called_once_with(
-                description="测试", include_uploads=True, password=None
-            )
+            # 立即项（2026-11-01）：未显式设置口令时，手动备份也必须用平台密钥加密，
+            # 不再以 password=None 明文落盘。这里只断言"已传入非空口令"。
+            call_kwargs = svc.create_backup.call_args.kwargs
+            assert call_kwargs["description"] == "测试"
+            assert call_kwargs["include_uploads"] is True
+            assert call_kwargs["password"]
 
 
 def test_create_backup_target_dir_not_writable(bk_client, monkeypatch):

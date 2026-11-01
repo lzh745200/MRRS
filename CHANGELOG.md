@@ -1,3 +1,71 @@
+## [1.18.33] - 2026-11-01 — 审计报告「立即 5 项 + 短期 7 项」落地（异步边界 / 数据一致性 / 导出安全 / 可观测性）
+
+> 依据 `docs/03-开发文档/09-审计报告/2026-10-31-全面审查与修复报告.md` §5 路线图逐项执行。
+> 本轮全部是「不报错但结果错」或「单机桌面不易察觉」的问题：导入阻塞事件循环、主键
+> 冲突后外键错挂、导出被静默截断、决算结余固化为旧值、公式注入、敏感管理面无组织
+> 边界、审计日志缺请求关联 ID。
+
+### Fixed
+
+- **数据包确认导入阻塞事件循环（API-02）**：`services/data_package_service.confirm_import`
+  与 `confirm_import_with_conflict_resolution` 声明为 `async def`，函数体却全是同步重活
+  （zip 解析 + 逐行 upsert + `db_coordinator.exclusive_write(timeout=120)`），一次导入
+  最长冻结整个事件循环 120 秒 —— 期间所有请求（含 `/health`）无响应。拆为
+  `_confirm_import_sync` / `_confirm_import_with_conflict_resolution_sync` 并用
+  `run_in_thread` 执行；`import_package` 的 checksum 计算同样下放线程池。
+  回归：`tests/unit/test_data_package_async_boundary_1031.py`（断言同步主体线程 ident ≠ 主线程）。
+- **主键冲突换新 id 后子表外键不重写（API-01）**：数据包导入遇到同 id 不同内容时会给
+  记录换新主键，但项目/经费等子表仍指向旧 id —— 导入返回 success=True，数据却挂错或
+  丢失。`_bulk_upsert_records` 增加 `remap` 收集 `{表名: {旧id: 新id}}`，
+  新增 `_fk_targets` / `_apply_fk_remap` 按模型外键元数据改写子表引用（父先于子，
+  `DATA_TYPE_MODELS` 顺序已保证）。回归：`test_data_package_fk_remap_api01.py`（5 例）。
+- **CSV/Excel 公式注入**：导出单元格若以 `= + - @ \t \r` 开头，Excel/WPS 打开即当公式
+  执行（`=HYPERLINK(...)` 可外带数据）。新增 `utils/export_safety.py`
+  （`sanitize_cell/row/mapping`，仅字符串加 `'` 前缀，数字日期不变），接入
+  `excel_report_style._coerce`、`import_export/export.py`、`supported_village_export_service`、
+  `batch_service`、`household_service`、`system/audit.py`、`projects/school/policy/consumption/
+  report_templates` 全部导出路径。回归：`test_export_formula_injection.py`（25 例）。
+- **机器码管理面无组织边界**：`GET /machine-code/admin/list` 返回全部组织的
+  machine_code/pass_code/绑定用户名，`POST /admin/revoke/{id}` 可撤销任意组织 —— 部门级
+  admin 即可跨组织读敏感凭证。列表按 `_scoped_org_ids` 过滤（空集 fail-closed 返回空），
+  撤销前 `assert_org_reachable`。回归：`test_machine_code_org_scope_sec3.py`（+8 例）。
+- **备份默认明文且创建/删除无审计**：`POST /system/backups` 不传密码即落明文 .db，
+  且不写审计、不校验目标路径。改为默认用 `INTERNAL_BACKUP_KEY` 加密、创建/删除/恢复
+  全写 `AuditLogger`；遗留 `POST /system/admin/backup`（裸 `shutil.copy2` .db）加弃用头。
+  回归：备份相关 150 例。
+- **导出静默截断**：`/export/*` 五个端点最多导出 1 万行，超出部分被 `.limit()` 静默丢弃，
+  用户以为导出完整。响应头新增 `X-Export-Truncated/X-Export-Total/X-Export-Returned/
+  X-Export-Limit`，前端 `request.ts` 对 blob 响应统一弹「仅导出前 N 条（共 M 条）」。
+- **决算结余固化为旧值**：决算生成后再追加支出或只改单字段，`total_remaining` 不重算；
+  审批通过后错误金额永久固化。新增 `services/fund_settlement_service.py`
+  （`recalculate_settlement_totals` / `refresh_project_settlements`，只重算非 APPROVED），
+  接入经费增删改与决算审批前。回归：`test_fund_settlement_refresh_1031.py`（7 例，
+  100% 分支覆盖）。
+- **报表模板导入按村名裸查**：重名村会被挂到别的组织（或已软删的村），导入仍 success=True，
+  且新项目缺 `organization_id` → 非超管导入后列表不可见。导入按调用者组织过滤村、
+  排除 `is_active=False`、未填组织时回填村组织。回归：`test_template_import_scope_1031.py`（7 例）。
+- **审计日志缺请求关联 ID**：响应头有 `X-Request-ID`，JSON 日志却没有，无法把一次请求的
+  多条日志串起来。`JsonFormatter` 现从 `request_id_var` 取上下文写入 `request_id`
+  （后台线程/启动期省略该字段）。
+
+### Added
+
+- **组织模块策略执行点（shadow 默认）**：`middleware/org_module_policy_gate.py` 把
+  `OrgModulePolicy.edit_mode` 真正接到写请求上（此前只存不执行）。`ORG_MODULE_POLICY_MODE=off|shadow|enforce`
+  默认 shadow：只记 WARNING + 响应头 `X-Org-Module-Policy: would-block`，不改行为；
+  5 秒 TTL 进程内缓存（含负缓存），策略查询异常 fail-open 不 500；不沿组织树继承。
+- **Electron 权限处理器**：`session.defaultSession.setPermissionRequestHandler/CheckHandler`
+  默认拒绝，仅放行 notifications / clipboard-sanitized-write / fullscreen
+  （大屏页 `requestFullscreen` 是正式功能）。摄像头/麦克风/定位/屏幕捕获不再被默认批准。
+
+### Tests
+
+- 后端改动面回归：新增 8 个测试文件（决策 25 / 决算 7 / 模板 7 / 异步边界 2 /
+  外键重写 5 / 机器码 8 / 日志 2 / 策略 57），既有相关套件全绿；`flake8` 改动模块
+  `--max-line-length=120 --max-complexity=16` 通过。
+- 记录一条踩坑：`Session.refresh()` 会丢弃未 flush 的改动，测试里必须 `flush()` 后再
+  refresh，否则断言看到旧值（生产由 `safe_commit` flush，故线上无此问题）。
+
 ## [1.18.32] - 2026-11-01 — 时间口径 / 数据归属 / 越权读取三条主线收口（8 项缺陷）
 
 > 本轮来自现场与代码复核的混合缺陷，共同点是「静默错」：接口不报错、页面不白屏，

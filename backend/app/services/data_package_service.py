@@ -455,11 +455,13 @@ class DataPackageService:
             # 校验摘要随包记录落库（additive），供 /received 接收记录展示
             manifest_dict["validation_summary"] = validation.warnings
 
+        # API-02：大包（上限 512MB）的 SHA256 计算是纯 CPU/IO，放 worker 线程
+        checksum = await run_in_thread(self._calculate_checksum, permanent_path)
         package = DataPackage(
             package_code=package_code, org_id=org_id, file_path=permanent_path,
             file_name=file_name, file_size=os.path.getsize(permanent_path),
             manifest=manifest_dict, status=_package_status(PackageStatus.validated.value),
-            version=manifest.version, checksum=self._calculate_checksum(permanent_path),
+            version=manifest.version, checksum=checksum,
             # JSON 列直接存列表（R28 修复双重编码，同 export_package）
             data_types=manifest.data_types,
             record_count=sum(manifest.record_counts.values()), created_by=imported_by,
@@ -634,12 +636,31 @@ class DataPackageService:
         self, package_id: int, confirmed_by: int, overwrite_existing: bool = False,
         selected_types: List[str] = None, ts_guard: bool = False,
     ) -> DataPackageConfirmResult:
-        """确认导入数据。
+        """确认导入数据（async 门面：重活放到 worker 线程）。
+
+        API-02（2026-11-01 审计）：原实现是 async def，函数体却全是同步代码 ——
+        zip 解析、字段校验、逐行 upsert 以及 ``db_coordinator.exclusive_write(timeout=120)``
+        都在事件循环线程里执行，一次大包导入可把整个进程（含 /health、其他用户请求）
+        冻结最长 120 秒。现把同步主体下沉到 ``_confirm_import_sync``，交给共享线程池，
+        事件循环只等待结果。
 
         ts_guard（W18-D5）：True 时覆盖更新仅在包内记录比本地新时执行 ——
         增量包重复应用不再把本机新编辑打回旧版本。
         """
-        """确认导入数据 (核心重构：使用 Bulk Upsert 和独占锁)"""
+        return await run_in_thread(
+            self._confirm_import_sync,
+            package_id,
+            confirmed_by,
+            overwrite_existing,
+            selected_types,
+            ts_guard,
+        )
+
+    def _confirm_import_sync(
+        self, package_id: int, confirmed_by: int, overwrite_existing: bool = False,
+        selected_types: List[str] = None, ts_guard: bool = False,
+    ) -> DataPackageConfirmResult:
+        """确认导入数据的同步主体（仅由 ``confirm_import`` 在线程池中调用）。"""
         package = self.db.query(DataPackage).filter(DataPackage.id == package_id).first()
         if not package:
             raise BusinessError(f"数据包不存在: {package_id}")
@@ -686,6 +707,11 @@ class DataPackageService:
 
                     data_types = selected_types or manifest_dict.get("data_types", [])
 
+                    # API-01：父记录换 id 后，后续类型的子表外键要按映射重写。
+                    # 依赖方向由导出顺序保证（DATA_TYPE_MODELS 为 村→项目→经费→学校），
+                    # 与 manifest.data_types 的生成顺序一致。
+                    fk_remap: Dict[str, Dict[Any, Any]] = {}
+
                     for data_type in data_types:
                         if data_type not in DATA_TYPE_MODELS:
                             continue
@@ -709,10 +735,16 @@ class DataPackageService:
                                 data_type=data_type,
                             ))
 
-                        # 🚀 调用批量 Upsert 方法
+                        # 🚀 调用批量 Upsert 方法（API-01：先按换 id 映射重写子表外键）
+                        rewritten = self._apply_fk_remap(model, accepted, fk_remap)
+                        if rewritten:
+                            logger.info(
+                                "数据包 %s: %s 有 %s 个外键值按「源 id→新 id」映射重写",
+                                package_id, data_type, rewritten,
+                            )
                         imp, skip, errs = self._bulk_upsert_records(
                             model, accepted, resolved_org_id, overwrite_existing,
-                            ts_guard=ts_guard,
+                            ts_guard=ts_guard, remap=fk_remap,
                         )
                         imported_counts[data_type] = imp
                         skipped_counts[data_type] = skip + len(rejected)
@@ -877,9 +909,17 @@ class DataPackageService:
 
     def _bulk_upsert_records(
         self, model: Any, records: List[Dict], org_id: int, overwrite: bool,
-        ts_guard: bool = False,
+        ts_guard: bool = False, remap: Optional[Dict[str, Dict[Any, Any]]] = None,
     ) -> Tuple[int, int, List[DataPackageValidationError]]:
-        """批量 Upsert (Insert or Update) 记录，保留原始 ID，解决外键孤儿问题"""
+        """批量 Upsert (Insert or Update) 记录，保留原始 ID，解决外键孤儿问题
+
+        API-01（2026-11-01 审计）：主键相撞且业务键不同时，旧实现会给记录换新 id
+        插入，但**不登记 源id→新id 映射**（注释里承诺过、代码没做）。后果是子表
+        记录仍带着包里的旧父 id：轻则挂到本机同 id 的另一条父记录下（数据挂错），
+        重则父记录被换 id 后子记录成孤儿（静默丢关系）。现在把映射写进 ``remap``
+        （``{表名: {旧主键: 新主键}}``），由 ``confirm_import`` 在导入子表前调用
+        ``_apply_fk_remap`` 重写外键。
+        """
         if not records:
             return 0, 0, []
 
@@ -956,12 +996,22 @@ class DataPackageService:
 
         # 业务键不同但主键相撞：去掉主键后插入，让数据库分配新 id。
         # 这样既不会覆写本机已有记录，也能把源机记录完整带进来。
+        # API-01：逐行插入（而不是 values([...]) 批量）以便取回 inserted_primary_key，
+        # 把「源 id → 新 id」登记到 remap，供后续子表外键重写。换 id 的记录是碰撞
+        # 少数派，逐行开销可接受。
+        table_name = model.__tablename__
         for rec in relocated:
+            old_pk = rec.get(pk_name)
             payload = {k: v for k, v in rec.items() if k != pk_name}
             try:
                 with self.db.begin_nested():
-                    self.db.execute(sqlite_insert(model).values([payload]))
+                    result = self.db.execute(sqlite_insert(model).values(payload))
                 imported += 1
+                if remap is not None:
+                    inserted = result.inserted_primary_key
+                    new_pk = inserted[0] if inserted else None
+                    if new_pk is not None:
+                        remap.setdefault(table_name, {})[old_pk] = new_pk
             except Exception as e:
                 logger.warning('_bulk_upsert_records 兜底失败（已降级）: %s', e, exc_info=True)
                 errors.append(DataPackageValidationError(
@@ -971,6 +1021,43 @@ class DataPackageService:
                 ))
 
         return imported, skipped, errors
+
+    @staticmethod
+    def _fk_targets(model: Any) -> Dict[str, str]:
+        """返回 ``{外键列名: 目标表名}``，供 API-01 的外键重写使用。"""
+        targets: Dict[str, str] = {}
+        for column in inspect(model).columns:
+            for fk in column.foreign_keys:
+                targets[column.key] = fk.column.table.name
+        return targets
+
+    def _apply_fk_remap(
+        self, model: Any, records: List[Dict], remap: Optional[Dict[str, Dict[Any, Any]]]
+    ) -> int:
+        """按 ``remap`` 原地重写子表记录的外键值，返回改写条数。
+
+        API-01：父记录因主键碰撞被换新 id 后，包里子表记录仍指向旧 id。
+        不重写的话，子记录要么挂到本机同 id 的另一条父记录下（数据挂错组织/村），
+        要么成孤儿。只处理 ``int``/``str`` 形态且确实命中映射的值，避免误改。
+        """
+        if not remap or not records:
+            return 0
+        targets = self._fk_targets(model)
+        if not targets:
+            return 0
+        rewritten = 0
+        for record in records:
+            for column, target_table in targets.items():
+                if column not in record:
+                    continue
+                table_map = remap.get(target_table)
+                if not table_map:
+                    continue
+                value = record[column]
+                if isinstance(value, (int, str)) and value in table_map:
+                    record[column] = table_map[value]
+                    rewritten += 1
+        return rewritten
 
     # ========================================================================
     # 3. 加密导入导出功能
@@ -1114,7 +1201,23 @@ class DataPackageService:
     async def confirm_import_with_conflict_resolution(
         self, package_id: int, conflict_strategy: str = "KEEP_BOTH", password: Optional[str] = None
     ) -> Dict[str, Any]:
-        """确认导入并处理冲突 (补全并优化)"""
+        """确认导入并处理冲突（async 门面：重活放到 worker 线程）。
+
+        API-02（2026-11-01 审计）：与 ``confirm_import`` 同因 —— 解密、zip 解析、
+        ``SmartConflictResolver.import_with_id_mapping`` 与独占写锁都是同步重活，
+        原实现在事件循环线程里跑，会冻结整个服务。现下沉到 ``_confirm_import_with_conflict_resolution_sync``。
+        """
+        return await run_in_thread(
+            self._confirm_import_with_conflict_resolution_sync,
+            package_id,
+            conflict_strategy,
+            password,
+        )
+
+    def _confirm_import_with_conflict_resolution_sync(
+        self, package_id: int, conflict_strategy: str = "KEEP_BOTH", password: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """确认导入并处理冲突的同步主体（仅由 async 门面在线程池中调用）。"""
         from app.services.smart_conflict_resolver import SmartConflictResolver
         from app.services.password_encryption_service import PasswordEncryptionService, InvalidPasswordError
 

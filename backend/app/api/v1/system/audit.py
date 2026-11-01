@@ -4,10 +4,12 @@ from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import false, func
 from sqlalchemy.orm import Session
 
+from app.core.data_permission import _get_scope_org_ids
 from app.core.database import get_db
-from app.core.permission_utils import is_admin, require_superuser
+from app.core.permission_utils import is_admin, is_superuser, require_superuser
 from app.core.response import ok_list, success_response
 from app.core.security import get_current_user
 from app.models.audit import AuditAction, AuditLevel, AuditStatus
@@ -127,6 +129,191 @@ def _inclusive_end_date(end_date: Optional[datetime]) -> Optional[datetime]:
     )
     # 入参是本地日历时间；AuditLog.created_at 是 UTC 墙钟，必须换算后再比较。
     return to_utc_naive(local_end)
+
+
+# ─── 审计数据范围收敛（短期改进第 4 项，2026-11-01） ───────────────────────────
+
+
+def _apply_audit_scope(query, db: Session, current_user, model=None):
+    """把审计类查询收敛到当前用户可见的组织范围。
+
+    口径与 ``core.data_permission`` 的严格数据范围一致（R28/W25）：
+    - 超级管理员：原样返回（全库可见）；
+    - 部门级 admin：仅本组织及组织子树内的用户日志；
+    - 无组织归属的 admin：过滤为空集（fail-closed），绝不回落全量；
+    - ``user_id`` 为 NULL 的系统日志没有组织归属，内连接后对部门级 admin
+      不可见（fail-closed：宁可少看，不可越权）。
+
+    修复背景：2026-11-01 审计发现这些端点只判 ``is_admin`` 就查全库，部门级
+    admin 能读到其他组织的用户名 / IP / 详情。
+    """
+    if is_superuser(current_user):
+        return query
+
+    from app.models.audit import AuditLog as AuditLogModel
+
+    target = model if model is not None else AuditLogModel
+    org_ids = _get_scope_org_ids(current_user, db=db)
+    if not org_ids:
+        return query.filter(false())
+
+    from app.models.user import User
+
+    return query.join(User, target.user_id == User.id).filter(User.organization_id.in_(org_ids))
+
+
+def _query_audit_logs_scoped(
+    db: Session,
+    current_user,
+    *,
+    user_id: Optional[int],
+    username: Optional[str],
+    action: Optional[AuditAction],
+    resource_type: Optional[str],
+    status: Optional[AuditStatus],
+    level: Optional[AuditLevel],
+    start_date: Optional[datetime],
+    end_date: Optional[datetime],
+    page: int,
+    page_size: int,
+) -> dict:
+    """部门级 admin 的分页审计列表（组织子树内查询，字段口径同 AuditService）。"""
+    from app.models.audit import AuditLog as AuditLogModel
+
+    query = _apply_audit_scope(db.query(AuditLogModel), db, current_user)
+    if user_id:
+        query = query.filter(AuditLogModel.user_id == user_id)
+    if username:
+        query = query.filter(AuditLogModel.username == username)
+    if action:
+        query = query.filter(AuditLogModel.action == action.value)
+    if resource_type:
+        query = query.filter(AuditLogModel.resource_type == resource_type)
+    if start_date:
+        query = query.filter(AuditLogModel.created_at >= start_date)
+    if end_date:
+        query = query.filter(AuditLogModel.created_at <= end_date)
+    if status:
+        query = query.filter(AuditLogModel.status == status.value)
+    if level:
+        query = query.filter(AuditLogModel.level == level.value)
+
+    total = query.count()
+    logs = (
+        query.order_by(AuditLogModel.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "items": [log.to_dict() for log in logs],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+def _query_audit_stats_scoped(
+    db: Session,
+    current_user,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> dict:
+    """部门级 admin 的审计统计（返回字段与 AuditService.get_audit_stats 一致）。"""
+    from app.models.audit import AuditLog as AuditLogModel
+
+    query = _apply_audit_scope(db.query(AuditLogModel), db, current_user)
+    if start_date:
+        query = query.filter(AuditLogModel.created_at >= start_date)
+    if end_date:
+        query = query.filter(AuditLogModel.created_at <= end_date)
+
+    by_action = dict(
+        query.with_entities(AuditLogModel.action, func.count(AuditLogModel.id))
+        .group_by(AuditLogModel.action)
+        .all()
+    )
+    by_status = dict(
+        query.with_entities(AuditLogModel.status, func.count(AuditLogModel.id))
+        .group_by(AuditLogModel.status)
+        .all()
+    )
+    by_level = dict(
+        query.with_entities(AuditLogModel.level, func.count(AuditLogModel.id))
+        .group_by(AuditLogModel.level)
+        .all()
+    )
+    top_users = dict(
+        query.with_entities(AuditLogModel.username, func.count(AuditLogModel.id))
+        .group_by(AuditLogModel.username)
+        .order_by(func.count(AuditLogModel.id).desc())
+        .limit(10)
+        .all()
+    )
+    recent_activity = query.order_by(AuditLogModel.created_at.desc()).limit(20).all()
+
+    # “今日”是本地日历语义；created_at 存 UTC，本地零点需换算后再比较。
+    local_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = to_utc_naive(local_midnight)
+    today_operations = query.filter(AuditLogModel.created_at >= today_start).count()
+
+    return {
+        "total_count": query.count(),
+        "by_action": by_action,
+        "by_status": by_status,
+        "by_level": by_level,
+        "top_users": top_users,
+        "recent_activity": [log.to_dict() for log in recent_activity],
+        "today_operations": today_operations,
+        "total_operations": query.count(),
+        "active_users": len(top_users),
+        "failed_operations": sum(
+            c for k, c in by_status.items() if str(k).lower() in ("failed", "failure", "error")
+        ),
+        "warnings": sum(c for k, c in by_level.items() if str(k).lower() in ("warning", "warn")),
+    }
+
+
+def _query_security_events_scoped(
+    db: Session,
+    current_user,
+    *,
+    severity: Optional[str],
+    event_type: Optional[str],
+    resolved: Optional[bool],
+    start_date: Optional[datetime],
+    end_date: Optional[datetime],
+    page: int,
+    page_size: int,
+) -> dict:
+    """部门级 admin 的安全事件分页（组织子树内查询，字段口径同 SecurityEventService）。"""
+    from app.models.audit import SecurityEvent
+
+    query = _apply_audit_scope(db.query(SecurityEvent), db, current_user, model=SecurityEvent)
+    if severity:
+        query = query.filter(SecurityEvent.severity == severity)
+    if event_type:
+        query = query.filter(SecurityEvent.event_type == event_type)
+    if resolved is not None:
+        query = query.filter(SecurityEvent.resolved == resolved)
+    if start_date:
+        query = query.filter(SecurityEvent.created_at >= start_date)
+    if end_date:
+        query = query.filter(SecurityEvent.created_at <= end_date)
+
+    total = query.count()
+    events = (
+        query.order_by(SecurityEvent.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "items": [event.to_dict() for event in events],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 def get_security_service(db: Session = Depends(get_db)) -> SecurityEventService:
@@ -332,7 +519,9 @@ async def export_audit_logs(  # noqa: C901
 
     from app.models.audit import AuditLog as AuditLogModel
 
-    query = db.query(AuditLogModel).order_by(AuditLogModel.created_at.desc())
+    query = _apply_audit_scope(db.query(AuditLogModel), db, current_user).order_by(
+        AuditLogModel.created_at.desc()
+    )
     if action:
         query = query.filter(AuditLogModel.action == action)
     if start_date:
@@ -388,7 +577,10 @@ async def export_audit_logs(  # noqa: C901
                 cell.alignment = Alignment(horizontal="center")
 
             for item in items:
-                ws.append([
+                # SEC（2026-11-01）：审计详情含用户可控文本，导出 Excel 前净化公式前缀
+                from app.utils.export_safety import sanitize_row
+
+                ws.append(sanitize_row([
                     item["id"],
                     item["time"],
                     item["user"],
@@ -397,7 +589,7 @@ async def export_audit_logs(  # noqa: C901
                     item["detail"],
                     item["status"],
                     item["ip"],
-                ])
+                ]))
 
             # 自动列宽
             for col in ws.columns:
@@ -433,7 +625,10 @@ async def export_audit_logs(  # noqa: C901
                    "resource_type", "detail", "status", "ip"]
     writer = csv.DictWriter(output, fieldnames=field_names)
     writer.writeheader()
-    writer.writerows(items)
+    # SEC（2026-11-01）：CSV 分支同样净化公式注入前缀
+    from app.utils.export_safety import sanitize_mapping
+
+    writer.writerows(sanitize_mapping(item) for item in items)
 
     csv_bytes = output.getvalue().encode("utf-8")
     filename = f"audit_report_{timestamp}.csv"
@@ -471,20 +666,37 @@ async def get_audit_logs(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid parameter value")
 
-    result = audit.query_audit_logs(
+    username_filter = username.strip() if isinstance(username, str) and username.strip() else None
+    end_date_filter = _inclusive_end_date(end_date)
+
+    if is_superuser(current_user):
+        return audit.query_audit_logs(
+            user_id=user_id,
+            username=username_filter,
+            action=action_enum,
+            resource_type=resource_type,
+            start_date=start_date,
+            end_date=end_date_filter,
+            status=status_enum,
+            level=level_enum,
+            page=page,
+            page_size=page_size,
+        )
+
+    return _query_audit_logs_scoped(
+        db,
+        current_user,
         user_id=user_id,
-        username=username.strip() if isinstance(username, str) and username.strip() else None,
+        username=username_filter,
         action=action_enum,
         resource_type=resource_type,
-        start_date=start_date,
-        end_date=_inclusive_end_date(end_date),
         status=status_enum,
         level=level_enum,
+        start_date=start_date,
+        end_date=end_date_filter,
         page=page,
         page_size=page_size,
     )
-
-    return result
 
 
 @router.get("/logs/{log_id}")
@@ -494,7 +706,8 @@ async def get_audit_log_detail(log_id: int, current_user=Depends(get_current_use
 
     from app.models.audit import AuditLog as AuditLogModel
 
-    log = db.query(AuditLogModel).filter(AuditLogModel.id == log_id).first()
+    query = _apply_audit_scope(db.query(AuditLogModel), db, current_user)
+    log = query.filter(AuditLogModel.id == log_id).first()
 
     if not log:
         raise HTTPException(status_code=404, detail="Audit log not found")
@@ -529,7 +742,10 @@ async def get_audit_stats(
         raise HTTPException(status_code=403, detail="Admin access required")
 
     audit = AuditService(db)
-    return audit.get_audit_stats(start_date=start_date, end_date=end_date)
+    if is_superuser(current_user):
+        return audit.get_audit_stats(start_date=start_date, end_date=end_date)
+
+    return _query_audit_stats_scoped(db, current_user, start_date=start_date, end_date=end_date)
 
 
 @router.get("/actions")
@@ -558,7 +774,20 @@ async def get_security_events(
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = SecurityEventService(db)
-    return service.get_events(
+    if is_superuser(current_user):
+        return service.get_events(
+            severity=severity,
+            event_type=event_type,
+            resolved=resolved,
+            start_date=start_date,
+            end_date=end_date,
+            page=page,
+            page_size=page_size,
+        )
+
+    return _query_security_events_scoped(
+        db,
+        current_user,
         severity=severity,
         event_type=event_type,
         resolved=resolved,
@@ -650,7 +879,7 @@ async def get_api_access_logs(
 
     from app.models.audit import APIAccessLog
 
-    query = db.query(APIAccessLog)
+    query = _apply_audit_scope(db.query(APIAccessLog), db, current_user, model=APIAccessLog)
 
     if user_id:
         query = query.filter(APIAccessLog.user_id == user_id)

@@ -512,13 +512,14 @@ async def export_schools_excel(
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
         status_display = {"active": "帮扶中", "inactive": "未帮扶", "completed": "已完成"}
+        from app.utils.export_safety import sanitize_row
 
         for idx, school in enumerate(schools, 1):
             region = f"{school.province or ''}{school.city or ''}{school.district or ''}"
             type_val = school.type.value if school.type else ""
             status_val = school.support_status.value if school.support_status else ""
             ws.append(
-                [
+                sanitize_row([
                     idx,
                     school.name,
                     school.code or "",
@@ -530,7 +531,7 @@ async def export_schools_excel(
                     school.support_unit or "",
                     school.principal or "",
                     school.contact_phone or "",
-                ]
+                ])
             )
 
         widths = [8, 25, 15, 12, 25, 12, 12, 12, 20, 12, 15]

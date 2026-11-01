@@ -1748,8 +1748,11 @@ async def update_settlement(
 
     for key, val in data.model_dump(exclude_unset=True).items():
         setattr(s, key, val)
-    if data.total_budget is not None and data.total_spent is not None:
-        s.total_remaining = _numeric(data.total_budget - data.total_spent)
+    # 短期项 2（2026-11-01 审计）：原实现只在「预算与支出两个字段同时提供」时才重算
+    # 结余；只改其中一个字段时 total_remaining 停在旧值，审批后错误金额被固化。
+    # 现按落库后的当前值重算（两个字段可能一个来自本次入参、另一个是历史值）。
+    if s.total_budget is not None and s.total_spent is not None:
+        s.total_remaining = _numeric(float(s.total_budget) - float(s.total_spent))
 
     safe_commit(db)
     db.refresh(s)
@@ -1789,6 +1792,13 @@ async def approve_settlement(
         raise HTTPException(status_code=400, detail="当前状态不可审批，请检查决算状态")
     if s.status == SettlementStatus.APPROVED.value:  # pragma: no cover - 幂等守卫已排除 APPROVED，防御性冗余分支
         raise HTTPException(status_code=400, detail="该决算已审批通过")
+
+    # 短期项 2（2026-11-01 审计）：审批即固化金额 —— 落定状态之前按当前经费重算一次，
+    # 避免「生成决算后又追加了支出」导致固化的是旧结余（历史缺陷：审批后不可改）。
+    if s.project_id is not None:
+        from app.services.fund_settlement_service import recalculate_settlement_totals
+
+        recalculate_settlement_totals(db, s)
 
     s.status = SettlementStatus.APPROVED.value
     s.auditor = _get_username(current_user)

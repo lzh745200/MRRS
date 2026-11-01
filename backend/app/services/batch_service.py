@@ -260,9 +260,12 @@ class BatchService:
             ws = wb.active
             ws.title = table_name
             header = list(records[0].keys()) if records else ["id"]
+            from app.utils.export_safety import sanitize_cell
+
             ws.append(header)
             for rec in records:
-                ws.append([rec.get(h) for h in header])
+                # SEC（2026-11-01）：批量导出同样要阻断公式注入
+                ws.append([sanitize_cell(rec.get(h)) for h in header])
             output = BytesIO()
             wb.save(output)
             data = base64.b64encode(output.getvalue()).decode()

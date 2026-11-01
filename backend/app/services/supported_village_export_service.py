@@ -299,8 +299,13 @@ class SupportedVillageExportService:
             return None
         if isinstance(value, bool):
             return value
-        if isinstance(value, (int, float, str)):
+        if isinstance(value, (int, float)):
             return value
+        if isinstance(value, str):
+            # SEC（2026-11-01）：阻断 CSV/Excel 公式注入（= + - @ \t \r 前缀）
+            from app.utils.export_safety import sanitize_cell
+
+            return sanitize_cell(value)
         # datetime/date/time 直接支持
         import datetime as _dt
         if isinstance(value, (_dt.datetime, _dt.date, _dt.time)):

@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, Menu, Tray, shell, ipcMain, safeStorage } = require('electron');
+const { app, BrowserWindow, dialog, Menu, Tray, shell, ipcMain, safeStorage, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
@@ -1222,6 +1222,63 @@ function setupIpcHandlers() {
   console.log('[IPC] 注册完成');
 }
 
+// ─── 会话权限（2026-11-01 安全审计项）───
+// 缺口：未注册 setPermission*Handler 时，Electron 对会话权限采取"未处理即批准"，
+// 任意页面申请摄像头/麦克风/定位/屏幕共享都会被静默放行；渲染层一旦被注入，
+// 攻击者即可直接拿到设备能力。本应用是纯离线管理端，除浏览器通知、"剪贴板净化
+// 写入"与 HTML5 全屏外没有合法的设备权限需求，故改为默认拒绝 + 最小白名单。
+// request 与 check 必须同口径：只拦 request 时，Chromium 的能力检查
+// （如 enumerateDevices / permissions.query）仍会把权限判为可用。
+// 例外：大屏页 BigScreen.vue 依赖 HTML5 全屏（requestFullscreen），Electron 把该
+// 能力归为会话权限 'fullscreen' —— 这是正式交付的产品功能，必须放行，否则大屏无法
+// 全屏显示。其余设备类权限（camera/microphone/geolocation/display-capture 等）仍拒绝。
+const SESSION_PERMISSION_ALLOWLIST = new Set([
+  'notifications',
+  'clipboard-sanitized-write',
+  'fullscreen', // 大屏页 BigScreen.vue 依赖 HTML5 全屏，必须放行
+]);
+
+/** 权限是否在最小白名单内（两个 handler 共用，保证口径一致）。 */
+function isSessionPermissionAllowed(permission) {
+  return SESSION_PERMISSION_ALLOWLIST.has(permission);
+}
+
+/** 取发起权限的页面来源 URL 用于告警；webContents 已销毁时 getURL 会抛错，兜底 unknown。 */
+function permissionSourceUrl(webContents) {
+  try {
+    return (webContents && typeof webContents.getURL === 'function' && webContents.getURL()) || 'unknown';
+  } catch (_) {
+    return 'unknown';
+  }
+}
+
+/**
+ * 注册会话级权限处理器（只能在 app ready 之后调用）。
+ * 默认 deny：白名单外的请求一律 callback(false) / return false，并落 warn
+ * （permission 名 + 来源 URL 是现场排障的两个关键字段）。
+ */
+function setupPermissionHandlers() {
+  const ses = session.defaultSession;
+
+  ses.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowed = isSessionPermissionAllowed(permission);
+    if (!allowed) {
+      console.warn(`[Security] 拒绝权限申请: ${permission}，来源: ${permissionSourceUrl(webContents)}`);
+    }
+    callback(allowed);
+  });
+
+  ses.setPermissionCheckHandler((webContents, permission) => {
+    const allowed = isSessionPermissionAllowed(permission);
+    if (!allowed) {
+      console.warn(`[Security] 拒绝权限检查: ${permission}，来源: ${permissionSourceUrl(webContents)}`);
+    }
+    return allowed;
+  });
+
+  console.log(`[Security] 会话权限已收紧（默认拒绝，白名单: ${[...SESSION_PERMISSION_ALLOWLIST].join(', ')}）`);
+}
+
 // ─── 应用生命周期 ───
 // 单实例锁必须在 whenReady 注册之前获取：否则第二个实例（如重复双击、安装后
 // 自动启动+手动启动）会绕过锁检查执行 whenReady 回调，同时拉起两个后端进程，
@@ -1239,6 +1296,9 @@ app.whenReady().then(async () => {
   // 防御：即使 app.quit() 与 ready 事件存在竞态，未获锁的实例也不启动后端
   if (!gotLock) { app.exit(0); return; }
   console.log('[App] 启动...');
+  // 安全审计 2026-11-01：权限处理器必须在任何 BrowserWindow 创建之前注册，
+  // 否则首个窗口的权限请求仍会走 Chromium 的"未处理即批准"默认策略。
+  setupPermissionHandlers();
   setupIpcHandlers();
   registerGlobalShortcuts();
 

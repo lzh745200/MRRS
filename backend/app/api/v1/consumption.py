@@ -163,11 +163,14 @@ def _build_export_bytes(
     export_format: str, headers: list, data_rows: list
 ) -> bytes:
     """生成导出文件字节（xlsx 用 openpyxl / csv 用标准库，csv 带 BOM 兼容 Excel）。"""
+    from app.utils.export_safety import sanitize_row
+
     if export_format == "csv":
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerow(headers)
-        writer.writerows(data_rows)
+        # SEC（2026-11-01）：台账文本来自用户录入，导出前统一阻断公式注入
+        writer.writerows(sanitize_row(row) for row in data_rows)
         return ("\ufeff" + buffer.getvalue()).encode("utf-8")
 
     from openpyxl import Workbook
@@ -177,7 +180,7 @@ def _build_export_bytes(
     sheet.title = "消费帮扶台账"
     sheet.append(headers)
     for row in data_rows:
-        sheet.append(row)
+        sheet.append(sanitize_row(row))
     output = io.BytesIO()
     workbook.save(output)
     workbook.close()

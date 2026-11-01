@@ -669,12 +669,14 @@ def _build_export_workbook(policies_list: List[Policy]):
         cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
+    from app.utils.export_safety import sanitize_row
+
     for idx, policy in enumerate(policies_list, 1):
         level_val = str(policy.level) if policy.level else ""
         status_val = str(policy.status) if policy.status else "draft"
         cat = str(policy.category) if policy.category else ""
         ws.append(
-            [
+            sanitize_row([
                 idx,
                 policy.title,
                 policy.code or "",
@@ -685,7 +687,7 @@ def _build_export_workbook(policies_list: List[Policy]):
                 (policy.effective_date.strftime("%Y-%m-%d") if policy.effective_date else ""),
                 status_display.get(status_val, status_val),
                 policy.keywords or "",
-            ]
+            ])
         )
 
     widths = {
