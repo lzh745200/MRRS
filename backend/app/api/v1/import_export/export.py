@@ -116,6 +116,10 @@ async def _export_file_response(
         media_type = _CSV_MEDIA_TYPE
     else:
         raise HTTPException(status_code=400, detail="不支持的导出格式")
+    # 短期项 7（2026-11-01）：业务指标 —— 成功导出次数（按格式）进 /system/metrics
+    from app.core import business_metrics
+
+    business_metrics.incr(f"export.{format}")
     return Response(
         content=content,
         media_type=media_type,

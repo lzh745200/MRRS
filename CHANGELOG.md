@@ -57,6 +57,17 @@
 - **Electron 权限处理器**：`session.defaultSession.setPermissionRequestHandler/CheckHandler`
   默认拒绝，仅放行 notifications / clipboard-sanitized-write / fullscreen
   （大屏页 `requestFullscreen` 是正式功能）。摄像头/麦克风/定位/屏幕捕获不再被默认批准。
+- **组织模块策略前端接线**：`fetchOrgPolicies` 此前**全仓无调用点**，`visibility=hidden`
+  的配置永远读不到（后端 shadow 拦得住、侧栏照样显示）。现登录成功、2FA 成功、布局
+  `onMounted` 三处拉取策略（失败静默降级，不阻断登录）；未并入 `fetchMenus`，因为
+  既有单测依赖"菜单只发一次 GET"的断言。
+- **业务指标结构化**：新增 `core/business_metrics.py`（进程内、加锁、重启归零），
+  覆盖数据包导入成功/失败、文件导出（按格式）、备份创建/恢复、权限包导入；
+  `GET /api/v1/system/metrics` 新增 `business` 段落。离线部署不引入 prometheus 依赖。
+- **安装包签名全产物校验**：`scripts/verify_installer_signature.ps1` 递归校验
+  `dist/electron` 下全部 exe（安装器 + `resources/backend` 主程序），`Valid` 通过、
+  `NotSigned` 默认告警 / `-RequireSignature` 失败、签名无效一律失败；`build-windows.yml`
+  新增 `Verify all exe signatures` 步骤（有 `CSC_LINK` 时自动带 `-RequireSignature`）。
 
 ### Tests
 
@@ -65,6 +76,9 @@
   `--max-line-length=120 --max-complexity=16` 通过。
 - 记录一条踩坑：`Session.refresh()` 会丢弃未 flush 的改动，测试里必须 `flush()` 后再
   refresh，否则断言看到旧值（生产由 `safe_commit` flush，故线上无此问题）。
+- 本轮追加：`test_business_metrics_1031.py`（6 例：增/查/重置、快照隔离、空事件名、
+  `/system/metrics` 暴露、导出响应计数）；前端 `auth/auth-store/menu/menu-bypass/
+  DefaultLayoutSafe` 5 文件 **157 passed**（策略接线不破坏既有「菜单只发一次 GET」断言）。
 
 ## [1.18.32] - 2026-11-01 — 时间口径 / 数据归属 / 越权读取三条主线收口（8 项缺陷）
 

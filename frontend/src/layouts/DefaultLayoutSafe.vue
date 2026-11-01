@@ -685,6 +685,9 @@ function handleThemeChange(command: string) {
 
 // 挂载时加载用户可见菜单（若未加载）
 onMounted(async () => {
+  // 短期项 5：组织模块策略（hidden → 侧栏不显示）与菜单同时加载；
+  // 刷新页面/深链进入时登录流程不会执行，必须在这里补一次（失败静默降级）。
+  void menuStore.fetchOrgPolicies()
   if (!menuStore.loaded) {
     await menuStore.fetchMenus()
   }

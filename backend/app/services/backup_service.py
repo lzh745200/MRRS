@@ -630,6 +630,11 @@ class BackupService:
 
         safe_commit(self.db)
 
+        # 短期项 7（2026-11-01）：业务指标 —— 备份成功次数进 /system/metrics
+        from app.core import business_metrics
+
+        business_metrics.incr("backup.create")
+
         return BackupRecord(
             backup_id=cast(int, config.id),
             file_name=backup_file_name,
@@ -1153,6 +1158,10 @@ class BackupService:
                 result["message"] = (
                     "系统恢复成功（已按强制方式跨密钥恢复，敏感字段可能不可读）"
                 )
+            # 短期项 7（2026-11-01）：业务指标 —— 恢复成功次数进 /system/metrics
+            from app.core import business_metrics
+
+            business_metrics.incr("backup.restore")
             return result
 
         except BackupKeyMismatchError:

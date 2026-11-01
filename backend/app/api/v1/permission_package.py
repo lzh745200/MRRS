@@ -373,6 +373,11 @@ def confirm_import_permission_package(
             raise HTTPException(status_code=400, detail=result.get("message", "内容校验失败"))
         raise HTTPException(status_code=500, detail=result.get("message", "导入失败"))
 
+    # 短期项 7（2026-11-01）：业务指标 —— 权限包确认导入次数进 /system/metrics
+    from app.core import business_metrics
+
+    business_metrics.incr("permission_package.import")
+
     # R26-W07：确认导入（RBAC 权限镜像写入）成功后补记工作日志。审计失败不阻断主流程。
     try:
         write_work_log(

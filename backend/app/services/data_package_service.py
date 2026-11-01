@@ -756,6 +756,10 @@ class DataPackageService:
                 package.imported_by = confirmed_by
                 safe_commit(self.db)
 
+            # 短期项 7（2026-11-01）：业务指标 —— 数据包导入成功/失败计数
+            from app.core import business_metrics
+
+            business_metrics.incr("data_package.import")
             return DataPackageConfirmResult(
                 success=True, package_id=package_id, imported_counts=imported_counts,
                 skipped_counts=skipped_counts, error_counts=error_counts, errors=errors,
@@ -766,6 +770,9 @@ class DataPackageService:
             package.status = _package_status(PackageStatus.failed.value)
             package.error_message = str(e)
             safe_commit(self.db)
+            from app.core import business_metrics
+
+            business_metrics.incr("data_package.import_failed")
             return DataPackageConfirmResult(
                 success=False, package_id=package_id, imported_counts=imported_counts,
                 skipped_counts=skipped_counts, error_counts=error_counts,

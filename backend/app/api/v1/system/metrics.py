@@ -128,6 +128,13 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
         "hostname": platform.node(),
     }
 
+    # 业务事件计数（短期项 7，2026-11-01）：进程内累计，重启归零。
+    # 覆盖数据包导入（成功/失败）、文件导出（按格式）、备份创建/恢复、权限包导入，
+    # 让运维不必翻日志就能回答"这台机器今天导了几次、备份成功几次"。
+    from app.core import business_metrics
+
+    metrics["business"] = business_metrics.snapshot()
+
     # 数据库指标
     try:
         pool = engine.pool

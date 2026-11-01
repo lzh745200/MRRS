@@ -565,6 +565,18 @@ jobs:
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "> ⚠️ 本构建未做代码签名（未配置 CSC_LINK），请以 SHA256SUMS 校验完整性。"
           }
 
+      # 10.4 全产物签名校验（短期项 8，2026-11-01）：安装包之外还要覆盖
+      #     win-unpacked 里的后端主程序 —— 只校验安装器时，后端 exe 漏签不会被发现。
+      #     有证书时必须全部 Valid；无证书时只告警（与上一步口径一致）。
+      - name: Verify all exe signatures
+        shell: pwsh
+        env:
+          SIGN_EXPECT_SIGNED: ${{ secrets.CSC_LINK != '' && '1' || '0' }}
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_installer_signature.ps1 `
+            -Path dist/electron `
+            -RequireSignature:($env:SIGN_EXPECT_SIGNED -eq '1')
+
       # 10.5 生成产物 SHA256 清单（军队分发完整性链，W6-T5）
       - name: Generate SHA256SUMS
         shell: pwsh

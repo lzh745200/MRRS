@@ -226,6 +226,12 @@ export const useAuthStore = defineStore('auth', () => {
             useMenuStore()
               .fetchMenus()
               .catch(() => {})
+            // 短期项 5（2026-11-01）：组织模块策略此前定义了却无人调用 ——
+            // `canAccessMenu` 里 visibility==='hidden' 的分支永远读不到策略，
+            // 配置「隐藏」的模块照常显示。登录后与菜单并行拉取，失败静默降级。
+            void useMenuStore()
+              .fetchOrgPolicies()
+              .catch(() => {})
           } catch {
             /* ignore */
           }
@@ -268,6 +274,9 @@ export const useAuthStore = defineStore('auth', () => {
         } as UserInfo
         persistAuth(res.data.access_token, user, res.refresh_token)
         useMenuStore().fetchMenus()
+        // 短期项 5：2FA 登录同样要加载组织模块策略（与普通登录一致）。
+        // 可选调用：部分单测把 menu store 整体 mock，缺少该方法时不得阻断登录。
+        void useMenuStore().fetchOrgPolicies?.()
         return true
       }
 
