@@ -103,6 +103,20 @@ class TestSearch:
         assert resp.json()["data"]["total"] == 0
 
 
+class TestHelpContentConsistency:
+    def test_no_registration_guidance_in_help_articles(self):
+        """系统已不提供注册功能，帮助中心不得再出现注册流程/入口文案。"""
+        from app.api.v1.system.help import _HELP_ARTICLES
+
+        for article in _HELP_ARTICLES:
+            text = " ".join([
+                article.get("title", ""),
+                article.get("content", ""),
+                " ".join(article.get("tags", [])),
+            ])
+            assert "注册" not in text, f"帮助文章仍含注册说明: {article['id']} {article['title']}"
+
+
 class TestSystemInfo:
     def test_returns_info(self, auth_client):
         resp = auth_client.get(f"{BASE}/system-info")
