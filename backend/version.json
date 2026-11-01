@@ -1,7 +1,7 @@
 {
   "version": "1.18.34",
-  "build": "20261102",
-  "release_date": "2026-11-02",
+  "build": "20261101",
+  "release_date": "2026-11-01",
   "description": "路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）",
   "features": [
     "普通/加密导出与 Excel 导入移入线程池，ZIP 数据 JSON 流式写入，大包不再阻塞全站",

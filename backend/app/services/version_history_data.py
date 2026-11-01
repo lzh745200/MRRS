@@ -3958,7 +3958,7 @@ VERSION_HISTORY_DATA = [
     },
     {
         "version": "1.18.34",
-        "date": "2026-11-02",
+        "date": "2026-11-01",
         "description": "路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）",
         "features": [
             (
