@@ -99,12 +99,6 @@ describe('auth/Profile.vue', () => {
     const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true)
   })
 })
-describe('auth/Register.vue', () => {
-  it('渲染', async () => {
-    const { default: C } = await import('@/views/auth/Register.vue')
-    const w = mount(C); await flushPromises(); expect(w.exists()).toBe(true)
-  })
-})
 describe('auth/TwoFactorSettings.vue', () => {
   it('渲染', async () => {
     const { default: C } = await import('@/views/auth/TwoFactorSettings.vue')

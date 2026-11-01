@@ -118,7 +118,7 @@ describe('403 修复：菜单加载失败不阻断导航 + 旧角色归一化', 
   })
 })
 
-describe('白名单路由（登录/注册/找回密码）免登录跳转 + 锁屏拦截', () => {
+describe('白名单路由（登录/找回密码）免登录跳转 + 锁屏拦截', () => {
   beforeEach(() => {
     mockCanAccess.mockReset()
     mockFetchMenus.mockReset()
@@ -134,8 +134,8 @@ describe('白名单路由（登录/注册/找回密码）免登录跳转 + 锁�
     expect(next).toHaveBeenCalledWith('/dashboard')
   })
 
-  it('/register 与 /forgot-password 同属白名单，同样免登录进工作台', async () => {
-    for (const p of ['/register', '/forgot-password']) {
+  it('/forgot-password 属白名单，免登录进工作台', async () => {
+    for (const p of ['/forgot-password']) {
       const next = vi.fn()
       await routeGuard({ meta: {}, path: p } as any, {} as any, next)
       expect(next).toHaveBeenCalledWith('/dashboard')

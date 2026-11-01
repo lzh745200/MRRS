@@ -212,17 +212,9 @@
             <li>
               <span class="step-no" aria-hidden="true">3</span>
               <div class="step-body">
-                <p class="step-title">
-                  {{ canSelfRegister ? '用通行码注册账号' : '账号由管理员开通' }}
-                </p>
-                <button v-if="canSelfRegister" type="button" class="step-btn" @click="goToRegister">
-                  注册账户
-                </button>
-                <template v-else>
-                  <!-- 保持原有句子不变（用户手册引用），再补机器码的用途，避免"步骤 1 白做"的误解 -->
-                  <p class="step-note">本机未开启自助注册，请联系管理员开通账号</p>
-                  <p class="step-note">把第 1 步的机器码报给管理员，用于设备绑定与换机重置。</p>
-                </template>
+                <p class="step-title">账号由管理员开通</p>
+                <p class="step-note">账号由管理员在「系统管理 → 用户与角色」中创建。</p>
+                <p class="step-note">把第 1 步的机器码报给管理员，用于设备绑定与换机重置。</p>
               </div>
             </li>
           </ol>
@@ -303,7 +295,6 @@ const LOGIN_BACKGROUND = '/images/login-bg/bg1.jpg'
 const RATE_LIMIT_COOLDOWN_SECONDS = 60
 
 interface PublicConfig {
-  self_register_enabled: boolean
   lockout_minutes: number
   max_failed_attempts: number
 }
@@ -311,33 +302,18 @@ interface PublicConfig {
 /**
  * 登录页公开配置（`GET /auth/public-config`，无需登录、不含敏感信息）。
  *
- * **fail-closed 默认值**：全部取"最保守"（不允许自助注册、无倒计时可用）。
- * 若请求失败（后端未就绪/超时），注册入口保持隐藏 —— 宁可不显示，
- * 也不给用户一个点了必然失败的链接（W27 修复「注册账户死链」）。
+ * **fail-closed 默认值**：取最保守值（无倒计时可用）。
+ * 请求失败时静默降级，不阻塞登录。
  */
 const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
-  self_register_enabled: false,
   lockout_minutes: 0,
   max_failed_attempts: 0,
 }
 
 const publicConfig = ref<PublicConfig>({ ...DEFAULT_PUBLIC_CONFIG })
-const canSelfRegister = computed(() => publicConfig.value.self_register_enabled === true)
 
-/**
- * 机器码用途说明（P1 矛盾修复）。
- *
- * 用户曾看到「本机未开启自助注册，请联系管理员开通账号」，但第 1 步又让他取机器码、
- * 第 3 步又叫他"用通行码注册账号"—— 矛盾感来自**把"设备授权"与"账号开通"混成一条引导**。
- * 这里把机器码的用途讲清：
- *   - 自助注册关闭（默认）：机器码用于设备绑定 / 换机重置，与建号无关；
- *   - 自助注册开启（controlled）：机器码还额外用于让管理员生成注册通行码。
- */
-const machineCodeStepNote = computed(() =>
-  canSelfRegister.value
-    ? '用于设备绑定与换机重置；管理员会用它生成注册通行码。'
-    : '用于设备绑定与换机重置；账号由管理员在后台开通。'
-)
+/** 机器码只用于设备绑定/换机重置；账号由管理员开通。 */
+const machineCodeStepNote = '用于设备绑定与换机重置；账号由管理员在后台开通。'
 
 const username = ref('')
 const password = ref('')
@@ -513,13 +489,12 @@ function applyLoginFailure(result: { message?: string; httpStatus?: number } | u
   setAlert({ type: 'danger', text })
 }
 
-/** 拉取登录页公开配置；失败静默降级（fail-closed：注册入口保持隐藏） */
+/** 拉取登录页公开配置；失败静默降级（不影响登录） */
 async function loadPublicConfig() {
   try {
     const res: any = await get('/auth/public-config')
     const data: any = res?.data ?? res ?? {}
     publicConfig.value = {
-      self_register_enabled: data.self_register_enabled === true,
       lockout_minutes: Number(data.lockout_minutes) || 0,
       max_failed_attempts: Number(data.max_failed_attempts) || 0,
     }
@@ -777,10 +752,6 @@ const resetTwoFactor = () => {
 
 const goToForgotPassword = () => {
   pushSafe('/forgot-password')
-}
-
-const goToRegister = () => {
-  pushSafe('/register')
 }
 
 const goToMachineCode = () => {

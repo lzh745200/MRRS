@@ -112,7 +112,6 @@ describe('Core view smoke tests', () => {
     // src/views 100% 阈值（Linux CI 实测：移除 AuthViewsBatch 深挂载后仍复现，
     // 证伪「仅深挂载冲突」；凡是第二个文件触碰该 .vue 即复现）。专属测试
     // LoginEnhanced.test.ts 已覆盖 19/19，import 可挂载性由路由懒加载保证。
-    { name: 'Register', path: '@/views/auth/Register.vue' },
     { name: 'ForgotPassword', path: '@/views/auth/ForgotPassword.vue' },
     { name: 'Profile', path: '@/views/auth/Profile.vue' },
   ]

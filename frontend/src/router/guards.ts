@@ -6,7 +6,7 @@ import { AuthStorage } from '@/utils/authStorage'
 import { ADMIN_ROLES, normalizeRole } from '@/utils/roleAccess'
 import { useMenuStore } from '@/stores/menu'
 
-const whiteList = ['/login', '/register', '/forgot-password']
+const whiteList = ['/login', '/forgot-password']
 // 强制改密期间允许访问的路由
 const changePasswordWhitelist = ['/change-password', '/logout']
 
@@ -46,7 +46,7 @@ export const routeGuard = async (to: any, _from: any, next: any) => {
   const token = AuthStorage.getToken()
   const locked = readLockFlag()
 
-  // 已登录（含"记住登录"持久令牌）访问登录/注册页 → 直接进入工作台，实现免登录；
+  // 已登录（含"记住登录"持久令牌）访问登录/找回密码页 → 直接进入工作台，实现免登录；
   // 但锁屏标记存在时（自动/手动锁屏）必须重新输入密码，不允许自动跳回。
   if (whiteList.includes(to.path)) {
     if (token && !locked) {

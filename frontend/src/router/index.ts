@@ -15,12 +15,6 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: '登录', noAuth: true },
   },
   {
-    path: '/register',
-    name: 'Register',
-    component: () => retryImport(() => import('@/views/auth/Register.vue')),
-    meta: { title: '注册', noAuth: true },
-  },
-  {
     path: '/forgot-password',
     name: 'ForgotPassword',
     component: () => retryImport(() => import('@/views/auth/ForgotPassword.vue')),

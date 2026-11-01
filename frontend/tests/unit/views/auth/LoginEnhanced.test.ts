@@ -111,10 +111,9 @@ beforeEach(() => {
   mockVerify2FA.mockResolvedValue(true)
   mockApiRequest.mockResolvedValue({ success: true })
   mockPost.mockResolvedValue({ success: true })
-  // 默认：未开启自助注册 + 锁定 15 分钟（模拟生产默认 SELF_REGISTER_MODE=off）
+  // 默认：锁定 15 分钟
   mockGet.mockResolvedValue({
     data: {
-      self_register_enabled: false,
       lockout_minutes: 15,
       max_failed_attempts: 5,
       two_factor_required: false,
@@ -465,8 +464,6 @@ describe('LoginEnhanced.vue', () => {
     const vm = w.vm as any
     vm.goToForgotPassword()
     expect(mockPushSafe).toHaveBeenCalledWith('/forgot-password')
-    vm.goToRegister()
-    expect(mockPushSafe).toHaveBeenCalledWith('/register')
     vm.goToMachineCode()
     expect(mockPushSafe).toHaveBeenCalledWith('/get-machine-code')
   })
@@ -778,74 +775,30 @@ describe('LoginEnhanced.vue', () => {
     expect(w.text()).toContain('本机尚未授权登录')
   })
 
-  describe('登录页公开配置（P0：修注册死链）', () => {
-    it('未开启自助注册 → 不渲染注册入口，改为提示联系管理员', async () => {
-      mockGet.mockResolvedValue({ data: { self_register_enabled: false } })
-      const w = await mountComp()
-      const vm = w.vm as any
-      expect(vm.canSelfRegister).toBe(false)
-      // 展开首次使用引导后：第三步没有注册按钮，只有说明
-      vm.firstUseOpen = true
-      await nextTick()
-      expect(w.find('.register-link').exists()).toBe(false)
-      expect(w.text()).toContain('本机未开启自助注册，请联系管理员开通账号')
-      expect(mockGet).toHaveBeenCalledWith('/auth/public-config')
-    })
-
-    it('开启自助注册 → 渲染注册入口', async () => {
+  describe('登录页公开配置', () => {
+    it('不渲染注册入口，固定提示账号由管理员开通', async () => {
       mockGet.mockResolvedValue({
-        data: { self_register_enabled: true, lockout_minutes: 10, max_failed_attempts: 3 },
+        data: { lockout_minutes: 10, max_failed_attempts: 3 },
       })
       const w = await mountComp()
       const vm = w.vm as any
-      expect(vm.canSelfRegister).toBe(true)
       expect(vm.publicConfig.lockout_minutes).toBe(10)
       expect(vm.publicConfig.max_failed_attempts).toBe(3)
       vm.firstUseOpen = true
       await nextTick()
-      const btn = w.findAll('.step-btn').find((b) => b.text().includes('注册账户'))
-      expect(btn).toBeTruthy()
-      await btn!.trigger('click')
-      expect(mockPushSafe).toHaveBeenCalledWith('/register')
+      expect(w.text()).toContain('账号由管理员开通')
+      expect(w.text()).toContain('账号由管理员在「系统管理 → 用户与角色」中创建')
+      expect(w.findAll('button').some((b) => b.text().includes('注册'))).toBe(false)
+      expect(mockGet).toHaveBeenCalledWith('/auth/public-config')
     })
 
-    it('未开启自助注册：步骤 3 标题改为「账号由管理员开通」，步骤 1 说明注明与建号无关（P1 矛盾修复）', async () => {
-      mockGet.mockResolvedValue({ data: { self_register_enabled: false } })
-      const w = await mountComp()
-      const vm = w.vm as any
-      expect(vm.canSelfRegister).toBe(false)
-      expect(vm.machineCodeStepNote).toContain('账号由管理员在后台开通')
-      vm.firstUseOpen = true
-      await nextTick()
-      const text = w.text()
-      expect(text).toContain('账号由管理员开通')
-      expect(text).not.toContain('用通行码注册账号')
-      expect(text).toContain('本机未开启自助注册，请联系管理员开通账号')
-      expect(text).toContain('用于设备绑定与换机重置')
-    })
-
-    it('开启自助注册：步骤 3 标题为「用通行码注册账号」，步骤 1 说明提示会生成通行码', async () => {
-      mockGet.mockResolvedValue({ data: { self_register_enabled: true } })
-      const w = await mountComp()
-      const vm = w.vm as any
-      expect(vm.canSelfRegister).toBe(true)
-      expect(vm.machineCodeStepNote).toContain('注册通行码')
-      vm.firstUseOpen = true
-      await nextTick()
-      const text = w.text()
-      expect(text).toContain('用通行码注册账号')
-      expect(text).not.toContain('账号由管理员开通')
-    })
-
-    it('配置请求失败 → fail-closed：隐藏注册入口且不阻塞登录', async () => {
+    it('配置请求失败 → 静默降级且不阻塞登录', async () => {
       mockGet.mockRejectedValue(new Error('backend down'))
       const w = await mountComp()
       const vm = w.vm as any
-      expect(vm.canSelfRegister).toBe(false)
       vm.firstUseOpen = true
       await nextTick()
-      expect(w.findAll('.step-btn').some((b) => b.text().includes('注册账户'))).toBe(false)
-      // 登录功能本身不受影响
+      expect(w.text()).toContain('账号由管理员开通')
       ;(vm as any).username = 'admin'
       ;(vm as any).password = 'pw'
       await (vm as any).handleLogin()
@@ -853,22 +806,20 @@ describe('LoginEnhanced.vue', () => {
     })
 
     it('响应为裸对象（无 envelope）也能解析', async () => {
-      mockGet.mockResolvedValue({ self_register_enabled: true })
+      mockGet.mockResolvedValue({ lockout_minutes: 5 })
       const w = await mountComp()
-      expect((w.vm as any).canSelfRegister).toBe(true)
+      expect((w.vm as any).publicConfig.lockout_minutes).toBe(5)
     })
 
     it('字段缺失/类型异常 → 回落到最保守默认值', async () => {
       mockGet.mockResolvedValue({
         data: {
-          self_register_enabled: 'yes',
           lockout_minutes: 'abc',
           max_failed_attempts: null,
         },
       })
       const w = await mountComp()
       const cfg = (w.vm as any).publicConfig
-      expect(cfg.self_register_enabled).toBe(false)
       expect(cfg.lockout_minutes).toBe(0)
       expect(cfg.max_failed_attempts).toBe(0)
     })
@@ -1132,11 +1083,10 @@ describe('LoginEnhanced.vue', () => {
       expect(mockLogin).not.toHaveBeenCalled()
     })
 
-    it('公开配置返回 undefined → 走空对象兜底，注册入口隐藏', async () => {
+    it('公开配置返回 undefined → 走空对象兜底', async () => {
       mockGet.mockResolvedValue(undefined)
       const w = await mountComp()
       const vm = w.vm as any
-      expect(vm.canSelfRegister).toBe(false)
       expect(vm.publicConfig.lockout_minutes).toBe(0)
     })
 
