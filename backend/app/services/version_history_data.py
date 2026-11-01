@@ -3841,4 +3841,57 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.32",
+        "date": "2026-11-01",
+        "description": "时间口径 / 数据归属 / 越权读取三条主线收口（8 项缺陷）",
+        "features": [
+            (
+                "「今日操作数」按 UTC 零点清零（AuditService.get_audit_stats，审计页统计卡）：AuditLog.created_at 存 UTC 墙钟，统计却用 utcno"
+                "w().replace(hour=0) 当边界 ——UTC+8 下统计日要到北京时间 08:00 才切换，0–8 点的窗口实际是「昨天 08:00 → 现在」：既把昨天的操作算进今天，又漏"
+                "掉当天 0–8 点的操作。"
+            ),
+            (
+                "同步仪表盘趋势日期按 UTC 分桶（api/v1/sync.py）：log.created_at.strftime(\"%Y-%m-%d\")直接切 UTC 日期，UTC+8 的 00:0"
+                "0–08:00 记录会被算到前一天；改走 to_local()。"
+            ),
+            (
+                "/auth/me 的 lastLoginTime 少 8 小时：user.last_login 是 UTC 列，直接 strftime拼字符串返回，前端按本地时间显示 → 永远比实际早 8"
+                " 小时；改走 to_local()。"
+            ),
+            (
+                "90 天未走访预警晚一天（household_service._today）：last_visit_date 是本地日历语义的Date 列，参照日却取 datetime.now(timez"
+                "one.utc).date()；UTC+8 的 00:00–08:00 参照日比本地少一天。改为 datetime.now().date()。"
+            ),
+            (
+                "批量导出可整库导出（batch_service.batch_export）：组织过滤条件写成not is_superuser and organization_id is not None"
+                " and ... —— 账号未绑定组织时organization_id 为 None，条件整体为假，过滤被跳过，非超管可导出全库数据（S2 审计红线）。"
+            ),
+            (
+                "Excel 导入产生\"幽灵台账\"（excel_importer_service）：项目 / 资金 / 学校三条导入路径只写业务字段，未写 organization_id / creat"
+                "ed_by（帮扶村路径一直有写）。非超管用户导入后，列表按组织过滤 → 导入\"成功\"但一条都看不到。现与手工创建一致：模板未填组织编码时回落到调用者本组织，并记录创建者。"
+            ),
+            (
+                "同步日志历史不按类型过滤、分页失效（views/dataSync/{Export,Import}.vue）：前端传 {action, page, page_size}，而 /data-sy"
+                "nc/logs 实际契约是 {sync_type, limit} ——三个参数全被忽略，导出页看到的是全部日志、limit 走默认 50。"
+            ),
+            "包体积显示 NaN MB（Export.vue::formatSize）：DataSyncLog 没有 size 字段，缺值参与除法得 NaN；改为缺失显示 -。",
+            (
+                "/sync/status、/sync/dashboard 收敛为管理员专属：两者返回包名、记录数、操作人、磁盘余量与审计统计，属运维信息，此前任意登录用户可读（信息泄露）。非管理员现返回 "
+                "403。"
+            ),
+            (
+                "资金审批「核定金额」不再吞 0（views/funds/Detail.vue）：approved_amount || amount || 0在核定金额为 0（审批通过但不予拨付）时会回落到"
+                " amount，把 0 覆盖成申请额；改 ??。"
+            ),
+            (
+                "政策搜索状态列不再把空值当\"禁用\"（views/policies/Search.vue）：status 缺失时三元表达式落到 danger，显示红色「禁用」——把\"字段没返回\"误报"
+                "成\"政策被停用\"；改为缺失渲染占位 —，同时按 FTS 实际返回字段映射分类 / 发布部门 / 发布日期。"
+            ),
+            (
+                "登录页步骤文案自相矛盾（views/auth/LoginEnhanced.vue）：未开自助注册时，第 1 步仍让用户取机器码、第 3 步标题却是\"用通行码注册账号\"。现按self_r"
+                "egister_enabled 切换第 3 步标题，并说明机器码用于设备绑定 / 换机重置。超管跳过组织过滤（导出 + 校验）；sync_api_cov 夹具改为管理员身份（端点已收紧）。"
+            ),
+        ],
+    },
 ]
