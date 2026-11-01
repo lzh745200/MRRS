@@ -54,6 +54,7 @@ vi.mock('@/composables/useSafeData', () => ({
 }))
 
 import { freezeRequests, unfreezeRequests, _setCachedToken } from '@/api/request'
+import { ElMessage } from 'element-plus'
 
 describe('api/request — interceptors', () => {
   beforeEach(() => {
@@ -117,6 +118,53 @@ describe('api/request — interceptors', () => {
       }
       handlers.response(response)
       expect(response.data.items).toEqual([{ id: 1 }, { id: 2 }])
+    })
+
+    // 短期项 1（2026-11-01）：导出静默截断要在前端明确提示，否则用户以为导全了
+    it('导出被截断时提示"仅导出前 N 条（共 M 条）"', () => {
+      const response = {
+        config: { method: 'GET', url: '/export/villages', responseType: 'blob' },
+        headers: { 'x-export-truncated': 'true', 'x-export-returned': '10000', 'x-export-total': '25000' },
+        data: new Blob(['x']),
+      }
+      handlers.response(response)
+      expect(ElMessage.warning).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('10000'),
+          grouping: true,
+        })
+      )
+      expect((ElMessage.warning as any).mock.calls[0][0].message).toContain('25000')
+    })
+
+    it('截断响应缺 total/returned 头时用 ? 兜底，不抛错', () => {
+      const response = {
+        config: { method: 'GET', url: '/export/villages', responseType: 'blob' },
+        headers: { 'x-export-truncated': 'true' },
+        data: new Blob(['x']),
+      }
+      expect(() => handlers.response(response)).not.toThrow()
+      expect((ElMessage.warning as any).mock.calls[0][0].message).toContain('?')
+    })
+
+    it('非 blob 响应即使带截断头也不提示', () => {
+      const response = {
+        config: { method: 'GET', url: '/villages' },
+        headers: { 'x-export-truncated': 'true', 'x-export-returned': '1', 'x-export-total': '2' },
+        data: { code: 200, data: [] },
+      }
+      handlers.response(response)
+      expect(ElMessage.warning).not.toHaveBeenCalled()
+    })
+
+    it('blob 响应但未截断（头为 false/缺失）不提示', () => {
+      const response = {
+        config: { method: 'GET', url: '/export/villages', responseType: 'blob' },
+        headers: { 'x-export-truncated': 'false' },
+        data: new Blob(['x']),
+      }
+      handlers.response(response)
+      expect(ElMessage.warning).not.toHaveBeenCalled()
     })
   })
 

@@ -373,7 +373,8 @@ class TestResolveUser:
         monkeypatch.setattr("app.core.security.decode_token", boom)
         with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
             assert gate.resolve_user(_scope("Bearer bad"), _FakeDB("user")) is None
-        assert "令牌解析异常" in caplog.text
+        # fail-open 旁路：解析/查库任何异常都只留 WARNING 并放行，绝不抛给写请求
+        assert "用户解析异常" in caplog.text
 
     def test_payload_without_sub(self, monkeypatch):
         monkeypatch.setattr("app.core.security.decode_token", lambda token: {"role": "user"})

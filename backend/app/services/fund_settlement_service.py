@@ -31,7 +31,12 @@ def recalculate_settlement_totals(db: Session, settlement: FundSettlement) -> Fu
     """按项目当前经费重算单张未审批决算（原地修改，不提交）。"""
     if settlement.project_id is None:
         return settlement
-    funds = db.query(Fund).filter(Fund.project_id == settlement.project_id).all()
+    funds = (
+        db.query(Fund)
+        .filter(Fund.project_id == settlement.project_id)
+        .filter(Fund.is_active.is_(True))  # 软删除（is_active=False）的经费不计入决算合计
+        .all()
+    )
     total_budget = sum(_fund_budget(f) for f in funds)
     total_spent = sum(float(f.used_amount or 0) for f in funds)
     settlement.total_budget = _quantize(total_budget)

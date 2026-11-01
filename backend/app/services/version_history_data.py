@@ -3894,4 +3894,65 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.33",
+        "date": "2026-11-01",
+        "description": "审计报告「立即 5 项 + 短期 7 项」落地（异步边界 / 数据一致性 / 导出安全 / 可观测性）",
+        "features": [
+            (
+                "数据包确认导入阻塞事件循环（API-02）：services/data_package_service.confirm_import与 confirm_import_with_confli"
+                "ct_resolution 声明为 async def，函数体却全是同步重活（zip 解析 + 逐行 upsert + db_coordinator.exclusive_write(tim"
+                "eout=120)）…"
+            ),
+            (
+                "主键冲突换新 id 后子表外键不重写（API-01）：数据包导入遇到同 id 不同内容时会给记录换新主键，但项目/经费等子表仍指向旧 id —— 导入返回 success=True，数据却"
+                "挂错或丢失。_bulk_upsert_records 增加 remap 收集 {表名: {旧id: 新id}}，新增 _fk_targets / _apply_fk_remap 按模型外键"
+                "元数据改写子表引用（父先于子…"
+            ),
+            (
+                "CSV/Excel 公式注入：导出单元格若以 = + - @ \\t \\r 开头，Excel/WPS 打开即当公式执行（=HYPERLINK(...) 可外带数据）。新增 utils/e"
+                "xport_safety.py（sanitize_cell/row/mapping，仅字符串加 ' 前缀，数字日期不变）…"
+            ),
+            (
+                "机器码管理面无组织边界：GET /machine-code/admin/list 返回全部组织的machine_code/pass_code/绑定用户名，POST /admin/revok"
+                "e/{id} 可撤销任意组织 —— 部门级admin 即可跨组织读敏感凭证。列表按 _scoped_org_ids 过滤（空集 fail-closed 返回空），撤销前 assert_or"
+                "g_reachable。"
+            ),
+            (
+                "备份默认明文且创建/删除无审计：POST /system/backups 不传密码即落明文 .db，且不写审计、不校验目标路径。改为默认用 INTERNAL_BACKUP_KEY 加密、创"
+                "建/删除/恢复全写 AuditLogger；遗留 POST /system/admin/backup（裸 shutil.copy2 .db）加弃用头。回归：备份相关 150 例。"
+            ),
+            (
+                "导出静默截断：/export/* 五个端点最多导出 1 万行，超出部分被 .limit() 静默丢弃，用户以为导出完整。响应头新增 X-Export-Truncated/X-Export-"
+                "Total/X-Export-Returned/X-Export-Limit，前端 request.ts 对 blob 响应统一弹「仅导出前 N 条（共 M 条）」。"
+            ),
+            (
+                "决算结余固化为旧值：决算生成后再追加支出或只改单字段，total_remaining 不重算；审批通过后错误金额永久固化。新增 services/fund_settlement_servi"
+                "ce.py（recalculate_settlement_totals / refresh_project_settlements，只重算非 APPROVED），接入经费增删改与决算审批前"
+                "。"
+            ),
+            (
+                "报表模板导入按村名裸查：重名村会被挂到别的组织（或已软删的村），导入仍 success=True，且新项目缺 organization_id → 非超管导入后列表不可见。导入按调用者组织过"
+                "滤村、排除 is_active=False、未填组织时回填村组织。回归：test_template_import_scope_1031.py（7 例）。"
+            ),
+            (
+                "审计日志缺请求关联 ID：响应头有 X-Request-ID，JSON 日志却没有，无法把一次请求的多条日志串起来。JsonFormatter 现从 request_id_var 取上下文"
+                "写入 request_id（后台线程/启动期省略该字段）。"
+            ),
+            (
+                "组织模块策略执行点（shadow 默认）：middleware/org_module_policy_gate.py 把OrgModulePolicy.edit_mode 真正接到写请求上（"
+                "此前只存不执行）。ORG_MODULE_POLICY_MODE=off|shadow|enforce默认 shadow：只记 WARNING + 响应头 X-Org-Module-Poli"
+                "cy: would-block，不改行为；"
+            ),
+            (
+                "Electron 权限处理器：session.defaultSession.setPermissionRequestHandler/CheckHandler默认拒绝，仅放行 notific"
+                "ations / clipboard-sanitized-write / fullscreen（大屏页 requestFullscreen 是正式功能）。摄像头/麦克风/定位/屏幕捕获不再"
+                "被默认批准。"
+            ),
+            (
+                "组织模块策略前端接线：fetchOrgPolicies 此前全仓无调用点，visibility=hidden的配置永远读不到（后端 shadow 拦得住、侧栏照样显示）。现登录成功、2FA"
+                " 成功、布局onMounted 三处拉取策略（失败静默降级，不阻断登录）；未并入 fetchMenus，因为既有单测依赖\"菜单只发一次 GET\"的断言。"
+            ),
+        ],
+    },
 ]

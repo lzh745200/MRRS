@@ -80,6 +80,21 @@
   `/system/metrics` 暴露、导出响应计数）；前端 `auth/auth-store/menu/menu-bypass/
   DefaultLayoutSafe` 5 文件 **157 passed**（策略接线不破坏既有「菜单只发一次 GET」断言）。
 
+### Fixed（CI 收口，2026-11-01 下午）
+
+- `backend/app/services/version_history_data.py` 用 `scripts/sync_update_log.py` 重新生成
+  （121 段）：此前改了 CHANGELOG 未同步，`test_update_log_sync` 红。
+- `backend/app/services/fund_settlement_service.py` 的汇总查询补 `Fund.is_active.is_(True)`，
+  修 `Soft-delete filter guard` 门禁（已软删的经费不得计入决算结余）。
+- 审计调用收敛为一个边界：`AuditLogger.log_safely()`（内部唯一宽泛 catch + WARNING，
+  返回是否成功），备份创建/删除与系统备份改用它，替代三处各自 `try/except Exception`
+  —— 审计失败不再可能把「备份已成功」变成 500，同时 `except Exception` 从 811 降到 809。
+- `org_module_policy_gate.resolve_user()` 的解析/查库合并为一个 fail-open 边界（任一步
+  异常只留 WARNING 并放行给端点鉴权），配 `.type-debt-baseline.json` 更新（mypy 77 / 宽泛
+  catch 809），并在提交说明中记录 +3 的理由（两类 fail-safe 兜底不可收窄）。
+- 前端 `src/api/request.ts` 导出截断提示补 4 例（含缺头 `?` 兜底 / 非 blob / 头为 false），
+  修 `src/api/**` 100% 覆盖率门禁（此前 98.45%，缺 333、335-341 行）。
+
 ## [1.18.32] - 2026-11-01 — 时间口径 / 数据归属 / 越权读取三条主线收口（8 项缺陷）
 
 > 本轮来自现场与代码复核的混合缺陷，共同点是「静默错」：接口不报错、页面不白屏，

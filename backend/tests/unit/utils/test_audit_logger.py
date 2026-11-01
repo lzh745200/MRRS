@@ -204,3 +204,23 @@ class TestAuditLogger:
         assert AuditLevel.INFO == "info"
         assert AuditLevel.WARNING == "warning"
         assert AuditLevel.CRITICAL == "critical"
+
+    @patch('app.utils.audit_logger.logger')
+    def test_log_safely_returns_true_on_success(self, mock_logger):
+        """log_safely：正常路径等同 log()，返回 True。
+
+        2026-11-01 类型债棘轮：三个调用点各自的 try/except 收敛到本方法，
+        这里锁住「成功时布尔返回」契约，避免调用方误判。
+        """
+        ok = AuditLogger.log_safely(action=AuditAction.CREATE, user_id=1, username="u")
+        assert ok is True
+        mock_logger.info.assert_called_once()
+
+    @patch('app.utils.audit_logger.logger')
+    def test_log_safely_swallows_failure_with_warning(self, mock_logger):
+        """log_safely：审计失败必须吞掉异常并留 WARNING（否则备份结果被审计拖垮）。"""
+        with patch.object(AuditLogger, 'log', side_effect=RuntimeError("audit db down")):
+            ok = AuditLogger.log_safely(action=AuditAction.CREATE, user_id=1, username="u")
+
+        assert ok is False
+        mock_logger.warning.assert_called_once()

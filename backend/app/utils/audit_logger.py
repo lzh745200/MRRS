@@ -184,6 +184,26 @@ class AuditLogger:
         AuditLogger._persist_to_db(audit_data, action)
 
     @staticmethod
+    def log_safely(*args: Any, **kwargs: Any) -> bool:
+        """记录审计，但**永不**把异常抛给调用方（返回是否成功）。
+
+        用于「审计是附加动作、业务结果更重要」的路径：备份创建/删除、
+        跨机导入确认、危险操作留痕等。审计失败必须留 WARNING 日志，
+        否则等于静默丢证据（AGENTS.md「宽泛 catch 必须留痕」）。
+
+        历史（2026-11-01 类型债棘轮）：此前每个调用点各自写
+        ``try: AuditLogger.log(...) except Exception: logger.warning(...)``，
+        三处重复的宽泛 catch 把 ``except Exception`` 计数抬高 3 处；
+        收敛到本方法后全库只保留一个「审计不得影响业务」的边界。
+        """
+        try:
+            AuditLogger.log(*args, **kwargs)
+        except Exception:  # noqa: BLE001 - 审计失败不得影响业务，必须留痕
+            logger.warning("审计日志写入失败（业务不受影响）", exc_info=True)
+            return False
+        return True
+
+    @staticmethod
     def _persist_to_db(
         audit_data: Dict[str, Any],
         action: AuditAction,

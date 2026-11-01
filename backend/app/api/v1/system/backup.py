@@ -316,24 +316,21 @@ async def create_backup(
 
         # 立即项（2026-11-01）：备份创建写审计（此前创建/删除都没有痕迹，
         # 只剩 app.log 文本，无法回答"谁在何时拷走了全库"）。
-        try:
-            from app.utils.audit_logger import AuditLogger
+        from app.utils.audit_logger import AuditLogger
 
-            AuditLogger.log(
-                action="backup_create",
-                user_id=None,
-                username=operator,
-                resource_type="backup",
-                resource_id=record.file_name,
-                details={
-                    "file_name": record.file_name,
-                    "file_size": record.file_size,
-                    "include_uploads": body.include_uploads,
-                    "encrypted": True,
-                },
-            )
-        except Exception:
-            logger.warning("备份审计写入失败（不影响备份结果）", exc_info=True)
+        AuditLogger.log_safely(
+            action="backup_create",
+            user_id=None,
+            username=operator,
+            resource_type="backup",
+            resource_id=record.file_name,
+            details={
+                "file_name": record.file_name,
+                "file_size": record.file_size,
+                "include_uploads": body.include_uploads,
+                "encrypted": True,
+            },
+        )
 
         # 保留策略在此统一执行（单一事实源）。
         # 触发方可能是 Electron 定时任务（X-Internal-Backup）或前端手动备份，
@@ -693,19 +690,16 @@ async def delete_backup(
         )
 
         # 立即项（2026-11-01）：删除备份写审计（全库备份的销毁需要可追溯）
-        try:
-            from app.utils.audit_logger import AuditLogger
+        from app.utils.audit_logger import AuditLogger
 
-            AuditLogger.log(
-                action="backup_delete",
-                user_id=None,
-                username=operator,
-                resource_type="backup",
-                resource_id=filename,
-                details={"file_name": filename, "backup_id": target.backup_id},
-            )
-        except Exception:
-            logger.warning("备份删除审计写入失败（不影响删除结果）", exc_info=True)
+        AuditLogger.log_safely(
+            action="backup_delete",
+            user_id=None,
+            username=operator,
+            resource_type="backup",
+            resource_id=filename,
+            details={"file_name": filename, "backup_id": target.backup_id},
+        )
 
         return {"success": True, "message": f"备份文件 '{filename}' 已删除"}
     except HTTPException:

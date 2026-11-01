@@ -180,19 +180,22 @@ def resolve_user(scope, db):
         from app.core.security import decode_token
 
         payload = decode_token(token)
-    except Exception:
+        if not payload:
+            return None
+        username = payload.get("sub")
+        if not username:
+            return None
+        from app.models.user import User
+
+        return db.query(User).filter(User.username == username).first()
+    except Exception:  # noqa: BLE001 - fail-open 旁路：解析/查库任何异常都必须放行给端点鉴权裁决
+        # 本层是"旁路裁决"：拿不到确定用户就不裁决，交给端点认证依赖（真正源头）。
+        # 这里刻意保持宽泛 catch —— 令牌内容畸形、连接池取连接失败等都不应该让
+        # 一次写请求 500；但必须留 WARNING，避免静默降级无人发现。
         logger.warning(
-            "组织模块策略闸门：令牌解析异常，放行（鉴权由端点负责）", exc_info=True
+            "组织模块策略闸门：用户解析异常，放行（鉴权由端点负责）", exc_info=True
         )
         return None
-    if not payload:
-        return None
-    username = payload.get("sub")
-    if not username:
-        return None
-    from app.models.user import User
-
-    return db.query(User).filter(User.username == username).first()
 
 
 def load_policy_edit_mode(db, organization_id: int, module_key: str) -> Optional[str]:

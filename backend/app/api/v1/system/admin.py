@@ -140,19 +140,17 @@ async def create_backup(current_user=Depends(get_current_user), db: Session = De
             password=_resolve_auto_backup_password(None),
         )
 
-        try:
-            from app.utils.audit_logger import AuditLogger
+        from app.utils.audit_logger import AuditLogger
 
-            AuditLogger.log(
-                action="backup_create",
-                user_id=getattr(current_user, "id", None),
-                username=getattr(current_user, "username", "unknown"),
-                resource_type="backup",
-                resource_id=record.file_name,
-                details={"file_name": record.file_name, "encrypted": True, "source": "system/admin/backup"},
-            )
-        except Exception:
-            logger.warning("备份审计写入失败（不影响备份结果）", exc_info=True)
+        # 审计是附加动作：写失败不得让「备份已成功」变成 500（log_safely 内部留 WARNING）
+        AuditLogger.log_safely(
+            action="backup_create",
+            user_id=getattr(current_user, "id", None),
+            username=getattr(current_user, "username", "unknown"),
+            resource_type="backup",
+            resource_id=record.file_name,
+            details={"file_name": record.file_name, "encrypted": True, "source": "system/admin/backup"},
+        )
 
         return success_response(
             data={
