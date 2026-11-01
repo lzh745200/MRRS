@@ -582,10 +582,17 @@ jobs:
         shell: pwsh
         env:
           SIGN_EXPECT_SIGNED: ${{ secrets.CSC_LINK != '' && '1' || '0' }}
+        # 注意：[switch] 参数不能靠 `-RequireSignature:(expr)` 传 —— 无论 `-File` 还是
+        # `-Command`，表达式都可能以字符串形式落到 [switch] 上，报
+        # "Cannot convert value System.String to SwitchParameter"（v1.18.33 tag 构建即因此失败）。
+        # 这里按环境变量分成两条明确命令：需要门禁时只带开关名，不需要时完全不写。
         run: |
-          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_installer_signature.ps1 `
-            -Path dist/electron `
-            -RequireSignature:($env:SIGN_EXPECT_SIGNED -eq '1')
+          if ($env:SIGN_EXPECT_SIGNED -eq '1') {
+            & ./scripts/verify_installer_signature.ps1 -Path dist/electron -RequireSignature
+          } else {
+            & ./scripts/verify_installer_signature.ps1 -Path dist/electron
+          }
+          if ($LASTEXITCODE -ne 0) { throw "全产物签名校验失败（exit $LASTEXITCODE）" }
 
       # 10.5 生成产物 SHA256 清单（军队分发完整性链，W6-T5）
       - name: Generate SHA256SUMS

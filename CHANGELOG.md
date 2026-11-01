@@ -47,6 +47,12 @@
 - **审计日志缺请求关联 ID**：响应头有 `X-Request-ID`，JSON 日志却没有，无法把一次请求的
   多条日志串起来。`JsonFormatter` 现从 `request_id_var` 取上下文写入 `request_id`
   （后台线程/启动期省略该字段）。
+- **发版流水线签名校验开关传参错误**：`build-windows.yml` 用
+  `powershell -File ... -RequireSignature:($env:SIGN_EXPECT_SIGNED -eq '1')` 调用校验脚本，
+  `[switch]` 参数收到字符串直接报 `Cannot convert value "System.String" to
+  SwitchParameter`，v1.18.33 的 tag 构建即在「Verify all exe signatures」必失败。改为按
+  环境变量分成两条明确命令（需要门禁时只写开关名，不需要时完全不写），并在注释里记录
+  这个 PowerShell 参数绑定陷阱。
 
 ### Added
 

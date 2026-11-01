@@ -3940,6 +3940,11 @@ VERSION_HISTORY_DATA = [
                 "写入 request_id（后台线程/启动期省略该字段）。"
             ),
             (
+                "发版流水线签名校验开关传参错误：build-windows.yml 用powershell -File ... -RequireSignature:($env:SIGN_EXPECT_SI"
+                "GNED -eq '1') 调用校验脚本，[switch] 参数收到字符串直接报 Cannot convert value \"System.String\" toSwitchParame"
+                "ter…"
+            ),
+            (
                 "组织模块策略执行点（shadow 默认）：middleware/org_module_policy_gate.py 把OrgModulePolicy.edit_mode 真正接到写请求上（"
                 "此前只存不执行）。ORG_MODULE_POLICY_MODE=off|shadow|enforce默认 shadow：只记 WARNING + 响应头 X-Org-Module-Poli"
                 "cy: would-block，不改行为；"
@@ -3948,10 +3953,6 @@ VERSION_HISTORY_DATA = [
                 "Electron 权限处理器：session.defaultSession.setPermissionRequestHandler/CheckHandler默认拒绝，仅放行 notific"
                 "ations / clipboard-sanitized-write / fullscreen（大屏页 requestFullscreen 是正式功能）。摄像头/麦克风/定位/屏幕捕获不再"
                 "被默认批准。"
-            ),
-            (
-                "组织模块策略前端接线：fetchOrgPolicies 此前全仓无调用点，visibility=hidden的配置永远读不到（后端 shadow 拦得住、侧栏照样显示）。现登录成功、2FA"
-                " 成功、布局onMounted 三处拉取策略（失败静默降级，不阻断登录）；未并入 fetchMenus，因为既有单测依赖\"菜单只发一次 GET\"的断言。"
             ),
         ],
     },
