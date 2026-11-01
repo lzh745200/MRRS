@@ -115,3 +115,31 @@
 - 打包态冒烟：`python scripts/verify_frozen_modules.py` 校验冻结模块（含 `difflib` + 全部 `app.*`）。
 
 完整日志与命令见 `docs/03-开发文档/09-审计报告/2026-11-01-回归测试报告-v1.18.32.md`。
+
+## 六、本版构建与产物（2026-11-01）
+
+- **源码冻结点**：`76a48b09`；annotated tag `v1.18.32` 已推送。
+- **PR Checks**：run `41261848814`，**9/9 success**（12 段后端全量 + 前端覆盖率 + E2E +
+  Windows smoke + 静态/安全/门禁）。
+- **Windows x64 构建**：run `41263377714` success（8m51s）。
+- **ARM64 构建**：run `41263377839` success（28m26s）。
+- **Release**：`https://github.com/lzh745200/MRRS/releases/tag/v1.18.32`，共 8 个资产。
+
+| CI 资产 | 大小（bytes） | SHA256 |
+|---|---:|---|
+| `MRRS-Setup-1.18.32-x64.exe` | 283,537,167 | `4c495825c034eb560a3f908c95fcb1546ac9a2756a358f8158b9e4b2b613bfc9` |
+| `MRRS-Setup-1.18.32-arm64.deb` | 282,029,866 | `d05f3a506face767baf962da9708c831c96cf2d163e5924e1c2dbdeb16f1c3e0` |
+| `assistance-management-system_1.18.32_arm64.deb` | 105,074,352 | `b2f31129d8ce3ce6866811204624dc6114dc28e51c8b93ae717c40d5427d1388` |
+
+- **本地同 commit 构建**：`dist/electron/MRRS-Setup-1.18.32-x64.exe`（318 MB，
+  SHA256 `435a606f0ccb046f139b9aa024fac8caeace8c0f25f63a2d8aa274681c13a5e1`）；
+  前端 `version.json` = 1.18.32 / buildTime `2026-11-01T02:34:06Z`。
+- **载荷冒烟**：解包 8,478 个文件 → 内置后端（隔离 APPDATA、端口 18033）`/health` 200：
+  `version=1.18.32`、`migration.at_head=true`、`journal_mode=wal`、`clock.status=ok`。
+  证据：`deliverables/smoke-health-1.18.32.json`。
+- **安装验证**：
+  - v1.18.30 的 NSIS 安装副本曾在本机 Program Files 实测可运行（`/health` 200、
+    `/version.json` 200），证据 `deliverables/install-smoke-v1.18.30.log`；
+  - 本执行环境仍禁止向 Program Files 写入：`v1.18.32` 安装器静默执行返回 0 但不落盘，
+    故 **NSIS 注册安装/卸载冒烟未完成**，需在普通 Windows 桌面人工复验；
+  - ARM64 仅有 CI 产物与校验和，未在真实 ARM64 设备安装。
