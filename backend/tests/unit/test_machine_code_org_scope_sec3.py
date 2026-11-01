@@ -146,6 +146,41 @@ def test_list_rejects_foreign_organization_filter(monkeypatch):
     assert exc.value.status_code == 403
 
 
+def test_export_rejects_foreign_organization_filter(monkeypatch):
+    """导出端点显式传外部 organization_id 时必须 403（SEC-3：导出与列表同口径）。
+
+    该守卫是 CI 覆盖率缺口（machine_code.py:886）——只测了列表端点没测导出，
+    会让「按组织导出」重新变成跨组织数据出口。
+    """
+    from app.core.data_permission import assert_org_reachable as real_guard
+
+    monkeypatch.setattr(mc_api, "assert_org_reachable", real_guard)
+
+    class _Db:
+        def query(self, *args, **kwargs):
+            return self
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return None
+
+    monkeypatch.setattr(
+        MachineCodeService, "get_organization_pass_codes", lambda self, **kw: ([], 0)
+    )
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            mc_api.export_organization_pass_codes(
+                organization_id=99,
+                status=None,
+                db=_Db(),
+                current_user=DEPT_ADMIN,
+            )
+        )
+    assert exc.value.status_code == 403
+
+
 def test_service_list_filters_by_organization_ids():
     """服务层：organization_ids 必须落到 SQL 过滤；空列表 = 无结果（fail-closed）。"""
     from app.models.machine_code import MachineCode
