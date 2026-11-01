@@ -51,13 +51,15 @@
 
 | 项目 | 结果 |
 |---|---|
-| 后端全量（12 段独立进程） | 待填 |
-| 前端全量 vitest | 待填 |
-| 静态门禁（flake8 / type-debt / bare-returns / changelog / doc-numbers / 版本单源） | 待填 |
+| 后端全量（12 段独立进程） | **12/12 段 PASS，15,543 passed**；合并覆盖率 47,590 语句 / 11,956 分支 = **100.00%**（0 miss / 0 partial） |
+| 前端全量 vitest | **348 文件 / 7,495 用例全通过** |
+| 静态门禁（flake8 / type-debt / bare-returns / changelog / doc-numbers / 版本单源） | 全部通过：flake8 rc=0；mypy 77/77、`except Exception` 809/809（未恶化）；bare dict 241/244（NEW=0）；CHANGELOG 142 段；文档数字 846 端点 / 15,543 用例；`sync-version --check` ✅ |
 | Electron 单测 | 23 passed |
 | 打包冻结自检 | `FROZEN_MODULE_CHECK_PASS`（difflib + app.* 全收录） |
 | 冷启动冒烟 | liveness / health / version.json 全 200 |
-| CI 构建 | 待填（tag 触发） |
+| main PR Checks | run 41329183881 **9/9 job 全绿** |
+| CI 构建 | `Build Windows Installer (x64)` run 41332134601 **success**；`Build Self-Contained ARM64 Debian Package` run 41332134516 **success** |
+| 发布资产 | Windows x64 `MRRS-Setup-1.18.34-x64.exe` 317,043,050 B / `f481dc87…3384ce`；ARM64 Electron deb 295,550,048 B / `9bdb2d08…57941d`；ARM64 standalone deb 105,107,032 B / `7a97577e…d8564e`；三份 `SHA256SUMS` 与 GitHub API digest 逐字一致 |
 
 ## 升级步骤
 

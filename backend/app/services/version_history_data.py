@@ -3958,7 +3958,7 @@ VERSION_HISTORY_DATA = [
     },
     {
         "version": "1.18.34",
-        "date": "2026-11-01",
+        "date": "2026-11-02",
         "description": "路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）",
         "features": [
             (
@@ -3979,8 +3979,8 @@ VERSION_HISTORY_DATA = [
                 "/超时/非 SQLite 放行三例（test_exclusive_write_concurrency_1031.py）。"
             ),
             (
-                "后端新增 18 例（演练 8 / 端点 5 / 并发 3 / 指标 2），前端新增 8 例（看板 3、store 3、api 2）；全量回归与门禁结果见 docs/04-部署文档/RELE"
-                "ASE_NOTES-v1.18.34.md。"
+                "后端新增 20 例（演练 10 / 端点 5 / 并发 3 / 指标 2），前端新增 10 例（看板 3、store 3、api 2、导入页失败分支 2）；全量回归与门禁结果见 docs/"
+                "04-部署文档/RELEASE_NOTES-v1.18.34.md。"
             ),
             (
                 "依赖安全扫描（pip-audit + npm audit --omit=dev --audit-level=high）已在 PR Checks 的security 作业里运行，本轮复核无需"

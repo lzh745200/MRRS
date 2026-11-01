@@ -1,4 +1,4 @@
-# 部署文档 v1.18.33
+# 部署文档 v1.18.34
 
 ## 快速链接
 
@@ -11,8 +11,8 @@
 | **Docker E2E** | 任意 | compose | `make test-e2e-docker` (E2E 测试专用配置) |
 | **升级/回滚（全平台）** | — | — | [离线升级与回滚指南](OFFLINE_UPGRADE.md) |
 | **安装后起不来 / 打包态排障** | — | — | [打包态启动排障与离线包验证](06-打包态启动排障与离线包验证.md)（环境变量清单 / difflib 事故 / 冻结模块自检 / 冒烟命令） |
-| **本版发布说明** | — | — | [RELEASE_NOTES-v1.18.33](RELEASE_NOTES-v1.18.33.md)（审计报告「立即 5 项 + 短期 7 项」落地 + 升级必读） |
-| **上一版发布说明** | — | — | [RELEASE_NOTES-v1.18.32](RELEASE_NOTES-v1.18.32.md)（时间口径 / 数据归属 / 越权读取 8 项修复） |
+| **本版发布说明** | — | — | [RELEASE_NOTES-v1.18.34](RELEASE_NOTES-v1.18.34.md)（路线图长期项收口：Electron 45 / 两阶段导入 / 可观测性） |
+| **上一版发布说明** | — | — | [RELEASE_NOTES-v1.18.33](RELEASE_NOTES-v1.18.33.md)（审计报告「立即 5 项 + 短期 7 项」落地 + 升级必读） |
 
 ## 部署前置检查（安全红线，v1.15.12 起，v1.15.15 复核）
 
@@ -80,7 +80,34 @@
   不要直接把默认值改为 enforce（会把存量权限配置问题一次性暴露成 403）。
 - 切换只需改环境变量并重启后端，无需改代码。
 
-## 本版发布物（v1.18.33，2026-11-01）
+## 本版发布物（v1.18.34，2026-11-02）
+
+GitHub Release [v1.18.34](https://github.com/lzh745200/MRRS/releases/tag/v1.18.34) 产出（Windows x64 + 麒麟 ARM64）：
+
+| 平台 | 产物 | 体积 / SHA256 |
+|---|---|---|
+| Windows 10/11 x64 | `MRRS-Setup-1.18.34-x64.exe`（NSIS，自包含 Electron 45 + 冻结后端，含 Python 运行时） | 317,043,050 B ≈ 302.4 MB / `f481dc87…3384ce` |
+| Windows（增量更新元数据） | `MRRS-Setup-1.18.34-x64.exe.blockmap`、`latest.yml` | — |
+| 麒麟 V10 ARM64 | `MRRS-Setup-1.18.34-arm64.deb`（Electron 桌面版） | 295,550,048 B ≈ 281.9 MB / `9bdb2d08…57941d` |
+| 麒麟 V10 ARM64 | `assistance-management-system_1.18.34_arm64.deb`（standalone 纯 Web 版，systemd 托管） | 105,107,032 B ≈ 100.2 MB / `7a97577e…d8564e` |
+| 全部 | `SHA256SUMS-windows-x64.txt`、`SHA256SUMS-electron-deb-arm64.txt`、`SHA256SUMS-standalone-deb-arm64.txt` | 分发前务必 `sha256sum -c` 校验 |
+
+> **安装包为什么变大了约 33 MB**：Electron 从 33（Chromium 130）升到 45（Chromium 142 代），
+> 新版内核体积更大；这不是把依赖打多了，离线自包含口径未变（目标机仍**无需** Python / Node）。
+>
+> 发布验证：`v1.18.34` tag 触发的 `Build Windows Installer (x64)`（run 41332134601）与
+> `Build Self-Contained ARM64 Debian Package`（run 41332134516）均 success；main 的 PR Checks
+> （run 41329183881）9/9 job 全绿；三份 `SHA256SUMS` 与 GitHub API 资产 digest 逐字一致。
+
+### v1.18.34 升级要点（4 条，现场最常问）
+
+1. **浏览器内核换了**：Electron 33 已 EOL 且 Chromium 130 受在野利用 CVE 影响；升级后
+   Windows 首次启动如出现 SmartScreen 提示属"未签名"已知限制（安装包签名待证书）。
+2. **导入先演练**：数据包「确认导入」现在先弹「将新增 / 覆盖 / 拒绝」摘要，演练失败不会写库。
+3. **监控面板多了业务卡片**：业务事件计数与慢请求 TOP5；计数是进程内累计，**服务重启归零**。
+4. **后端依赖与行为不变**：本版不含数据库 schema 变更，回滚只需装回 v1.18.33（先备份）。
+
+## 上一版发布物（v1.18.33，2026-11-01）
 
 GitHub Release [v1.18.33](https://github.com/lzh745200/MRRS/releases/tag/v1.18.33) 产出（Windows x64 + 麒麟 ARM64）：
 
@@ -112,7 +139,7 @@ GitHub Release [v1.18.33](https://github.com/lzh745200/MRRS/releases/tag/v1.18.3
 4. **导入的数据不会挂错组织**：数据包换主键时会重写子表外键（项目/经费不再指向旧 id）；
    报表模板导入按组织 + `is_active` 精确匹配村，重名村不再错挂。
 
-## 上一版发布物（v1.18.32，2026-11-01）
+## 更早发布物（v1.18.32，2026-11-01）
 
 GitHub Release [v1.18.32](https://github.com/lzh745200/MRRS/releases/tag/v1.18.32) 产出（Windows x64 + 麒麟 ARM64）：
 
@@ -182,7 +209,53 @@ sudo dpkg -i assistance-management-system_1.18.33_arm64.deb
 
 ## 发布通知模板（派单 / 通知平台可直接粘贴）
 
-### v1.18.33 模板（当前版本）
+### v1.18.34 模板（当前版本）
+
+> 仓库内没有名为「派单」的模块，站内消息中心（`/message`）已在
+> [使用指南](../02-用户手册/使用指南.md) 覆盖。若通知渠道是外部 OA / 钉钉 / 企业微信，
+> 直接粘贴下面模板即可，无需改代码；如需自动推送，请提供平台 Webhook 与凭据（**待确认**）。
+
+```text
+【版本发布】帮扶管理信息系统 v1.18.34（2026-11-02）
+
+一、本版重点（路线图长期项收口）
+1. 浏览器内核升级：Electron 33（已 EOL）→ 45，修复 Chromium 130 的在野利用 CVE；
+   安装包因此增大约 33 MB，仍为离线自包含（目标机无需 Python/Node）。
+2. 数据包导入改为两阶段：先只读演练，弹窗显示「将新增 N 条 / 覆盖 M 条 / 拒绝 K 条」，
+   演练失败零写入；确认导入仍是单事务，中途失败整体回滚。
+3. 可观测性：监控面板新增业务事件（导入成功/失败、导出、备份、权限包）与慢请求 TOP5；
+   计数为进程内累计，服务重启归零。
+4. 质量：backend 12 段 15,543 用例全过且行/分支覆盖 100%；前端 348 文件 7,495 用例全过。
+
+二、安装包（GitHub Release 附带 SHA256SUMS，下载后请先核对哈希）
+- Windows x64：MRRS-Setup-1.18.34-x64.exe（317,043,050 B）
+- 麒麟/国产 ARM64（Electron 桌面版）：MRRS-Setup-1.18.34-arm64.deb（295,550,048 B）
+- 麒麟/国产 ARM64（standalone Web，自包含无 Electron）：assistance-management-system_1.18.34_arm64.deb（105,107,032 B）
+
+三、升级步骤
+1. 备份：系统管理 → 备份与存储 → 创建备份（务必记录备份密码）。
+2. 覆盖安装对应架构的包（Windows 直接运行安装程序；Linux `sudo dpkg -i <deb>`）。
+3. 启动后确认：登录页/「关于」显示 1.18.34；GET /api/v1/health 全项 ok；
+   数据包列表点一次「演练」应弹出数量摘要；监控面板可见业务事件卡片。
+4. 升级后 30 分钟内不要卸载旧包，便于回滚（见《离线升级与回滚指南》）。
+
+四、常见问题（先看这里，再提单）
+- 装完打不开 / 白屏 / 启动即退：见《打包态启动排障与离线包验证》
+  （冻结模块自检 verify_frozen_modules.py、环境变量清单、日志位置）。
+- Windows 首次运行 SmartScreen 提示：安装包未做代码签名（无证书）的已知限制，
+  请核对 SHA256 后选择「仍要运行」。
+- 监控面板业务计数为 0：本版计数为进程内累计，重启后归零；跨重启请查日志/导出记录。
+- 多机/局域网注册被拒 403：所有实例统一配置同一 PASS_CODE_SECRET。
+- 导入授权包失败 400：本机未配置 GRANT_PUBKEY（或包未签名），见 README「部署前置检查」第 3 条。
+- 写操作被 403 且响应头有 X-Org-Module-Policy：组织模块策略处于 shadow/enforce 下的预期拦截，
+  联系超管调整「组织模块策略」。
+
+五、反馈
+请在派单中附：安装包名 + 架构 + 操作系统版本 + 报错截图 + 日志
+（Windows: %LOCALAPPDATA%\bumofu-assistance\data\logs；Linux: /opt/assistance-management-system/data/logs）。
+```
+
+### 历史模板：v1.18.33（2026-11-01）
 
 > 仓库内没有名为「派单」的模块，站内消息中心（`/message`）已在
 > [使用指南](../02-用户手册/使用指南.md) 覆盖。若通知渠道是外部 OA / 钉钉 / 企业微信，

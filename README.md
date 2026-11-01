@@ -5,7 +5,7 @@
 ![Version](https://img.shields.io/badge/version-1.18.34-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-22%2C860-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C038-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 本版亮点（v1.18.34）
@@ -230,8 +230,8 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-11-01（v1.18.33 发布前）— 后端 **15,523** 用例（12 段 12/12 PASS）、
-> 前端 **348 个 `.test.ts` / 7,487 用例**；统一门禁 **35/35 PASS**。
+> **上次全量验证**: 2026-11-02（v1.18.34 发布前）— 后端 **15,543** 用例（12 段 12/12 PASS，
+> 行/分支覆盖率 100%）、前端 **348 个 `.test.ts` / 7,495 用例**；统一门禁 **35/35 PASS**。
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
 > 前端 12 组 glob 阈值 100%；覆盖率结论以本次 tag 的 `PR Checks` 运行记录为准。）
