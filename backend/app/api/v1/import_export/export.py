@@ -34,18 +34,19 @@ def _truncation_headers(total: int, returned: int) -> Dict[str, str]:
     「静默截断」在现场最常被当成 bug（用户以为导出成功但少了数据）。
     返回空字典表示未截断，不改变既有响应。
     """
-    if not isinstance(total, int) or not isinstance(returned, int):
+    headers: Dict[str, str] = {}
+    if isinstance(total, int) and isinstance(returned, int) and total > returned:
+        headers = {
+            "X-Export-Truncated": "true",
+            "X-Export-Total": str(total),
+            "X-Export-Returned": str(returned),
+            "X-Export-Limit": str(MAX_EXPORT_ROWS),
+        }
+    else:
         # 防御：单测里 query 常被整体 mock，`.count()` 会返回 MagicMock/None。
         # 导出响应不应因为「统计不到总数」而失败（不能为了提示把成功导出变成 500）。
-        return {}
-    if total <= returned:
-        return {}
-    return {
-        "X-Export-Truncated": "true",
-        "X-Export-Total": str(total),
-        "X-Export-Returned": str(returned),
-        "X-Export-Limit": str(MAX_EXPORT_ROWS),
-    }
+        headers = {}
+    return headers
 
 
 def format_datetime(dt):

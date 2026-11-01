@@ -205,12 +205,13 @@ def _query_audit_logs_scoped(
         .limit(page_size)
         .all()
     )
-    return {
+    payload = {
         "items": [log.to_dict() for log in logs],
         "total": total,
         "page": page,
         "page_size": page_size,
     }
+    return payload
 
 
 def _query_audit_stats_scoped(
@@ -257,7 +258,7 @@ def _query_audit_stats_scoped(
     today_start = to_utc_naive(local_midnight)
     today_operations = query.filter(AuditLogModel.created_at >= today_start).count()
 
-    return {
+    payload = {
         "total_count": query.count(),
         "by_action": by_action,
         "by_status": by_status,
@@ -272,6 +273,7 @@ def _query_audit_stats_scoped(
         ),
         "warnings": sum(c for k, c in by_level.items() if str(k).lower() in ("warning", "warn")),
     }
+    return payload
 
 
 def _query_security_events_scoped(
@@ -308,12 +310,13 @@ def _query_security_events_scoped(
         .limit(page_size)
         .all()
     )
-    return {
+    payload = {
         "items": [event.to_dict() for event in events],
         "total": total,
         "page": page,
         "page_size": page_size,
     }
+    return payload
 
 
 def get_security_service(db: Session = Depends(get_db)) -> SecurityEventService:

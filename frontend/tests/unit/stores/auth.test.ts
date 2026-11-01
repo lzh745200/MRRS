@@ -367,6 +367,22 @@ describe('useAuthStore', () => {
       expect(mockUseMenuStore).toHaveBeenCalled()
     })
 
+    it('菜单 store 提供 fetchOrgPolicies 时 2FA 登录也会加载组织模块策略', async () => {
+      const mockFetchOrgPolicies = vi.fn()
+      mockUseMenuStore.mockReturnValue({
+        fetchMenus: mockFetchMenus,
+        fetchOrgPolicies: mockFetchOrgPolicies,
+      })
+      mockVerifyLoginTwoFactor.mockResolvedValueOnce({
+        code: 200,
+        data: { access_token: 't3', user: { id: 3, username: 'carol' } },
+        refresh_token: 'r3',
+      })
+      const store = useAuthStore()
+      expect(await store.verifyTwoFactorLogin('tmp', '123456')).toBe(true)
+      expect(mockFetchOrgPolicies).toHaveBeenCalledTimes(1)
+    })
+
     it('验证失败（非 200 code）返回 false 并设置 error', async () => {
       mockVerifyLoginTwoFactor.mockResolvedValueOnce({ code: 400, message: '验证码错误' })
       const store = useAuthStore()
