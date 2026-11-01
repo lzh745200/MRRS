@@ -752,6 +752,37 @@ class TestExportOrgPassCodes:
             resp = client_admin.get("/api/v1/machine-code/organization/export")
         assert resp.status_code == 400
 
+    def test_with_organization_id_checks_reachability(self, client_admin, mock_db):
+        """带 organization_id 导出必须先做组织可达性校验（SEC-2 越权导出防线）。"""
+        svc = MagicMock()
+        svc.get_organization_pass_codes.return_value = ([], 0)
+        export_svc = MagicMock()
+        export_svc.export_organization_pass_codes.return_value = b"excel data"
+
+        with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc), \
+                patch("app.services.export_service.ExcelExportService", return_value=export_svc), \
+                patch("app.api.v1.machine_code.assert_org_reachable") as reachable:
+            resp = client_admin.get("/api/v1/machine-code/organization/export?organization_id=2")
+
+        assert resp.status_code == 200
+        reachable.assert_called_once()
+        assert reachable.call_args[0][2] == 2
+
+
+class TestDeleteOrgPassCode:
+    """DELETE /machine-code/organization/{id}：不存在时 404，且不触发越权校验。"""
+
+    def test_missing_record_returns_404_without_reachability(self, client_admin, mock_db):
+        svc = MagicMock()
+        svc.delete_organization_pass_code.return_value = False
+
+        with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc), \
+                patch("app.api.v1.machine_code.assert_org_reachable") as reachable:
+            resp = client_admin.delete("/api/v1/machine-code/organization/999")
+
+        assert resp.status_code == 404
+        reachable.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 #  Endpoints using require_admin (known bug: require_admin takes 1 arg, called with 2)
