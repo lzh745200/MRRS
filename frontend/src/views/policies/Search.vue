@@ -122,7 +122,10 @@
         <el-table-column prop="publishDate" label="发布日期" width="120" />
         <el-table-column prop="status" label="状态" width="80" align="center">
           <template #default="scope">
-            <el-tag v-if="scope.row.status" :type="scope.row.status === 'active' ? 'success' : 'danger'">
+            <el-tag
+              v-if="scope.row.status"
+              :type="scope.row.status === 'active' ? 'success' : 'danger'"
+            >
               {{ scope.row.status === 'active' ? '启用' : '禁用' }}
             </el-tag>
             <span v-else>—</span>
