@@ -1,4 +1,4 @@
-﻿/**
+/**
  * views/dataPackage/List.vue 覆盖率攻坚（四指标 100%）
  *
  * 覆盖：onMounted 加载列表/组织、loadPackages 成功失败、resetFilters、
@@ -383,14 +383,45 @@ describe('列表操作', () => {
     await vm.handleConfirmImport(pkg1 as any)
     expect(ElMessage.error).not.toHaveBeenCalledWith('导入失败')
 
-    // 失败 → error.message
-    mockPost.mockRejectedValueOnce(new Error('冲突'))
+    // 失败 → error.message（只让 confirm 失败：dry-run 若也失败会走演练兜底分支，覆盖不到这里）
+    const originalImpl = mockPost.getMockImplementation()
+
+    // 演练失败 → 提示并中止，不进入确认框（两阶段导入的关键防线）
+    const failDryRunWith = (error: unknown) => {
+      mockPost.mockImplementation((url: string, ...rest: unknown[]) => {
+        if (typeof url === 'string' && url.endsWith('/dry-run')) {
+          return Promise.reject(error)
+        }
+        return originalImpl!(url, ...rest)
+      })
+    }
+    confirmMock.mockClear()
+    failDryRunWith(new Error('演练失败'))
+    await vm.handleConfirmImport(pkg1 as any)
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalledWith('演练失败')
+    // 演练失败且无 message → 兜底文案
+    failDryRunWith({})
+    await vm.handleConfirmImport(pkg1 as any)
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalledWith('导入失败')
+
+    const failConfirmWith = (error: unknown) => {
+      mockPost.mockImplementation((url: string, ...rest: unknown[]) => {
+        if (typeof url === 'string' && url.endsWith('/confirm')) {
+          return Promise.reject(error)
+        }
+        return originalImpl!(url, ...rest)
+      })
+    }
+    failConfirmWith(new Error('冲突'))
     await vm.handleConfirmImport(pkg1 as any)
     expect(ElMessage.error).toHaveBeenCalledWith('冲突')
     // 失败无 message → 兜底
-    mockPost.mockRejectedValueOnce({})
+    failConfirmWith({})
     await vm.handleConfirmImport(pkg1 as any)
     expect(ElMessage.error).toHaveBeenCalledWith('导入失败')
+    mockPost.mockImplementation(originalImpl!)
     wrapper.unmount()
   })
 
