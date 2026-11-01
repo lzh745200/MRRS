@@ -90,6 +90,34 @@
       </div>
     </div>
 
+    <!-- ── 业务事件与慢请求（长期项 3：可观测性看板） ── -->
+    <div class="observability-panel">
+      <div class="panel-header">
+        <span
+          ><el-icon><Histogram /></el-icon> 业务事件（本次运行累计）</span
+        >
+        <el-tag v-if="businessRows.length === 0" type="info">暂无数据</el-tag>
+      </div>
+      <div v-if="businessRows.length" class="business-grid">
+        <div v-for="row in businessRows" :key="row.key" class="business-card">
+          <span class="business-value">{{ row.value }}</span>
+          <span class="business-label">{{ row.label }}</span>
+        </div>
+      </div>
+      <div v-else class="business-empty">暂无业务事件（服务重启后计数归零）</div>
+
+      <div v-if="slowApiTop.length" class="slow-top">
+        <span class="slow-title">慢请求 TOP{{ slowApiTop.length }}</span>
+        <ul class="slow-list">
+          <li v-for="(item, idx) in slowApiTop" :key="`${item.method}-${item.path}-${idx}`">
+            <el-tag size="small" effect="plain">{{ item.method }}</el-tag>
+            <code class="slow-path">{{ item.path }}</code>
+            <span class="slow-ms">{{ item.elapsed_ms }} ms</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
     <!-- ── Middle Row: API Stats Chart + System Logs ── -->
     <div class="middle-row">
       <div class="chart-panel">
@@ -237,6 +265,7 @@ import {
   Upload,
   Setting,
   FirstAidKit,
+  Histogram,
 } from '@element-plus/icons-vue'
 import echarts from '@/utils/echarts'
 import { get, apiRequest } from '@/api/request'
@@ -684,6 +713,53 @@ async function fetchHealthChecks() {
   }
 }
 
+/**
+ * 可观测性（长期项 3，2026-11-01）：业务事件计数 + 慢请求 TOP5。
+ *
+ * 数据来自 ``GET /system/metrics`` 的 ``business`` / ``observability`` 两段；
+ * 任一段缺失都降级为空（面板显示“暂无数据”），不阻断 CPU/内存/日志等主指标。
+ * 计数是进程内的，服务重启归零——面板文案要写明这一点，避免运维误判。
+ */
+interface SlowApiItem {
+  method: string
+  path: string
+  elapsed_ms: number
+}
+
+const businessCounters = ref<Record<string, number>>({})
+const slowApiTop = ref<SlowApiItem[]>([])
+
+const BUSINESS_EVENT_LABELS: Record<string, string> = {
+  'data_package.import': '数据包导入',
+  'data_package.import_failed': '数据包导入失败',
+  'export.xlsx': '导出 Excel',
+  'export.csv': '导出 CSV',
+  'backup.create': '创建备份',
+  'backup.restore': '恢复备份',
+  'permission_package.import': '权限包导入',
+}
+
+const businessRows = computed(() =>
+  Object.entries(businessCounters.value)
+    .map(([key, value]) => ({ key, label: BUSINESS_EVENT_LABELS[key] ?? key, value }))
+    .sort((a, b) => b.value - a.value)
+)
+
+async function fetchBusinessMetrics() {
+  try {
+    const res = await get('/system/metrics')
+    const data = unwrapMonitorPayload<{
+      business?: Record<string, number>
+      observability?: { slow_api_top?: SlowApiItem[] }
+    }>(res)
+    businessCounters.value = data.business ?? {}
+    slowApiTop.value = data.observability?.slow_api_top ?? []
+  } catch {
+    businessCounters.value = {}
+    slowApiTop.value = []
+  }
+}
+
 async function refreshAll() {
   loading.value = true
   try {
@@ -693,6 +769,7 @@ async function refreshAll() {
       fetchHealth(),
       fetchHealthChecks(),
       fetchSystemLogs(),
+      fetchBusinessMetrics(),
     ])
     /* c8 ignore start -- allSettled rejected/falsy branches, fetch* 内部自吞错 */
     const snapData = snap.status === 'fulfilled' ? snap.value : null
@@ -1186,6 +1263,80 @@ watch(healthExpanded, (val) => {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   margin-top: 2px;
+}
+
+/* ═══ Observability Panel（长期项 3） ═══ */
+.observability-panel {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-card);
+}
+.business-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.business-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+}
+.business-value {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--color-primary-600);
+  font-variant-numeric: tabular-nums;
+}
+.business-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+.business-empty {
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+.slow-top {
+  margin-top: 12px;
+  border-top: 1px dashed var(--color-card-border);
+  padding-top: 10px;
+}
+.slow-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.slow-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.slow-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+}
+.slow-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+.slow-ms {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-warning);
 }
 
 /* ═══ Middle Row (Chart + Logs) ═══ */

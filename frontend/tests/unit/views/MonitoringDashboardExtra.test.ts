@@ -513,4 +513,51 @@ describe('MonitoringDashboard.vue 补充', () => {
     await vm.buildChart()
     expect(mockSetOption).toHaveBeenCalled()
   })
+
+  describe('可观测性面板（长期项 3）', () => {
+    function mockMetrics(payload: Record<string, unknown>) {
+      const base = mockGet.getMockImplementation() as (url: string) => Promise<unknown>
+      mockGet.mockImplementation((url: string) => {
+        if (url === '/system/metrics') {
+          return Promise.resolve({ data: { success: true, data: payload } })
+        }
+        return base(url)
+      })
+    }
+
+    it('business + slow_api_top 齐全 → 渲染计数卡与慢请求', async () => {
+      mockMetrics({
+        business: { 'data_package.import': 3, 'data_package.import_failed': 1, 'custom.event': 5 },
+        observability: {
+          slow_api_top: [{ method: 'GET', path: '/api/v1/villages', elapsed_ms: 1200 }],
+        },
+      })
+      const wrapper = mountComponent()
+      await advanceFakeTimersAndFlush()
+      // 按计数降序：custom.event(5) → 3 → 1，未知事件回退用 key 作标签
+      const values = wrapper.findAll('.business-value').map((n) => n.text())
+      expect(values).toEqual(['5', '3', '1'])
+      const labels = wrapper.findAll('.business-label').map((n) => n.text())
+      expect(labels).toContain('custom.event')
+      expect(labels).toContain('数据包导入')
+      expect(wrapper.find('.slow-list').text()).toContain('/api/v1/villages')
+      expect(wrapper.find('.slow-list').text()).toContain('1200 ms')
+    })
+
+    it('只有 observability（无 business）→ 显示暂无业务事件', async () => {
+      mockMetrics({ observability: { slow_api_top: [] } })
+      const wrapper = mountComponent()
+      await advanceFakeTimersAndFlush()
+      expect(wrapper.find('.business-empty').text()).toContain('暂无业务事件')
+      expect(wrapper.find('.slow-top').exists()).toBe(false)
+    })
+
+    it('只有 business（无 observability）→ 渲染计数但不显示慢请求', async () => {
+      mockMetrics({ business: { 'backup.create': 2 } })
+      const wrapper = mountComponent()
+      await advanceFakeTimersAndFlush()
+      expect(wrapper.findAll('.business-value').map((n) => n.text())).toEqual(['2'])
+      expect(wrapper.find('.slow-top').exists()).toBe(false)
+    })
+  })
 })

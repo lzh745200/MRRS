@@ -14,6 +14,7 @@ import type {
   DataPackageConfirmResult,
 } from '@/types/organization'
 import * as dataPackageApi from '@/api/dataPackage'
+import type { DataPackageDryRunReport } from '@/api/dataPackage'
 
 export const useDataPackageStore = defineStore('dataPackage', () => {
   // State
@@ -27,6 +28,8 @@ export const useDataPackageStore = defineStore('dataPackage', () => {
   const importing = ref(false)
   const error = ref<string | null>(null)
   const total = ref(0)
+  /** 导入演练报告（只读，不写库）：confirm 之前给用户看「新增/覆盖/拒绝」 */
+  const dryRunReport = ref<DataPackageDryRunReport | null>(null)
 
   // Getters
   const validatedPackages = computed(() =>
@@ -157,6 +160,29 @@ export const useDataPackageStore = defineStore('dataPackage', () => {
     }
   }
 
+  /**
+   * 导入演练（长期项「两阶段导入」第一阶段）：只读调用，不写库、不改包状态。
+   * 结果同时存到 dryRunReport，供确认弹窗展示「将新增 / 将覆盖 / 将被拒」。
+   */
+  async function dryRunPackage(
+    id: number,
+    data?: DataPackageConfirmRequest
+  ): Promise<DataPackageDryRunReport> {
+    loading.value = true
+    error.value = null
+    try {
+      const report = await dataPackageApi.dryRunDataPackage(id, data)
+      dryRunReport.value = report
+      return report
+    } catch (e) {
+      error.value = (e as Error).message
+      throw e
+      /* c8 ignore next -- finally 分支为 v8 计数伪影 */
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function downloadPackage(id: number) {
     loading.value = true
     error.value = null
@@ -228,6 +254,7 @@ export const useDataPackageStore = defineStore('dataPackage', () => {
     importing.value = false
     error.value = null
     total.value = 0
+    dryRunReport.value = null
   }
 
   return {
@@ -242,6 +269,7 @@ export const useDataPackageStore = defineStore('dataPackage', () => {
     importing,
     error,
     total,
+    dryRunReport,
     // Getters
     validatedPackages,
     importedPackages,
@@ -253,6 +281,7 @@ export const useDataPackageStore = defineStore('dataPackage', () => {
     importPackage,
     previewPackage,
     confirmImport,
+    dryRunPackage,
     downloadPackage,
     deletePackage,
     setCurrentPackage,

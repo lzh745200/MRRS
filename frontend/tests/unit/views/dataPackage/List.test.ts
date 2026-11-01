@@ -1,4 +1,4 @@
-/**
+﻿/**
  * views/dataPackage/List.vue 覆盖率攻坚（四指标 100%）
  *
  * 覆盖：onMounted 加载列表/组织、loadPackages 成功失败、resetFilters、
@@ -185,7 +185,8 @@ function mountComp() {
 
 async function clickBtn(wrapper: any, text: string, index = 0) {
   const btns = wrapper.findAll('.el-button-stub').filter((b: any) => b.text().trim().includes(text))
-  expect(btns.length, `按钮「${text}」`).toBeGreaterThan(index)
+  const all = wrapper.findAll('.el-button-stub').map((b: any) => b.text().trim())
+  expect(btns.length, `按钮「${text}」; 实际=[${all.join(' | ')}]`).toBeGreaterThan(index)
   await btns[index].trigger('click')
   await flushPromises()
 }
@@ -193,7 +194,19 @@ async function clickBtn(wrapper: any, text: string, index = 0) {
 beforeEach(() => {
   vi.resetAllMocks()
   mockGet.mockImplementation(defaultApiImpl)
-  mockPost.mockResolvedValue({ success: true })
+  // 两阶段导入：confirm 之前先调 dry-run，演练报告带「新增/覆盖/拒绝」计数
+  mockPost.mockImplementation((url: string) => {
+    if (typeof url === 'string' && url.endsWith('/dry-run')) {
+      return Promise.resolve({
+        success: true,
+        total_records: 10,
+        total_to_create: 6,
+        total_to_update: 0,
+        total_rejected: 4,
+      })
+    }
+    return Promise.resolve({ success: true })
+  })
   mockApiRequest.mockResolvedValue({})
   confirmMock.mockResolvedValue('confirm')
 })
@@ -346,13 +359,21 @@ describe('列表操作', () => {
   })
 
   it('handleConfirmImport：确认 → 导入成功 + 回第 1 页刷新；取消静默；失败提示', async () => {
+    pkg1.status = 'validated'
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     vm.pagination.page = 2
     mockPost.mockClear()
+    expect(vm.packages.map((p: any) => p.status)).toEqual(['validated', 'pending', 'imported', 'weird'])
     await clickBtn(wrapper, '确认导入', 0) // pkg1 validated
-    expect(confirmMock).toHaveBeenCalledWith('确定要导入此数据包吗？', '确认导入', expect.anything())
+    // 两阶段导入：先 dry-run 拿到差异摘要，再弹确认框（文案含计数）
+    expect(mockPost).toHaveBeenCalledWith('/data-packages/1/dry-run', {})
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.stringContaining('本次将新增 6 条、覆盖 0 条、拒绝 4 条'),
+      '确认导入',
+      expect.anything(),
+    )
     expect(mockPost).toHaveBeenCalledWith('/data-packages/1/confirm', {})
     expect(ElMessage.success).toHaveBeenCalledWith('导入成功')
     expect(vm.pagination.page).toBe(1)
@@ -502,3 +523,5 @@ describe('辅助函数', () => {
     wrapper.unmount()
   })
 })
+
+

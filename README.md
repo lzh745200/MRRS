@@ -1,14 +1,31 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.33
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.34
 
-![Version](https://img.shields.io/badge/version-1.18.33-blue)
+![Version](https://img.shields.io/badge/version-1.18.34-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-22%2C860-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.33）
+## 本版亮点（v1.18.34）
+
+- **桌面壳安全寿命**：Electron `33.3.1`（2025-04 已 EOL，Chromium 130）升级到
+  `45.2.1`；Chromium 130 命中的 V8 CVE-2025-6554（CISA KEV 在野）不再暴露。
+- **导入可预览、可回滚**：新增 `POST /api/v1/data-packages/{id}/dry-run`，先返回
+  「将新增 / 将覆盖 / 被拒绝」三组计数与拒绝明细，再走原有的一次性 savepoint 提交；
+  演练**只读**，不写库、不改包状态。
+- **运维看得见**：`GET /api/v1/system/metrics` 新增 `business`（导入/导出/备份/权限包
+  导入计数）与 `observability`（慢请求 TOP、导入失败率）；系统监控页新增可观测性面板。
+- **关键路径故障注入 + 并发用例**：坏 zip、confirm 中途异常回滚（含失败计数）、
+  独占写锁双线程互斥与同线程重入超时，全部进回归集。
+- **依赖安全扫描**：`pip-audit` + `npm audit --audit-level=high` 已是 PR Checks 的
+  固定 job（本版复核仍全绿）。
+- 🧪 验证与安装包：见
+  [v1.18.34 发布说明](docs/04-部署文档/RELEASE_NOTES-v1.18.34.md)（全量回归数字、
+  三平台产物与 SHA256）。
+
+## 历史亮点（v1.18.33）
 
 - **审计报告「立即 5 项 + 短期 7 项」全部落地**（对应
   [全面审查与修复报告](docs/03-开发文档/09-审计报告/2026-10-31-全面审查与修复报告.md)）：

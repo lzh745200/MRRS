@@ -172,3 +172,38 @@ class DataPackageConfirmResult(BaseModel):
     errors: List[Any] = Field(default_factory=list)
     records_imported: int = 0
     message: str = ""
+
+
+class DataPackageDryRunTypeReport(BaseModel):
+    """导入演练：单个数据类型的差异清单（只读，不落库）。"""
+
+    data_type: str = ""
+    total: int = 0
+    accepted: int = 0
+    rejected: int = 0
+    existing: int = 0
+    to_create: int = 0
+    to_update: int = 0
+    id_samples: List[Any] = Field(default_factory=list)
+
+
+class DataPackageDryRunReport(BaseModel):
+    """导入演练报告（长期项：两阶段导入的第一阶段）。
+
+    与 confirm 使用同一套「读取 zip → 字段校验 → 主键存在性判定」逻辑，
+    但**绝不写库**：先让用户看清「将新增 / 将覆盖 / 将被拒」的真实数量，
+    再决定是否执行 confirm；confirm 侧仍是 savepoint + 独占写锁的原子提交。
+    """
+
+    success: bool = True
+    package_id: int = 0
+    package_code: str = ""
+    status: str = ""
+    overwrite_existing: bool = False
+    types: List[DataPackageDryRunTypeReport] = Field(default_factory=list)
+    total_records: int = 0
+    total_to_create: int = 0
+    total_to_update: int = 0
+    total_rejected: int = 0
+    rejected: List[Any] = Field(default_factory=list)
+    message: str = ""

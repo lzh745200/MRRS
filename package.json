@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.18.33",
+  "version": "1.18.34",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -30,7 +30,7 @@
     "electron-log": "^4.4.8"
   },
   "devDependencies": {
-    "electron": "^33.3.1",
+    "electron": "^45.2.1",
     "electron-builder": "^24.13.3",
     "electron-builder-squirrel-windows": "^24.13.3"
   },

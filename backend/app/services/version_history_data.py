@@ -3956,4 +3956,36 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.34",
+        "date": "2026-11-01",
+        "description": "路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）",
+        "features": [
+            (
+                "Electron 33.3.1 → 45.2.1：33 分支已于 2025-04-28 EOL，Chromium 130 落后 12 个大版本，且 CVE-2025-6554（V8，CVS"
+                "S 8.1，CISA KEV 在野）覆盖区间包含 130。"
+            ),
+            (
+                "两阶段导入（先演练、再确认）：新增 POST /api/v1/data-packages/{id}/dry-run，只读返回「每类将新增/覆盖/拒绝多少 + 拒绝明细」，与 confirm"
+                " 共用同一套读取与字段校验，不写库、不改包状态；run_in_thread 执行避免冻结事件循环；组织权限与 confirm 同一口径（无权 403）。前端确认导入前先演练并把摘要写进确认"
+                "弹窗（新增 6 / 覆盖 M / 拒绝 K），演练失败则零写入。"
+            ),
+            (
+                "可观测性看板：GET /api/v1/system/metrics 增加 business（导入成功/失败、导出、备份、权限包导入计数）与 observability（慢请求摘要、慢请求 "
+                "TOP5、数据包导入失败率；无导入时 null而非除零）。监控面板新增「业务事件（本次运行累计）」卡片与慢请求 TOP 列表，计数进程内累计、重启归零（面板已注明）。"
+            ),
+            (
+                "故障注入与并发用例：坏包演练抛 BadZipFile、confirm 中途异常必须回滚且失败计数 +1；SQLiteWriteCoordinator.exclusive_write 补互斥"
+                "/超时/非 SQLite 放行三例（test_exclusive_write_concurrency_1031.py）。"
+            ),
+            (
+                "后端新增 18 例（演练 8 / 端点 5 / 并发 3 / 指标 2），前端新增 8 例（看板 3、store 3、api 2）；全量回归与门禁结果见 docs/04-部署文档/RELE"
+                "ASE_NOTES-v1.18.34.md。"
+            ),
+            (
+                "依赖安全扫描（pip-audit + npm audit --omit=dev --audit-level=high）已在 PR Checks 的security 作业里运行，本轮复核无需"
+                "新增（结论与命令记录在发布说明）。"
+            ),
+        ],
+    },
 ]

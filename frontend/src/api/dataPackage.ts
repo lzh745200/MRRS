@@ -107,6 +107,45 @@ export async function confirmImport(
   return response
 }
 
+/** 导入演练：单个数据类型的差异清单（长期项「两阶段导入」第一阶段） */
+export interface DataPackageDryRunTypeReport {
+  data_type: string
+  total: number
+  accepted: number
+  rejected: number
+  existing: number
+  to_create: number
+  to_update: number
+  id_samples: number[]
+}
+
+/** 导入演练报告：只读，不写库、不改包状态 */
+export interface DataPackageDryRunReport {
+  success: boolean
+  package_id: number
+  package_code: string
+  status: string
+  overwrite_existing: boolean
+  types: DataPackageDryRunTypeReport[]
+  total_records: number
+  total_to_create: number
+  total_to_update: number
+  total_rejected: number
+  rejected: Array<{ data_type: string; row: number; message: string }>
+  message: string
+}
+
+/**
+ * 导入演练（只读）：先看「将新增 / 将覆盖 / 将被拒」，再决定是否 confirm。
+ */
+export async function dryRunDataPackage(
+  id: number,
+  data?: DataPackageConfirmRequest
+): Promise<DataPackageDryRunReport> {
+  const response = await post(`${BASE_URL}/${id}/dry-run`, data || {})
+  return response
+}
+
 /**
  * 下载数据包
  */

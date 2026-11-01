@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.async_utils import run_in_thread
 from app.core.exceptions import BusinessError, NotFoundException
 from app.utils.upload_helper import (
     ensure_zip_within_limit,
@@ -44,6 +45,7 @@ from app.models.import_export_history import OperationResult
 from app.models.data_package import PackageType
 from app.schemas.data_package import (DataPackageConfirmRequest,
                                       DataPackageConfirmResult,
+                                      DataPackageDryRunReport,
                                       DataPackageExportRequest,
                                       DataPackageExportResult,
                                       DataPackageImportResult,
@@ -1238,6 +1240,46 @@ async def confirm_import(
 
     except BusinessError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/{package_id}/dry-run",
+    response_model=DataPackageDryRunReport,
+    summary="导入演练（只读差异清单）",
+)
+async def dry_run_data_package(
+    package_id: int,
+    data: DataPackageConfirmRequest,
+    current_user=Depends(get_current_user),
+    service: DataPackageService = Depends(get_package_service),
+    permission_service: OrganizationPermissionService = Depends(get_permission_service),
+):
+    """两阶段导入的第一阶段：只读演练。
+
+    返回「每个类型将新增多少、覆盖多少、拒绝多少」以及拒绝明细，**不写库、不改包状态**。
+    用户确认清单后再调 ``/confirm``；confirm 仍是 savepoint + 独占写锁的原子提交。
+    重活（解压 + 校验 + 主键探测）同样走线程池，避免冻结事件循环（API-02 口径）。
+    """
+    require_admin(current_user, error_message="仅管理员可演练数据包导入")
+
+    package = service.get_package(package_id)
+    if not package:
+        raise NotFoundException("数据包不存在")
+    if not permission_service.can_access_organization(current_user.id, cast(int, package.org_id)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权演练该数据包导入")
+
+    try:
+        report = await run_in_thread(
+            service.dry_run_import,
+            package_id,
+            data.overwrite_existing,
+            data.selected_types,
+        )
+    except BusinessError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="数据包文件损坏（zip 解析失败）")
+    return report
 
 
 @router.get("/{package_id}/download")

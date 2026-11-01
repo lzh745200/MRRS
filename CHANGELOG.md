@@ -1,3 +1,40 @@
+## [1.18.34] - 2026-11-01 — 路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）
+
+> 依据审计报告 §5「长期演进」逐项落地。本轮聚焦「运行环境安全寿命 + 导入可预览可回滚 +
+> 运维看得见」，并把关键路径的故障注入与并发用例补进回归集。
+
+### Changed
+
+- **Electron 33.3.1 → 45.2.1**：33 分支已于 2025-04-28 EOL，Chromium 130 落后 12 个大版本，
+  且 CVE-2025-6554（V8，CVSS 8.1，CISA KEV 在野）覆盖区间包含 130。升级后逐项验证：
+  `node --check electron/main.js electron/preload.js` 通过、`npm run test:electron` 23/23、
+  `electron-builder --dir --win --x64` 打包成功、冻结模块自检 `FROZEN_MODULE_CHECK_PASS`、
+  打包后端冷启动冒烟三端点 200。安装包内主程序 249,916,928 B。
+  说明：真实 GUI 启动无法在非交互会话验证（与 NSIS 卸载器同类环境限制），以 CI 构建 + 打包后
+  后端子进程冒烟为证据。
+
+### Added
+
+- **两阶段导入（先演练、再确认）**：新增 `POST /api/v1/data-packages/{id}/dry-run`，只读返回
+  「每类将新增/覆盖/拒绝多少 + 拒绝明细」，与 confirm 共用同一套读取与字段校验，**不写库、不改包状态**；
+  `run_in_thread` 执行避免冻结事件循环；组织权限与 confirm 同一口径（无权 403）。
+  前端确认导入前先演练并把摘要写进确认弹窗（新增 6 / 覆盖 M / 拒绝 K），演练失败则零写入。
+  回归：`test_data_package_dry_run_1031.py`（8 例）+ `test_data_packages_api.py`（端点 5 例）。
+- **可观测性看板**：`GET /api/v1/system/metrics` 增加 `business`（导入成功/失败、导出、备份、
+  权限包导入计数）与 `observability`（慢请求摘要、慢请求 TOP5、数据包导入失败率；无导入时 `null`
+  而非除零）。监控面板新增「业务事件（本次运行累计）」卡片与慢请求 TOP 列表，计数进程内累计、
+  重启归零（面板已注明）。
+- **故障注入与并发用例**：坏包演练抛 `BadZipFile`、confirm 中途异常必须回滚且失败计数 +1；
+  `SQLiteWriteCoordinator.exclusive_write` 补互斥/超时/非 SQLite 放行三例
+  （`test_exclusive_write_concurrency_1031.py`）。
+
+### Tests
+
+- 后端新增 18 例（演练 8 / 端点 5 / 并发 3 / 指标 2），前端新增 8 例（看板 3、store 3、api 2）；
+  全量回归与门禁结果见 `docs/04-部署文档/RELEASE_NOTES-v1.18.34.md`。
+- 依赖安全扫描（`pip-audit` + `npm audit --omit=dev --audit-level=high`）**已**在 PR Checks 的
+  `security` 作业里运行，本轮复核无需新增（结论与命令记录在发布说明）。
+
 ## [1.18.33] - 2026-11-01 — 审计报告「立即 5 项 + 短期 7 项」落地（异步边界 / 数据一致性 / 导出安全 / 可观测性）
 
 > 依据 `docs/03-开发文档/09-审计报告/2026-10-31-全面审查与修复报告.md` §5 路线图逐项执行。

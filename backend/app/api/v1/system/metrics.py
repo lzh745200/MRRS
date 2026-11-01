@@ -133,7 +133,32 @@ async def get_system_metrics(current_user=Depends(get_current_user)):
     # 让运维不必翻日志就能回答"这台机器今天导了几次、备份成功几次"。
     from app.core import business_metrics
 
-    metrics["business"] = business_metrics.snapshot()
+    business = business_metrics.snapshot()
+    metrics["business"] = business
+
+    # 可观测性（长期项 3，2026-11-01）：慢请求/慢 SQL 摘要与 TOP5 和业务计数放在同一响应，
+    # 前端监控面板一次拉取即可回答"最近哪些接口慢、导入失败了几次"。
+    # 注意：这里只读进程内 deque，不查库、不抛业务异常，故不做 try 包裹。
+    from app.middleware.slow_request_monitor import get_slow_api_records, get_slow_stats
+
+    import_succeeded = business.get("data_package.import", 0)
+    import_failed = business.get("data_package.import_failed", 0)
+    import_total = import_succeeded + import_failed
+    metrics["observability"] = {
+        "slow": get_slow_stats(),
+        "slow_api_top": [
+            {
+                "method": record.get("method"),
+                "path": record.get("path"),
+                "elapsed_ms": record.get("elapsed_ms"),
+            }
+            for record in get_slow_api_records(limit=5)
+        ],
+        # 导入失败率：进程内尚无导入时返回 None（前端显示 --，避免除零误导）
+        "data_package_import_failure_rate": (
+            round(import_failed / import_total, 4) if import_total else None
+        ),
+    }
 
     # 数据库指标
     try:

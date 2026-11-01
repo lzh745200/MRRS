@@ -632,6 +632,107 @@ class DataPackageService:
             logger.error(f"Error previewing package data from {file_path}: {e}", exc_info=True)
         return preview_list
 
+    def dry_run_import(
+        self, package_id: int, overwrite_existing: bool = False,
+        selected_types: List[str] = None,
+    ) -> Dict[str, Any]:
+        """导入演练（只读）：产出「将新增 / 将覆盖 / 将被拒」的差异清单。
+
+        长期项「事务 + 冲突报告两阶段导入」的第一阶段。刻意**不复用**
+        ``_confirm_import_sync``：那条路径会写库（savepoint + upsert + 提交状态），
+        即便最后回滚，也会占用 SQLite 写锁、放大 WAL，并且换 id 映射只有真实插入
+        后才成立。演练只做三件不写库的事：读包、字段校验、按主键探测本地是否已存在。
+
+        与 confirm 的关系：两者读同一个包、同一套 ``validate_records``；confirm 仍是
+        savepoint + 独占写锁的原子提交，演练结果不可替代 confirm 的提交语义。
+        """
+        package = self.db.query(DataPackage).filter(DataPackage.id == package_id).first()
+        if not package:
+            raise BusinessError(f"数据包不存在: {package_id}")
+        if package.status not in (
+            PackageStatus.validated.value,
+            PackageStatus.imported.value,
+        ):
+            raise BusinessError(f"数据包状态不允许演练: {package.status}")
+
+        report: Dict[str, Any] = {
+            "success": True,
+            "package_id": package_id,
+            "package_code": package.package_code or "",
+            "status": package.status or "",
+            "overwrite_existing": overwrite_existing,
+            "types": [],
+            "total_records": 0,
+            "total_to_create": 0,
+            "total_to_update": 0,
+            "total_rejected": 0,
+            "rejected": [],
+            "message": "",
+        }
+
+        with zipfile.ZipFile(cast(str, package.file_path), "r") as zf:
+            ensure_zip_within_limit(zf)
+            manifest_dict = json.loads(read_zip_member(zf, "manifest.json").decode("utf-8"))
+            data_types = selected_types or manifest_dict.get("data_types", [])
+
+            for data_type in data_types:
+                if data_type not in DATA_TYPE_MODELS:
+                    continue
+                data_file = f"data/{data_type}.json"
+                if data_file not in zf.namelist():
+                    continue
+
+                records = json.loads(read_zip_member(zf, data_file).decode("utf-8"))
+                model = DATA_TYPE_MODELS[data_type]
+                fv = validate_records(data_type, records)
+                accepted = fv["ok"] + [c["data"] for c in fv["corrected"]]
+                rejected = fv["rejected"]
+
+                # 用 SQLAlchemy inspect 取主键，避免 ``model.__mapper__`` 在
+                # DeclarativeMeta 类型下被 mypy 判为 attr-defined（会顶穿类型债棘轮）。
+                primary_key = list(inspect(model).primary_key)
+                pk_name = (primary_key[0].key if primary_key else None) or "id"
+                ids = [rec.get(pk_name) for rec in accepted if isinstance(rec.get(pk_name), int)]
+                existing = 0
+                if ids:
+                    existing = (
+                        self.db.query(model)
+                        .filter(getattr(model, pk_name).in_(ids))
+                        .count()
+                    )
+
+                to_create = len(accepted) - existing
+                to_update = existing if overwrite_existing else 0
+
+                for item in rejected:
+                    report["rejected"].append({
+                        "data_type": data_type,
+                        "row": item["row"] + 1,
+                        "message": "；".join(item["reasons"]),
+                    })
+
+                report["types"].append({
+                    "data_type": data_type,
+                    "total": len(records),
+                    "accepted": len(accepted),
+                    "rejected": len(rejected),
+                    "existing": existing,
+                    "to_create": to_create,
+                    "to_update": to_update,
+                    "id_samples": ids[:5],
+                })
+                report["total_records"] += len(records)
+                report["total_to_create"] += to_create
+                report["total_to_update"] += to_update
+                report["total_rejected"] += len(rejected)
+
+        report["message"] = (
+            f"演练完成：新增 {report['total_to_create']} 条，"
+            f"覆盖 {report['total_to_update']} 条，"
+            f"拒绝 {report['total_rejected']} 条；未写入任何数据"
+        )
+        return report
+
     async def confirm_import(
         self, package_id: int, confirmed_by: int, overwrite_existing: bool = False,
         selected_types: List[str] = None, ts_guard: bool = False,

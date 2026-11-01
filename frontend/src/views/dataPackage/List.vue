@@ -275,7 +275,21 @@ async function handlePreview(pkg: DataPackage) {
 
 async function handleConfirmImport(pkg: DataPackage) {
   try {
-    await ElMessageBox.confirm('确定要导入此数据包吗？', '确认导入', {
+    // 长期项「两阶段导入」：先只读演练，把「新增/覆盖/拒绝」摆在用户面前再决定。
+    // 演练失败（包状态非法、文件损坏等）直接给出后端原因，不进入 confirm。
+    let summary = '确定要导入此数据包吗？'
+    try {
+      const report = await packageStore.dryRunPackage(pkg.id)
+      summary =
+        `本次将新增 ${report.total_to_create} 条、覆盖 ${report.total_to_update} 条` +
+        `、拒绝 ${report.total_rejected} 条（合计 ${report.total_records} 条）。\n` +
+        '导入为单事务提交，中途失败会整体回滚。确定继续吗？'
+    } catch (dryRunError) {
+      // 演练失败 = 这次导入没有发生任何写入，按「导入失败」提示即可
+      ElMessage.error((dryRunError as Error).message || '导入失败')
+      return
+    }
+    await ElMessageBox.confirm(summary, '确认导入', {
       type: 'warning',
     })
     await packageStore.confirmImport(pkg.id)

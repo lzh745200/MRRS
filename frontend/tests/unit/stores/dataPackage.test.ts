@@ -7,6 +7,7 @@ const mockExportDataPackage = vi.fn()
 const mockImportDataPackage = vi.fn()
 const mockPreviewDataPackage = vi.fn()
 const mockConfirmImport = vi.fn()
+const mockDryRunDataPackage = vi.fn()
 const mockDownloadDataPackage = vi.fn()
 const mockDeleteDataPackage = vi.fn()
 
@@ -17,6 +18,7 @@ vi.mock('@/api/dataPackage', () => ({
   importDataPackage: (...args: any[]) => mockImportDataPackage(...args),
   previewDataPackage: (...args: any[]) => mockPreviewDataPackage(...args),
   confirmImport: (...args: any[]) => mockConfirmImport(...args),
+  dryRunDataPackage: (...args: any[]) => mockDryRunDataPackage(...args),
   downloadDataPackage: (...args: any[]) => mockDownloadDataPackage(...args),
   deleteDataPackage: (...args: any[]) => mockDeleteDataPackage(...args),
 }))
@@ -339,5 +341,48 @@ describe('useDataPackageStore', () => {
     mockDeleteDataPackage.mockResolvedValueOnce({})
     await store.deletePackage(1)
     expect(store.currentPackage).toEqual({ id: 2 })
+  })
+
+  // 长期项「两阶段导入」第一阶段：演练只读，不触碰包状态
+  it('dryRunPackage 成功时写入 dryRunReport 且不改包状态', async () => {
+    store.packages = [{ id: 3, status: 'validated' } as any]
+    const report = {
+      success: true,
+      package_id: 3,
+      package_code: 'PKG-3',
+      status: 'validated',
+      overwrite_existing: false,
+      types: [],
+      total_records: 10,
+      total_to_create: 6,
+      total_to_update: 0,
+      total_rejected: 4,
+      rejected: [],
+      message: '',
+    }
+    mockDryRunDataPackage.mockResolvedValueOnce(report)
+
+    const result = await store.dryRunPackage(3)
+
+    expect(result).toEqual(report)
+    expect(store.dryRunReport).toEqual(report)
+    expect(store.packages[0].status).toBe('validated')
+    expect(store.loading).toBe(false)
+    expect(store.error).toBeNull()
+  })
+
+  it('dryRunPackage 失败时设置 error + 抛出且 report 保持为空', async () => {
+    mockDryRunDataPackage.mockRejectedValueOnce(new Error('dry boom'))
+    await expect(store.dryRunPackage(3)).rejects.toThrow('dry boom')
+    expect(store.error).toBe('dry boom')
+    expect(store.dryRunReport).toBeNull()
+    expect(store.loading).toBe(false)
+  })
+
+  it('$reset 清空 dryRunReport', async () => {
+    mockDryRunDataPackage.mockResolvedValueOnce({ success: true, types: [] })
+    await store.dryRunPackage(3)
+    store.$reset()
+    expect(store.dryRunReport).toBeNull()
   })
 })

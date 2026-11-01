@@ -284,3 +284,37 @@ class TestGetMetricsHistory:
         mock_db.query = MagicMock(side_effect=Exception("db err"))
         resp = auth_client.get("/api/v1/system/metrics/history")
         assert "message" in resp.json()["data"]
+
+
+class TestObservabilityBlock:
+    """长期项 3（2026-11-01）：/system/metrics 需同时给出业务计数与慢请求摘要。
+
+    这两个块的消费者是监控面板（前端直读），缺字段会让面板静默空白，
+    因此这里显式锁住字段形状与失败率口径（分母 0 → None）。
+    """
+
+    def test_observability_shape_without_counters(self, auth_client):
+        from app.core import business_metrics
+
+        business_metrics.reset()
+        data = auth_client.get("/api/v1/system/metrics").json()["data"]
+        observability = data["observability"]
+        assert isinstance(observability["slow"], dict)
+        assert isinstance(observability["slow_api_top"], list)
+        assert observability["data_package_import_failure_rate"] is None
+        assert data["business"] == {}
+
+    def test_import_failure_rate_reflects_counters(self, auth_client):
+        from app.core import business_metrics
+
+        business_metrics.reset()
+        business_metrics.incr("data_package.import")
+        for _ in range(3):
+            business_metrics.incr("data_package.import_failed")
+        try:
+            data = auth_client.get("/api/v1/system/metrics").json()["data"]
+            assert data["business"]["data_package.import"] == 1
+            assert data["business"]["data_package.import_failed"] == 3
+            assert data["observability"]["data_package_import_failure_rate"] == 0.75
+        finally:
+            business_metrics.reset()

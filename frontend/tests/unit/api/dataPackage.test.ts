@@ -24,6 +24,7 @@ import {
   validateDataPackage,
   previewDataPackage,
   confirmImport,
+  dryRunDataPackage,
   downloadDataPackage,
   deleteDataPackage,
   getPackageHistory,
@@ -131,6 +132,19 @@ describe('api/dataPackage', () => {
     mockGet.mockResolvedValueOnce({ data: { package_id: 1, items: [] } })
     await getPackageHistory(1, { page: 1 })
     expect(mockGet).toHaveBeenCalledWith('/data-packages/1/history', { page: 1 })
+  })
+
+  // 长期项「两阶段导入」：演练走独立只读端点，绝不能复用 confirm
+  it('dryRunDataPackage POST /data-packages/{id}/dry-run（带参数）', async () => {
+    mockPost.mockResolvedValueOnce({ data: { success: true, total_to_create: 2 } })
+    await dryRunDataPackage(3, { overwrite_existing: true } as any)
+    expect(mockPost).toHaveBeenCalledWith('/data-packages/3/dry-run', { overwrite_existing: true })
+  })
+
+  it('dryRunDataPackage 无 data 时用 {}', async () => {
+    mockPost.mockResolvedValueOnce({ data: { success: true } })
+    await dryRunDataPackage(3)
+    expect(mockPost).toHaveBeenCalledWith('/data-packages/3/dry-run', {})
   })
 
   it('getDownloadUrl 返回 URL 字符串', () => {
