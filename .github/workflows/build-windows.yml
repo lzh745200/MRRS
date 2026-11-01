@@ -539,6 +539,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "7z 列举失败 (exit $LASTEXITCODE)" }
           python scripts/verify_package_no_tests.py --listing $listing
 
+      # 10.15 载荷完整性守卫（2026-11-01）：electron-builder 的 NSIS 压缩阶段被中断
+      #      （超时 / 进程被杀 / 并发写同一输出）会留下"只有外壳、没有 app-64.7z"的
+      #      残缺包（现场 489 KB，正常 332 MB）。这种包双击报
+      #      「NSIS Error — Error writing temporary file」，但 %TEMP% 完全正常
+      #      （实测 NSIS 会自动创建缺失的末级临时目录），根因是载荷缺失。
+      #      上面的存在性检查看不出这一点，必须校验 PE overlay 里真的有 7z 流。
+      - name: Verify installer payload present
+        shell: bash
+        run: python scripts/verify_installer_payload.py
+
       # 10.45 签名状态门禁（2026-10-25）：
       #   electron-builder 已在配置了 CSC_LINK/CSC_KEY_PASSWORD 时自动签名；
       #   本步骤把"到底签没签"变成可见证据：

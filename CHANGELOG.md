@@ -95,6 +95,26 @@
 - 前端 `src/api/request.ts` 导出截断提示补 4 例（含缺头 `?` 兜底 / 非 blob / 头为 false），
   修 `src/api/**` 100% 覆盖率门禁（此前 98.45%，缺 333、335-341 行）。
 
+### Fixed（打包完整性，2026-11-01 下午）
+
+- **残缺安装包（只有 NSIS 外壳、没有 `app-64.7z`）被当成成品**：现场双击
+  `MRRS-Setup-1.18.33-x64.exe` 弹出「NSIS Error — Error writing temporary file.
+  Make sure your temp folder is valid.」，很容易被带去查 `%TEMP%`。实测该文件只有
+  **489,290 B**（PE 附加数据 280,394 B，无 7z 流），而正常的 1.18.32 包是
+  **332,563,422 B**、7z 流在 487,771 偏移处 —— 根因是 NSIS 压缩阶段被中断
+  （超时/进程被杀/并发写同一输出）后留下半成品，而流水线把"文件存在"当"构建成功"。
+  **`%TEMP%` 是误诊**：makensis 对照实验（TEMP 指向不存在的末级目录）退出码 0，
+  NSIS 会自己创建该目录。
+  新增 `scripts/verify_installer_payload.py`：校验总大小、PE 表可解析、overlay 内含
+  7z 签名、7z **起始头自洽**（StartHeaderCRC + NextHeader 边界）、载荷未被截断、
+  文件名版本与 `package.json` 一致；失败时 `--quarantine` 把产物改名为 `.invalid`
+  （防现场误双击）。`npm run build` / `build:win` 已串接该门禁，CI 的
+  `Build Windows Installer` 在"产物存在性检查"之后新增
+  `Verify installer payload present`，残缺包不再可能上传 Release。
+  回归：`tests/unit/test_verify_installer_payload.py`（17 例：空壳/截断/签名后垃圾/
+  头部 CRC 损坏/过小/非法 PE/版本不符/隔离改名），并用真实产物双向验证
+  （1.18.32 与重建后的 1.18.33 通过；489 KB 空壳退出码 1）。
+
 ## [1.18.32] - 2026-11-01 — 时间口径 / 数据归属 / 越权读取三条主线收口（8 项缺陷）
 
 > 本轮来自现场与代码复核的混合缺陷，共同点是「静默错」：接口不报错、页面不白屏，
