@@ -220,3 +220,39 @@ def test_service_list_filters_by_organization_ids():
     records, total = service.get_organization_pass_codes(organization_ids=[10, 11])
     assert (records, total) == ([], 0)
     assert any("organization_id IN" in f for f in filters)
+
+
+def test_delete_skips_guard_when_target_missing(monkeypatch):
+    """目标记录不存在时必须跳过组织守卫并返回 404（分支覆盖 machine_code.py:965）。
+
+    该分支是 CI 覆盖率缺口：DELETE 端点先按 id 取归属组织再做可达性校验，
+    「取不到记录」这一侧此前没有用例走过，等于删除路径的守卫短路行为未被钉住。
+    """
+    guard_calls = []
+    monkeypatch.setattr(
+        mc_api, "assert_org_reachable", lambda *a, **kw: guard_calls.append(a)
+    )
+
+    class _Db:
+        def query(self, *args, **kwargs):
+            return self
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def first(self):
+            return None
+
+    monkeypatch.setattr(
+        MachineCodeService, "delete_organization_pass_code", lambda self, pass_code_id: False
+    )
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            mc_api.delete_organization_pass_code(
+                pass_code_id=123456,
+                db=_Db(),
+                current_user=DEPT_ADMIN,
+            )
+        )
+    assert exc.value.status_code == 404
+    assert guard_calls == []
