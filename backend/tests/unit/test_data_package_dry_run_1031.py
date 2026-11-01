@@ -192,3 +192,37 @@ def test_confirm_rolls_back_and_counts_failure_on_midway_error(tmp_path, monkeyp
 
     assert result.success is False
     assert result.errors and result.errors[0].message == "注入的中途失败"
+
+def test_dry_run_skips_declared_type_without_data_file(tmp_path):
+    """manifest 声明了类型但包内缺 data/<type>.json：跳过，不报错也不写库。"""
+    path = tmp_path / "package.zip"
+    manifest = {"version": "1.0", "data_types": ["villages"], "org_code": "520000"}
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+
+    service, db = _service_with_package(str(path))
+    report = service.dry_run_import(7)
+
+    assert report["success"] is True
+    assert report["total_records"] == 0
+    assert report["types"] == []
+    db.add.assert_not_called()
+
+
+def test_dry_run_without_int_primary_keys_skips_existence_query(tmp_path):
+    """accepted 记录都没有 int 主键时不查库（existing 恒 0），避免 IN 空集查询。"""
+    file_path = _build_zip(
+        tmp_path,
+        ["villages"],
+        {"villages": [{"village_name": "无编号村"}]},
+    )
+    service, db = _service_with_package(file_path, existing=99)
+
+    report = service.dry_run_import(7)
+
+    assert report["success"] is True
+    assert report["total_records"] == 1
+    village_report = report["types"][0]
+    assert village_report["existing"] == 0, "无 int 主键时不得把桩返回的 99 当已存在"
+    assert village_report["to_create"] == 1
+    db.add.assert_not_called()
