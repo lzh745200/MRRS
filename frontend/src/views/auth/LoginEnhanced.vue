@@ -194,6 +194,7 @@
               <span class="step-no" aria-hidden="true">1</span>
               <div class="step-body">
                 <p class="step-title">获取本机机器码</p>
+                <p class="step-note">{{ machineCodeStepNote }}</p>
                 <button type="button" class="step-btn" @click="goToMachineCode">
                   打开机器码页
                 </button>
@@ -211,11 +212,17 @@
             <li>
               <span class="step-no" aria-hidden="true">3</span>
               <div class="step-body">
-                <p class="step-title">用通行码注册账号</p>
+                <p class="step-title">
+                  {{ canSelfRegister ? '用通行码注册账号' : '账号由管理员开通' }}
+                </p>
                 <button v-if="canSelfRegister" type="button" class="step-btn" @click="goToRegister">
                   注册账户
                 </button>
-                <p v-else class="step-note">本机未开启自助注册，请联系管理员开通账号</p>
+                <template v-else>
+                  <!-- 保持原有句子不变（用户手册引用），再补机器码的用途，避免"步骤 1 白做"的误解 -->
+                  <p class="step-note">本机未开启自助注册，请联系管理员开通账号</p>
+                  <p class="step-note">把第 1 步的机器码报给管理员，用于设备绑定与换机重置。</p>
+                </template>
               </div>
             </li>
           </ol>
@@ -316,6 +323,21 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
 
 const publicConfig = ref<PublicConfig>({ ...DEFAULT_PUBLIC_CONFIG })
 const canSelfRegister = computed(() => publicConfig.value.self_register_enabled === true)
+
+/**
+ * 机器码用途说明（P1 矛盾修复）。
+ *
+ * 用户曾看到「本机未开启自助注册，请联系管理员开通账号」，但第 1 步又让他取机器码、
+ * 第 3 步又叫他"用通行码注册账号"—— 矛盾感来自**把"设备授权"与"账号开通"混成一条引导**。
+ * 这里把机器码的用途讲清：
+ *   - 自助注册关闭（默认）：机器码用于设备绑定 / 换机重置，与建号无关；
+ *   - 自助注册开启（controlled）：机器码还额外用于让管理员生成注册通行码。
+ */
+const machineCodeStepNote = computed(() =>
+  canSelfRegister.value
+    ? '用于设备绑定与换机重置；管理员会用它生成注册通行码。'
+    : '用于设备绑定与换机重置；账号由管理员在后台开通。'
+)
 
 const username = ref('')
 const password = ref('')
