@@ -121,7 +121,7 @@ describe('挂载与历史', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(mockGetSyncLogs).toHaveBeenCalledWith({ action: 'export', page: 1, page_size: 20 })
+    expect(mockGetSyncLogs).toHaveBeenCalledWith({ sync_type: 'export', limit: 20 })
     expect(vm.exportHistory).toEqual([rowA, rowB, rowC])
     expect(vm.exportForm.modules).toHaveLength(13)
     const text = wrapper.text()

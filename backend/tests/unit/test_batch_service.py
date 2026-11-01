@@ -465,7 +465,7 @@ class TestBatchExport:
         svc = BatchService(db=Mock())
         recs = [Mock(to_dict=MagicMock(return_value={"id": i, "name": f"n{i}"})) for i in (1, 2, 3)]
         svc.db.query.return_value.filter.return_value.all.return_value = recs
-        result = await svc.batch_export("projects", [1, 2, 3])
+        result = await svc.batch_export("projects", [1, 2, 3], is_superuser=True)
         assert result["success"] is True
         assert result["exported_count"] == 3
         assert isinstance(result["data"], str)
@@ -477,7 +477,7 @@ class TestBatchExport:
         svc = BatchService(db=Mock())
         # ids 为空时不经过 .filter()，链终点是 db.query(...).all()
         svc.db.query.return_value.all.return_value = []
-        result = await svc.batch_export("projects", [])
+        result = await svc.batch_export("projects", [], is_superuser=True)
         assert result["success"] is True
         assert result["exported_count"] == 0
         # 空结果集时表头回落为 ["id"]
@@ -488,7 +488,7 @@ class TestBatchExport:
         from app.services.batch_service import BatchService
         svc = BatchService(db=Mock())
         svc.db.query.return_value.filter.return_value.all.return_value = []
-        result = await svc.batch_export("projects", [1, 2])
+        result = await svc.batch_export("projects", [1, 2], is_superuser=True)
         assert result["success"] is True
         assert result["exported_count"] == 0
         assert isinstance(result["data"], str) and len(result["data"]) > 0
@@ -507,7 +507,7 @@ class TestBatchExport:
 
         svc = BatchService(db=Mock())
         with patch("builtins.__import__", side_effect=mock_import):
-            result = await svc.batch_export("projects", [1, 2])
+            result = await svc.batch_export("projects", [1, 2], is_superuser=True)
         assert result == {"success": False, "data": "",
                           "exported_count": 0}
 
@@ -525,7 +525,7 @@ class TestValidateBatch:
     async def test_no_db_returns_zero(self):
         from app.services.batch_service import BatchService
         svc = BatchService(db=None)
-        result = await svc.validate_batch("projects", [1, 2])
+        result = await svc.validate_batch("projects", [1, 2], organization_id=7)
         assert result == {"success": True, "existing_count": 0}
 
     async def test_partial_existing(self):
@@ -537,8 +537,9 @@ class TestValidateBatch:
         db.query.return_value = mock_q
         mock_q.filter.return_value = mock_f
         mock_f.count.return_value = 1
+        mock_f.filter.return_value.count.return_value = 1
         svc = BatchService(db)
-        result = await svc.validate_batch("projects", [1, 2])
+        result = await svc.validate_batch("projects", [1, 2], organization_id=7)
         assert result == {"success": True, "existing_count": 1}
 
     async def test_all_exist(self):
@@ -549,8 +550,9 @@ class TestValidateBatch:
         db.query.return_value = mock_q
         mock_q.filter.return_value = mock_f
         mock_f.count.return_value = 3
+        mock_f.filter.return_value.count.return_value = 3
         svc = BatchService(db)
-        result = await svc.validate_batch("projects", [1, 2, 3])
+        result = await svc.validate_batch("projects", [1, 2, 3], organization_id=7)
         assert result == {"success": True, "existing_count": 3}
 
 
@@ -605,3 +607,47 @@ class TestBatchOrgFailClosed:
         assert result["success_count"] == 0
         assert "未绑定组织" in result["error"]
         db.delete.assert_not_called()
+
+    async def test_batch_export_rejects_user_without_org(self):
+        from app.services.batch_service import BatchService
+
+        db = Mock()
+        svc = BatchService(db)
+        result = await svc.batch_export(
+            "projects", [1, 2], organization_id=None, is_superuser=False
+        )
+        assert result["success"] is False
+        assert result["exported_count"] == 0
+        assert "未绑定组织" in result["error"]
+
+    async def test_validate_batch_rejects_user_without_org(self):
+        from app.services.batch_service import BatchService
+
+        db = Mock()
+        svc = BatchService(db)
+        result = await svc.validate_batch(
+            "projects", [1, 2], organization_id=None, is_superuser=False
+        )
+        assert result["success"] is False
+        assert result["existing_count"] == 0
+        assert "未绑定组织" in result["error"]
+
+    async def test_superuser_skips_org_filter_on_export_and_validate(self):
+        """超管不套组织过滤：fail-closed 只针对"非超管且无组织"的账号。"""
+        from app.services.batch_service import BatchService
+
+        db = Mock()
+        db.query.return_value.filter.return_value.all.return_value = []
+        db.query.return_value.filter.return_value.count.return_value = 2
+        svc = BatchService(db)
+
+        exported = await svc.batch_export(
+            "projects", [1, 2], organization_id=None, is_superuser=True
+        )
+        assert exported["success"] is True
+        assert exported["exported_count"] == 0
+
+        validated = await svc.validate_batch(
+            "projects", [1, 2], organization_id=None, is_superuser=True
+        )
+        assert validated == {"success": True, "existing_count": 2}

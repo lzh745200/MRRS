@@ -144,7 +144,7 @@ describe('挂载与历史', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(mockGetSyncLogs).toHaveBeenCalledWith({ action: 'import', page: 1, page_size: 20 })
+    expect(mockGetSyncLogs).toHaveBeenCalledWith({ sync_type: 'import', limit: 20 })
     expect(vm.importHistory).toEqual([rowA, rowB])
     // 模板插槽渲染：成功/失败/冲突数字标签（slot 内容）
     const text = wrapper.text()

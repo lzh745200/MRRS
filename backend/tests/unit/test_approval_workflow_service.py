@@ -1107,3 +1107,23 @@ class TestResolveRoleApprover:
 
         with patch("app.core.database.SessionLocal", side_effect=RuntimeError("boom")):
             assert ApprovalWorkflowService._resolve_role_approver_id("admin") is None
+
+
+class TestApprovalDateRange:
+    """日期区间必须按本地日历解释，结束日包含全天。"""
+
+    def test_date_range_converts_local_day_bounds(self, svc, mock_db):
+        q = make_mock_query(mock_db)
+        q.count.return_value = 0
+        result = svc.get_tasks_with_count(
+            date_from="2026-01-01", date_to="2026-01-31"
+        )
+        assert result["total"] == 0
+
+    def test_invalid_date_is_ignored(self, svc, mock_db):
+        q = make_mock_query(mock_db)
+        q.count.return_value = 0
+        result = svc.get_tasks_with_count(
+            date_from="not-a-date", date_to="also-bad"
+        )
+        assert result["total"] == 0

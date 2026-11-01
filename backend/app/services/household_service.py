@@ -75,10 +75,14 @@ def _utcnow() -> datetime:
 
 
 def _today(today: Optional[date] = None) -> date:
-    """参照日期（测试可注入固定日期，默认取 UTC 当天）。"""
+    """参照日期（测试可注入固定日期，默认取本地当天）。
+
+    ``last_visit_date`` 是按本地日历回写的 Date 列；参照日若取 UTC 日期，
+    UTC+8 凌晨会少算一天，90 天未走访预警延迟一天。
+    """
     if today is not None:
         return today
-    return datetime.now(timezone.utc).date()
+    return datetime.now().date()
 
 
 # ════════════════════════════════════════════════════════════════════

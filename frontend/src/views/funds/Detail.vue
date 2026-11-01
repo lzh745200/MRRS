@@ -1113,7 +1113,8 @@ function doWorkflow(action: string) {
   wfAction.value = action
   wfDialogTitle.value = wfLabels[action] || action
   wfForm.opinion = ''
-  wfForm.allocated_amount = fundData.approved_amount || fundData.amount || 0
+  // 0 是合法核定金额（如审批通过但核定拨付为 0），不能用 || 吞掉
+  wfForm.allocated_amount = fundData.approved_amount ?? fundData.amount ?? 0
   wfForm.allocation_method = ''
   wfForm.audit_result = '通过'
   wfDialogVisible.value = true

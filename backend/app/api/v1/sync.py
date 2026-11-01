@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.response import success_response
 from app.core.security import get_current_user
+from app.core.permission_utils import require_admin
 from app.models.user import User
-from app.utils.time_utils import utcnow
+from app.utils.time_utils import to_local, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ async def get_sync_status(
     返回当前用户的同步状态信息，从 data_sync_logs 表查询真实数据。
     """
     from app.models.data_sync import DataSyncLog
+
+    require_admin(current_user, error_message="仅管理员可查看同步状态")
 
     # 查询最近一次同步记录
     last_log = (
@@ -84,6 +87,8 @@ async def get_sync_dashboard(
     from app.core.database import check_disk_space
     from app.models.audit import AuditLog
 
+    require_admin(current_user, error_message="仅管理员可查看同步状态")
+
     # ── 1. 审计日志中的同步操作统计 ──
     # AuditLog.created_at 为 UTC 墙钟列：窗口基准必须用 UTC 口径，
     # 否则 UTC+8 下窗口整体前移 8 小时
@@ -107,7 +112,7 @@ async def get_sync_dashboard(
     # ── 3. 按日期统计趋势 ──
     daily_trend: Dict[str, int] = {}
     for log in sync_logs:
-        day = log.created_at.strftime("%Y-%m-%d") if log.created_at else "unknown"
+        day = to_local(log.created_at).strftime("%Y-%m-%d") if log.created_at else "unknown"
         daily_trend[day] = daily_trend.get(day, 0) + 1
 
     # 转为有序列表

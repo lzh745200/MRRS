@@ -1,6 +1,6 @@
 {
   "_comment": "W27 零断言测试棘轮基线。只允许持平或减少；新增零断言测试会让门禁失败。修复方式：补真实断言，或对'仅验证不抛异常'的合理 smoke 用例加 @pytest.mark.no_assert。",
-  "count": 264,
+  "count": 263,
   "entries": [
     "tests/integration/test_encrypted_package_flow.py::TestEncryptedPackageFlow::test_org",
     "tests/integration/test_encrypted_package_flow.py::TestEncryptedPackageFlow::test_villages",
@@ -211,7 +211,6 @@
     "tests/unit/test_security_data_isolation.py::TestRequireManagerRole::test_admin_passes",
     "tests/unit/test_security_data_isolation.py::TestRequireManagerRole::test_manager_passes",
     "tests/unit/test_security_data_isolation.py::TestRequireManagerRole::test_super_admin_passes",
-    "tests/unit/test_security_full_cov20.py::TestAuditLogService::test_rollback_failure_swallowed",
     "tests/unit/test_session_lifecycle_r26.py::test_session_cleanup_job_swallows_db_errors",
     "tests/unit/test_statistics_api_cov.py::TestCacheHelpers::test_cache_stats_disabled_noop",
     "tests/unit/test_statistics_api_cov.py::TestCacheHelpers::test_cache_stats_write_exception_degrades",

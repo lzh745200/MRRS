@@ -96,10 +96,13 @@ class TestBatchService:
         """测试批量导出 - XLSX格式"""
         ids = [p.id for p in sample_projects]
 
+        # 导出已收紧为 fail-closed：非超管且未绑定组织时拒绝，
+        # 本用例验证导出内容与格式，故以超管身份直接调用服务层。
         result = await service.batch_export(
             table_name="projects",
             ids=ids,
-            format="xlsx"
+            format="xlsx",
+            is_superuser=True,
         )
 
         assert result["success"] is True
@@ -113,7 +116,8 @@ class TestBatchService:
 
         result = await service.validate_batch(
             table_name="projects",
-            ids=ids
+            ids=ids,
+            is_superuser=True,
         )
 
         assert result["success"] is True

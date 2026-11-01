@@ -347,9 +347,11 @@ class AuditService:
         recent_activity = query.order_by(desc(AuditLog.created_at)).limit(20).all()
 
         # 前端统计卡派生字段（today_operations / active_users / failed_operations / warnings）
-        from app.utils.time_utils import utcnow as _utcnow
+        from app.utils.time_utils import to_utc_naive
 
-        today_start = _utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        # “今日”是本地日历语义；created_at 存 UTC，本地零点需换算后再比较。
+        local_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = to_utc_naive(local_midnight)
         today_operations = (
             self.db.query(func.count(AuditLog.id))
             .filter(AuditLog.created_at >= today_start)

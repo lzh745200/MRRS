@@ -627,7 +627,12 @@ describe('工作流', () => {
     vm.fundData.approved_amount = null
     vm.fundData.amount = 0
     vm.doWorkflow('allocate')
-    expect(vm.wfForm.allocated_amount).toBe(0) // || 0 臂
+    expect(vm.wfForm.allocated_amount).toBe(0) // 0 是合法核定金额，?? 不会吞成兜底
+
+    vm.fundData.approved_amount = null
+    vm.fundData.amount = null
+    vm.doWorkflow('allocate')
+    expect(vm.wfForm.allocated_amount).toBe(0) // 两级都为 null → 末位 0
   })
 
   it('submitWorkflow：六种 action 分发与载荷差异（opinion 有/无）', async () => {

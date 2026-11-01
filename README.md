@@ -1,16 +1,32 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.31
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.32
 
-![Version](https://img.shields.io/badge/version-1.18.31-blue)
+![Version](https://img.shields.io/badge/version-1.18.32-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-22%2C422-brightgreen)
+![Tests](https://img.shields.io/badge/tests-22%2C859-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.26）
+## 本版亮点（v1.18.32）
 
-- **全库审计十八批（含 4 个 Critical）（含 4 个 Critical）**：refresh 此前完全绕过 `token_version`
+- **导入不再产生"幽灵台账"**：Excel 导入项目 / 资金 / 学校此前不写 `organization_id` /
+  `created_by`，非超管账号导入成功后在自己的列表里**一条都看不到**（列表按组织过滤）。
+  现与手工创建一致：模板未填组织编码时回落到调用者本组织并记录创建者。
+- **批量导出 fail-closed**：组织过滤写成复合条件，账号未绑定组织时整体为假 → 过滤被跳过，
+  非超管可**整库导出**（S2 审计红线）。改为"没拿到组织就拒绝"，`validate_batch` 同口径。
+- **运维接口收紧**：`/sync/status`、`/sync/dashboard` 返回包名、记录数、操作人、磁盘余量，
+  此前任意登录用户可读，现收敛为管理员专属（非管理员 403）。
+- **时间口径统一本地时区**：审计「今日操作数」不再北京时间 0–8 点算成昨天；同步仪表盘趋势
+  按本地日期分桶；`/auth/me` 最后登录时间不再早 8 小时；90 天未走访预警不再晚一天。
+- **展示层三处误判**：资金核定金额为 0 时不再被申请额覆盖（`||` → `??`）；政策搜索状态缺失
+  渲染 `—` 而非红色「禁用」；同步日志历史改传后端真实契约 `sync_type`/`limit`（此前参数全被忽略）。
+- **质量**：新增 7 例后端 + 1 例前端用例；5 个改动视图行/分支覆盖率 **100%**；
+  后端按 CI 同构 12 段全量回归、前端 3 分片全量回归。
+
+## 历史亮点（v1.18.26）
+
+- **全库审计十八批（含 4 个 Critical）**：refresh 此前完全绕过 `token_version`
   吊销（登出/强退后旧 refresh 仍可换 access）；权限包可选认证手写解码绕过黑名单/版本/
   禁用/首登改密四项校验，却用于「重写全库 RBAC」；RBAC 8 个写路由零审计；禁用账号的
   未过期 access 仍全权限。均已修复并补负向回归。
@@ -23,7 +39,7 @@
 - **数据隔离与错误口径**：批量改删在操作者未绑定组织时 fail-closed；备份恢复不再回传
   含绝对路径的异常原文；`/system/env` 收紧为管理员。
 - **质量**：mypy **1310 → 880**（启用 SQLAlchemy 插件，消除 420 个误报）、`as any` 保持
-  **0**、静默吞异常 **0**；统一门禁 **35/35 PASS**；后端 **15,060** / 前端 **7,455** 用例。
+  **0**、静默吞异常 **0**；统一门禁 **35/35 PASS**；后端 **15,355** / 前端 **7,504** 用例。
 
 ## 历史亮点（v1.18.25）
 
@@ -176,8 +192,8 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-10-30（v1.18.29 发布前）— 后端 **15,060** 用例、
-> 前端 **348 个 `.test.ts` / 7,455 用例**；统一门禁 **35/35 PASS**。
+> **上次全量验证**: 2026-11-01（v1.18.32 发布前）— 后端 **15,355** 用例、
+> 前端 **349 个 `.test.ts` / 7,504 用例**；统一门禁 **35/35 PASS**。
 > （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
 > 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
 > 前端 12 组 glob 阈值 100%；覆盖率结论以本次 tag 的 `PR Checks` 运行记录为准。）

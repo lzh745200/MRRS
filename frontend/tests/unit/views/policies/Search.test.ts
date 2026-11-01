@@ -564,7 +564,7 @@ const snippetRows = [
   { id: '4', title: 'T4', snippet: '<mark>整段高亮</mark>', status: 'active' },
 ]
 
-function mountWithSnippets() {
+function mountWithSnippets(rows: any[] = snippetRows) {
   return mount(Search, {
     global: {
       renderStubDefaultSlot: true,
@@ -578,7 +578,7 @@ function mountWithSnippets() {
           template:
             '<div class="el-table-column-stub"><slot v-for="(r, i) in stubRows" :key="i" :row="r" /></div>',
           data() {
-            return { stubRows: snippetRows }
+            return { stubRows: rows }
           },
         },
         'el-link': { template: '<a class="el-link-stub"><slot /></a>' },
@@ -588,6 +588,23 @@ function mountWithSnippets() {
     },
   })
 }
+
+describe('状态列：缺失时占位而非误标禁用', () => {
+  it('status 为空/缺失时渲染 —，不再把空值误判成“禁用”', async () => {
+    const wrapper = mountWithSnippets([
+      { id: '1', title: 'A', snippet: '原文', status: '' },
+      { id: '2', title: 'B', snippet: '原文', status: undefined },
+      { id: '3', title: 'C', snippet: '原文', status: 'draft' },
+    ])
+    await flushPromises()
+
+    // 只有第 3 行（status=draft）渲染状态标签，前两行是占位符
+    const tags = wrapper.findAll('.el-tag-stub')
+    expect(tags).toHaveLength(1)
+    expect(tags[0].text()).toBe('禁用')
+    expect(wrapper.text()).toContain('—')
+  })
+})
 
 describe('splitSnippet 与命中摘要列渲染', () => {
   it('模板渲染：有摘要行拆段并用 <mark> 包裹，无摘要行回退—', async () => {

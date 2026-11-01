@@ -243,9 +243,17 @@ class BatchService:
             query = self.db.query(model)
             if ids:
                 query = query.filter(model.id.in_(ids))
-            # 数据隔离（S2 红线）：非超管只能导出本组织数据，与 update/delete 一致
+            # 数据隔离（S2 红线）：非超管只能导出本组织数据，与 update/delete 一致。
+            # fail-closed：账号未绑定组织时不能因为 organization_id=None 就跳过过滤。
             org_col = getattr(model, 'organization_id', None)
-            if not is_superuser and organization_id is not None and org_col is not None:
+            if not is_superuser and org_col is not None:
+                if organization_id is None:
+                    return {
+                        "success": False,
+                        "data": "",
+                        "exported_count": 0,
+                        "error": "账号未绑定组织，禁止批量导出",
+                    }
                 query = query.filter(org_col == organization_id)
             records = [r.to_dict() for r in query.all()]
             wb = Workbook()
@@ -274,7 +282,13 @@ class BatchService:
             # 批量 COUNT 查询替代逐条 GET（避免 N+1）
             query = self.db.query(model).filter(model.id.in_(ids))
             org_col = getattr(model, 'organization_id', None)
-            if not is_superuser and organization_id is not None and org_col is not None:
+            if not is_superuser and org_col is not None:
+                if organization_id is None:
+                    return {
+                        "success": False,
+                        "existing_count": 0,
+                        "error": "账号未绑定组织，禁止批量校验",
+                    }
                 query = query.filter(org_col == organization_id)
             existing_count = query.count()
         return {"success": True, "existing_count": existing_count}

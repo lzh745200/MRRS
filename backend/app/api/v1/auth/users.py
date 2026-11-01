@@ -23,6 +23,7 @@ from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, normalize_role
 from app.core.transaction import safe_commit
 from app.core.response import success_response
 from app.utils.pagination import clamp_offset_limit, coerce_page_param
+from app.utils.time_utils import to_local
 from app.utils.upload_helper import read_upload_with_limit
 
 logger = logging.getLogger(__name__)
@@ -296,7 +297,11 @@ async def get_current_user_profile(current_user=Depends(get_current_user), db: S
             "is_active": user.is_active,
             "is_superuser": user.is_superuser,
             "status": "active" if user.is_active else "inactive",
-            "lastLoginTime": (user.last_login.strftime("%Y-%m-%d %H:%M:%S") if user.last_login else ""),
+            "lastLoginTime": (
+                to_local(user.last_login).strftime("%Y-%m-%d %H:%M:%S")
+                if user.last_login
+                else ""
+            ),
             "lastLoginIp": "",
             "created_at": user.created_at.isoformat() if user.created_at else None,
             "allowed_menus": user.allowed_menus_list,

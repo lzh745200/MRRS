@@ -48,7 +48,11 @@ def client():
     from app.main import app
 
     original = app.dependency_overrides.copy()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=1, username="root")
+    # /sync/status 与 /sync/dashboard 已收紧为管理员专属（2026-11-01），
+    # 本文件只验证仪表盘统计逻辑本身，因此固定使用管理员身份。
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=1, username="root", role="super_admin", is_superuser=True
+    )
     yield TestClient(app, raise_server_exceptions=False)
     app.dependency_overrides = original
 

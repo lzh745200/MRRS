@@ -1216,7 +1216,7 @@ class TestServiceInternals:
         assert household_service.enrich_households(db, []) == []
         assert household_service._village_name_map(db, set()) == {}
         assert household_service._member_count_map(db, []) == {}
-        assert household_service._today() == datetime.now(timezone.utc).date()
+        assert household_service._today() == datetime.now().date()
 
     def test_export_value_normalization(self):
         from app.services.household_service import _export_value

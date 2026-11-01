@@ -284,7 +284,7 @@ const showConflicts = () => {
 const loadImportHistory = async () => {
   loadingHistory.value = true
   try {
-    const response: any = await getSyncLogs({ action: 'import', page: 1, page_size: 20 })
+    const response: any = await getSyncLogs({ sync_type: 'import', limit: 20 })
     // 兼容信封 items / 裸数组
     const list = unwrapList(response).items
     importHistory.value = Array.isArray(list) ? list : []

@@ -13,6 +13,8 @@ def client():
     app = FastAPI()
     mock_user = MagicMock()
     mock_user.id = 1
+    mock_user.role = "super_admin"
+    mock_user.is_superuser = True
     app.dependency_overrides[deps.get_current_user] = lambda: mock_user
     mock_db = MagicMock()
     mock_db.query.return_value.order_by.return_value.first.return_value = None
@@ -32,3 +34,41 @@ class TestGetSyncStatus:
         assert data["data"]["sync_enabled"] is True
         assert data["data"]["sync_status"] == "idle"
         assert data["data"]["pending_changes"] == 0
+
+
+class TestSyncAdminGate:
+    def test_non_admin_cannot_read_status(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.api.v1 import deps
+        from app.core.database import get_db
+        from app.api.v1.sync import router
+
+        app = FastAPI()
+        user = MagicMock()
+        user.id = 2
+        user.role = "viewer"
+        user.is_superuser = False
+        app.dependency_overrides[deps.get_current_user] = lambda: user
+        app.dependency_overrides[get_db] = lambda: MagicMock()
+        app.include_router(router)
+        resp = TestClient(app).get("/sync/status")
+        assert resp.status_code == 403
+
+    def test_non_admin_cannot_read_dashboard(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.api.v1 import deps
+        from app.core.database import get_db
+        from app.api.v1.sync import router
+
+        app = FastAPI()
+        user = MagicMock()
+        user.id = 2
+        user.role = "viewer"
+        user.is_superuser = False
+        app.dependency_overrides[deps.get_current_user] = lambda: user
+        app.dependency_overrides[get_db] = lambda: MagicMock()
+        app.include_router(router)
+        resp = TestClient(app).get("/sync/dashboard")
+        assert resp.status_code == 403

@@ -1,6 +1,7 @@
 """Tests for ExcelImporterService — 100% code coverage."""
 
 import io
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -897,3 +898,44 @@ def test_module_has_pandas_flag():
     from app.services.excel_importer_service import _HAS_PANDAS_FAST_READ
 
     assert isinstance(_HAS_PANDAS_FAST_READ, bool)
+
+
+# ---------------------------------------------------------------------------
+# 归属字段回落（2026-11-01）
+# ---------------------------------------------------------------------------
+
+
+class TestImportOwnershipFallback:
+    """项目/资金/学校导入必须写入 organization_id 与 created_by。
+
+    历史缺陷：三条导入路径只构造业务字段，落库后 organization_id 为空，
+    非超管用户在列表里被组织过滤掉 —— 导入"成功"但台账不可见（幽灵台账）。
+    模板未填 organization_code 时回落到调用者本组织；调用者无组织时只写创建者。
+    """
+
+    @pytest.mark.parametrize("method_name,row", [
+        ("_import_projects", {"name": "P1"}),
+        ("_import_funds", {"name": "F1"}),
+        ("_import_schools", {"name": "S1"}),
+    ])
+    @pytest.mark.parametrize("org_id,expected_org", [(5, 5), (None, None)])
+    def test_ownership_fields_written(self, db, method_name, row, org_id, expected_org):
+        user = SimpleNamespace(id=9, organization_id=org_id, role="user", is_superuser=False)
+        svc = ExcelImporterService(db, current_user=user)
+        validator = MagicMock()
+        validator.convert_row_types.side_effect = lambda r: dict(r)
+        # org_map / existing_names 查询统一返回空表
+        db.query.return_value.all.return_value = []
+
+        with patch(
+            "app.services.excel_importer_service.EntityImportValidator",
+            return_value=validator,
+        ):
+            result = getattr(svc, method_name)(
+                [row], ImportResult(success=True), MagicMock(), ImportMode.INCREMENTAL
+            )
+
+        assert result.success_rows == 1
+        created = db.add.call_args[0][0]
+        assert created.created_by == 9
+        assert created.organization_id == expected_org

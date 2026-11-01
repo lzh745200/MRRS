@@ -122,9 +122,10 @@
         <el-table-column prop="publishDate" label="发布日期" width="120" />
         <el-table-column prop="status" label="状态" width="80" align="center">
           <template #default="scope">
-            <el-tag :type="scope.row.status === 'active' ? 'success' : 'danger'">
+            <el-tag v-if="scope.row.status" :type="scope.row.status === 'active' ? 'success' : 'danger'">
               {{ scope.row.status === 'active' ? '启用' : '禁用' }}
             </el-tag>
+            <span v-else>—</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -157,6 +158,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { ElMessage } from 'element-plus'
 import { get, apiRequest } from '@/api/request'
+import { getCategoryLabel } from '@/api/policy'
 
 import { Refresh, Search } from '@element-plus/icons-vue'
 interface Policy {
@@ -280,10 +282,12 @@ const loadData = async () => {
         id: item.id,
         title: item.title,
         snippet: sanitizeSnippet(item.snippet || ''),
-        categoryName: '',
-        department: '',
-        publishDate: '',
-        status: '',
+        // 后端 FTS 返回 category/level；status/部门/日期当前未返回，
+        // 缺失时留空并由模板显示占位，不能硬编码 '' 后误判成“禁用”。
+        categoryName: getCategoryLabel(item.category || ''),
+        department: item.issuing_authority || item.department || '',
+        publishDate: item.publish_date || item.issue_date || '',
+        status: item.status || '',
       }))
       loading.value = false
       return

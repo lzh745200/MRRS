@@ -298,7 +298,7 @@ const handleDownloadByName = async (packageName: string) => {
 const loadExportHistory = async () => {
   loadingHistory.value = true
   try {
-    const response: any = await getSyncLogs({ action: 'export', page: 1, page_size: 20 })
+    const response: any = await getSyncLogs({ sync_type: 'export', limit: 20 })
     // 兼容信封 items / 裸数组
     const list = unwrapList(response).items
     exportHistory.value = Array.isArray(list) ? list : []
@@ -309,10 +309,13 @@ const loadExportHistory = async () => {
   }
 }
 
-const formatSize = (bytes: number) => {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+const formatSize = (bytes?: number | null) => {
+  // 后端 DataSyncLog 当前没有 size 字段；缺失时明确显示 '-'，不能算出 NaN MB
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n <= 0) return '-'
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return (n / 1024).toFixed(2) + ' KB'
+  return (n / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
 const formatDate = (dateStr?: string | null): string => format.formatDateTimeLocale(dateStr)

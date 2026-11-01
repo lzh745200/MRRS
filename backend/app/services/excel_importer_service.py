@@ -665,6 +665,13 @@ class ExcelImporterService:
                     # 可达性 —— 否则导入可把数据写进任意组织（跨组织写入）。
                     self._assert_org_reachable(target_org_id)
                     project_data["organization_id"] = target_org_id
+                elif self.current_user is not None:
+                    # 模板未填组织编码时回落到调用者本组织，避免导入成“幽灵台账”
+                    current_org = getattr(self.current_user, "organization_id", None)
+                    if current_org:
+                        project_data["organization_id"] = current_org
+                if self.current_user is not None:
+                    project_data["created_by"] = getattr(self.current_user, "id", None)
 
                 project = Project(**project_data)
                 self.db.add(project)
@@ -732,6 +739,12 @@ class ExcelImporterService:
                     "date": converted.get("date"),
                     "remarks": converted.get("remarks"),
                 }
+                # 归属字段：与手工创建/帮扶村导入一致，否则非超管列表直接看不到
+                if self.current_user is not None:
+                    current_org = getattr(self.current_user, "organization_id", None)
+                    if current_org:
+                        fund_data["organization_id"] = current_org
+                    fund_data["created_by"] = getattr(self.current_user, "id", None)
                 project_code = converted.get("project_code")
                 if project_code and project_code in project_map:
                     fund_data["project_id"] = project_map[project_code]
@@ -803,6 +816,12 @@ class ExcelImporterService:
                     "description": converted.get("description"),
                     "is_active": True,
                 }
+                # 归属字段：与手工创建一致（学校列表按组织/创建者收敛）
+                if self.current_user is not None:
+                    current_org = getattr(self.current_user, "organization_id", None)
+                    if current_org:
+                        school_data["organization_id"] = current_org
+                    school_data["created_by"] = getattr(self.current_user, "id", None)
                 school = School(**school_data)
                 self.db.add(school)
                 self.db.flush()
