@@ -127,3 +127,40 @@ docker buildx build --platform linux/arm64 \
 sudo dpkg -i assistance-management-system_1.18.31_arm64.deb
 # 浏览器访问 http://localhost:8000
 ```
+
+## 发布通知模板（派单 / 通知平台可直接粘贴）
+
+> 仓库内没有名为「派单」的模块，站内消息中心（`/message`）已在
+> [使用指南](../02-用户手册/使用指南.md) 覆盖。若通知渠道是外部 OA / 钉钉 / 企业微信，
+> 直接粘贴下面模板即可，无需改代码；如需自动推送，请提供平台 Webhook 与凭据（**待确认**）。
+
+```text
+【版本发布】帮扶管理信息系统 v1.18.31（2026-10-31）
+
+一、本版重点
+1. P0 修复：ARM64 安装包漏收 difflib，安装后后端启动即崩（v1.18.29 事故，已补构建期冻结模块门禁）。
+2. 地图：瓦片包内置 z5–8 全省概览，单包导入即可缩放看全省；新增右侧图例/图注与比例尺。
+3. 安全：权限包导入提权、9 类超管端点错配、组织通行码越权、审计日志销毁、校验码 oracle、
+   媒体链路（路径逃逸/像素炸弹）、前端锁屏绕过与导入错误 XSS 等 10 项收敛（提交 06a9e994）。
+
+二、安装包（GitHub Release 附带 SHA256SUMS，下载后请先核对哈希）
+- Windows x64：MRRS-Setup-1.18.31-x64.exe（283,524,134 B）
+- 麒麟/国产 ARM64（Electron 桌面版）：MRRS-Setup-1.18.31-arm64.deb（281,990,840 B）
+- 麒麟/国产 ARM64（standalone Web，自包含无 Electron）：assistance-management-system_1.18.31_arm64.deb（105,041,660 B）
+
+三、升级步骤
+1. 备份：系统管理 → 备份与存储 → 创建备份（务必记录备份密码）。
+2. 覆盖安装对应架构的包（Windows 直接运行安装程序；Linux `sudo dpkg -i <deb>`）。
+3. 启动后确认：浏览器/桌面能打开登录页；管理端「版本.json」显示 1.18.31。
+4. 升级后 30 分钟内不要卸载旧包，便于回滚（见《离线升级与回滚指南》）。
+
+四、常见问题（先看这里，再提单）
+- 装完打不开 / 白屏 / 启动即退：见《打包态启动排障与离线包验证》
+  （冻结模块自检 verify_frozen_modules.py、环境变量清单、日志位置）。
+- 多机/局域网注册被拒 403：所有实例统一配置同一 PASS_CODE_SECRET。
+- 导入授权包失败 400：本机未配置 GRANT_PUBKEY（或包未签名），见 README「部署前置检查」第 3 条。
+
+五、反馈
+请在派单中附：安装包名 + 架构 + 操作系统版本 + 报错截图 + 日志
+（Windows: %LOCALAPPDATA%\bumofu-assistance\data\logs；Linux: /opt/assistance-management-system/data/logs）。
+```
