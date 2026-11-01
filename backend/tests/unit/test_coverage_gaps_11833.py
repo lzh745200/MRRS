@@ -208,3 +208,24 @@ def db_session():
     yield session
     session.close()
     engine.dispose()
+
+
+class TestRelocatedInsertWithoutPrimaryKey:
+    """1020->1010：换 id 插入成功但驱动不回主键时，不得登记无效 remap。"""
+
+    def test_inserted_primary_key_none_skips_remap(self):
+        from app.models.supported_village import SupportedVillage
+
+        relocated = [{"id": 7, "village_name": "撞号村"}]
+        svc = DataPackageService(MagicMock())
+        svc._clean_import_record = lambda record, *a, **k: dict(record)  # type: ignore[method-assign]
+        svc._classify_import_records = lambda *a, **k: ([], [], relocated)  # type: ignore[method-assign]
+        svc.db.execute.return_value = SimpleNamespace(inserted_primary_key=None)
+
+        remap: dict = {}
+        imported, skipped, errors = svc._bulk_upsert_records(
+            SupportedVillage, [{"id": 7, "village_name": "撞号村"}], 1, False, remap=remap
+        )
+
+        assert (imported, skipped, errors) == (1, 0, [])
+        assert remap == {}
