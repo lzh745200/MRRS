@@ -288,4 +288,22 @@ describe('clearAllDrafts（登出清理）', () => {
       vi.unstubAllGlobals()
     }
   })
+
+  it('枚举键时存储抛错（隐私模式 SecurityError）也静默降级', () => {
+    const throwingStore = {
+      length: 1,
+      key: () => {
+        throw new Error('SecurityError')
+      },
+      removeItem: vi.fn(),
+    }
+    vi.stubGlobal('localStorage', throwingStore)
+    try {
+      // 覆盖 clearAllDrafts 的 catch 分支：登出绝不能因为存储拒绝访问而中断
+      expect(() => clearAllDrafts()).not.toThrow()
+      expect(throwingStore.removeItem).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
