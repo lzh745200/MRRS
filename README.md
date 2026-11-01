@@ -347,7 +347,13 @@ powershell -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
 cd frontend && npm run build && cd .. && cmd /c scripts\build\sync-frontend-dist.bat
 cd backend && .venv/Scripts/python.exe -m PyInstaller assistance-backend.spec --clean --noconfirm && cd ..
 npx electron-builder --win --x64     # 产物：dist/electron/MRRS-Setup-<版本>-x64.exe
+npm run verify:installer             # 必跑：校验安装包真的带 7z 载荷（残缺包双击会报
+                                     # 「Error writing temporary file」，与 %TEMP% 无关）
 ```
+
+> 构建 NSIS 安装包（780 MB → 330 MB 压缩）请**放后台跑，勿中途关窗口**：压缩被打断会
+> 留下只有外壳的 489 KB 半成品。`npm run verify:installer` 失败时会把产物改名 `.invalid`
+> 并退出 1；`npm run build:win` 已自动串接该门禁，CI 出包也会在发布前再验一次。
 
 ## CI/CD 流水线
 

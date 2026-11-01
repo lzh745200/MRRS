@@ -13,7 +13,7 @@
     "start": "electron .",
     "check:electron": "node --check electron/main.js && node --check electron/preload.js",
     "test:electron": "node --test \"electron/tests/*.test.js\"",
-    "build": "npm run check:electron && npm run build:backend && electron-builder && npm run verify:installer",
+    "build": "npm run check:electron && npm run build:backend && electron-builder",
     "build:backend": "cd backend && node ../scripts/run-python.js -m PyInstaller assistance-backend.spec --clean --noconfirm",
     "verify:installer": "node scripts/run-python.js scripts/verify_installer_payload.py --quarantine",
     "build:linux": "electron-builder --linux",

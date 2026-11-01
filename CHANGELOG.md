@@ -108,9 +108,9 @@
   新增 `scripts/verify_installer_payload.py`：校验总大小、PE 表可解析、overlay 内含
   7z 签名、7z **起始头自洽**（StartHeaderCRC + NextHeader 边界）、载荷未被截断、
   文件名版本与 `package.json` 一致；失败时 `--quarantine` 把产物改名为 `.invalid`
-  （防现场误双击）。`npm run build` / `build:win` 已串接该门禁，CI 的
-  `Build Windows Installer` 在"产物存在性检查"之后新增
-  `Verify installer payload present`，残缺包不再可能上传 Release。
+  （防现场误双击）。`npm run build:win` 已串接该门禁，README 的本地构建步骤补上
+  `npm run verify:installer`；CI 的 `Build Windows Installer` 在"产物存在性检查"
+  之后新增 `Verify installer payload present`，残缺包不再可能上传 Release。
   回归：`tests/unit/test_verify_installer_payload.py`（17 例：空壳/截断/签名后垃圾/
   头部 CRC 损坏/过小/非法 PE/版本不符/隔离改名），并用真实产物双向验证
   （1.18.32 与重建后的 1.18.33 通过；489 KB 空壳退出码 1）。
