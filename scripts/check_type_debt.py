@@ -70,6 +70,15 @@ def count_mypy_errors() -> tuple[int, list[str]]:
             "app/",
             "--config-file=mypy.ini",
             "--ignore-missing-imports",
+            # 平台口径钉死 win32：本产品以 Windows 桌面为主，但 CI 跑在
+            # ubuntu-latest 上。mypy 的平台类型存根不同，`sys.windll`
+            # （app/utils/drive_detect.py:30）与 `asyncio.ProactorEventLoop`
+            # （app/utils/win_proactor_fix.py:164）这两个 Windows-only 符号
+            # 在 Linux 下会各报一条 attr-defined / name-defined，导致同一份
+            # 代码在本地是 77 条、在 CI 是 78 条 —— 门禁数字随机器漂移，红线
+            # 失去意义（2026-11-01 v1.18.33 的 lint 红就是这么来的）。
+            # 显式钉平台后本地与 CI 用同一套存根，基线 77 才是可比的。
+            "--platform=win32",
         ],
         cwd=str(BACKEND),
         capture_output=True,

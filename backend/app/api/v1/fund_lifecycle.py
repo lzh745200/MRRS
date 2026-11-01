@@ -1795,10 +1795,11 @@ async def approve_settlement(
 
     # 短期项 2（2026-11-01 审计）：审批即固化金额 —— 落定状态之前按当前经费重算一次，
     # 避免「生成决算后又追加了支出」导致固化的是旧结余（历史缺陷：审批后不可改）。
-    if s.project_id is not None:
-        from app.services.fund_settlement_service import recalculate_settlement_totals
+    # project_id 为空时 recalculate_settlement_totals 自身直接返回（聚合按项目经费，
+    # 无项目即无经费可算）；这里不再重复判空，避免留一条业务上不可达的分支。
+    from app.services.fund_settlement_service import recalculate_settlement_totals
 
-        recalculate_settlement_totals(db, s)
+    recalculate_settlement_totals(db, s)
 
     s.status = SettlementStatus.APPROVED.value
     s.auditor = _get_username(current_user)

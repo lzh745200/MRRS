@@ -202,6 +202,23 @@ class TestSettlementApiRecompute:
         db_session.refresh(settlement)
         assert settlement.total_remaining == Decimal("55.0000")
 
+    def test_update_without_total_spent_does_not_recompute(self, client, project, db_session):
+        """预算与支出缺一时不重算结余（避免用 None 做减法）。"""
+        settlement = _settlement(project.id, no="JS-R-API-UPDATE-NOSPENT",
+                                 status=SettlementStatus.DRAFT.value,
+                                 budget=100, spent=30, remaining=70)
+        db_session.add(settlement)
+        db_session.flush()
+        settlement.total_spent = None
+        db_session.flush()
+
+        resp = client.put(f"{_BASE}/settlement/{settlement.id}", json={"total_budget": 120})
+
+        assert resp.status_code == 200, resp.text
+        db_session.refresh(settlement)
+        assert settlement.total_budget == Decimal("120.0000")
+        assert settlement.total_remaining == Decimal("70.0000")
+
     def test_approve_recomputes_before_freezing(self, client, project, db_session):
         settlement = _settlement(project.id, no="JS-R-API-APPROVE", status=SettlementStatus.DRAFT.value,
                                  budget=100, spent=30, remaining=70)

@@ -94,6 +94,18 @@
   catch 809），并在提交说明中记录 +3 的理由（两类 fail-safe 兜底不可收窄）。
 - 前端 `src/api/request.ts` 导出截断提示补 4 例（含缺头 `?` 兜底 / 非 blob / 头为 false），
   修 `src/api/**` 100% 覆盖率门禁（此前 98.45%，缺 333、335-341 行）。
+- **类型债门禁钉平台口径**：`scripts/check_type_debt.py` 的 mypy 调用加 `--platform=win32`。
+  同一份代码在 Windows 下是 77 条、在 ubuntu 下是 78 条——差在 `sys.windll`
+  （`app/utils/drive_detect.py:30`）与 `asyncio.ProactorEventLoop`
+  （`app/utils/win_proactor_fix.py:164`）这两个 Windows-only 符号在 Linux 存根里不存在。
+  数字随机器漂移会让红线失去意义（v1.18.33 的 lint 红正是如此），钉死后基线 77 才可比。
+- **后端最终覆盖率 99.98% → 100%**：CI 合并覆盖率缺口全在本轮新增分支上
+  （`data_package_service.py` 外键重写日志与无外键早返回、`fund_service.py` 项目变更重算、
+  `system/admin.py` 的 `except HTTPException: raise`）。新增
+  `tests/unit/test_coverage_gaps_11833.py`（5 例，真实确认导入路径 + 最小替身）与
+  决算「预算/支出缺一不重算」用例；同时把 `fund_lifecycle.approve_settlement` 里
+  「project_id 非空才重算」的判空删掉——`recalculate_settlement_totals` 自身已对空
+  project_id 直接返回，外层再判空只会留一条业务上不可达的分支。
 
 ### Fixed（打包完整性，2026-11-01 下午）
 
