@@ -220,6 +220,39 @@ describe('views/system/OrgGrant', () => {
     expect(text).toContain('继承：可操作（来自 S01）')
   })
 
+  it('矩阵下拉 update:modelValue 写回行状态（模板 v-model）', async () => {
+    const wrapper = factory()
+    wrapper.vm.onOrgIdInput('7')
+    await wrapper.vm.load()
+    await wrapper.vm.$nextTick()
+
+    const selects = wrapper.findAll('select')
+    expect(selects.length).toBeGreaterThan(0)
+    await selects[0].setValue('edit')
+    expect(wrapper.vm.rows[0].state).toBe('edit')
+  })
+
+  it('组织树节点缺省字段：名称/编码/children 与 root_id=0 兜底', async () => {
+    mockTree.mockResolvedValue({
+      root_id: 0,
+      node: { id: 5 },
+    })
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.vm.treeData[0].label).toBe('未命名单位')
+    expect(wrapper.vm.treeData[0].children).toEqual([])
+    expect(wrapper.vm.treeRootId).toBe(0)
+  })
+
+  it('onSearch 容忍 null；buildRows 容忍 grants/effective/sources 缺省', () => {
+    const wrapper = factory()
+    wrapper.vm.onSearch(null as unknown as string)
+    expect(wrapper.vm.searchText).toBe('')
+    const rows = wrapper.vm.buildRows({} as never)
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows[0].state).toBe('inherit')
+  })
+
   it('加载成功（未签名 + 无编码/来源）：走 info 标签与缺省文案', async () => {
     mockGet.mockResolvedValue({
       ...MATRIX,

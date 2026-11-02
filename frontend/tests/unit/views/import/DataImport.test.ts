@@ -140,6 +140,12 @@ const stubs = {
     template: '<div class="el-select-stub"><slot /></div>',
     emits: ['update:modelValue', 'change'],
   },
+  'el-input': {
+    name: 'ElInput',
+    props: ['modelValue'],
+    template: '<input class="el-input-stub" :value="modelValue" />',
+    emits: ['update:modelValue', 'change'],
+  },
   'el-radio-group': {
     name: 'ElRadioGroup',
     template: '<div class="el-radio-group-stub"><slot /></div>',
@@ -587,5 +593,18 @@ describe('状态映射工具', () => {
     const radioGroup = wrapper.findComponent({ name: 'ElRadioGroup' })
     radioGroup.vm.$emit('update:modelValue', 'full')
     expect(vm.importForm.mode).toBe('full')
+  })
+
+  it('表单 v-model：导出填报的数据类型下拉与记录 ID 输入 update:modelValue 同步', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 模板中第一个 el-select 是「导出填报」的数据类型下拉
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    selects[0].vm.$emit('update:modelValue', 'school')
+    expect(vm.exportForm.entityType).toBe('school')
+    const input = wrapper.findComponent({ name: 'ElInput' })
+    input.vm.$emit('update:modelValue', ' 2,4 ')
+    expect(vm.exportForm.ids).toBe(' 2,4 ')
   })
 })

@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   apiRequest: vi.fn(),
+  downloadBlob: vi.fn(),
+  parseContentDisposition: vi.fn(() => 'download.xlsx'),
 }))
 
 // src/api/import.ts 实际 import：default (request)、{ post, apiRequest }
@@ -16,12 +18,13 @@ vi.mock('@/api/request', () => ({
   get: mocks.get,
   post: mocks.post,
   apiRequest: mocks.apiRequest,
-  parseContentDisposition: vi.fn(() => 'download.xlsx'),
-  downloadBlob: vi.fn(),
+  parseContentDisposition: mocks.parseContentDisposition,
+  downloadBlob: mocks.downloadBlob,
   getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
 
 import {
   downloadImportTemplate,
+  exportFillTemplateAndSave,
   importVillages,
   getImportHistory,
   formatImportStatus,
@@ -111,6 +114,35 @@ describe('api/import', () => {
     })
     it('未知状态回退', () => {
       expect(formatImportStatus('xyz')).toEqual({ text: 'xyz', type: 'info' })
+    })
+  })
+
+  describe('exportFillTemplateAndSave', () => {
+    const downloadResponse = () => ({
+      data: new Blob(['x']),
+      headers: { 'content-disposition': 'attachment; filename="x.xlsx"' },
+    })
+
+    it('数组 ids 合并为逗号串并触发下载', async () => {
+      mocks.get.mockResolvedValueOnce(downloadResponse())
+      await exportFillTemplateAndSave('project', [1, 2], '项目填报')
+      const [url, config] = mocks.get.mock.calls[0]
+      expect(url).toBe('/import/export-fill')
+      expect(config.params).toEqual({ entity_type: 'project', ids: '1,2' })
+      expect(config.responseType).toBe('blob')
+      expect(mocks.downloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'download.xlsx')
+    })
+
+    it('字符串 ids 去除首尾空格后传出', async () => {
+      mocks.get.mockResolvedValueOnce(downloadResponse())
+      await exportFillTemplateAndSave('fund', '  3,7  ', '资金填报')
+      expect(mocks.get.mock.calls[0][1].params).toEqual({ entity_type: 'fund', ids: '3,7' })
+    })
+
+    it('ids 为空时只传 entity_type（导出全部）', async () => {
+      mocks.get.mockResolvedValueOnce(downloadResponse())
+      await exportFillTemplateAndSave('school', undefined, '学校填报')
+      expect(mocks.get.mock.calls[0][1].params).toEqual({ entity_type: 'school' })
     })
   })
 })

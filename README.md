@@ -5,7 +5,7 @@
 ![Version](https://img.shields.io/badge/version-1.18.35-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C185-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C192-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 本版亮点（v1.18.35）
@@ -26,7 +26,7 @@
 - **运维收敛**：组织级 `data_scope` 影子观测（默认 `off`，不改变查询结果）；写闸门
   `grant_guard` 与组织模块策略共用判定，**更严者生效**，默认行为不变。
 - 🧪 验证：后端 12 段全量 **15,684 passed**（覆盖率 **100.00%**，48,189 行 / 12,160 分支）；
-  前端 **348 files / 7,501 tests** 全绿；flake8 / type-check / lint / 三层对齐 / 文档数字 /
+  前端 **348 files / 7,508 tests** 全绿；flake8 / type-check / lint / 三层对齐 / 文档数字 /
   CHANGELOG / 硬编码色 / 路由鉴权门禁全部通过。
 
 ## 历史亮点（v1.18.34）

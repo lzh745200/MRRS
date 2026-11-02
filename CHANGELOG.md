@@ -85,7 +85,11 @@
 - 迁移自证：r39/r40/r43 的测试文件按完整 revision 重命名（`test_migration_*_001.py`），
   新增 `backend/tests/unit/test_migration_org_data_scope_001.py`（旧库加列/幂等/缺表跳过/
   回滚保留数据/回滚幂等/迁移链 6 例），`check_migration_self_evidence.py` 清零。
-- 后端用例数 15,678 → **15,684**；README/RELEASE_NOTES/PPT 数字同步。
+- 后端用例数 15,678 → **15,684**；前端补测后 **7,508** 用例（348 文件）；README/RELEASE_NOTES/
+  PPT 数字同步。
+- 前端覆盖率补测：为 `src/api/import.ts` 的 `exportFillTemplateAndSave`（数组/字符串/空 ids 三支）、
+  `DataImport.vue` 导出填报表单的 v-model、`OrgGrant.vue` 矩阵行下拉与组织树缺省字段补 7 例，
+  使 `src/api/**` 与 `src/views/**` 恢复 100%（CI `test:coverage` 门禁通过）。
 - 类型债基线：mypy 错误数 77 → **76**（净改善）；broad-except 809 → **816**
   （+7 均为新流程兜底：并发会话的审计/备份 4 处 + 本轮的导入失败历史/影子观测 3 处，
   均带日志或显式外部化，不是静默吞异常）。
