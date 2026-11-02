@@ -73,6 +73,20 @@
   包版本对比合并 `version1/version2`；未读数按 number 归一（不再按 `{data:{total}}` 解构）。
 - **脚本**：`scripts/docker/build.ps1`、`scripts/legacy/build-kylin.sh` 默认版本同步 1.18.35。
 
+### CI 门禁收口与迁移自证（2026-11-03）
+
+- 修复 PR Checks 暴露的门禁问题：`sqlite_migration.py` 的 `# nosec` 注释超长（flake8 E501）；
+  `fill_template_service` 按 `supported_village_id` 查村时补 `is_active` 过滤（软删除门禁
+  NEW=1 → 0）；`main.py` 与 `excel_importer_service.py` 两处 `except Exception` 补显式豁免
+  理由（静默吞异常门禁）。
+- 组织树构建抽到 `app/services/org_grant_tree_service.py`（`matrix_of/subtree_orgs/parent_codes/
+  tree_node`），路由文件只保留鉴权/事务/响应封装；消除 bare-dict 门禁对内部数据结构
+  （非端点响应）的误报（当前 241 / 基线 244，NEW=0）。
+- 迁移自证：r39/r40/r43 的测试文件按完整 revision 重命名（`test_migration_*_001.py`），
+  新增 `backend/tests/unit/test_migration_org_data_scope_001.py`（旧库加列/幂等/缺表跳过/
+  回滚保留数据/回滚幂等/迁移链 6 例），`check_migration_self_evidence.py` 清零。
+- 后端用例数 15,678 → **15,684**；README/RELEASE_NOTES/PPT 数字同步。
+
 ## [1.18.34] - 2026-11-01 — 路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）
 
 > 依据审计报告 §5「长期演进」逐项落地。本轮聚焦「运行环境安全寿命 + 导入可预览可回滚 +

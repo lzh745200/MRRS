@@ -37,6 +37,12 @@ from app.services.effective_grant_service import (
     clear_cache,
     get_grant_matrix_for_org,
 )
+from app.services.org_grant_tree_service import (
+    matrix_of,
+    parent_codes,
+    subtree_orgs,
+    tree_node,
+)
 from app.services.grant_package_service import (
     GrantPackageError,
     apply_package,
@@ -74,11 +80,6 @@ def _require_admin_and_reach(db: Session, current_user, org_id: int, action: str
     if org is None:
         raise HTTPException(status_code=404, detail="单位不存在")
     return org
-
-
-def _matrix_of(db: Session, org_id: int) -> dict:
-    rows = db.query(OrgGrant).filter(OrgGrant.organization_id == org_id).all()
-    return {row.module_key: row.level for row in rows}
 
 
 def _matrix_brief(grants: dict) -> str:
@@ -159,52 +160,6 @@ async def import_grant_package(
     return success_response(data=result, message="授权包已应用")
 
 
-def _subtree_orgs(db: Session, root_id: int) -> list:
-    """按组织树顺序返回 root 及其全部下级（深度/环保护由 `_get_org_subtree` 提供）。"""
-    org_ids, _names = _get_org_subtree(db, root_id)
-    rows = (
-        db.query(Organization)
-        .filter(Organization.id.in_(org_ids))
-        .order_by(Organization.sort_order, Organization.id)
-        .all()
-    )
-    by_id = {org.id: org for org in rows}
-    return [by_id[org_id] for org_id in org_ids if org_id in by_id]
-
-
-def _parent_codes(orgs_by_id: dict, org: Organization) -> list:
-    """根 → 上级的单位编码链（仅作包内溯源元数据，不参与权限计算）。"""
-    codes = []
-    seen = set()
-    current = orgs_by_id.get(org.parent_id) if org.parent_id else None
-    while current is not None and current.id not in seen:
-        seen.add(current.id)
-        # 调用方已保证子树内每个单位都有 code，这里只做溯源，不再判空。
-        codes.append(current.code)
-        current = orgs_by_id.get(current.parent_id) if current.parent_id else None
-    return list(reversed(codes))
-
-
-def _tree_node(db: Session, org: Organization, children_by_parent: dict) -> dict:
-    """组织策略树的单个节点（显式矩阵 + 元信息 + 子节点）。"""
-    return {
-        "id": org.id,
-        "name": org.name,
-        "code": org.code,
-        "parent_id": org.parent_id,
-        "level": org.level,
-        "grant_version": org.grant_version or 0,
-        "grant_source": org.grant_source,
-        "signed": bool(org.grant_signature),
-        "inherit_from_parent": bool(org.inherit_from_parent),
-        "grants": _matrix_of(db, org.id),
-        "children": [
-            _tree_node(db, child, children_by_parent)
-            for child in children_by_parent.get(org.id, [])
-        ],
-    }
-
-
 @router.get("/tree", summary="查看组织策略树")
 def get_org_grant_tree(
     root_id: int | None = Query(default=None, description="根单位 ID；缺省为当前用户所属单位"),
@@ -236,7 +191,7 @@ def get_org_grant_tree(
         raise HTTPException(status_code=400, detail="缺少根单位 ID，且当前账号未绑定单位")
 
     root = _require_admin_and_reach(db, current_user, root_id, "查看组织策略树")
-    orgs = _subtree_orgs(db, root_id)
+    orgs = subtree_orgs(db, root_id)
     if not orgs:
         raise HTTPException(status_code=404, detail="单位不存在或组织树为空")
 
@@ -245,7 +200,7 @@ def get_org_grant_tree(
         children_by_parent.setdefault(org.parent_id, []).append(org)
 
     return success_response(
-        data={"root_id": root_id, "node": _tree_node(db, root, children_by_parent)}
+        data={"root_id": root_id, "node": tree_node(db, root, children_by_parent)}
     )
 
 
@@ -264,7 +219,7 @@ def export_grant_package(
             detail="该单位未填写单位编号（code），无法作为授权包目标",
         )
 
-    grants = _matrix_of(db, org_id)
+    grants = matrix_of(db, org_id)
     version = (org.grant_version or 0) + 1
     try:
         package = build_package(
@@ -309,7 +264,7 @@ def export_grant_branch(
     zip 只是分发容器；`manifest.json` 记录文件名/版本/哈希与跳过原因。
     """
     root = _require_admin_and_reach(db, current_user, org_id, "批量导出子树授权包")
-    orgs = _subtree_orgs(db, org_id)
+    orgs = subtree_orgs(db, org_id)
     if not orgs:
         raise HTTPException(status_code=404, detail="单位不存在或组织树为空")
 
@@ -349,7 +304,7 @@ def export_grant_branch(
                 grants=grants,
                 version=version,
                 org_name=org.name,
-                parent_codes=_parent_codes(orgs_by_id, org),
+                parent_codes=parent_codes(orgs_by_id, org),
                 private_key=settings.GRANT_SIGNING_KEY,
             )
         except GrantPackageError as exc:
@@ -423,7 +378,7 @@ def get_org_grants(
             "signed": bool(org.grant_signature),
             # 显式矩阵（本机存储）与继承后的有效矩阵分开返回：
             # 前端四态编辑需要同时看到"我写了什么"和"最终生效什么"。
-            "grants": _matrix_of(db, org_id),
+            "grants": matrix_of(db, org_id),
             "active": matrix.active,
             "effective": dict(matrix.levels) if matrix.active else {},
             "sources": dict(matrix.sources) if matrix.active else {},
@@ -450,7 +405,7 @@ def set_org_grants(
             )
 
     # 审计需要变更前快照，必须在删除前读取
-    before = _matrix_of(db, org_id)
+    before = matrix_of(db, org_id)
 
     # 裸 delete + 逐条 add 在同一事务内完成：safe_commit 失败会自动 rollback，
     # 不会留下"矩阵已清空但新矩阵未写入"的中间态。

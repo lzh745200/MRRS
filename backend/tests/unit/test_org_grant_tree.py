@@ -151,13 +151,13 @@ class TestTreeEndpoint:
 class TestTreeEdgeCases:
     def test_tree_404_when_subtree_empty(self, db, tree, monkeypatch):
         """根单位存在但子树解析为空（异常数据）时返回 404，而不是空树。"""
-        monkeypatch.setattr(api, "_get_org_subtree", lambda *a, **kw: ([], []))
+        monkeypatch.setattr(api, "subtree_orgs", lambda *a, **kw: [])
         with pytest.raises(HTTPException) as exc:
             api.get_org_grant_tree(root_id=tree.root.id, db=db, current_user=ADMIN)
         assert exc.value.status_code == 404
 
     def test_export_branch_404_when_subtree_empty(self, db, tree, monkeypatch):
-        monkeypatch.setattr(api, "_get_org_subtree", lambda *a, **kw: ([], []))
+        monkeypatch.setattr(api, "subtree_orgs", lambda *a, **kw: [])
         with pytest.raises(HTTPException) as exc:
             api.export_grant_branch(tree.root.id, db=db, current_user=ADMIN)
         assert exc.value.status_code == 404

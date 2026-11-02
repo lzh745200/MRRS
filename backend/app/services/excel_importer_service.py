@@ -489,7 +489,7 @@ class ExcelImporterService:
                 self.db.add(failed_history)
                 safe_commit(self.db)
                 result.import_history_id = failed_history.id
-            except Exception:
+            except Exception:  # nosec:swallow - 失败历史写入异常不阻断原始导入结果返回
                 result.import_history_id = None
             return result
 

@@ -40,7 +40,7 @@ def drop_column(bind, table: str, column: str, op=None) -> None:
 
 def rename_column(bind, table: str, old: str, new: str, op=None) -> None:
     if _supports_rename_column(bind) or op is None:
-        bind.execute(sa.text(f'ALTER TABLE "{table}" RENAME COLUMN "{old}" TO "{new}"'))  # nosec B608 - 表名/列名来自迁移脚本常量，非用户输入
+        bind.execute(sa.text(f'ALTER TABLE "{table}" RENAME COLUMN "{old}" TO "{new}"'))  # nosec B608 - 标识符为迁移脚本常量
         return
     with op.batch_alter_table(table) as batch_op:
         batch_op.alter_column(old, new_column_name=new)

@@ -650,7 +650,7 @@ def _run_alembic_upgrade():
             known_revisions = {rev.revision for rev in ScriptDirectory.from_config(cfg).walk_revisions()}
             with engine.connect() as conn:
                 current_rev = MigrationContext.configure(conn).get_current_revision()
-        except Exception:
+        except Exception:  # nosec:swallow - alembic/连接不可用时按"无法判定"处理，由下方日志与 error_type 外化
             known_revisions = set()
             current_rev = None
         if current_rev and known_revisions and current_rev not in known_revisions:

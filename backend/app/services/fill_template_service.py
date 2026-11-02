@@ -154,6 +154,7 @@ class FillTemplateService:
                 village.id: village
                 for village in self.db.query(SupportedVillage)
                 .filter(SupportedVillage.id.in_(village_ids))
+                .filter(SupportedVillage.is_active.is_(True))
                 .all()
             }
         fields = {
