@@ -50,8 +50,10 @@ def parent_codes(orgs_by_id: dict, org: Organization) -> list:
 
 def tree_node(db, org: Organization, children_by_parent: dict) -> dict:
     """组织策略树的单个节点（显式矩阵 + 元信息 + 子节点）。"""
+    org_id = org.id
+    assert org_id is not None  # 已落库组织必有主键；显式收窄供 mypy 使用
     return {
-        "id": org.id,
+        "id": org_id,
         "name": org.name,
         "code": org.code,
         "parent_id": org.parent_id,
@@ -60,9 +62,9 @@ def tree_node(db, org: Organization, children_by_parent: dict) -> dict:
         "grant_source": org.grant_source,
         "signed": bool(org.grant_signature),
         "inherit_from_parent": bool(org.inherit_from_parent),
-        "grants": matrix_of(db, org.id),
+        "grants": matrix_of(db, org_id),
         "children": [
             tree_node(db, child, children_by_parent)
-            for child in children_by_parent.get(org.id, [])
+            for child in children_by_parent.get(org_id, [])
         ],
     }

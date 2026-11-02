@@ -330,6 +330,8 @@ class ExcelImporterService:
                 return result
 
             # 根据实体类型选择验证器和导入逻辑
+            validation_result: Any
+            duplicate_errors: Any
             if entity_type == "supported_village":
                 validation_result = self.validator.validate_batch(rows)
                 duplicate_errors = self.validator.check_duplicates(rows)
@@ -875,9 +877,11 @@ class ExcelImporterService:
         if mode == ImportMode.INCREMENTAL:
             for h in self.db.query(Household).filter(Household.is_active.is_(True)).all():
                 if h.household_code:
-                    existing.add((h.supported_village_id, h.household_code.strip().lower()))
+                    existing.add((h.supported_village_id, (h.household_code or "").strip().lower()))
                 else:
-                    existing.add((h.supported_village_id, h.household_name.strip().lower()))
+                    existing.add(
+                        (h.supported_village_id, (h.household_name or "").strip().lower())
+                    )
 
         for row_idx, row in enumerate(rows, 1):
             converted = validator.convert_row_types(row)
@@ -904,16 +908,16 @@ class ExcelImporterService:
                 result.success_rows += 1
                 continue
 
-            village = self._resolve_household_village(
+            resolved_village = self._resolve_household_village(
                 villages, by_name, village_name, county, township, row_idx, result
             )
-            if village is None:
+            if resolved_village is None:
                 continue
 
             dup_key = (
-                (village.id, household_code.lower())
+                (resolved_village.id, household_code.lower())
                 if household_code
-                else (village.id, household_name.lower())
+                else (resolved_village.id, household_name.lower())
             )
             if mode == ImportMode.INCREMENTAL and dup_key in existing:
                 result.skipped_rows += 1
@@ -921,7 +925,9 @@ class ExcelImporterService:
 
             try:
                 with self.db.begin_nested():
-                    household = self._build_household(converted, village, household_name, household_code)
+                    household = self._build_household(
+                        converted, resolved_village, household_name, household_code
+                    )
                     self.db.add(household)
                     self.db.flush()
                 result.created_ids.append(household.id)

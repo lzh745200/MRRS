@@ -185,7 +185,7 @@ def get_org_grant_tree(
             .order_by(Organization.id.asc())
             .first()
         )
-        if top is not None:
+        if top is not None and top.id is not None:
             root_id = int(top.id)
     if not isinstance(root_id, int) or isinstance(root_id, bool) or root_id <= 0:
         raise HTTPException(status_code=400, detail="缺少根单位 ID，且当前账号未绑定单位")

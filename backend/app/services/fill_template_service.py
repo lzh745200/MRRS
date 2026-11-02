@@ -108,11 +108,12 @@ class FillTemplateService:
             # 只覆盖 project/fund/school/household，没有 village 配置）。
             from app.services.data_validator_service import DataValidatorService
 
-            validator = DataValidatorService()
-            label_to_field = validator.COLUMN_MAPPING
+            label_to_field = DataValidatorService().COLUMN_MAPPING
+            field_defs: list = []
         else:
-            validator = EntityImportValidator(entity_type)
-            label_to_field = validator.get_column_mapping()
+            entity_validator = EntityImportValidator(entity_type)
+            label_to_field = entity_validator.get_column_mapping()
+            field_defs = entity_validator.config.get("fields", [])
         header_row, headers = self._locate_header(sheet, label_to_field)
 
         # 导出的“已填模板”去掉必填星号：回导/前端预览按纯标签匹配，避免
@@ -159,7 +160,7 @@ class FillTemplateService:
             }
         fields = {
             item["name"]: item
-            for item in getattr(getattr(validator, "config", {}), "get", lambda *_: [])("fields", [])
+            for item in field_defs
         }
 
         for offset, record in enumerate(records):
@@ -181,12 +182,12 @@ class FillTemplateService:
         model = MODELS[entity_type]
         query = self.db.query(model)
         if ids:
-            query = query.filter(model.id.in_([int(item) for item in ids]))
+            query = query.filter(getattr(model, "id").in_([int(item) for item in ids]))
         if self.current_user is not None:
             query = scoped_filter(query, model, self.current_user)
         # 五个可导出模型均带 is_active（软删除），无需再做 hasattr 分支。
-        query = query.filter(model.is_active.is_(True))
-        return query.order_by(model.id).limit(MAX_EXPORT_ROWS).all()
+        query = query.filter(getattr(model, "is_active").is_(True))
+        return query.order_by(getattr(model, "id")).limit(MAX_EXPORT_ROWS).all()
 
     @staticmethod
     def _locate_header(sheet, label_to_field: Dict[str, str]) -> tuple[int, List[str]]:
@@ -214,7 +215,12 @@ class FillTemplateService:
         if field in ("village_name", "county", "township") and isinstance(record, Household):
             village = getattr(record, "supported_village", None)
             if village is None:
-                village = self._village_map.get(getattr(record, "supported_village_id", None))
+                village_id = getattr(record, "supported_village_id", None)
+                village = (
+                    self._village_map.get(int(village_id))
+                    if village_id is not None
+                    else None
+                )
             return getattr(village, field, "") or ""
         value = getattr(record, field, None)
         if value is None:

@@ -86,6 +86,12 @@
   新增 `backend/tests/unit/test_migration_org_data_scope_001.py`（旧库加列/幂等/缺表跳过/
   回滚保留数据/回滚幂等/迁移链 6 例），`check_migration_self_evidence.py` 清零。
 - 后端用例数 15,678 → **15,684**；README/RELEASE_NOTES/PPT 数字同步。
+- 类型债基线：mypy 错误数 77 → **76**（净改善）；broad-except 809 → **816**
+  （+7 均为新流程兜底：并发会话的审计/备份 4 处 + 本轮的导入失败历史/影子观测 3 处，
+  均带日志或显式外部化，不是静默吞异常）。
+- `scripts/check_migrations.py` 在加载前把 `backend/` 加入 `sys.path`（与 `alembic/env.py`
+  一致），修复 CI「Alembic migration health check」在仅装 alembic 的环境下无法导入
+  `app.utils.sqlite_migration` 的问题。
 
 ## [1.18.34] - 2026-11-01 — 路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）
 

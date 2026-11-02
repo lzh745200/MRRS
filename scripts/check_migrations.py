@@ -19,6 +19,12 @@ from alembic.script import ScriptDirectory
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# 迁移脚本可能 `from app.utils import sqlite_migration`（R57 兼容助手），
+# 因此与 backend/alembic/env.py 保持一致，把 backend 放入 sys.path。
+_BACKEND = PROJECT_ROOT / "backend"
+if str(_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_BACKEND))
+
 
 def main() -> int:
     alembic_ini = PROJECT_ROOT / "backend" / "alembic.ini"
