@@ -264,10 +264,13 @@ class ApprovalReminderService:
                     .all()
                 )
                 for proj in overdue_projects:
-                    ref_link = f"/projects/{proj.id}"
+                    # 与 reminder_orchestrator 的 deadline_warning:{id} 对齐，
+                    # 否则同一项目会被两套调度各生成一条，且无法一次忽略。
+                    ref_link = f"deadline_warning:{proj.id}"
+                    legacy_link = f"/projects/{proj.id}"
                     existing = db.query(Message).filter(
-                        Message.link == ref_link,
-                        Message.message_type == "project_deadline",
+                        Message.link.in_([ref_link, legacy_link]),
+                        Message.message_type.in_(["deadline_warning", "project_deadline"]),
                     ).first()
                     if not existing:
                         # messages.user_id 为 NOT NULL：无归属人时跳过，避免整批提交失败
@@ -282,7 +285,7 @@ class ApprovalReminderService:
                             user_id=proj.created_by,
                             title=title,
                             content=content,
-                            message_type="project_deadline",
+                            message_type="deadline_warning",
                             link=ref_link,
                             is_read=False,
                         ))

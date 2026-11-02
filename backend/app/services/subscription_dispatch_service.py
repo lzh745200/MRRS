@@ -250,22 +250,32 @@ class SubscriptionDispatchService:
         file_path = out_dir / file_name
         file_path.write_bytes(payload)
 
+        from app.services.message_service import MessageService
+
+        # 先发通知、成功后再推进 last_sent_at：原实现先提交 last_sent_at 再发
+        # 通知，通知失败时本周期被永久跳过（用户以为订阅失效）。
+        try:
+            MessageService(db).send_system_message(
+                user_id=sub.user_id,
+                title=f"订阅报表已生成：{sub.name}",
+                content=(
+                    f"您订阅的报表「{sub.name}」已生成（{file_name}，"
+                    f"{len(payload)} 字节），已保存到报表输出目录。"
+                ),
+                link="/export",
+            )
+        except Exception:
+            # 通知失败不保留本次报表文件，避免重试时孤儿文件堆积
+            try:
+                file_path.unlink()
+            except OSError:
+                pass
+            raise
+
         sub.last_sent_at = as_utc_naive(now_utc)
         from app.core.transaction import safe_commit
 
         safe_commit(db)
-
-        from app.services.message_service import MessageService
-
-        MessageService(db).send_system_message(
-            user_id=sub.user_id,
-            title=f"订阅报表已生成：{sub.name}",
-            content=(
-                f"您订阅的报表「{sub.name}」已生成（{file_name}，"
-                f"{len(payload)} 字节），已保存到报表输出目录。"
-            ),
-            link="/export",
-        )
         logger.info(
             "订阅 %s 报表生成完成: %s (%d 字节)", sub.id, file_path, len(payload)
         )
