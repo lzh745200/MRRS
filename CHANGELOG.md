@@ -71,6 +71,9 @@
   勾选完成/取消后重新拉取列表；项目编辑保存按钮 loading/防重复提交；学校附件上传前
   `await ensureCsrf()`（原生 XHR 不经 axios 拦截器）；分块上传轮询加并发锁与连续失败终态；
   包版本对比合并 `version1/version2`；未读数按 number 归一（不再按 `{data:{total}}` 解构）。
+- **提醒与订阅**：项目到期提醒去重键统一为 `deadline_warning:{id}`（兼容旧
+  `project_deadline` + `/projects/{id}` 记录）；订阅报表改为**通知成功后再推进
+  `last_sent_at`**，通知失败时清理本次文件并保留可重试状态，不再永久跳过本周期。
 - **脚本**：`scripts/docker/build.ps1`、`scripts/legacy/build-kylin.sh` 默认版本同步 1.18.35。
 
 ### CI 门禁收口与迁移自证（2026-11-03）
@@ -85,7 +88,7 @@
 - 迁移自证：r39/r40/r43 的测试文件按完整 revision 重命名（`test_migration_*_001.py`），
   新增 `backend/tests/unit/test_migration_org_data_scope_001.py`（旧库加列/幂等/缺表跳过/
   回滚保留数据/回滚幂等/迁移链 6 例），`check_migration_self_evidence.py` 清零。
-- 后端用例数 15,678 → **15,684**；前端补测后 **7,508** 用例（348 文件）；README/RELEASE_NOTES/
+- 后端用例数 15,678 → **15,686**（含提醒/订阅回归 2 例）；前端补测后 **7,508** 用例（348 文件）；README/RELEASE_NOTES/
   PPT 数字同步。
 - 前端覆盖率补测：为 `src/api/import.ts` 的 `exportFillTemplateAndSave`（数组/字符串/空 ids 三支）、
   `DataImport.vue` 导出填报表单的 v-model、`OrgGrant.vue` 矩阵行下拉与组织树缺省字段补 7 例，

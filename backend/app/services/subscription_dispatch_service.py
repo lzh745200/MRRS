@@ -254,6 +254,7 @@ class SubscriptionDispatchService:
 
         # 先发通知、成功后再推进 last_sent_at：原实现先提交 last_sent_at 再发
         # 通知，通知失败时本周期被永久跳过（用户以为订阅失效）。
+        notified = False
         try:
             MessageService(db).send_system_message(
                 user_id=sub.user_id,
@@ -264,13 +265,14 @@ class SubscriptionDispatchService:
                 ),
                 link="/export",
             )
-        except Exception:
-            # 通知失败不保留本次报表文件，避免重试时孤儿文件堆积
-            try:
-                file_path.unlink()
-            except OSError:
-                pass
-            raise
+            notified = True
+        finally:
+            if not notified:
+                # 通知失败不保留本次报表文件，避免重试时孤儿文件堆积
+                try:
+                    file_path.unlink()
+                except OSError:
+                    pass
 
         sub.last_sent_at = as_utc_naive(now_utc)
         from app.core.transaction import safe_commit

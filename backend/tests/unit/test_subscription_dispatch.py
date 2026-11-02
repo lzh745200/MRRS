@@ -8,7 +8,7 @@
 因此本文件的 fixture 必须用 ``local_wall()`` / ``local_now()`` 表达「本地墙钟」，
 使断言在任意运行时时区下结论一致（此前用裸 naive datetime，等价于假定本机为 UTC）。
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -470,3 +470,63 @@ class TestGenerateForSubscriptionReal:
 
         assert result["file_path"].startswith(str(custom))
         assert (custom / result["file_name"]).exists()
+
+    @pytest.mark.asyncio
+    async def test_message_failure_removes_file_and_keeps_last_sent_at(
+        self, monkeypatch, tmp_path
+    ):
+        """通知失败：异常向上抛、本次报表文件清理、last_sent_at 不推进（可重试）。"""
+        from app.services.subscription_dispatch_service import SubscriptionDispatchService
+        from app.models.user import User
+
+        out_dir = tmp_path / "out"
+        monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+        owner = MagicMock(spec=User)
+        db = MagicMock()
+        _, sub = self._make_db_and_sub(tmp_path, output_dir=str(out_dir))
+        sub.last_sent_at = None
+
+        with patch("app.services.report_service.ReportService") as MockReportSvc:
+            MockReportSvc.return_value.export_to_excel = AsyncMock(return_value=b"data")
+            with patch("app.services.message_service.MessageService") as MockMsg:
+                MockMsg.return_value.send_system_message.side_effect = RuntimeError(
+                    "消息服务不可用"
+                )
+                with pytest.raises(RuntimeError):
+                    await SubscriptionDispatchService().generate_for_subscription(
+                        db, sub, owner, local_now(2026, 9, 10, 8, 0)
+                    )
+
+        assert sub.last_sent_at is None
+        assert list(out_dir.glob("subscription-*")) == []
+
+    @pytest.mark.asyncio
+    async def test_message_failure_and_unlink_error_still_raises_original(
+        self, monkeypatch, tmp_path
+    ):
+        """通知失败 + 清理文件也失败（如被占用）：吞掉清理异常，仍抛原始通知异常。"""
+        from pathlib import Path
+
+        from app.services.subscription_dispatch_service import SubscriptionDispatchService
+        from app.models.user import User
+
+        out_dir = tmp_path / "out"
+        monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
+        owner = MagicMock(spec=User)
+        db = MagicMock()
+        _, sub = self._make_db_and_sub(tmp_path, output_dir=str(out_dir))
+        sub.last_sent_at = None
+
+        with patch("app.services.report_service.ReportService") as MockReportSvc:
+            MockReportSvc.return_value.export_to_excel = AsyncMock(return_value=b"data")
+            with patch("app.services.message_service.MessageService") as MockMsg:
+                MockMsg.return_value.send_system_message.side_effect = RuntimeError(
+                    "消息服务不可用"
+                )
+                with patch.object(Path, "unlink", side_effect=OSError("文件被占用")):
+                    with pytest.raises(RuntimeError, match="消息服务不可用"):
+                        await SubscriptionDispatchService().generate_for_subscription(
+                            db, sub, owner, local_now(2026, 9, 10, 8, 0)
+                        )
+
+        assert sub.last_sent_at is None
