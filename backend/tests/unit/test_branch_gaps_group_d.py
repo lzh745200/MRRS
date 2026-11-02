@@ -303,7 +303,7 @@ class TestImportDataBranches:
         """excel_importer_service.py 338->342：未知实体类型跳过全部分发分支。"""
         db = MagicMock()
         svc = ExcelImporterService(db, current_user=None)
-        svc.parse_excel = Mock(return_value=([], []))
+        svc.parse_excel = Mock(return_value=([{"name": "x"}], ["name"]))
         out = svc.import_data(
             file_content=b"",
             file_name="x.xlsx",
@@ -312,7 +312,9 @@ class TestImportDataBranches:
             mode=ImportMode.INCREMENTAL,
             entity_type="unknown_entity",
         )
-        assert out.total_rows == 0
+        assert out.total_rows == 1
+        assert out.success is False
+        assert out.success_rows == 0
         assert out.errors == []
 
     def test_create_village_keeps_provided_bool_field(self):

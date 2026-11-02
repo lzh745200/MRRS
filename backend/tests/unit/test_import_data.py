@@ -53,6 +53,15 @@ class TestDownloadImportTemplate:
             resp = client_with_mocked_auth.get(f"{BASE}/template", params={"entity_type": "school"})
             assert resp.status_code == 200
 
+    def test_household_template(self, client_with_mocked_auth):
+        with patch("app.api.v1.import_export.import_data.ExcelTemplateService") as mock_svc_cls:
+            mock_svc = MagicMock()
+            mock_svc.generate_household_template.return_value = b"household_xlsx"
+            mock_svc_cls.return_value = mock_svc
+            resp = client_with_mocked_auth.get(f"{BASE}/template", params={"entity_type": "household"})
+            assert resp.status_code == 200
+            mock_svc.generate_household_template.assert_called_once()
+
     def test_policy_template(self, client_with_mocked_auth):
         with patch("app.api.v1.import_export.import_data.ExcelTemplateService") as mock_svc_cls:
             mock_svc = MagicMock()

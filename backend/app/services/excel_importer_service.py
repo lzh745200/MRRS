@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.services.data_scope_query import scoped_filter  # B1 下沉：服务层统一入口
 from app.models.fund import Fund
+from app.models.household import Household
 from app.models.import_history import ImportHistory, ImportMode, ImportStatus
 from app.models.organization import Organization
 from app.models.project import Project
@@ -27,6 +28,29 @@ from app.services.data_validator_service import (
 from app.services.entity_import_validator import EntityImportValidator
 from app.services.office_reader import read_rows
 from app.core.transaction import safe_commit
+
+# R61：帮扶村可写字段（创建与按 ID 更新共用，避免字段清单漂移）
+_VILLAGE_FIELDS = frozenset({
+    "sequence_no",
+    "department",
+    "support_unit",
+    "village_name",
+    "region_scope",
+    "is_three_regions",
+    "is_border_area",
+    "is_ethnic_area",
+    "is_revolutionary_area",
+    "is_key_county",
+    "is_revitalization_tier",
+    "is_provincial_demo",
+    "is_hundred_village_demo",
+    "is_tiered_development",
+    "is_cross_province",
+    "is_cross_city",
+    "is_cross_unit_cooperation",
+    "is_in_overall_plan",
+    "honors",
+})
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +96,9 @@ class ImportResult:
     errors: List[ImportError] = field(default_factory=list)
     created_ids: List[int] = field(default_factory=list)
     import_history_id: Optional[int] = None
+    # R61：解析成功但没有任何数据行（官方模板只含示例行/页脚）——API 层据此返回 400，
+    # 与「文件损坏/格式不支持」区分开（后者仍按既有契约返回 200 + errors 明细）。
+    no_data_rows: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -145,6 +172,9 @@ class ExcelImporterService:
             for idx, h in enumerate(candidate):
                 if idx not in mapping and h in known_fields:
                     mapping[idx] = h
+                # 表格填报回导：ID 是导出时追加的隐藏更新键，不在模板字段表里
+                if idx not in mapping and str(h).strip().upper() == "ID":
+                    mapping[idx] = "id"
             return mapping
 
         # 读取全部原始行（pandas 快速路径 / openpyxl 回退，均不带表头假设）
@@ -189,16 +219,26 @@ class ExcelImporterService:
 
     @staticmethod
     def _is_skippable_row(row: list, example_markers: List[str]) -> bool:
-        """示例行/填写说明/页脚/空行 跳过"""
-        first_value = row[0] if len(row) > 0 else None
-        if first_value and str(first_value).strip() in example_markers:
+        """示例行/填写说明/页脚/空行 跳过。
+
+        R61 修复：此前只要行内任意单元格含「示例行」就整行跳过——用户在官方模板
+        的示例行上直接改成真实数据（尾列「← 示例行（导入时自动跳过）」注释仍在）
+        时，整行被静默丢弃，界面提示导入成功但 0 条入库。现在只有「示例标记值
+        仍在」的行才跳过；真实数据行即使保留该注释也照常导入。
+        """
+        texts = [str(c).strip() for c in row if c is not None and str(c).strip()]
+        if not texts:
             return True
-        if any(
-            isinstance(c, str) and ("示例行" in c or "填写说明" in c or "帮扶管理信息系统 v" in c)
-            for c in row
+        if texts[0] in example_markers:
+            return True
+        has_marker = any(text in example_markers for text in texts)
+        if has_marker and any("示例行" in text for text in texts):
+            return True
+        if len(texts) == 1 and any(
+            key in texts[0] for key in ("填写说明", "填报说明", "帮扶管理信息系统 v")
         ):
             return True
-        return all(cell is None or (isinstance(cell, str) and not cell.strip()) for cell in row)
+        return False
 
     @staticmethod
     def _row_to_dict(row: list, headers: List[str], header_mapping: Dict[int, str]) -> Dict[str, Any]:
@@ -217,7 +257,7 @@ class ExcelImporterService:
             if col_idx in header_mapping
         }
 
-    def import_data(
+    def import_data(  # noqa: C901 - 多实体/多模式导入分支，拆分风险高
         self,
         file_content: bytes,
         file_name: str,
@@ -268,6 +308,21 @@ class ExcelImporterService:
                         field_name="",
                         error_code=ValidationErrorCode.ROW_LIMIT_EXCEEDED.value,
                         message=f"数据行数超过限制，单次最多导入 {self.MAX_ROWS} 条记录，当前 {len(rows)} 条",
+                    )
+                )
+                self._update_import_history(import_history, result, ImportStatus.FAILED)
+                safe_commit(self.db)
+                return result
+
+            # full 模式会先软删；0 行必须在删除之前返回，否则模板空表会清空台账
+            if not rows:
+                result.no_data_rows = True
+                result.errors.append(
+                    ImportError(
+                        row_number=0,
+                        field_name="",
+                        error_code=ValidationErrorCode.MISSING_REQUIRED_FIELD.value,
+                        message="未解析到任何数据行：示例行不会导入，请在示例行下方新增数据行",
                     )
                 )
                 self._update_import_history(import_history, result, ImportStatus.FAILED)
@@ -331,6 +386,34 @@ class ExcelImporterService:
                 result = self._import_funds(rows, result, import_history, mode)
             elif entity_type == "school":
                 result = self._import_schools(rows, result, import_history, mode)
+            elif entity_type == "household":
+                result = self._import_households(rows, result, import_history, mode)
+
+            # full 模式是“先软删再写”：任何一行失败都必须整体回滚，
+            # 否则旧数据已消失、新数据只写一半（业务数据不可逆丢失）。
+            if mode == ImportMode.FULL and result.failed_rows > 0:
+                self.db.rollback()
+                result.success = False
+                result.success_rows = 0
+                result.created_ids = []
+                failed_history = ImportHistory(
+                    user_id=user_id,
+                    file_name=file_name,
+                    file_size=file_size,
+                    import_mode=mode.value,
+                    entity_type=entity_type,
+                    status=ImportStatus.FAILED.value,
+                    started_at=datetime.now(timezone.utc),
+                    completed_at=datetime.now(timezone.utc),
+                    total_rows=result.total_rows,
+                    success_rows=0,
+                    failed_rows=result.failed_rows,
+                    error_details=[e.to_dict() for e in result.errors],
+                )
+                self.db.add(failed_history)
+                safe_commit(self.db)
+                result.import_history_id = failed_history.id
+                return result
 
             # 更新导入历史
             status = ImportStatus.COMPLETED if result.success else ImportStatus.FAILED
@@ -386,6 +469,28 @@ class ExcelImporterService:
                 )
             )
             result.failed_rows = result.total_rows
+            # 回滚会删掉此前 flush 的 import_history；重建失败历史，
+            # 避免“导入失败但历史查不到 + 返回悬空 id”。
+            try:
+                failed_history = ImportHistory(
+                    user_id=user_id,
+                    file_name=file_name,
+                    file_size=file_size,
+                    import_mode=mode.value,
+                    entity_type=entity_type,
+                    status=ImportStatus.FAILED.value,
+                    started_at=datetime.now(timezone.utc),
+                    completed_at=datetime.now(timezone.utc),
+                    total_rows=result.total_rows,
+                    success_rows=0,
+                    failed_rows=result.total_rows,
+                    error_details=[e.to_dict() for e in result.errors],
+                )
+                self.db.add(failed_history)
+                safe_commit(self.db)
+                result.import_history_id = failed_history.id
+            except Exception:
+                result.import_history_id = None
             return result
 
     def _import_incremental_mode(
@@ -418,6 +523,23 @@ class ExcelImporterService:
             # 转换数据类型
             converted_row = self.validator.convert_row_types(row)
 
+            row_id = self._coerce_row_id(converted_row.get("id"))
+            if row_id:
+                existing_village = self._scoped_get(SupportedVillage, row_id)
+                if existing_village is None:
+                    result.errors.append(ImportError(
+                        row_number=row_idx, field_name="id",
+                        error_code=ValidationErrorCode.INVALID_DATA_FORMAT.value,
+                        message=f"ID={row_id} 不存在或无权限", value=row_id,
+                    ))
+                    result.failed_rows += 1
+                    continue
+                with self.db.begin_nested():
+                    self._apply_update(existing_village, converted_row)
+                result.created_ids.append(existing_village.id)
+                result.success_rows += 1
+                continue
+
             village_name = converted_row.get("village_name", "")
             if village_name and village_name.lower() in existing_names:
                 # 跳过已存在的记录
@@ -426,7 +548,8 @@ class ExcelImporterService:
 
             # 创建新记录
             try:
-                village = self._create_village(converted_row)
+                with self.db.begin_nested():
+                    village = self._create_village(converted_row)
                 result.created_ids.append(village.id)
                 result.success_rows += 1
 
@@ -448,6 +571,32 @@ class ExcelImporterService:
 
         result.success = result.failed_rows == 0
         return result
+
+    @staticmethod
+    def _coerce_row_id(value: Any) -> Optional[int]:
+        if value is None or str(value).strip() == "":
+            return None
+        try:
+            return int(float(str(value).strip()))
+        except (TypeError, ValueError):
+            return None
+
+    def _scoped_get(self, model: Any, row_id: int):
+        query = self.db.query(model).filter(model.id == row_id)
+        if self.current_user is not None:
+            query = scoped_filter(query, model, self.current_user)
+        return query.first()
+
+    def _apply_update(self, instance: Any, data: Dict[str, Any]) -> None:
+        """按 ORM 列白名单更新（ID 回导），跳过归属/时间/主键列。"""
+        skip = {"id", "created_at", "updated_at", "organization_id", "created_by"}
+        for column in instance.__table__.columns.keys():
+            if column in skip or column not in data:
+                continue
+            value = data[column]
+            if value is not None:
+                setattr(instance, column, value)
+        self.db.flush()
 
     def _assert_org_reachable(self, target_org_id: Any) -> None:
         """校验调用者可将数据写入 *target_org_id*（W25 跨组织写入守卫）。
@@ -556,29 +705,7 @@ class ExcelImporterService:
             SupportedVillage: 创建的记录
         """
         # 过滤掉None值和非模型字段
-        village_fields = {
-            "sequence_no",
-            "department",
-            "support_unit",
-            "village_name",
-            "region_scope",
-            "is_three_regions",
-            "is_border_area",
-            "is_ethnic_area",
-            "is_revolutionary_area",
-            "is_key_county",
-            "is_revitalization_tier",
-            "is_provincial_demo",
-            "is_hundred_village_demo",
-            "is_tiered_development",
-            "is_cross_province",
-            "is_cross_city",
-            "is_cross_unit_cooperation",
-            "is_in_overall_plan",
-            "honors",
-        }
-
-        filtered_data = {k: v for k, v in data.items() if k in village_fields and v is not None}
+        filtered_data = {k: v for k, v in data.items() if k in _VILLAGE_FIELDS and v is not None}
 
         # 设置布尔字段的默认值
         bool_fields = [
@@ -639,6 +766,22 @@ class ExcelImporterService:
 
         for row_idx, row in enumerate(rows, 1):
             converted = validator.convert_row_types(row)
+            row_id = self._coerce_row_id(converted.get("id"))
+            if row_id:
+                existing_project = self._scoped_get(Project, row_id)
+                if existing_project is None:
+                    result.errors.append(ImportError(
+                        row_number=row_idx, field_name="id",
+                        error_code=ValidationErrorCode.INVALID_DATA_FORMAT.value,
+                        message=f"ID={row_id} 不存在或无权限", value=row_id,
+                    ))
+                    result.failed_rows += 1
+                    continue
+                with self.db.begin_nested():
+                    self._apply_update(existing_project, converted)
+                result.created_ids.append(existing_project.id)
+                result.success_rows += 1
+                continue
             name = converted.get("name", "")
             if mode == ImportMode.INCREMENTAL and name and name.lower() in existing_names:
                 result.skipped_rows += 1
@@ -673,9 +816,10 @@ class ExcelImporterService:
                 if self.current_user is not None:
                     project_data["created_by"] = getattr(self.current_user, "id", None)
 
-                project = Project(**project_data)
-                self.db.add(project)
-                self.db.flush()
+                with self.db.begin_nested():
+                    project = Project(**project_data)
+                    self.db.add(project)
+                    self.db.flush()
                 result.created_ids.append(project.id)
                 result.success_rows += 1
                 if name:
@@ -694,6 +838,167 @@ class ExcelImporterService:
 
         result.success = result.failed_rows == 0
         return result
+
+    # ============== 一户一档导入 ==============
+
+    def _import_households(
+        self,
+        rows: List[Dict[str, Any]],
+        result: ImportResult,
+        import_history: ImportHistory,
+        mode: ImportMode,
+    ) -> ImportResult:
+        """导入一户一档主档。
+
+        帮扶村按“名称 + 县/市 + 乡镇”解析；同名多村时该行报错，要求补充
+        县/乡镇，不做猜测。户编号在村内唯一；留空时按“村 + 户主姓名”
+        做增量去重（避免重复导入同一户）。
+        """
+        validator = EntityImportValidator("household")
+        if mode == ImportMode.FULL:
+            self._soft_delete_scoped(Household)
+
+        # 预加载可见帮扶村：只取有效村，按名称/县/乡镇建索引。
+        villages = self.db.query(SupportedVillage).filter(
+            SupportedVillage.is_active.is_(True)
+        ).all()
+        by_name: Dict[tuple, List[SupportedVillage]] = {}
+        for village in villages:
+            key = (
+                (village.village_name or "").strip(),
+                (getattr(village, "county", None) or "").strip(),
+                (getattr(village, "township", None) or "").strip(),
+            )
+            by_name.setdefault(key, []).append(village)
+
+        existing: set = set()
+        if mode == ImportMode.INCREMENTAL:
+            for h in self.db.query(Household).filter(Household.is_active.is_(True)).all():
+                if h.household_code:
+                    existing.add((h.supported_village_id, h.household_code.strip().lower()))
+                else:
+                    existing.add((h.supported_village_id, h.household_name.strip().lower()))
+
+        for row_idx, row in enumerate(rows, 1):
+            converted = validator.convert_row_types(row)
+            village_name = str(converted.get("village_name") or "").strip()
+            county = str(converted.get("county") or "").strip()
+            township = str(converted.get("township") or "").strip()
+            household_name = str(converted.get("household_name") or "").strip()
+            household_code = str(converted.get("household_code") or "").strip() or None
+
+            row_id = self._coerce_row_id(converted.get("id"))
+            if row_id:
+                existing_household = self._scoped_get(Household, row_id)
+                if existing_household is None:
+                    result.errors.append(ImportError(
+                        row_number=row_idx, field_name="id",
+                        error_code=ValidationErrorCode.INVALID_DATA_FORMAT.value,
+                        message=f"ID={row_id} 不存在或无权限", value=row_id,
+                    ))
+                    result.failed_rows += 1
+                    continue
+                with self.db.begin_nested():
+                    self._apply_update(existing_household, converted)
+                result.created_ids.append(existing_household.id)
+                result.success_rows += 1
+                continue
+
+            village = self._resolve_household_village(
+                villages, by_name, village_name, county, township, row_idx, result
+            )
+            if village is None:
+                continue
+
+            dup_key = (
+                (village.id, household_code.lower())
+                if household_code
+                else (village.id, household_name.lower())
+            )
+            if mode == ImportMode.INCREMENTAL and dup_key in existing:
+                result.skipped_rows += 1
+                continue
+
+            try:
+                with self.db.begin_nested():
+                    household = self._build_household(converted, village, household_name, household_code)
+                    self.db.add(household)
+                    self.db.flush()
+                result.created_ids.append(household.id)
+                result.success_rows += 1
+                existing.add(dup_key)
+            except Exception as exc:
+                logger.warning("一户一档导入第 %d 行失败: %s", row_idx, exc, exc_info=True)
+                result.errors.append(ImportError(
+                    row_number=row_idx, field_name="",
+                    error_code=ValidationErrorCode.DATABASE_ERROR.value,
+                    message=f"创建一户一档失败: {exc}",
+                ))
+                result.failed_rows += 1
+
+        result.success = result.failed_rows == 0
+        return result
+
+    def _resolve_household_village(
+        self,
+        villages: List[SupportedVillage],
+        by_name: Dict[tuple, List[SupportedVillage]],
+        village_name: str,
+        county: str,
+        township: str,
+        row_idx: int,
+        result: ImportResult,
+    ) -> Optional[SupportedVillage]:
+        """按 名称+县+乡镇 解析帮扶村；同名多村时要求补充县/乡镇。"""
+        candidates = by_name.get((village_name, county, township), [])
+        if not candidates:
+            candidates = [
+                v for v in villages
+                if (v.village_name or "").strip() == village_name
+            ]
+        reachable = []
+        for v in candidates:
+            try:
+                self._assert_org_reachable(v.organization_id)
+            except PermissionError:
+                continue
+            reachable.append(v)
+        if len(reachable) != 1:
+            msg = "未找到帮扶村" if not reachable else "帮扶村不唯一，请补充县/市、乡镇"
+            result.errors.append(ImportError(
+                row_number=row_idx, field_name="village_name",
+                error_code=ValidationErrorCode.INVALID_DATA_FORMAT.value,
+                message=msg, value=village_name,
+            ))
+            result.failed_rows += 1
+            return None
+        return reachable[0]
+
+    def _build_household(
+        self, converted: Dict[str, Any], village: SupportedVillage,
+        household_name: str, household_code: Optional[str],
+    ) -> Household:
+        housing_safe = converted.get("housing_safe")
+        return Household(
+            supported_village_id=village.id,
+            household_code=household_code,
+            household_name=household_name,
+            address=converted.get("address"),
+            household_type=converted.get("household_type") or "general",
+            risk_type=converted.get("risk_type") or "none",
+            risk_level=converted.get("risk_level") or "low",
+            helper_name=converted.get("helper_name"),
+            helper_phone=converted.get("helper_phone"),
+            annual_income=converted.get("annual_income"),
+            migrant_workers=converted.get("migrant_workers") or 0,
+            has_serious_illness=bool(converted.get("has_serious_illness")),
+            housing_safe=bool(housing_safe) if housing_safe is not None else True,
+            last_visit_date=converted.get("last_visit_date"),
+            monitoring_note=converted.get("monitoring_note"),
+            organization_id=village.organization_id
+            or getattr(self.current_user, "organization_id", None),
+            created_by=getattr(self.current_user, "id", None),
+        )
 
     # ============== 资金导入 ==============
 
@@ -720,6 +1025,22 @@ class ExcelImporterService:
 
         for row_idx, row in enumerate(rows, 1):
             converted = validator.convert_row_types(row)
+            row_id = self._coerce_row_id(converted.get("id"))
+            if row_id:
+                existing_fund = self._scoped_get(Fund, row_id)
+                if existing_fund is None:
+                    result.errors.append(ImportError(
+                        row_number=row_idx, field_name="id",
+                        error_code=ValidationErrorCode.INVALID_DATA_FORMAT.value,
+                        message=f"ID={row_id} 不存在或无权限", value=row_id,
+                    ))
+                    result.failed_rows += 1
+                    continue
+                with self.db.begin_nested():
+                    self._apply_update(existing_fund, converted)
+                result.created_ids.append(existing_fund.id)
+                result.success_rows += 1
+                continue
             name = converted.get("name", "")
             if mode == ImportMode.INCREMENTAL and name and name.lower() in existing_names:
                 result.skipped_rows += 1
@@ -749,9 +1070,10 @@ class ExcelImporterService:
                 if project_code and project_code in project_map:
                     fund_data["project_id"] = project_map[project_code]
 
-                fund = Fund(**fund_data)
-                self.db.add(fund)
-                self.db.flush()
+                with self.db.begin_nested():
+                    fund = Fund(**fund_data)
+                    self.db.add(fund)
+                    self.db.flush()
                 result.created_ids.append(fund.id)
                 result.success_rows += 1
                 if name:
@@ -793,6 +1115,22 @@ class ExcelImporterService:
 
         for row_idx, row in enumerate(rows, 1):
             converted = validator.convert_row_types(row)
+            row_id = self._coerce_row_id(converted.get("id"))
+            if row_id:
+                existing_school = self._scoped_get(School, row_id)
+                if existing_school is None:
+                    result.errors.append(ImportError(
+                        row_number=row_idx, field_name="id",
+                        error_code=ValidationErrorCode.INVALID_DATA_FORMAT.value,
+                        message=f"ID={row_id} 不存在或无权限", value=row_id,
+                    ))
+                    result.failed_rows += 1
+                    continue
+                with self.db.begin_nested():
+                    self._apply_update(existing_school, converted)
+                result.created_ids.append(existing_school.id)
+                result.success_rows += 1
+                continue
             name = converted.get("name", "")
             if mode == ImportMode.INCREMENTAL and name and name.lower() in existing_names:
                 result.skipped_rows += 1
@@ -822,9 +1160,10 @@ class ExcelImporterService:
                     if current_org:
                         school_data["organization_id"] = current_org
                     school_data["created_by"] = getattr(self.current_user, "id", None)
-                school = School(**school_data)
-                self.db.add(school)
-                self.db.flush()
+                with self.db.begin_nested():
+                    school = School(**school_data)
+                    self.db.add(school)
+                    self.db.flush()
                 result.created_ids.append(school.id)
                 result.success_rows += 1
                 if name:

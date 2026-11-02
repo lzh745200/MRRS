@@ -15,16 +15,20 @@ enableAutoUnmount(afterEach)
 const {
   ElMessage,
   mockDownloadTemplate,
+  mockExportFillTemplate,
   mockImportEntities,
   mockPreviewImportData,
   mockGetImportHistory,
   mockFormatImportStatus,
+  routeState,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   mockDownloadTemplate: vi.fn(),
+  mockExportFillTemplate: vi.fn(),
   mockImportEntities: vi.fn(),
   mockPreviewImportData: vi.fn(),
   mockGetImportHistory: vi.fn(),
+  routeState: { query: {} as Record<string, unknown> },
   mockFormatImportStatus: vi.fn((s: string) => {
     const map: Record<string, { text: string; type: string }> = {
       pending: { text: '等待中', type: 'info' },
@@ -37,9 +41,14 @@ const {
 }))
 
 vi.mock('element-plus', () => ({ ElMessage }))
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-router')>()
+  return { ...actual, useRoute: () => ({ query: routeState.query }) }
+})
 
 vi.mock('@/api/import', () => ({
   downloadImportTemplateAndSave: mockDownloadTemplate,
+  exportFillTemplateAndSave: mockExportFillTemplate,
   importEntities: mockImportEntities,
   previewImportData: mockPreviewImportData,
   getImportHistory: mockGetImportHistory,
@@ -162,13 +171,22 @@ const file = new File(['x'], 'data.xlsx', {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  routeState.query = {}
   mockGetImportHistory.mockResolvedValue({ items: historyRows, total: 2 })
   mockPreviewImportData.mockResolvedValue(previewResponse)
   mockImportEntities.mockResolvedValue(successResult)
   mockDownloadTemplate.mockResolvedValue(undefined)
+  mockExportFillTemplate.mockResolvedValue(undefined)
 })
 
 describe('挂载与导入历史', () => {
+  it('从一户一档入口进入时预选 household 模板', async () => {
+    routeState.query = { entity: 'household' }
+    const wrapper = mountComp()
+    await flushPromises()
+    expect((wrapper.vm as any).importForm.entityType).toBe('household')
+  })
+
   it('onMounted 加载历史并渲染状态/时间列（completed 命中、未知状态透传、created_at 缺省）', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -251,6 +269,61 @@ describe('模板下载', () => {
     await vm.handleDownloadTemplate('supported_village')
     expect(ElMessage.error).toHaveBeenLastCalledWith('模板下载失败')
     expect(vm.downloadingType).toBe('')
+  })
+})
+
+describe('导出填报表格（单条 / 批量回导）', () => {
+  it('批量导出：不填 ID 时 ids 为 undefined，导出后提示成功', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.exportForm.entityType = 'project'
+    vm.exportForm.ids = '   '
+    await vm.handleExportFill()
+    expect(mockExportFillTemplate).toHaveBeenCalledWith('project', undefined, '填报数据')
+    expect(ElMessage.success).toHaveBeenLastCalledWith('填报表格已导出')
+    expect(vm.exporting).toBe(false)
+  })
+
+  it('单条/多条导出：逗号与中文逗号分隔，去空白后传数组', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.exportForm.entityType = 'fund'
+    vm.exportForm.ids = ' 3， 7 ,12 '
+    await vm.handleExportFill()
+    expect(mockExportFillTemplate).toHaveBeenCalledWith('fund', [3, 7, 12], '填报数据')
+  })
+
+  it('非法 ID 只警告、不发起导出', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.exportForm.ids = '1,abc'
+    await vm.handleExportFill()
+    expect(ElMessage.warning).toHaveBeenCalledWith('记录 ID 只能填数字，多条用逗号分隔')
+    expect(mockExportFillTemplate).not.toHaveBeenCalled()
+  })
+
+  it('导出异常三分支：detail / message / 默认文案，loading 复位', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    mockExportFillTemplate.mockRejectedValueOnce({
+      response: { data: { detail: '模板表头识别失败' } },
+    })
+    await vm.handleExportFill()
+    expect(ElMessage.error).toHaveBeenLastCalledWith('模板表头识别失败')
+
+    mockExportFillTemplate.mockRejectedValueOnce({ message: '网络错误' })
+    await vm.handleExportFill()
+    expect(ElMessage.error).toHaveBeenLastCalledWith('网络错误')
+
+    mockExportFillTemplate.mockRejectedValueOnce({})
+    await vm.handleExportFill()
+    expect(ElMessage.error).toHaveBeenLastCalledWith('填报表格导出失败')
+    expect(vm.exporting).toBe(false)
   })
 })
 
@@ -466,13 +539,25 @@ describe('确认导入', () => {
     expect(text).toContain('行5: 县市') // message 空 → field_name
 
     // success=false → 失败标题
-    vm.importResult = { success: false, total_rows: 3, success_rows: 0, failed_rows: 3, skipped_rows: 0 }
+    vm.importResult = {
+      success: false,
+      total_rows: 3,
+      success_rows: 0,
+      failed_rows: 3,
+      skipped_rows: 0,
+    }
     await nextTick()
     text = wrapper.text()
     expect(text).toContain('导入失败')
 
     // 全零 → skipped/failed/errors 分支不渲染
-    vm.importResult = { success: true, total_rows: 5, success_rows: 5, failed_rows: 0, skipped_rows: 0 }
+    vm.importResult = {
+      success: true,
+      total_rows: 5,
+      success_rows: 5,
+      failed_rows: 0,
+      skipped_rows: 0,
+    }
     await nextTick()
     text = wrapper.text()
     expect(text).toContain('总 5 条，成功 5 条')
@@ -496,8 +581,8 @@ describe('状态映射工具', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    const select = wrapper.findComponent({ name: 'ElSelect' })
-    select.vm.$emit('update:modelValue', 'fund')
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    selects[selects.length - 1].vm.$emit('update:modelValue', 'fund')
     expect(vm.importForm.entityType).toBe('fund')
     const radioGroup = wrapper.findComponent({ name: 'ElRadioGroup' })
     radioGroup.vm.$emit('update:modelValue', 'full')

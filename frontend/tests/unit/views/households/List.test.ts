@@ -731,6 +731,14 @@ describe('households/List.vue（一户一档列表）', () => {
     wrapper.unmount()
   })
 
+  it('表格填报入口跳转通用导入页并预选一户一档', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    await wrapper.find('.btn-table-fill').trigger('click')
+    expect(mocks.pushSafe).toHaveBeenCalledWith('/import/data?entity=household')
+    wrapper.unmount()
+  })
+
   it('展示映射函数：类型/等级/日期/责任人/兜底', () => {
     const wrapper = mountComp()
     const vm = vmOf(wrapper)

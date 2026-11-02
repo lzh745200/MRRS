@@ -8,12 +8,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const { ElMessage, confirmMock, promptMock, mockGet, mockPost } = vi.hoisted(() => ({
-  ElMessage: { success: vi.fn(), error: vi.fn() },
+const { ElMessage, confirmMock, promptMock, mockGet, mockPost, mockBatchApprove } = vi.hoisted(() => ({
+  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   confirmMock: vi.fn(),
   promptMock: vi.fn(),
   mockGet: vi.fn(),
   mockPost: vi.fn(),
+  mockBatchApprove: vi.fn(),
 }))
 
 vi.mock('element-plus', () => ({
@@ -24,6 +25,10 @@ vi.mock('element-plus', () => ({
 vi.mock('@/api/request', () => ({
   get: mockGet,
   post: mockPost,
+}))
+
+vi.mock('@/api/approval', () => ({
+  batchApprove: mockBatchApprove,
 }))
 
 import ApprovalCenter from '@/views/approval/ApprovalCenter.vue'
@@ -266,6 +271,22 @@ describe('单个审批', () => {
     await (wrapper.vm as any).handleReject(pendingTasks[0])
     expect(mockPost).not.toHaveBeenCalled()
   })
+
+  it('handleApprove：请求失败 → 提示错误，不误报成功', async () => {
+    mockPost.mockRejectedValueOnce(new Error('403 无权限'))
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleApprove(pendingTasks[0])
+    expect(ElMessage.error).toHaveBeenCalledWith('403 无权限')
+  })
+
+  it('handleReject：请求失败 → 提示错误', async () => {
+    mockPost.mockRejectedValueOnce(new Error('409 已处理'))
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleReject(pendingTasks[0])
+    expect(ElMessage.error).toHaveBeenCalledWith('409 已处理')
+  })
 })
 
 describe('批量审批', () => {
@@ -273,15 +294,51 @@ describe('批量审批', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
+    mockBatchApprove.mockResolvedValue({ success: [1, 2], failed: [] })
     vm.selectedIds = [1, 2]
     await vm.handleBatchApprove()
-    expect(mockPost).toHaveBeenCalledWith('/approval/tasks/batch', {
-      task_ids: [1, 2],
-      opinion: '批量通过',
-    })
-    expect(ElMessage.success).toHaveBeenCalledWith('批量审批通过')
+    expect(mockBatchApprove).toHaveBeenCalledWith([1, 2], '批量通过')
+    expect(ElMessage.success).toHaveBeenCalledWith('批量审批通过 2 条')
     expect(vm.selectedIds).toEqual([])
     expect(vm.batchLoading).toBe(false)
+  })
+
+  it('批量通过：部分失败 → warning 并保留失败项', async () => {
+    mockBatchApprove.mockResolvedValue({
+      success: [1],
+      failed: [{ id: 2, reason: '无权限' }],
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedIds = [1, 2]
+    await vm.handleBatchApprove()
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      '批量通过完成：成功 1 条，失败 1 条（无权限）'
+    )
+    expect(vm.selectedIds).toEqual([2])
+  })
+
+  it('批量通过：失败项无 reason → 显示未知原因', async () => {
+    mockBatchApprove.mockResolvedValue({ success: [], failed: [{ id: 2 }] })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedIds = [2]
+    await vm.handleBatchApprove()
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      '批量通过完成：成功 0 条，失败 1 条（未知原因）'
+    )
+  })
+
+  it('批量通过：接口异常 → 提示错误', async () => {
+    mockBatchApprove.mockRejectedValue(new Error('500'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedIds = [1]
+    await vm.handleBatchApprove()
+    expect(ElMessage.error).toHaveBeenCalledWith('500')
   })
 
   it('批量驳回：逐条提交 opinion（必填原因）', async () => {
@@ -292,8 +349,23 @@ describe('批量审批', () => {
     await vm.handleBatchReject()
     expect(mockPost).toHaveBeenCalledWith('/approval/tasks/1/reject', { opinion: '资料不全' })
     expect(mockPost).toHaveBeenCalledWith('/approval/tasks/2/reject', { opinion: '资料不全' })
-    expect(ElMessage.success).toHaveBeenCalledWith('批量驳回完成')
+    expect(ElMessage.success).toHaveBeenCalledWith('批量驳回完成 2 条')
     expect(vm.selectedIds).toEqual([])
+  })
+
+  it('批量驳回：部分失败 → warning 并保留失败项', async () => {
+    mockPost.mockImplementation((url: string) =>
+      url.endsWith('/2/reject')
+        ? Promise.reject(new Error('已处理'))
+        : Promise.resolve({ success: true })
+    )
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedIds = [1, 2]
+    await vm.handleBatchReject()
+    expect(ElMessage.warning).toHaveBeenCalledWith('批量驳回完成：成功 1 条，失败 1 条')
+    expect(vm.selectedIds).toEqual([2])
   })
 })
 

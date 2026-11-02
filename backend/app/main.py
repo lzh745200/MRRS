@@ -640,8 +640,33 @@ def _run_alembic_upgrade():
             logger.warning('_run_alembic_upgrade 兜底失败（已降级）: %s', exc, exc_info=True)
             _migration_status["head"] = None
 
-        # 检查是否需要 stamp（表已存在但无 alembic_version 表）
+        # 预检：库里的 revision 必须能在当前迁移链上定位。否则 alembic 会抛
+        # CommandError（"Can't locate revision"），日志只有堆栈、没有可操作结论。
+        # 这里提前给出明确错误，避免在"旧程序打开新备份"时反复重试升级。
+        from alembic.runtime.migration import MigrationContext
         from app.core.database import engine
+
+        try:
+            known_revisions = {rev.revision for rev in ScriptDirectory.from_config(cfg).walk_revisions()}
+            with engine.connect() as conn:
+                current_rev = MigrationContext.configure(conn).get_current_revision()
+        except Exception:
+            known_revisions = set()
+            current_rev = None
+        if current_rev and known_revisions and current_rev not in known_revisions:
+            _migration_status["at_head"] = False
+            _migration_status["error_type"] = "UnknownRevision"
+            msg = (
+                "数据库 schema revision %s 不在当前程序的迁移链上（当前 head=%s）。"
+                "该数据库/备份来自更高版本的程序，请先升级程序后再恢复；"
+                "在旧程序上反复启动不会自动修复。"
+            ) % (current_rev, _migration_status.get("head"))
+            logger.error(msg)
+            if is_production:
+                raise RuntimeError(msg)
+            return
+
+        # 检查是否需要 stamp（表已存在但无 alembic_version 表）
         insp = sa_inspect(engine)
         all_tables = set(insp.get_table_names())
         has_alembic_version = "alembic_version" in all_tables

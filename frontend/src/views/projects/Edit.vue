@@ -555,11 +555,22 @@
             <el-icon><ArrowLeft /></el-icon>
             返回列表
           </el-button>
-          <el-button type="primary" @click="handleSave('projectFormRef')">
+          <el-button
+            type="primary"
+            :loading="loading"
+            :disabled="loading"
+            @click="handleSave('projectFormRef')"
+          >
             <el-icon><Check /></el-icon>
             {{ isEditMode ? '保存修改' : '创建项目' }}
           </el-button>
-          <el-button v-if="!isEditMode" type="success" @click="handleSaveAndContinue">
+          <el-button
+            v-if="!isEditMode"
+            type="success"
+            :loading="loading"
+            :disabled="loading"
+            @click="handleSaveAndContinue"
+          >
             <el-icon><Check /></el-icon>
             保存并继续创建
           </el-button>
@@ -1206,7 +1217,7 @@ async function saveProjectData(): Promise<number | string | false> {
 
 // 处理保存
 async function handleSave(_formName: string) {
-  if (!projectFormRef.value) return
+  if (loading.value || !projectFormRef.value) return
 
   const formInstance = projectFormRef.value!
 
@@ -1229,7 +1240,7 @@ async function handleSave(_formName: string) {
 
 // 处理保存并继续创建
 async function handleSaveAndContinue() {
-  if (!projectFormRef.value) return
+  if (loading.value || !projectFormRef.value) return
 
   const formInstance = projectFormRef.value
 

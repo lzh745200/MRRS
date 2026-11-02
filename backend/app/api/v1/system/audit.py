@@ -382,7 +382,7 @@ async def batch_delete_audit_logs(
         if body.before_date:
             # 入口 schema 已校验；此处再兜一层，非法日期一律 400，绝不放行"无过滤全表删除"
             try:
-                dt = datetime.fromisoformat(body.before_date)
+                dt = to_utc_naive(datetime.fromisoformat(body.before_date))
             except ValueError:
                 logger.error("批量删除: before_date 格式无效 %r，拒绝执行", body.before_date)
                 raise HTTPException(
@@ -670,6 +670,7 @@ async def get_audit_logs(
         raise HTTPException(status_code=400, detail="Invalid parameter value")
 
     username_filter = username.strip() if isinstance(username, str) and username.strip() else None
+    start_date = to_utc_naive(start_date) if start_date else None
     end_date_filter = _inclusive_end_date(end_date)
 
     if is_superuser(current_user):
@@ -744,6 +745,8 @@ async def get_audit_stats(
     if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
+    start_date = to_utc_naive(start_date) if start_date else None
+    end_date = _inclusive_end_date(end_date)
     audit = AuditService(db)
     if is_superuser(current_user):
         return audit.get_audit_stats(start_date=start_date, end_date=end_date)
@@ -776,6 +779,8 @@ async def get_security_events(
     if not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
 
+    start_date = to_utc_naive(start_date) if start_date else None
+    end_date = _inclusive_end_date(end_date)
     service = SecurityEventService(db)
     if is_superuser(current_user):
         return service.get_events(
@@ -855,6 +860,8 @@ async def get_login_attempts(
         query = query.filter(LoginAttempt.username == username)
     if ip_address:
         query = query.filter(LoginAttempt.ip_address == ip_address)
+    start_date = to_utc_naive(start_date) if start_date else None
+    end_date = _inclusive_end_date(end_date)
     if start_date:
         query = query.filter(LoginAttempt.attempt_time >= start_date)
     if end_date:
@@ -888,6 +895,8 @@ async def get_api_access_logs(
         query = query.filter(APIAccessLog.user_id == user_id)
     if endpoint:
         query = query.filter(APIAccessLog.endpoint.contains(endpoint))
+    start_date = to_utc_naive(start_date) if start_date else None
+    end_date = _inclusive_end_date(end_date)
     if start_date:
         query = query.filter(APIAccessLog.created_at >= start_date)
     if end_date:
@@ -921,6 +930,8 @@ async def get_export_logs(
         query = query.filter(DataExportLog.user_id == user_id)
     if export_type:
         query = query.filter(DataExportLog.export_type == export_type)
+    start_date = to_utc_naive(start_date) if start_date else None
+    end_date = _inclusive_end_date(end_date)
     if start_date:
         query = query.filter(DataExportLog.created_at >= start_date)
     if end_date:

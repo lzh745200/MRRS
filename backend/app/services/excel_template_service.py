@@ -142,6 +142,7 @@ TEMPLATE_NAMES = {
     "fund": "经费台账数据导入模板",
     "school": "学校信息数据导入模板",
     "policy": "政策法规数据导入模板",
+    "household": "一户一档数据导入模板",
 }
 
 
@@ -324,6 +325,9 @@ class ExcelTemplateService:
 
     def generate_policy_template(self, include_example: bool = True) -> bytes:
         return self._build_template("policy", include_example)
+
+    def generate_household_template(self, include_example: bool = True) -> bytes:
+        return self._build_template("household", include_example)
 
     # 政策字段定义（EntityImportValidator 不支持 policy，直接硬编码）
     POLICY_FIELDS: List[Dict[str, Any]] = [

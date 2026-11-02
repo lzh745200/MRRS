@@ -389,7 +389,13 @@ const doCompare = async () => {
     })
 
     if (response.success) {
-      compareResult.value = response.data.comparison
+      // 后端把 version1/version2 与 comparison 放在同一层；只取 comparison 会
+      // 导致模板读 compareResult.version1.version 时 undefined 崩溃。
+      compareResult.value = {
+        ...response.data.comparison,
+        version1: response.data.version1,
+        version2: response.data.version2,
+      }
     }
   } catch (error: unknown) {
     handleApiError(error, '对比失败')

@@ -3988,4 +3988,60 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.35",
+        "date": "2026-11-02",
+        "description": "组织策略树与每单位授权包分发（R48）",
+        "features": [
+            (
+                "树形配置 + 每单位有效矩阵导出：GET /api/v1/org-grants/tree 返回整棵子树的显式矩阵（含 grant_version/grant_source/signed/i"
+                "nherit_from_parent）；"
+            ),
+            (
+                "前端：OrgGrant.vue 改为「单位树（搜索/折叠）+ 四态矩阵（继承/可操作/只读/不开放）」，选中继承行显示有效值与来源；保存提交显式覆盖（显式 none 会提交，修复“缺失=继"
+                "承”与“缺失=none”的语义冲突）；新增「导出本子树」按钮。"
+            ),
+            "超管默认树根：首次初始化的超级管理员未绑定单位时，GET /tree 自动回落到组织树最顶层；非超管仍返回 400「未绑定单位」，避免越权扩大可见范围。",
+            (
+                "组织级 data_scope 影子观测：organizations.data_scope（可空）+ORG_DATA_SCOPE_MODE=off 默认；仅 shadow 时比较“组织配置/"
+                "层级推导范围”与角色范围并记WARNING，不改变任何查询结果；迁移 org_data_scope_001 只加列、可重复执行。"
+            ),
+            (
+                "写闸门收敛：新增 app/core/module_edit_rules.py（模式归一化 / 禁用判定的单一来源）；grant_guard 在 R33 矩阵 active 时同时尊重 or"
+                "g_module_policies（更严者生效），与org_module_policy_gate 共用 evaluate_org_policy 查询路径；off/shadow 默认行为不变"
+                "。"
+            ),
+            (
+                "测试：后端 test_org_grant_tree.py（17）、test_org_data_scope_shadow_r48.py（25）、test_module_edit_rules_"
+                "r48.py（25），既有 R33 四文件 99 例保持全绿；前端OrgGrant.test.ts（23）与 orgGrants.test.ts（14）。"
+            ),
+            (
+                "修复「填报后导入 0 条」：官方模板的示例行末尾带 ← 示例行（导入时自动跳过）注释，旧逻辑只要行内任意单元格含「示例行」就整行跳过；用户在示例行上直接改数据时会被静默丢弃，界面提示成功但"
+                "入库 0 条。现改为只有「示例首列值 + 示例行注释」同时命中才跳过，包含注释的真实数据照常导入；解析不到任何数据行时返回 400 并提示在示例行下方新增数据行，不再出现“成功但 0 条”"
+                "。"
+            ),
+            (
+                "新增一户一档导入：GET /api/v1/import/template?entity_type=household 与POST /api/v1/import/entities 支持一户一"
+                "档；按「村名+县+乡镇」解析帮扶村（同名多村要求补充），户编号村内唯一、留空按村+户主姓名去重；前端导入页与一户一档列表均可进入。"
+            ),
+            (
+                "填报表格导出（单条 / 批量）：新增 GET /api/v1/import/export-fill?entity_type=&ids=，按官方模板表头导出当前数据权限范围内的数据并追加 I"
+                "D 列；ids 留空导出全部（批量填报），传一个或多个逗号分隔 ID 则只导出指定记录（单条导出）。「数据导入」页新增「导出填报表格」区，支持导出 → 修改 → 回导。"
+            ),
+            (
+                "ID 回导更新：带 ID 的行在数据权限范围内按 ID 更新原记录（不重复建档、不改归属），未知或越权 ID 计入失败并提示；无 ID 行保持增量去重/全量新建。帮扶村、项目、资金、学校、"
+                "一户一档五类实体均已支持。"
+            ),
+            (
+                "历史备份兼容：备份 manifest 增 format_version=2 / app_version / schema_revision；恢复时按「标准路径 → data/assista"
+                "nce.db → data/assistance_management.db → 根下同名 →data 下唯一 .db」回退定位历史备份，极老备份（无 alembic_version）按可"
+                "升级处理；"
+            ),
+            (
+                "测试：后端 test_import_fill_roundtrip_r61.py（5）、test_household_import_r57.py（8）、test_backup_legacy_"
+                "path_r57.py（8）、test_sqlite_migration_compat_r57.py（6）、test_import_example_row_r61.py（4）；前端 Dat"
+                "aImport.test.ts 增导出填报 4 例。"
+            ),
+        ],
+    },
 ]

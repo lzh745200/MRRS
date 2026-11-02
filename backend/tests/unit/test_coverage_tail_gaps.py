@@ -190,8 +190,18 @@ class TestMachineCodeVerify:
 
 class TestExcelImporterEdge:
     def test_is_skippable_row_example_text(self):
-        # 199-203：某单元格含 "示例行" 关键词
-        assert ExcelImporterService._is_skippable_row(["数据", "这是示例行"], []) is True
+        # R61：仅含「示例行」注释的真实数据行必须照常导入（旧行为会整行静默丢弃）
+        assert ExcelImporterService._is_skippable_row(["数据", "这是示例行"], []) is False
+
+    def test_is_skippable_row_example_marker_with_note(self):
+        # 示例标记值 + 「示例行」注释同时存在 → 仍按示例行跳过
+        assert (
+            ExcelImporterService._is_skippable_row(
+                ["某某部门", "某某村", "← 示例行（导入时自动跳过）"],
+                ["某某部门", "示例部门"],
+            )
+            is True
+        )
 
     def test_create_village_sets_ownership(self, real_db_session):
         user = SimpleNamespace(id=7, organization_id=3)

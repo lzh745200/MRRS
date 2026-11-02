@@ -27,6 +27,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.system_config import SystemConfig
+from app.core.config import settings
 from app.core.maintenance import maintenance_window
 from app.utils.upload_helper import read_zip_member
 from app.core.transaction import retry_on_deadlock, safe_commit
@@ -331,10 +332,21 @@ class BackupService:
 
         encrypted = fernet.encrypt(plaintext)
 
-        with open(file_path, "wb") as f:
-            f.write(BackupService._ENCRYPTED_MARKER)
-            f.write(salt)
-            f.write(encrypted)
+        # 原子替换：直接 open("wb") 会在加密/写盘失败时毁掉刚生成的有效备份；
+        # 先写 .part，成功后 os.replace，失败删除半成品。
+        part_path = file_path + ".enc.part"
+        try:
+            with open(part_path, "wb") as f:
+                f.write(BackupService._ENCRYPTED_MARKER)
+                f.write(salt)
+                f.write(encrypted)
+            os.replace(part_path, file_path)
+        except Exception:
+            try:
+                os.remove(part_path)
+            except OSError:
+                pass
+            raise
 
     @staticmethod
     def _is_encrypted(file_path: str) -> bool:
@@ -429,6 +441,25 @@ class BackupService:
                 f"一致性快照失败，已中止备份（-wal 数据保持原样，不会丢失）: {exc}"
             ) from exc
 
+    @staticmethod
+    def _current_app_version() -> Optional[str]:
+        return getattr(settings, "PROJECT_VERSION", None)
+
+    def _current_schema_revision(self) -> Optional[str]:
+        """读取当前库 alembic revision，写入备份清单便于排障（旧包无此字段）。"""
+        try:
+            if not self.database_path or not os.path.exists(self.database_path):
+                return None
+            conn = sqlite3.connect(self.database_path)
+            try:
+                row = conn.execute("SELECT version_num FROM alembic_version").fetchone()
+                return row[0] if row else None
+            finally:
+                conn.close()
+        except Exception:
+            logger.debug("读取备份 schema revision 失败", exc_info=True)
+            return None
+
     def _write_backup_zip(
         self, backup_file_path: str, snapshot_path: Optional[str],
         timestamp: str, description: str, include_uploads: bool,
@@ -465,6 +496,9 @@ class BackupService:
 
                 # 添加备份信息
                 backup_info = {
+                    "format_version": 2,
+                    "app_version": self._current_app_version(),
+                    "schema_revision": self._current_schema_revision(),
                     "timestamp": timestamp,
                     "description": description,
                     "include_uploads": include_uploads,
@@ -543,6 +577,14 @@ class BackupService:
                 conn.close()
             if check_result != "ok":
                 raise BackupIncompleteError(f"备份数据库完整性校验失败: {check_result}")
+        except Exception:
+            # 校验失败必须删包：否则坏 zip 会永久占目录，且不在 DB 台账中，
+            # cleanup_old_backups 永远看不到它（逐步吃满磁盘）。
+            try:
+                os.remove(backup_file_path)
+            except OSError:
+                pass
+            raise
         finally:
             try:
                 os.remove(verify_db_path)
@@ -709,6 +751,36 @@ class BackupService:
             shutil.copytree(self.uploads_dir, snapshot_uploads_dir)
         return snapshot_db_path, snapshot_uploads_dir
 
+    @staticmethod
+    def _locate_backup_db(temp_dir: str) -> Optional[str]:
+        """定位备份包内的 SQLite 主库（兼容历史包路径/文件名）。
+
+        旧版本备份曾使用不同的库文件名或直接放在根目录；恢复端只认
+        ``data/rural_revitalization.db`` 时会把"完整备份"误判为缺库。
+        这里按"标准路径 → 历史候选 → data 下唯一 .db"顺序查找，找不到返回 None。
+        """
+        candidates = [
+            os.path.join(temp_dir, "data", "rural_revitalization.db"),
+            os.path.join(temp_dir, "data", "assistance.db"),
+            os.path.join(temp_dir, "data", "assistance_management.db"),
+            os.path.join(temp_dir, "rural_revitalization.db"),
+        ]
+        for path in candidates:
+            if os.path.isfile(path):
+                return path
+        data_dir = os.path.join(temp_dir, "data")
+        if os.path.isdir(data_dir):
+            found = [
+                os.path.join(root, name)
+                for root, _dirs, files in os.walk(data_dir)
+                for name in files
+                if name.lower().endswith((".db", ".sqlite", ".sqlite3"))
+            ]
+            if len(found) == 1:
+                logger.warning("备份库使用历史路径，已回退识别: %s", found[0])
+                return found[0]
+        return None
+
     def _validate_backup_schema_version(self, backup_db_path: str) -> None:
         """恢复前置校验：备份库的 alembic 版本不得高于当前代码 head（W18-D7）。
 
@@ -760,8 +832,8 @@ class BackupService:
 
     def _restore_database_from_backup(self, temp_dir: str) -> bool:
         """从备份中恢复数据库（WAL 安全：先释放连接池再覆盖，清理残留 -wal/-shm）"""
-        backup_db_path = os.path.join(temp_dir, "data", "rural_revitalization.db")
-        if not os.path.exists(backup_db_path):
+        backup_db_path = self._locate_backup_db(temp_dir)
+        if not backup_db_path:
             return False
         os.makedirs(os.path.dirname(self.database_path), exist_ok=True)
         # 写协调器独占窗口: 与批量导入等 opt-in 写路径互斥, 避免恢复覆盖期间
@@ -1131,9 +1203,9 @@ class BackupService:
                 self._safe_extractall(zipf, temp_dir)
 
             # W18-D7：版本前置校验（在覆盖生产库**之前**，失败即拒绝且不碰现场）
-            self._validate_backup_schema_version(
-                os.path.join(temp_dir, "data", "rural_revitalization.db")
-            )
+            backup_db_path = self._locate_backup_db(temp_dir)
+            if backup_db_path:
+                self._validate_backup_schema_version(backup_db_path)
 
             database_restored = self._restore_database_from_backup(temp_dir)
             if not database_restored:

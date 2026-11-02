@@ -29,14 +29,10 @@ from typing import Optional
 
 from fastapi import HTTPException, Request, status
 
+from app.core.module_edit_rules import MODE_ENFORCE, MODE_OFF, MODE_SHADOW, VALID_MODES  # noqa: F401
 from app.core.write_route_map import is_exempt, is_write_method, resolve_module
 
 logger = logging.getLogger(__name__)
-
-MODE_OFF = "off"
-MODE_SHADOW = "shadow"
-MODE_ENFORCE = "enforce"
-VALID_MODES = frozenset({MODE_OFF, MODE_SHADOW, MODE_ENFORCE})
 
 _BEARER_PREFIX = "bearer "
 
@@ -131,5 +127,15 @@ async def enforce_write_grant(request: Request) -> None:
             return
         if not matrix.can_edit(module):
             _deny(mode, request, "level=%s" % matrix.level(module), module)
+            return
+
+        # R48 阶段 4：与 org_module_policies 收敛。矩阵 active 时，同一写请求还要
+        # 尊重组织模块开关（read_only/disabled），更严者生效；默认 off 不会走到
+        # 这里，因此存量行为不变。查询与缓存由中间件模块统一提供，避免两套实现。
+        from app.middleware.org_module_policy_gate import evaluate_org_policy
+
+        policy_mode = evaluate_org_policy(db, user, module)
+        if policy_mode:
+            _deny(mode, request, "org_policy:%s" % policy_mode, module)
     finally:
         db.close()

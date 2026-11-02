@@ -30,6 +30,8 @@ from app.services.data_validator_service import DataValidatorService
 from app.services.entity_import_validator import EntityImportValidator
 from app.services.excel_importer_service import ExcelImporterService, ImportMode
 from app.services.excel_template_service import ExcelTemplateService
+from app.services.fill_template_service import ENTITY_LABELS as FILL_ENTITY_LABELS
+from app.services.fill_template_service import FillTemplateService
 from app.utils.upload_helper import read_upload_with_limit
 
 _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -37,7 +39,7 @@ _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.
 logger = logging.getLogger(__name__)
 
 # 支持的实体类型
-VALID_ENTITY_TYPES = frozenset({"supported_village", "project", "fund", "school"})
+VALID_ENTITY_TYPES = frozenset({"supported_village", "project", "fund", "school", "household"})
 
 # R2 第二层：导入文件内存上限（与 DataValidatorService / EntityImportValidator
 # 的 MAX_FILE_SIZE=10MB 业务口径一致）。此处用模块常量而非读校验器实例属性：
@@ -146,6 +148,7 @@ async def download_import_template(
         "fund": "资金",
         "school": "学校",
         "policy": "政策",
+        "household": "一户一档",
     }
     method_map = {
         "supported_village": "generate_village_template",
@@ -153,6 +156,7 @@ async def download_import_template(
         "fund": "generate_fund_template",
         "school": "generate_school_template",
         "policy": "generate_policy_template",
+        "household": "generate_household_template",
     }
 
     method_name = method_map.get(entity_type)
@@ -167,6 +171,48 @@ async def download_import_template(
     label = entity_labels.get(entity_type, entity_type)
     filename = f"{label}导入模板_{datetime.now().strftime('%Y%m%d')}.xlsx"
 
+    return Response(
+        content=content,
+        media_type=_XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+@router.get("/export-fill")
+async def export_fill_template(
+    entity_type: str = Query(
+        "supported_village",
+        description="实体类型: supported_village, project, fund, school, household",
+    ),
+    ids: Optional[str] = Query(None, description="要导出的记录 ID，逗号分隔；缺省导出全部可见记录"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """导出「已填数据」的导入模板（含 ID 列），用于单条/批量回导更新。
+
+    - 表头与官方导入模板一致，回导时按 `ID` 更新既有记录；
+    - 未传 `ids` 时导出当前账号数据权限内的全部记录（上限 5000 条）。
+    """
+    if entity_type not in VALID_ENTITY_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的实体类型: {entity_type}，支持 {', '.join(sorted(VALID_ENTITY_TYPES))}",
+        )
+
+    parsed_ids: Optional[List[int]] = None
+    if ids:
+        try:
+            parsed_ids = [int(item) for item in ids.split(",") if item.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="ids 必须是逗号分隔的整数")
+
+    try:
+        content = FillTemplateService(db, current_user=current_user).export(entity_type, parsed_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    label = FILL_ENTITY_LABELS.get(entity_type, entity_type)
+    filename = f"{label}填报_{datetime.now().strftime('%Y%m%d')}.xlsx"
     return Response(
         content=content,
         media_type=_XLSX_MEDIA_TYPE,
@@ -323,6 +369,19 @@ async def _import_entities(
         from app.services.immediate_backup import trigger_immediate_backup
 
         trigger_immediate_backup(description=f"导入{entity_type}后备份", delay=1.0)
+
+    # R61：0 行不再返回「成功」——官方模板的示例行会被跳过，用户在示例行上直接
+    # 改写时此前会静默得到 0 条入库。明确报错并给出可执行指引，避免"假成功"。
+    # 仅对「解析成功但无数据行」返回 400；文件损坏/格式不支持仍按既有契约返回
+    # 200 + errors 明细（W25 角色门禁用例依赖该契约）。
+    if getattr(result, "no_data_rows", False) is True:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "未解析到任何数据行：模板中的示例行不会导入，请在示例行下方新增数据行"
+                "（或删除示例行后填写）；若已填写，请确认没有整行沿用示例内容。"
+            ),
+        )
 
     return ImportResultResponse(**result.to_dict())
 
@@ -535,6 +594,10 @@ def _preview_duplicate_column(entity_type: str, duplicate_field: str):
         from app.models.school import School
 
         return getattr(School, duplicate_field)
+    if entity_type == "household":
+        from app.models.household import Household
+
+        return getattr(Household, duplicate_field)
     raise HTTPException(
         status_code=400,
         detail=f"不支持的实体类型: {entity_type}，支持 {', '.join(VALID_ENTITY_TYPES)}",

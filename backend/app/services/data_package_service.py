@@ -556,7 +556,16 @@ class DataPackageService:
                             expected_count = manifest_dict.get("record_counts", {}).get(data_type, 0)
                             actual_count = len(data)
                             if actual_count != expected_count:
-                                warnings.append(f"{data_type}: 记录数不匹配 (期望: {expected_count}, 实际: {actual_count})")
+                                # 记录数不符意味着包内容不完整/被裁剪，必须阻断
+                                # confirm，不能只 warning 后照样“导入成功”。
+                                errors.append(DataPackageValidationError(
+                                    field=data_type,
+                                    message=(
+                                        f"{data_type}: 记录数不匹配 "
+                                        f"(期望: {expected_count}, 实际: {actual_count})"
+                                    ),
+                                    data_type=data_type,
+                                ))
                             # 字段级校验：摘要写入 warnings（additive，不影响 errors 语义）
                             warnings.extend(self._field_validation_warnings(data_type, data))
                         except json.JSONDecodeError as e:

@@ -1,0 +1,584 @@
+{
+  "version": "0.15.0",
+  "schemaVersion": 1,
+  "deckId": "e1581448-d7ef-4d41-9949-398f8d2bb0b0",
+  "revision": 2,
+  "title": "帮扶管理信息系统 v1.18.35 更新说明",
+  "theme": "data",
+  "language": "zh",
+  "motion": true,
+  "assets": {},
+  "history": [
+    {
+      "title": "帮扶管理信息系统 v1.18.35 更新说明",
+      "theme": "data",
+      "language": "zh",
+      "motion": true,
+      "slides": [
+        {
+          "layout": "cover",
+          "kicker": "2026-11-02 · 离线单机 + 多机协同",
+          "title": "帮扶管理信息系统 v1.18.35 更新说明",
+          "subtitle": "组织策略树授权分发 · 表格填报导入修复 · 填报导出回导 · 历史数据恢复",
+          "text": "",
+          "bullets": [],
+          "id": "89478e52-958d-47fa-9b75-9a96198c2c44"
+        },
+        {
+          "layout": "section",
+          "kicker": "",
+          "title": "本轮交付范围",
+          "subtitle": "",
+          "text": "R48 组织策略树 / R57 历史备份兼容 / R61 表格填报修复与导出回导 / 全量回归与收尾",
+          "bullets": [],
+          "id": "442b440c-456f-4fad-969b-90ca0bd77ea9"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "组织策略树：一次配置，逐单位下发",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "面向「1 省 + 9 市 + 88 县」：上级按组织树维护差异矩阵，未配置的模块沿父级继承",
+            "服务端按继承规则计算每个单位的有效矩阵，逐单位生成既有 r33-grant-package v1 包",
+            "POST /org-grants/{id}/export-branch 打包 zip：per-unit json + manifest（sha256/版本/模块数）",
+            "空矩阵单位跳过并写入 manifest.skipped，不生成空包；单位缺 code 整体 400 且不消耗版本",
+            "下级仍用现有 GrantImport 导入：协议零改动、数据库零迁移"
+          ],
+          "id": "73202951-4958-480c-be31-ddb444228b9f"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "前端：四态矩阵与来源可见",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "组织树支持搜索/折叠，选中节点才加载矩阵，98 个单位不再一次刷全量",
+            "四态：继承 / 可操作 / 只读 / 不开放；继承行显示有效值与来源单位",
+            "保存提交显式覆盖（含显式「不开放」），修复「缺失=继承」与「缺失=none」的语义冲突",
+            "新增「导出本子树」；超管未绑定单位时自动回落到组织树顶层"
+          ],
+          "id": "c1c04b6b-18c3-4437-ab3b-c62e30537cba"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "组织级 data_scope：只观测、不改结果",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "organizations 新增可空 datascope 列 + orgdatascope001 迁移（只加列、可重复执行）",
+            "ORGDATASCOPE_MODE 默认 off；设为 shadow 时仅比较「组织配置/层级推导」与角色范围",
+            "更窄时记一条 WARNING（同用户+组织+范围只记一次），查询结果完全不变",
+            "为后续正式启用组织级数据范围保留观测数据，避免一次性切换风险"
+          ],
+          "id": "227405a9-d482-4f4f-8af7-ba474453a4e5"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "写闸门收敛：更严者生效",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "新增 app/core/moduleeditrules.py：模式归一化与禁用判定的单一来源",
+            "grantguard（R33 矩阵）在 canedit 通过后叠加 orgmodulepolicies 的 read_only/disabled",
+            "与 orgmodulepolicygate 共用 evaluateorg_policy 查询路径，避免两套判定漂移",
+            "默认 off/shadow 行为不变；410 个写接口已全部归类，enforce 前置条件具备"
+          ],
+          "id": "8db85bc5-da3f-4599-8d2d-7b2c8bd21556"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "表格填报导入：修复「成功但 0 条」",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "根因：官方模板示例行末尾带「← 示例行（导入时自动跳过）」注释，旧逻辑行内出现「示例行」即整行跳过",
+            "用户在示例行上直接改数据时被静默丢弃；现改为仅「示例首列值 + 示例行注释」同时命中才跳过",
+            "解析不到任何数据行时返回 400 并提示在示例行下方新增数据行，不再假成功",
+            "新增一户一档导入：按村名+县+乡镇解析帮扶村，户编号村内唯一，留空按村+户主去重"
+          ],
+          "id": "7b30abe5-1d06-49c6-bfc4-b16551c8a7c3"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "填报表格导出与回导（单条 / 批量）",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "GET /import/export-fill：按官方模板表头导出当前数据域数据，并追加 ID 列",
+            "ids 留空 = 批量导出全部；填一个或多个 ID = 单条或指定记录导出",
+            "带 ID 回导按 ID 在数据权限范围内更新原记录：不重复建档、不改归属",
+            "未知/越权 ID 计入失败并提示；无 ID 行保持增量去重或全量新建",
+            "支持帮扶村、项目、资金、学校、一户一档五类实体；「数据导入」页新增导出区"
+          ],
+          "id": "b8952b63-d74f-4fcb-b6a0-42363875f1d1"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "历史版本数据恢复",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "备份 manifest 增 formatversion=2 / appversion / schema_revision",
+            "恢复时多路径回退定位：标准路径 → data/assistance.db → data/assistance_management.db → 根下同名 → data 下唯一 .db",
+            "极老备份（无 alembic_version）按可升级处理；schema 高于当前且不在迁移链才拒绝",
+            "新增 SQLite 版本回退工具：<3.35 无 DROP COLUMN、<3.25 无 RENAME COLUMN 时自动改用 batch 重建"
+          ],
+          "id": "d55f521a-e3b3-436b-b8f8-41347a917c59"
+        },
+        {
+          "layout": "table",
+          "kicker": "验证证据（2026-11-02 全量）",
+          "title": "验证证据（2026-11-02 全量）",
+          "rows": [
+            [
+              "项目",
+              "结果"
+            ],
+            [
+              "后端 12 段全量",
+              "12/12 PASS · 15,610 用例"
+            ],
+            [
+              "后端覆盖率",
+              "47,763 stmts / 12,014 branches = 100.00%"
+            ],
+            [
+              "前端全量",
+              "348 文件 / 7,495 用例全过"
+            ],
+            [
+              "静态检查",
+              "flake8 / type-check / lint 全通过"
+            ],
+            [
+              "专项门禁",
+              "三层对齐、文档数字、CHANGELOG、硬编码色、路由鉴权"
+            ],
+            [
+              "安装包",
+              "Windows x64 / 麒麟 ARM64 构建流程保持可用"
+            ]
+          ],
+          "id": "cb0b7659-7d12-4ad8-a46d-cad0250c9573"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "升级与操作提示",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "恢复历史备份前先做一次当前库备份；恢复走维护窗口，期间写请求 503、读正常",
+            "data_scope 先用 shadow 观测一段时间，再评估是否启用",
+            "授权包的 valid_until 只在授权页与导入结果提示，不做运行时降级/锁定",
+            "表格回导优先保留 ID 列；手工新增行不要复制示例行整行内容"
+          ],
+          "id": "8fed135a-f7c0-4556-a531-ebe9406fafe4"
+        },
+        {
+          "layout": "closing",
+          "kicker": "",
+          "title": "谢谢",
+          "subtitle": "详细变更见 CHANGELOG.md 与 docs/02-用户手册；仓库 github.com/lzh745200/MRRS",
+          "text": "",
+          "bullets": [],
+          "id": "49c10df2-dd39-4f44-9c4f-e66e88b9e8ff"
+        }
+      ]
+    },
+    {
+      "title": "帮扶管理信息系统 v1.18.35 更新说明",
+      "theme": "data",
+      "language": "zh",
+      "motion": true,
+      "slides": [
+        {
+          "layout": "cover",
+          "kicker": "2026-11-02 · 离线单机 + 多机协同",
+          "title": "帮扶管理信息系统 v1.18.35 更新说明",
+          "subtitle": "组织策略树授权分发 · 表格填报导入修复 · 填报导出回导 · 历史数据恢复",
+          "text": "",
+          "bullets": [],
+          "id": "89478e52-958d-47fa-9b75-9a96198c2c44"
+        },
+        {
+          "layout": "section",
+          "kicker": "",
+          "title": "本轮交付范围",
+          "subtitle": "",
+          "text": "R48 组织策略树 / R57 历史备份兼容 / R61 表格填报修复与导出回导 / 全量回归与收尾",
+          "bullets": [],
+          "id": "442b440c-456f-4fad-969b-90ca0bd77ea9"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "组织策略树：一次配置，逐单位下发",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "面向「1 省 + 9 市 + 88 县」：上级按组织树维护差异矩阵，未配置的模块沿父级继承",
+            "服务端按继承规则计算每个单位的有效矩阵，逐单位生成既有 r33-grant-package v1 包",
+            "POST /org-grants/{id}/export-branch 打包 zip：per-unit json + manifest（sha256/版本/模块数）",
+            "空矩阵单位跳过并写入 manifest.skipped，不生成空包；单位缺 code 整体 400 且不消耗版本",
+            "下级仍用现有 GrantImport 导入：协议零改动、数据库零迁移"
+          ],
+          "id": "73202951-4958-480c-be31-ddb444228b9f"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "前端：四态矩阵与来源可见",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "组织树支持搜索/折叠，选中节点才加载矩阵，98 个单位不再一次刷全量",
+            "四态：继承 / 可操作 / 只读 / 不开放；继承行显示有效值与来源单位",
+            "保存提交显式覆盖（含显式「不开放」），修复「缺失=继承」与「缺失=none」的语义冲突",
+            "新增「导出本子树」；超管未绑定单位时自动回落到组织树顶层"
+          ],
+          "id": "c1c04b6b-18c3-4437-ab3b-c62e30537cba"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "组织级 data_scope：只观测、不改结果",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "organizations 新增可空 datascope 列 + orgdatascope001 迁移（只加列、可重复执行）",
+            "ORGDATASCOPE_MODE 默认 off；设为 shadow 时仅比较「组织配置/层级推导」与角色范围",
+            "更窄时记一条 WARNING（同用户+组织+范围只记一次），查询结果完全不变",
+            "为后续正式启用组织级数据范围保留观测数据，避免一次性切换风险"
+          ],
+          "id": "227405a9-d482-4f4f-8af7-ba474453a4e5"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "写闸门收敛：更严者生效",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "新增 app/core/moduleeditrules.py：模式归一化与禁用判定的单一来源",
+            "grantguard（R33 矩阵）在 canedit 通过后叠加 orgmodulepolicies 的 read_only/disabled",
+            "与 orgmodulepolicygate 共用 evaluateorg_policy 查询路径，避免两套判定漂移",
+            "默认 off/shadow 行为不变；410 个写接口已全部归类，enforce 前置条件具备"
+          ],
+          "id": "8db85bc5-da3f-4599-8d2d-7b2c8bd21556"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "表格填报导入：修复「成功但 0 条」",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "根因：官方模板示例行末尾带「← 示例行（导入时自动跳过）」注释，旧逻辑行内出现「示例行」即整行跳过",
+            "用户在示例行上直接改数据时被静默丢弃；现改为仅「示例首列值 + 示例行注释」同时命中才跳过",
+            "解析不到任何数据行时返回 400 并提示在示例行下方新增数据行，不再假成功",
+            "新增一户一档导入：按村名+县+乡镇解析帮扶村，户编号村内唯一，留空按村+户主去重"
+          ],
+          "id": "7b30abe5-1d06-49c6-bfc4-b16551c8a7c3"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "填报表格导出与回导（单条 / 批量）",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "GET /import/export-fill：按官方模板表头导出当前数据域数据，并追加 ID 列",
+            "ids 留空 = 批量导出全部；填一个或多个 ID = 单条或指定记录导出",
+            "带 ID 回导按 ID 在数据权限范围内更新原记录：不重复建档、不改归属",
+            "未知/越权 ID 计入失败并提示；无 ID 行保持增量去重或全量新建",
+            "支持帮扶村、项目、资金、学校、一户一档五类实体；「数据导入」页新增导出区"
+          ],
+          "id": "b8952b63-d74f-4fcb-b6a0-42363875f1d1"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "历史版本数据恢复",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "备份 manifest 增 formatversion=2 / appversion / schema_revision",
+            "恢复时多路径回退定位：标准路径 → data/assistance.db → data/assistance_management.db → 根下同名 → data 下唯一 .db",
+            "极老备份（无 alembic_version）按可升级处理；schema 高于当前且不在迁移链才拒绝",
+            "新增 SQLite 版本回退工具：<3.35 无 DROP COLUMN、<3.25 无 RENAME COLUMN 时自动改用 batch 重建"
+          ],
+          "id": "d55f521a-e3b3-436b-b8f8-41347a917c59"
+        },
+        {
+          "layout": "table",
+          "kicker": "验证证据（2026-11-02 全量）",
+          "title": "验证证据（2026-11-02 全量）",
+          "rows": [
+            [
+              "项目",
+              "结果"
+            ],
+            [
+              "后端 12 段",
+              "12/12 · 15,610 用例"
+            ],
+            [
+              "覆盖率",
+              "100.00%（47,763 行 / 12,014 分支）"
+            ],
+            [
+              "前端",
+              "348 文件 / 7,495 用例"
+            ],
+            [
+              "静态检查",
+              "flake8 / type-check / lint"
+            ],
+            [
+              "专项门禁",
+              "三层对齐 · 文档数字 · CHANGELOG"
+            ],
+            [
+              "构建",
+              "Windows x64 / 麒麟 ARM64 可用"
+            ]
+          ],
+          "id": "cb0b7659-7d12-4ad8-a46d-cad0250c9573"
+        },
+        {
+          "layout": "bullets",
+          "kicker": "",
+          "title": "升级与操作提示",
+          "subtitle": "",
+          "text": "",
+          "bullets": [
+            "恢复历史备份前先做一次当前库备份；恢复走维护窗口，期间写请求 503、读正常",
+            "data_scope 先用 shadow 观测一段时间，再评估是否启用",
+            "授权包的 valid_until 只在授权页与导入结果提示，不做运行时降级/锁定",
+            "表格回导优先保留 ID 列；手工新增行不要复制示例行整行内容"
+          ],
+          "id": "8fed135a-f7c0-4556-a531-ebe9406fafe4"
+        },
+        {
+          "layout": "closing",
+          "kicker": "",
+          "title": "谢谢",
+          "subtitle": "详细变更见 CHANGELOG.md 与 docs/02-用户手册；仓库 github.com/lzh745200/MRRS",
+          "text": "",
+          "bullets": [],
+          "id": "49c10df2-dd39-4f44-9c4f-e66e88b9e8ff"
+        }
+      ]
+    }
+  ],
+  "slides": [
+    {
+      "layout": "cover",
+      "kicker": "2026-11-02 · 离线单机 + 多机协同",
+      "title": "帮扶管理信息系统 v1.18.35 更新说明",
+      "subtitle": "组织策略树授权分发 · 表格填报导入修复 · 填报导出回导 · 历史数据恢复",
+      "text": "",
+      "bullets": [],
+      "id": "89478e52-958d-47fa-9b75-9a96198c2c44"
+    },
+    {
+      "layout": "section",
+      "kicker": "",
+      "title": "本轮交付范围",
+      "subtitle": "",
+      "text": "R48 组织策略树 / R57 历史备份兼容 / R61 表格填报修复与导出回导 / 全量回归与收尾",
+      "bullets": [],
+      "id": "442b440c-456f-4fad-969b-90ca0bd77ea9"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "组织策略树：一次配置，逐单位下发",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "面向「1 省 + 9 市 + 88 县」：上级按组织树维护差异矩阵，未配置的模块沿父级继承",
+        "服务端按继承规则计算每个单位的有效矩阵，逐单位生成既有 r33-grant-package v1 包",
+        "POST /org-grants/{id}/export-branch 打包 zip：per-unit json + manifest（sha256/版本/模块数）",
+        "空矩阵单位跳过并写入 manifest.skipped，不生成空包；单位缺 code 整体 400 且不消耗版本",
+        "下级仍用现有 GrantImport 导入：协议零改动、数据库零迁移"
+      ],
+      "id": "73202951-4958-480c-be31-ddb444228b9f"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "前端：四态矩阵与来源可见",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "组织树支持搜索/折叠，选中节点才加载矩阵，98 个单位不再一次刷全量",
+        "四态：继承 / 可操作 / 只读 / 不开放；继承行显示有效值与来源单位",
+        "保存提交显式覆盖（含显式「不开放」），修复「缺失=继承」与「缺失=none」的语义冲突",
+        "新增「导出本子树」；超管未绑定单位时自动回落到组织树顶层"
+      ],
+      "id": "c1c04b6b-18c3-4437-ab3b-c62e30537cba"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "组织级 data_scope：只观测、不改结果",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "organizations 新增可空 datascope 列 + orgdatascope001 迁移（只加列、可重复执行）",
+        "ORGDATASCOPE_MODE 默认 off；设为 shadow 时仅比较「组织配置/层级推导」与角色范围",
+        "更窄时记一条 WARNING（同用户+组织+范围只记一次），查询结果完全不变",
+        "为后续正式启用组织级数据范围保留观测数据，避免一次性切换风险"
+      ],
+      "id": "227405a9-d482-4f4f-8af7-ba474453a4e5"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "写闸门收敛：更严者生效",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "新增 app/core/moduleeditrules.py：模式归一化与禁用判定的单一来源",
+        "grantguard（R33 矩阵）在 canedit 通过后叠加 orgmodulepolicies 的 read_only/disabled",
+        "与 orgmodulepolicygate 共用 evaluateorg_policy 查询路径，避免两套判定漂移",
+        "默认 off/shadow 行为不变；410 个写接口已全部归类，enforce 前置条件具备"
+      ],
+      "id": "8db85bc5-da3f-4599-8d2d-7b2c8bd21556"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "表格填报导入：修复「成功但 0 条」",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "根因：官方模板示例行末尾带「← 示例行（导入时自动跳过）」注释，旧逻辑行内出现「示例行」即整行跳过",
+        "用户在示例行上直接改数据时被静默丢弃；现改为仅「示例首列值 + 示例行注释」同时命中才跳过",
+        "解析不到任何数据行时返回 400 并提示在示例行下方新增数据行，不再假成功",
+        "新增一户一档导入：按村名+县+乡镇解析帮扶村，户编号村内唯一，留空按村+户主去重"
+      ],
+      "id": "7b30abe5-1d06-49c6-bfc4-b16551c8a7c3"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "填报表格导出与回导（单条 / 批量）",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "GET /import/export-fill：按官方模板表头导出当前数据域数据，并追加 ID 列",
+        "ids 留空 = 批量导出全部；填一个或多个 ID = 单条或指定记录导出",
+        "带 ID 回导按 ID 在数据权限范围内更新原记录：不重复建档、不改归属",
+        "未知/越权 ID 计入失败并提示；无 ID 行保持增量去重或全量新建",
+        "支持帮扶村、项目、资金、学校、一户一档五类实体；「数据导入」页新增导出区"
+      ],
+      "id": "b8952b63-d74f-4fcb-b6a0-42363875f1d1"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "历史版本数据恢复",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "备份 manifest 增 formatversion=2 / appversion / schema_revision",
+        "恢复时多路径回退定位：标准路径 → data/assistance.db → data/assistance_management.db → 根下同名 → data 下唯一 .db",
+        "极老备份（无 alembic_version）按可升级处理；schema 高于当前且不在迁移链才拒绝",
+        "新增 SQLite 版本回退工具：<3.35 无 DROP COLUMN、<3.25 无 RENAME COLUMN 时自动改用 batch 重建"
+      ],
+      "id": "d55f521a-e3b3-436b-b8f8-41347a917c59"
+    },
+    {
+      "layout": "table",
+      "kicker": "验证证据（2026-11-02 全量）",
+      "title": "验证证据（2026-11-02 全量）",
+      "rows": [
+        [
+          "项目",
+          "结果"
+        ],
+        [
+          "后端 12 段",
+          "12/12 · 15,642 用例"
+        ],
+        [
+          "覆盖率",
+          "100.00%（47,763 行 / 12,014 分支）"
+        ],
+        [
+          "前端",
+          "348 文件 / 7,501 用例"
+        ],
+        [
+          "静态检查",
+          "flake8 / type-check / lint"
+        ],
+        [
+          "专项门禁",
+          "三层对齐 · 文档数字 · CHANGELOG"
+        ],
+        [
+          "构建",
+          "Windows x64 / 麒麟 ARM64 可用"
+        ]
+      ],
+      "id": "cb0b7659-7d12-4ad8-a46d-cad0250c9573"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "",
+      "title": "升级与操作提示",
+      "subtitle": "",
+      "text": "",
+      "bullets": [
+        "恢复历史备份前先做一次当前库备份；恢复走维护窗口，期间写请求 503、读正常",
+        "data_scope 先用 shadow 观测一段时间，再评估是否启用",
+        "授权包的 valid_until 只在授权页与导入结果提示，不做运行时降级/锁定",
+        "表格回导优先保留 ID 列；手工新增行不要复制示例行整行内容"
+      ],
+      "id": "8fed135a-f7c0-4556-a531-ebe9406fafe4"
+    },
+    {
+      "layout": "closing",
+      "kicker": "",
+      "title": "谢谢",
+      "subtitle": "详细变更见 CHANGELOG.md 与 docs/02-用户手册；仓库 github.com/lzh745200/MRRS",
+      "text": "",
+      "bullets": [],
+      "id": "49c10df2-dd39-4f44-9c4f-e66e88b9e8ff"
+    }
+  ],
+  "slideCount": 12,
+  "quality": {
+    "ok": true,
+    "slideCount": 12,
+    "errorCount": 0,
+    "warningCount": 1,
+    "issues": [
+      {
+        "slide": 10,
+        "slideId": "cb0b7659-7d12-4ad8-a46d-cad0250c9573",
+        "severity": "warning",
+        "code": "table-density",
+        "message": "表格单元格文字较长，可能换行拥挤",
+        "suggestion": "精简单元格或减少列数"
+      }
+    ],
+    "note": "文字尺寸与溢出为静态估算；最终请检查 HTML 放映和 PowerPoint / WPS 实际显示。页脚和页码的小字号不计入正文检查。"
+  },
+  "artifacts": {
+    "html": "4e2a25d542282c16a2ba0c22de48212619dbf937f6fd918f0f3cdf25990572ed",
+    "pptx": "b2e5a19c90e4f11008e7bfc3efa8a3e34114915f827914f442d0dd98c63cde36"
+  }
+}

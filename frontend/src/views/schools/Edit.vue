@@ -226,7 +226,7 @@ const attachments = ref<any[]>([])
 // 上传配置
 const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const attachmentUploadUrl = computed(() => `${baseUrl}/schools/${route.params.id}/attachments`)
-const { uploadHeaders } = useUploadHeaders()
+const { uploadHeaders, ensureCsrf } = useUploadHeaders()
 
 const formData = reactive({
   name: '',
@@ -362,11 +362,14 @@ const loadAttachments = async () => {
   }
 }
 
-function beforeAttachmentUpload(file: any) {
+async function beforeAttachmentUpload(file: any) {
   if (file.size > 10 * 1024 * 1024) {
     ElMessage.error('文件大小不能超过 10MB')
     return false
   }
+  // el-upload 走原生 XHR，不经 axios 拦截器；必须等到 CSRF token 就绪，
+  // 否则页面刚打开/令牌轮换后上传必 403。
+  await ensureCsrf()
   return true
 }
 

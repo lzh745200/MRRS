@@ -84,6 +84,7 @@ import { ref, onMounted } from 'vue'
 import { unwrapList } from '@/utils/unwrapList'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post } from '@/api/request'
+import { batchApprove } from '@/api/approval'
 import { getApprovalStatusLabel, getEntityTypeLabel } from '@/config/enums'
 
 interface ApprovalTask {
@@ -179,28 +180,38 @@ function handleSelectionChange(rows: ApprovalTask[]) {
 async function handleApprove(row: ApprovalTask) {
   try {
     await ElMessageBox.confirm(`确认通过审批「${row.title}」？`, '审批确认', { type: 'success' })
+  } catch {
+    return // 用户取消
+  }
+  try {
     await post(`/approval/tasks/${row.id}/approve`, { opinion: '同意' })
     ElMessage.success('审批通过')
     await loadTasks()
     await loadPendingCount()
-  } catch {
-    // 用户取消
+  } catch (e) {
+    ElMessage.error(getErrorMessage(e, '审批失败'))
   }
 }
 
 async function handleReject(row: ApprovalTask) {
+  let value: string
   try {
-    const { value } = await ElMessageBox.prompt('请输入驳回原因（必填）', '驳回审批', {
+    const result = await ElMessageBox.prompt('请输入驳回原因（必填）', '驳回审批', {
       inputPlaceholder: '驳回原因',
       inputValidator: (v: string) => (v && v.trim().length > 0 ? true : '驳回原因不能为空'),
       type: 'warning',
     })
+    value = result.value
+  } catch {
+    return // 用户取消
+  }
+  try {
     await post(`/approval/tasks/${row.id}/reject`, { opinion: value.trim() })
     ElMessage.success('已驳回')
     await loadTasks()
     await loadPendingCount()
-  } catch {
-    // 用户取消
+  } catch (e) {
+    ElMessage.error(getErrorMessage(e, '驳回失败'))
   }
 }
 
@@ -210,16 +221,20 @@ async function handleBatchApprove() {
       type: 'success',
     })
     batchLoading.value = true
-    await post('/approval/tasks/batch', {
-      task_ids: selectedIds.value,
-      opinion: '批量通过',
-    })
-    ElMessage.success('批量审批通过')
-    selectedIds.value = []
+    const { success, failed } = await batchApprove(selectedIds.value, '批量通过')
+    if (failed.length > 0) {
+      selectedIds.value = failed.map((item) => item.id)
+      ElMessage.warning(
+        `批量通过完成：成功 ${success.length} 条，失败 ${failed.length} 条（${failed[0]?.reason ?? '未知原因'}）`
+      )
+    } else {
+      selectedIds.value = []
+      ElMessage.success(`批量审批通过 ${success.length} 条`)
+    }
     await loadTasks()
     await loadPendingCount()
-  } catch {
-    // 用户取消或失败
+  } catch (e) {
+    ElMessage.error(getErrorMessage(e, '批量审批失败'))
   } finally {
     batchLoading.value = false
   }
@@ -234,15 +249,26 @@ async function handleBatchReject() {
       type: 'warning',
     })
     batchLoading.value = true
+    const failedIds: number[] = []
+    let successCount = 0
     for (const id of selectedIds.value) {
-      await post(`/approval/tasks/${id}/reject`, { opinion: value.trim() })
+      try {
+        await post(`/approval/tasks/${id}/reject`, { opinion: value.trim() })
+        successCount += 1
+      } catch {
+        failedIds.push(id)
+      }
     }
-    ElMessage.success('批量驳回完成')
-    selectedIds.value = []
+    selectedIds.value = failedIds
+    if (failedIds.length > 0) {
+      ElMessage.warning(`批量驳回完成：成功 ${successCount} 条，失败 ${failedIds.length} 条`)
+    } else {
+      ElMessage.success(`批量驳回完成 ${successCount} 条`)
+    }
     await loadTasks()
     await loadPendingCount()
   } catch {
-    // 用户取消或失败
+    // prompt 取消
   } finally {
     batchLoading.value = false
   }

@@ -1,14 +1,35 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.34
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.35
 
-![Version](https://img.shields.io/badge/version-1.18.34-blue)
+![Version](https://img.shields.io/badge/version-1.18.35-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C038-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C179-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.34）
+## 本版亮点（v1.18.35）
+
+- **组织策略树授权**：上级按组织树配置差异矩阵，服务端按继承规则计算每个单位的**有效矩阵**并
+  逐单位生成既有 `r33-grant-package` v1 包（`POST /org-grants/{id}/export-branch` 打 zip +
+  manifest + sha256，空矩阵跳过并告警）；下级仍用现有导入页，协议零改动、数据库零迁移。
+  前端授权页改为「组织树 + 四态矩阵（继承/可操作/只读/不开放）+ 来源展示 + 导出本子树」。
+- **表格填报导入修复**：修复官方模板「示例行」注释导致的**静默 0 条导入**——只有「示例首列值 +
+  示例行注释」同时命中才跳过，真实数据照常入库；解析不到数据行时返回 400 并给出填写指引，
+  不再出现“提示成功但一条没进”。新增**一户一档**表格导入。
+- **填报表格导出与回导**：`GET /import/export-fill` 按官方模板表头导出并追加 `ID` 列，
+  支持**单条**（指定 ID）与**批量**（留空）导出；带 ID 回导按数据权限范围更新原记录，
+  无 ID 行保持增量新增；帮扶村/项目/资金/学校/一户一档五类实体全覆盖。
+- **历史版本数据恢复**：备份 manifest 增 `format_version=2 / app_version / schema_revision`；
+  恢复时多路径回退定位旧备份，无 `alembic_version` 的极老备份按可升级处理，并新增 SQLite
+  版本回退工具（<3.35 无 `DROP COLUMN`、<3.25 无 `RENAME COLUMN` 时自动重建表）。
+- **运维收敛**：组织级 `data_scope` 影子观测（默认 `off`，不改变查询结果）；写闸门
+  `grant_guard` 与组织模块策略共用判定，**更严者生效**，默认行为不变。
+- 🧪 验证：后端 12 段全量 **15,678 passed**（覆盖率 **100.00%**，48,189 行 / 12,160 分支）；
+  前端 **348 files / 7,501 tests** 全绿；flake8 / type-check / lint / 三层对齐 / 文档数字 /
+  CHANGELOG / 硬编码色 / 路由鉴权门禁全部通过。
+
+## 历史亮点（v1.18.34）
 
 - **桌面壳安全寿命**：Electron `33.3.1`（2025-04 已 EOL，Chromium 130）升级到
   `45.2.1`；Chromium 130 命中的 V8 CVE-2025-6554（CISA KEV 在野）不再暴露。

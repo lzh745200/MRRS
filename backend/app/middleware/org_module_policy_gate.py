@@ -57,22 +57,25 @@ from typing import Any, Dict, Optional, Tuple
 from starlette.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.module_edit_rules import (
+    DEFAULT_GATE_MODE,
+    MODE_ENFORCE,
+    MODE_OFF,
+    VALID_MODES,
+    edit_mode_label,
+    is_blocked_edit_mode,
+)
 
 logger = logging.getLogger(__name__)
 
-# ── 执行模式 ────────────────────────────────────────────────────────
-MODE_OFF = "off"
-MODE_SHADOW = "shadow"
-MODE_ENFORCE = "enforce"
-DEFAULT_MODE = MODE_SHADOW
-VALID_MODES = frozenset({MODE_OFF, MODE_SHADOW, MODE_ENFORCE})
+# ── 执行模式（定义在 core/module_edit_rules.py，与 grant_guard 共用） ──
+DEFAULT_MODE = DEFAULT_GATE_MODE
 
 # ── 判定口径 ────────────────────────────────────────────────────────
 # 写方法集合：GET/HEAD/OPTIONS 天然只读，不拦截（健康检查/探活均属 GET）。
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # 只有这两种 edit_mode 会收窄写权限；full_edit 与未知值均放行（fail-open）。
-BLOCKED_EDIT_MODES = frozenset({"read_only", "disabled"})
-_EDIT_MODE_LABELS: Dict[str, str] = {"read_only": "只读", "disabled": "禁用"}
+# BLOCKED_EDIT_MODES / 标签由 core.module_edit_rules 统一提供。
 
 # shadow 模式的响应头与取值（enforce 不写该头）。
 SHADOW_HEADER_NAME = b"x-org-module-policy"
@@ -276,6 +279,22 @@ def load_policy_edit_mode_cached(db, organization_id: int, module_key: str) -> O
     return edit_mode
 
 
+def evaluate_org_policy(db, user, module_key: str) -> Optional[str]:
+    """该用户/该模块若被组织策略收窄，返回 edit_mode（read_only/disabled）；否则 None。
+
+    供本中间件与 :mod:`app.core.grant_guard` 共用（R48 阶段 4 收敛）：
+    两个执行点对「组织模块开关」只有这一条查询路径，避免各写一套。
+    任何“无法确定”的情况都返回 None（放行），与中间件的 fail-open 口径一致。
+    """
+    if user is None:
+        return None
+    organization_id = getattr(user, "organization_id", None)
+    if not organization_id:
+        return None
+    edit_mode = load_policy_edit_mode_cached(db, organization_id, module_key)
+    return edit_mode if is_blocked_edit_mode(edit_mode) else None
+
+
 def evaluate_policy(scope, module_key: str) -> Optional[Tuple[int, str]]:
     """返回 (organization_id, edit_mode) 仅当该组织该模块应被拦截；否则 None。
 
@@ -290,8 +309,8 @@ def evaluate_policy(scope, module_key: str) -> Optional[Tuple[int, str]]:
         organization_id = getattr(user, "organization_id", None)
         if not organization_id:
             return None
-        edit_mode = load_policy_edit_mode_cached(db, organization_id, module_key)
-        if edit_mode not in BLOCKED_EDIT_MODES:
+        edit_mode = evaluate_org_policy(db, user, module_key)
+        if edit_mode is None:
             return None
         return organization_id, edit_mode
     finally:
@@ -365,7 +384,7 @@ class OrgModulePolicyGateMiddleware:
     async def _send_denied(self, scope, receive, send, organization_id: int, module_key: str, edit_mode: str) -> None:
         detail = (
             f"组织（ID={organization_id}）已将模块「{module_key}」设为"
-            f"{_EDIT_MODE_LABELS[edit_mode]}，当前写操作被拒绝"
+            f"{edit_mode_label(edit_mode)}，当前写操作被拒绝"
         )
         response = JSONResponse(
             status_code=403,

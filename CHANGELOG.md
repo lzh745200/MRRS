@@ -1,3 +1,78 @@
+## [1.18.35] - 2026-11-02 — 组织策略树与每单位授权包分发（R48）
+
+> 面向「1 省 + 9 市 + 88 县」的离线授权分发：上级按组织树维护差异矩阵，服务端按继承规则
+> 算出每个单位的有效矩阵并逐单位导出既有 `r33-grant-package` v1 包；下级导入协议、数据包
+> 格式与数据库结构均零改动。本轮不含「一包一分支」的新格式（经评估在“包内不得含兄弟单位”
+> 约束下无收益，已取消）。
+
+### 组织策略树（R48，2026-11-02）
+
+- **树形配置 + 每单位有效矩阵导出**：`GET /api/v1/org-grants/tree` 返回整棵子树的显式矩阵
+  （含 grant_version/grant_source/signed/inherit_from_parent）；`POST /api/v1/org-grants/{id}/export-branch`
+  由服务端按继承规则算好每个单位的**有效矩阵**，逐单位生成现有 `r33-grant-package` v1 包并打 zip，
+  manifest 记录每个包的 sha256/版本/模块数；空矩阵单位**跳过并告警**（`manifest.skipped`），
+  **不生成空包**；单位缺 `code` 时整体 400 且不消耗版本。`GET /org-grants/{id}` 增
+  `active/effective/sources`。下级仍用 `GrantImport` 原样导入，**导入协议零改动、零迁移**。
+- **前端**：`OrgGrant.vue` 改为「单位树（搜索/折叠）+ 四态矩阵（继承/可操作/只读/不开放）」，
+  选中继承行显示有效值与来源；保存提交显式覆盖（**显式 `none` 会提交**，修复“缺失=继承”与
+  “缺失=none”的语义冲突）；新增「导出本子树」按钮。
+- **超管默认树根**：首次初始化的超级管理员未绑定单位时，`GET /tree` 自动回落到组织树最顶层；
+  非超管仍返回 400「未绑定单位」，避免越权扩大可见范围。
+- **组织级 data_scope 影子观测**：`organizations.data_scope`（可空）+
+  `ORG_DATA_SCOPE_MODE=off` 默认；仅 shadow 时比较“组织配置/层级推导范围”与角色范围并记
+  WARNING，**不改变任何查询结果**；迁移 `org_data_scope_001` 只加列、可重复执行。
+- **写闸门收敛**：新增 `app/core/module_edit_rules.py`（模式归一化 / 禁用判定的单一来源）；
+  `grant_guard` 在 R33 矩阵 active 时同时尊重 `org_module_policies`（更严者生效），与
+  `org_module_policy_gate` 共用 `evaluate_org_policy` 查询路径；off/shadow 默认行为不变。
+- 测试：后端 `test_org_grant_tree.py`（17）、`test_org_data_scope_shadow_r48.py`（25）、
+  `test_module_edit_rules_r48.py`（25），既有 R33 四文件 99 例保持全绿；前端
+  `OrgGrant.test.ts`（23）与 `orgGrants.test.ts`（14）。
+
+### 表格填报导入修复与填报表格回导（R57 / R61，2026-11-02）
+
+- **修复「填报后导入 0 条」**：官方模板的示例行末尾带 `← 示例行（导入时自动跳过）`
+  注释，旧逻辑只要行内任意单元格含「示例行」就整行跳过；用户在示例行上直接改数据时会被
+  静默丢弃，界面提示成功但入库 0 条。现改为只有「示例首列值 + 示例行注释」同时命中才跳过，
+  包含注释的真实数据照常导入；解析不到任何数据行时返回 400 并提示在示例行下方新增数据行，
+  不再出现“成功但 0 条”。
+- **新增一户一档导入**：`GET /api/v1/import/template?entity_type=household` 与
+  `POST /api/v1/import/entities` 支持一户一档；按「村名+县+乡镇」解析帮扶村（同名多村要求补充），
+  户编号村内唯一、留空按村+户主姓名去重；前端导入页与一户一档列表均可进入。
+- **填报表格导出（单条 / 批量）**：新增 `GET /api/v1/import/export-fill?entity_type=&ids=`，
+  按官方模板表头导出当前数据权限范围内的数据并追加 `ID` 列；`ids` 留空导出全部（批量填报），
+  传一个或多个逗号分隔 ID 则只导出指定记录（单条导出）。「数据导入」页新增「导出填报表格」区，
+  支持导出 → 修改 → 回导。
+- **ID 回导更新**：带 `ID` 的行在数据权限范围内按 ID 更新原记录（不重复建档、不改归属），
+  未知或越权 ID 计入失败并提示；无 ID 行保持增量去重/全量新建。帮扶村、项目、资金、学校、
+  一户一档五类实体均已支持。
+- **历史备份兼容**：备份 manifest 增 `format_version=2 / app_version / schema_revision`；
+  恢复时按「标准路径 → `data/assistance.db` → `data/assistance_management.db` → 根下同名 →
+  `data` 下唯一 .db」回退定位历史备份，极老备份（无 `alembic_version`）按可升级处理；
+  新增 SQLite 版本回退工具（<3.35 无 DROP COLUMN、<3.25 无 RENAME COLUMN）。
+- 测试：后端 `test_import_fill_roundtrip_r61.py`（5）、`test_household_import_r57.py`（8）、
+  `test_backup_legacy_path_r57.py`（8）、`test_sqlite_migration_compat_r57.py`（6）、
+  `test_import_example_row_r61.py`（4）；前端 `DataImport.test.ts` 增导出填报 4 例。
+
+### 其他并发修复（审计 / 备份 / 数据同步 / 前端，2026-11-02）
+
+- **审计时间边界统一**：`system/audit.py` 的批量删除、审计日志/统计、安全事件、登录尝试、
+  API 访问日志、导出日志统一走 `to_utc_naive()` + `_inclusive_end_date()`，修复时区偏移与
+  「结束日期丢当天记录」的口径不一致。
+- **备份校验与历史包恢复**：`system/backup.py` 预览统一用 `_parse_backup_info()` 解析
+  `backup_info.json`；`verify_backup` 改 `run_in_thread`，避免数十~数百 MB 校验阻塞事件循环；
+  恢复上传接受历史库名（`data/assistance.db`、`data/assistance_management.db`、根下同名、
+  任意 `.db/.sqlite/.sqlite3`），与服务层 `_locate_backup_db` 口径一致。
+- **数据同步真实性**：`data_sync_service.py` 两处日志状态改为
+  `result_success = not errors and failed_records == 0`，修复「逐行全部失败但同步日志
+  completed/success」的假成功。
+- **迁移兼容**：`r39/r40/r43` 三份列裁剪迁移按 SQLite 版本回退工具调整，旧库升级不再因
+  缺 `DROP COLUMN`/`RENAME COLUMN` 失败。
+- **前端修复**：审批中心错误提示与批量审批改用 `api/approval`；待办删除加二次确认、
+  勾选完成/取消后重新拉取列表；项目编辑保存按钮 loading/防重复提交；学校附件上传前
+  `await ensureCsrf()`（原生 XHR 不经 axios 拦截器）；分块上传轮询加并发锁与连续失败终态；
+  包版本对比合并 `version1/version2`；未读数按 number 归一（不再按 `{data:{total}}` 解构）。
+- **脚本**：`scripts/docker/build.ps1`、`scripts/legacy/build-kylin.sh` 默认版本同步 1.18.35。
+
 ## [1.18.34] - 2026-11-01 — 路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）
 
 > 依据审计报告 §5「长期演进」逐项落地。本轮聚焦「运行环境安全寿命 + 导入可预览可回滚 +

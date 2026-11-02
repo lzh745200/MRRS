@@ -4,6 +4,7 @@
       <div class="header-actions">
         <el-button class="btn-alerts" @click="openAlerts">风险预警</el-button>
         <el-button class="btn-rollup" @click="openRollup">一键汇总回填</el-button>
+        <el-button class="btn-table-fill" @click="goTableImport">表格填报</el-button>
         <el-button class="btn-export-xlsx" :loading="exporting" @click="handleExport('xlsx')">
           导出 Excel
         </el-button>
@@ -837,6 +838,11 @@ function prefillFromQuery(): void {
   if (Number.isInteger(villageId) && villageId > 0) {
     query.village_id = villageId
   }
+}
+
+/** 表格填报：复用通用导入页，预选“一户一档”实体 */
+function goTableImport() {
+  pushSafe('/import/data?entity=household')
 }
 
 onMounted(() => {

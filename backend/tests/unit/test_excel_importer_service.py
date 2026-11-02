@@ -329,6 +329,10 @@ class TestImportData:
                 )
                 inst.check_duplicates.return_value = []
                 db.query.return_value.all.return_value = []
+                # R61 起空行整单失败；这里给出一行真实数据以覆盖 project 导入分支
+                service.parse_excel = MagicMock(
+                    return_value=([{"name": "proj1"}], ["name"])
+                )
                 data = _make_excel_bytes(
                     ["项目名称"], [["proj1"]], entity_type="project"
                 )
@@ -354,6 +358,9 @@ class TestImportData:
                 )
                 inst.check_duplicates.return_value = []
                 db.query.return_value.all.return_value = []
+                service.parse_excel = MagicMock(
+                    return_value=([{"name": "fund1"}], ["name"])
+                )
                 data = _make_excel_bytes(
                     ["资金名称"], [["fund1"]], entity_type="fund"
                 )
@@ -379,6 +386,9 @@ class TestImportData:
                 )
                 inst.check_duplicates.return_value = []
                 db.query.return_value.all.return_value = []
+                service.parse_excel = MagicMock(
+                    return_value=([{"name": "school1"}], ["name"])
+                )
                 data = _make_excel_bytes(
                     ["学校名称"], [["school1"]], entity_type="school"
                 )

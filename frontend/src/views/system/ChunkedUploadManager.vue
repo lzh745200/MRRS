@@ -221,12 +221,19 @@ function resetAll() {
   resetSession()
 }
 
+let pollFailures = 0
+let pollInFlight = false
+
 function startPolling() {
   stopPolling()
+  pollFailures = 0
+  pollInFlight = false
   pollingTimer = setInterval(async () => {
-    if (!sessionInfo.value) return
+    if (!sessionInfo.value || pollInFlight) return
+    pollInFlight = true
     try {
       const progress = await chunkedUploadApi.getProgress(sessionInfo.value.session_id)
+      pollFailures = 0
       progressInfo.value = progress
       updateChunkStatuses(progress)
       if (progress.status === 'completed' || progress.status === 'merged') {
@@ -241,7 +248,16 @@ function startPolling() {
         ElMessage.error('上传过程中出现错误')
       }
     } catch {
-      // polling error, continue
+      // 会话被回收/后端持续 5xx 时不能无限 500ms 重试：连续 10 次失败进入
+      // error 终态，让用户能重试/取消，而不是永远停在“上传中”。
+      pollFailures += 1
+      if (pollFailures >= 10) {
+        uploadState.value = 'error'
+        stopPolling()
+        ElMessage.error('上传状态获取失败，请重试')
+      }
+    } finally {
+      pollInFlight = false
     }
   }, 500)
 }

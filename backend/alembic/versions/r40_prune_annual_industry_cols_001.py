@@ -25,6 +25,8 @@ import logging
 import sqlalchemy as sa
 from alembic import op
 
+from app.utils import sqlite_migration as _compat
+
 revision = "r40_prune_annual_industry_cols_001"
 down_revision = "r39_prune_annual_infra_cols_001"
 branch_labels = None
@@ -83,16 +85,15 @@ def apply_cleanup(bind):
                 )
                 skipped.append(column)
                 continue
-            bind.execute(sa.text(
-                f'ALTER TABLE "{TABLE}" RENAME COLUMN "{column}" TO "{target}"'
-            ))  # nosec B608
+            # 旧 SQLite 无原生 RENAME/DROP COLUMN 时由 _compat 走 batch 重建。
+            _compat.rename_column(bind, TABLE, column, target, op)
             archived.append(column)
             logger.warning(
                 "r40：%s.%s 有历史数据，已改名为 %s 归档（数据保留）",
                 TABLE, column, target,
             )
         else:
-            bind.execute(sa.text(f'ALTER TABLE "{TABLE}" DROP COLUMN "{column}"'))  # nosec B608
+            _compat.drop_column(bind, TABLE, column, op)
             dropped.append(column)
     return {"dropped": dropped, "archived": archived, "skipped": skipped}
 
@@ -123,9 +124,7 @@ def downgrade():
         for column in DEAD_COLUMNS:
             archive = ARCHIVE_PREFIX + column
             if archive in existing and column not in existing:
-                bind.execute(sa.text(
-                    f'ALTER TABLE "{TABLE}" RENAME COLUMN "{archive}" TO "{column}"'
-                ))  # nosec B608
+                _compat.rename_column(bind, TABLE, archive, column, op)
                 restored.append(column)
         logger.info("r40 回滚完成：从归档列恢复 %d 个（已删除的空列不重建）", len(restored))
     finally:

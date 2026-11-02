@@ -57,6 +57,7 @@ from app.core.database import get_db
 from app.core.permission_utils import is_admin, is_superuser
 from app.core.security import get_current_user
 from app.models.organization import Organization
+from app.core.org_data_scope_shadow import observe_org_data_scope
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,9 @@ def get_data_scope(user: Any) -> DataScope:
     ``manager``) to their current equivalents, ensuring consistent data
     scoping for legacy user accounts.
 
+    R48：返回值完全不变；仅在 ``ORG_DATA_SCOPE_MODE=shadow`` 时额外做一次
+    组织级 data_scope 的影子比较（只记日志，不参与过滤）。
+
     Args:
         user: A user model instance (must have ``role`` and optionally
             ``is_superuser`` attributes).
@@ -110,6 +114,13 @@ def get_data_scope(user: Any) -> DataScope:
     if user is None:
         return DataScope.OWN
 
+    scope = _role_data_scope(user)
+    observe_org_data_scope(user, scope.value)
+    return scope
+
+
+def _role_data_scope(user: Any) -> DataScope:
+    """角色 → 数据范围（纯度 100%，供 get_data_scope 与影子层复用）。"""
     is_su = getattr(user, "is_superuser", False)
     role = normalize_role(getattr(user, "role", ""))
 

@@ -90,8 +90,6 @@ const v3 = {
 }
 
 const comparison = {
-  version1: { version: '1.0' },
-  version2: { version: '1.1' },
   differences: {
     added_in_v2: { villages: ['V9'], projects: [] },
     modified: { villages: ['M1'] },
@@ -188,7 +186,10 @@ beforeEach(() => {
   mockGet.mockResolvedValue({ success: true, data: { versions: [v1, v2, v3] } })
   mockPost.mockResolvedValue({ success: true, data: {} })
   mockDel.mockResolvedValue({ success: true })
-  mockApiRequest.mockResolvedValue({ success: true, data: { comparison } })
+  mockApiRequest.mockResolvedValue({
+    success: true,
+    data: { version1: { version: '1.0' }, version2: { version: '1.1' }, comparison },
+  })
   confirmMock.mockResolvedValue('confirm')
 })
 
@@ -347,7 +348,11 @@ describe('版本对比', () => {
         params: { version1: '1.0', version2: '1.1' },
       })
     )
-    expect(vm.compareResult).toEqual(comparison)
+    expect(vm.compareResult).toEqual({
+      ...comparison,
+      version1: { version: '1.0' },
+      version2: { version: '1.1' },
+    })
     await nextTick()
     expect(wrapper.text()).toContain('对比结果')
 

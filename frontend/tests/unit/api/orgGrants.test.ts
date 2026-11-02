@@ -26,7 +26,14 @@ vi.mock('@/api/request', () => ({
   parseContentDisposition: mockParseCd,
 }))
 
-import { exportGrantPackage, getOrgGrants, importGrantPackage, setOrgGrants } from '@/api/orgGrants'
+import {
+  exportGrantBranch,
+  exportGrantPackage,
+  getOrgGrantTree,
+  getOrgGrants,
+  importGrantPackage,
+  setOrgGrants,
+} from '@/api/orgGrants'
 
 describe('api/orgGrants', () => {
   beforeEach(() => {
@@ -123,5 +130,39 @@ describe('api/orgGrants', () => {
     const name = await exportGrantPackage(9)
     expect(name).toBe('grant-9.json')
     expect(mockDownloadBlob).toHaveBeenCalledWith(blob, 'grant-9.json')
+  })
+
+  it('getOrgGrantTree：缺省根不带 root_id，优先取 data', async () => {
+    mockGet.mockResolvedValue({ data: { root_id: 1, node: { id: 1 } } })
+    const res = await getOrgGrantTree()
+    expect(mockGet).toHaveBeenCalledWith('/org-grants/tree', undefined)
+    expect(res.root_id).toBe(1)
+  })
+
+  it('getOrgGrantTree：指定根带 root_id，无 data 包裹时直返响应', async () => {
+    mockGet.mockResolvedValue({ root_id: 7, node: { id: 7 } })
+    const res = await getOrgGrantTree(7)
+    expect(mockGet).toHaveBeenCalledWith('/org-grants/tree', { root_id: 7 })
+    expect(res.root_id).toBe(7)
+  })
+
+  it('exportGrantBranch：POST export-branch + blob 落盘', async () => {
+    const blob = new Blob(['zip'])
+    mockParseCd.mockReturnValue('grants-S01.zip')
+    mockRequestPost.mockResolvedValue({ data: blob, headers: {} })
+    const name = await exportGrantBranch(7)
+    expect(mockRequestPost).toHaveBeenCalledWith('/org-grants/7/export-branch', null, {
+      responseType: 'blob',
+    })
+    expect(mockDownloadBlob).toHaveBeenCalledWith(blob, 'grants-S01.zip')
+    expect(name).toBe('grants-S01.zip')
+  })
+
+  it('exportGrantBranch：解析失败时用兜底文件名', async () => {
+    const blob = new Blob(['zip'])
+    mockParseCd.mockReturnValue('grants-7.zip')
+    mockRequestPost.mockResolvedValue({ data: blob, headers: {} })
+    const name = await exportGrantBranch(7)
+    expect(name).toBe('grants-7.zip')
   })
 })

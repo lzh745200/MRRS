@@ -60,6 +60,11 @@ class Organization(BaseModel):
     address = Column(String(200), nullable=True, comment="地址")
     is_active = Column(Boolean, default=True, comment="是否启用")
     path = Column(String(500), nullable=True, comment="路径")
+    data_scope = Column(
+        String(16),
+        nullable=True,
+        comment="R48 组织级数据范围（shadow 观测）: all/subtree/self；NULL=按层级推导",
+    )
     created_by = Column(Integer, nullable=True, comment="创建人ID")
     updated_by = Column(Integer, nullable=True, comment="更新人ID")
 

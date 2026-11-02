@@ -372,8 +372,8 @@ describe('附件管理', () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.beforeAttachmentUpload({ size: 100 })).toBe(true)
-    expect(vm.beforeAttachmentUpload({ size: 11 * 1024 * 1024 })).toBe(false)
+    expect(await vm.beforeAttachmentUpload({ size: 100 })).toBe(true)
+    expect(await vm.beforeAttachmentUpload({ size: 11 * 1024 * 1024 })).toBe(false)
     expect(ElMessage.error).toHaveBeenCalledWith('文件大小不能超过 10MB')
   })
 

@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.34"
+    PROJECT_VERSION: str = "1.18.35"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -202,6 +202,11 @@ class Settings(BaseSettings):
     # 合法值校验在 app/middleware/org_module_policy_gate.py::current_mode()，
     # 非法/空值回退 shadow（与默认值一致，避免配置笔误把全站写接口锁死）。
     ORG_MODULE_POLICY_MODE: str = "shadow"
+
+    # R48 组织级 data_scope 影子观测：off-关闭（默认）/ shadow-只记日志。
+    # 仅比较「组织配置或层级推导出的范围」与「角色范围」，绝不改变任何查询结果。
+    # 观察期收集差异后再评估是否进入 enforce（本轮不做）。
+    ORG_DATA_SCOPE_MODE: str = "off"
 
     # R33 授权包签名（Ed25519，32 字节 hex）。
     # 上级配置 GRANT_SIGNING_KEY（签发），下级配置 GRANT_PUBKEY（验签）；

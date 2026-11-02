@@ -111,6 +111,31 @@ export async function downloadImportTemplateAndSave(
 }
 
 /**
+ * 导出「填报表格」（模板表头 + 数据 + ID 列），供修改后回导。
+ *
+ * 带 ID 的行回导时按 ID 更新原记录；ids 为空表示导出当前数据域内全部记录。
+ *
+ * @param entityType 实体类型
+ * @param ids 仅导出指定 ID（单条传一个，多条传数组；传空导出全部）
+ * @param fallbackName 文件名兜底
+ */
+export async function exportFillTemplateAndSave(
+  entityType: string,
+  ids?: number[] | string,
+  fallbackName = '填报'
+): Promise<void> {
+  const idText = Array.isArray(ids) ? ids.join(',') : String(ids || '').trim()
+  await downloadBlobAsFile(
+    () =>
+      request.get(`/import/export-fill`, {
+        params: idText ? { entity_type: entityType, ids: idText } : { entity_type: entityType },
+        responseType: 'blob',
+      }),
+    { fallbackFileName: `${fallbackName}.xlsx` }
+  )
+}
+
+/**
  * 导入实体数据（通用接口，支持 village/project/fund/school）
  * @param file 上传文件
  * @param entityType 实体类型

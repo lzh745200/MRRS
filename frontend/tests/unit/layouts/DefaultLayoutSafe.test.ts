@@ -365,7 +365,7 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     mocks.config.theme = 'default'
     mocks.consumeLockDigest.mockReturnValue(false)
     mocks.get.mockResolvedValue({ data: V2_PAYLOAD })
-    mocks.getUnreadCount.mockResolvedValue({ data: { total: 0 } })
+    mocks.getUnreadCount.mockResolvedValue(0)
     installMatchMedia(false)
     // 锁屏/登出使用 window.location.href 硬跳转：替换为可写桩便于断言
     Object.defineProperty(window, 'location', {
@@ -585,8 +585,8 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
 
   // ══════════════════ 未读角标 / 轮询 / 锁屏摘要 ══════════════════
 
-  it('未读角标：total 优先，electronAPI 同步托盘角标', async () => {
-    mocks.getUnreadCount.mockResolvedValue({ data: { total: 5 } })
+  it('未读角标：number 契约，electronAPI 同步托盘角标', async () => {
+    mocks.getUnreadCount.mockResolvedValue(5)
     const traySpy = vi.fn()
     ;(window as any).electronAPI = { updateTrayUnread: traySpy }
     try {
@@ -601,8 +601,8 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     }
   })
 
-  it('未读角标：total 缺失时回退 count；无 electronAPI 时静默', async () => {
-    mocks.getUnreadCount.mockResolvedValue({ data: { count: 3 } })
+  it('未读角标：number 契约；无 electronAPI 时静默', async () => {
+    mocks.getUnreadCount.mockResolvedValue(3)
     const wrapper = await mountLayout()
     expect(wrapper.find('.badge-stub').attributes('data-value')).toBe('3')
     expect(wrapper.find('.badge-stub').attributes('data-hidden')).toBe('false')
@@ -633,7 +633,7 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
 
   it('锁屏归来摘要：已登录且有未读时弹通知，点击跳转消息中心', async () => {
     mocks.consumeLockDigest.mockReturnValue(true)
-    mocks.getUnreadCount.mockResolvedValue({ data: { total: 2 } })
+    mocks.getUnreadCount.mockResolvedValue(2)
     await mountLayout()
 
     expect(mocks.notification).toHaveBeenCalledTimes(1)
@@ -660,14 +660,14 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
   it('注册 60s 轮询，轮询刷新未读数并在卸载时清理定时器', async () => {
     const intervalSpy = vi.spyOn(window, 'setInterval')
     const clearSpy = vi.spyOn(window, 'clearInterval')
-    mocks.getUnreadCount.mockResolvedValue({ data: { total: 1 } })
+    mocks.getUnreadCount.mockResolvedValue(1)
     const wrapper = await mountLayout()
     expect(wrapper.find('.badge-stub').attributes('data-value')).toBe('1')
     expect(intervalSpy).toHaveBeenCalledWith(expect.any(Function), 60000)
 
     // 手动触发一次轮询回调（避免 fake timers 与动态 import/flushPromises 冲突）
     const tick = intervalSpy.mock.calls[0][0] as () => Promise<void>
-    mocks.getUnreadCount.mockResolvedValue({ data: { total: 7 } })
+    mocks.getUnreadCount.mockResolvedValue(7)
     await tick()
     await nextTick()
     expect(wrapper.find('.badge-stub').attributes('data-value')).toBe('7')

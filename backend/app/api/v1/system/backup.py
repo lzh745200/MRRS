@@ -26,6 +26,7 @@ from app.services.backup_service import (
     BackupIncompleteError,
     BackupKeyMismatchError,
     BackupService,
+    _parse_backup_info,
     get_backup_service,
 )
 from app.services.system_config_service import get_config, get_int_config, set_config
@@ -778,7 +779,6 @@ async def preview_backup(
     """
     require_superuser(current_user, error_message="仅超级管理员可预览备份")
 
-    import json
     import zipfile
 
     file_path = _resolve_backup_file_path(filename)
@@ -790,7 +790,7 @@ async def preview_backup(
                 for info in zf.infolist()
             ]
             try:
-                meta = json.loads(read_zip_member(zf, "backup_info.json"))
+                meta = _parse_backup_info(read_zip_member(zf, "backup_info.json"))
             except Exception as exc:  # noqa: BLE001 - 兜底但必须留痕
                 logger.warning('preview_backup 兜底失败（已降级）: %s', exc, exc_info=True)
                 # 无元信息文件或内容加密时降级为空 dict
@@ -827,7 +827,9 @@ async def verify_backup(
         file_path = _resolve_backup_file_path(filename)
 
         svc = get_backup_service(db)
-        result = svc.verify_backup(file_path)
+        # 校验会做整包 SHA/testzip + integrity_check，数十~数百 MB 时同步执行
+        # 会冻结事件循环；与 create/restore 同口径交给线程池。
+        result = await run_in_thread(svc.verify_backup, file_path)
 
         logger.info(
             "备份验证: %s，结果: %s，操作人: %s",
@@ -1027,10 +1029,19 @@ async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分
                     _names = {n.replace("\\", "/") for n in _zf.namelist()}
             except zipfile.BadZipFile:
                 raise HTTPException(status_code=400, detail="上传的文件不是有效的备份包（ZIP 已损坏）")
-            if "data/rural_revitalization.db" not in _names:
+            # 与服务层 _locate_backup_db 保持一致：历史包可能用不同库名/路径。
+            _db_members = {
+                "data/rural_revitalization.db",
+                "data/assistance.db",
+                "data/assistance_management.db",
+                "rural_revitalization.db",
+            }
+            if not (_names & _db_members) and not any(
+                n.lower().endswith((".db", ".sqlite", ".sqlite3")) for n in _names
+            ):
                 raise HTTPException(
                     status_code=400,
-                    detail="上传的文件不是有效的备份包（缺少数据库文件 data/rural_revitalization.db）",
+                    detail="上传的文件不是有效的备份包（缺少数据库文件）",
                 )
 
         # 调用恢复逻辑（同 /restore：同步重活必须离开事件循环，见上方说明）

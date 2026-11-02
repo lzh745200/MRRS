@@ -107,6 +107,8 @@ class GrantMatrix:
 
     active: bool
     levels: Dict[str, str] = field(default_factory=dict)
+    # 每个生效键的来源单位 code（用于 UI 展示「继承自」）；未声明该键时无来源。
+    sources: Dict[str, str] = field(default_factory=dict)
 
     def level(self, module_key: str) -> str:
         """取某模块的授权级别；未声明即 `none`（fail-closed）。"""
@@ -126,6 +128,32 @@ class GrantMatrix:
 
 
 INACTIVE = GrantMatrix(active=False)
+
+
+def get_grant_matrix_for_org(db: Session, org: Organization) -> GrantMatrix:
+    """解析**指定单位**的有效授权矩阵（含来源）。
+
+    与 :func:`get_grant_matrix` 共用同一套合并规则（根→叶覆盖、`inherit_from_parent`
+    截断、环检测），区别只在于入口是单位而不是用户 —— 上级做「组织策略树」配置时
+    需要计算任意节点的有效值，批量导出也以它为准。
+    """
+    chain = _org_chain(db, org)
+    merged: Dict[str, str] = {}
+    sources: Dict[str, str] = {}
+    # 由根到叶 update：越深越后写，天然实现"深者优先"
+    for node in reversed(chain):
+        node_grants = _cached_org_grants(db, node)
+        if not node_grants:
+            continue
+        source = node.code or str(node.id)
+        for key, level in node_grants.items():
+            merged[key] = level
+            sources[key] = source
+
+    active = bool(merged) or bool(getattr(org, "grant_version", 0) or 0)
+    if not active:
+        return INACTIVE
+    return GrantMatrix(active=True, levels=merged, sources=sources)
 
 
 def get_grant_matrix(db: Session, user) -> GrantMatrix:
@@ -149,16 +177,7 @@ def get_grant_matrix(db: Session, user) -> GrantMatrix:
     if not isinstance(org, Organization):
         return INACTIVE
 
-    chain = _org_chain(db, org)
-    merged: Dict[str, str] = {}
-    # 由根到叶 update：越深越后写，天然实现"深者优先"
-    for node in reversed(chain):
-        merged.update(_cached_org_grants(db, node))
-
-    active = bool(merged) or bool(getattr(org, "grant_version", 0) or 0)
-    if not active:
-        return INACTIVE
-    return GrantMatrix(active=True, levels=merged)
+    return get_grant_matrix_for_org(db, org)
 
 
 def module_keys_of(grants: Dict[str, str]) -> set:

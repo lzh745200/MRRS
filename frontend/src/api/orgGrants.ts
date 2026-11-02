@@ -19,7 +19,35 @@ export interface OrgGrantMatrix {
   grant_source: string | null
   grant_applied_at: string | null
   signed: boolean
+  /** 本机显式矩阵（保存/导出以它为准） */
   grants: Record<string, GrantLevel>
+  /** 是否已有下发授权（inactive 时前端按 legacy 语义提示） */
+  active?: boolean
+  /** 继承后的有效矩阵（来自本级 + 上级） */
+  effective?: Record<string, GrantLevel>
+  /** 生效键 → 来源单位编码 */
+  sources?: Record<string, string>
+}
+
+/** 组织策略树节点（后端 `GET /org-grants/tree`） */
+export interface OrgGrantTreeNode {
+  id: number
+  name: string
+  code: string | null
+  parent_id: number | null
+  level: number | null
+  grant_version: number
+  grant_source: string | null
+  signed: boolean
+  inherit_from_parent: boolean
+  grants: Record<string, GrantLevel>
+  children: OrgGrantTreeNode[]
+}
+
+/** 组织策略树响应 */
+export interface OrgGrantTree {
+  root_id: number
+  node: OrgGrantTreeNode
 }
 
 /** 设置矩阵后的返回 */
@@ -39,9 +67,15 @@ export interface GrantImportResult {
 
 const BASE = '/org-grants'
 
-/** 查询某单位的授权矩阵与元信息 */
+/** 查询某单位的授权矩阵、有效矩阵与来源 */
 export async function getOrgGrants(orgId: number): Promise<OrgGrantMatrix> {
   const res = await get<any>(`${BASE}/${orgId}`)
+  return res?.data ?? res
+}
+
+/** 查询组织策略树（缺省根为本机当前用户所属单位） */
+export async function getOrgGrantTree(rootId?: number): Promise<OrgGrantTree> {
+  const res = await get<any>(`${BASE}/tree`, rootId ? { root_id: rootId } : undefined)
   return res?.data ?? res
 }
 
@@ -75,6 +109,25 @@ export async function exportGrantPackage(
   fallbackName = `grant-${orgId}.json`
 ): Promise<string> {
   const res = await request.post(`${BASE}/${orgId}/export`, null, { responseType: 'blob' })
+  const filename = parseContentDisposition(
+    res.headers as unknown as Record<string, string>,
+    fallbackName
+  )
+  downloadBlob(res.data as Blob, filename)
+  return filename
+}
+
+/**
+ * 批量导出整棵子树：服务端把每个单位的有效矩阵打成 v1 包，合并为一个 zip。
+ * 返回 zip 文件名，页面据此提示。
+ */
+export async function exportGrantBranch(
+  orgId: number,
+  fallbackName = `grants-${orgId}.zip`
+): Promise<string> {
+  const res = await request.post(`${BASE}/${orgId}/export-branch`, null, {
+    responseType: 'blob',
+  })
   const filename = parseContentDisposition(
     res.headers as unknown as Record<string, string>,
     fallbackName

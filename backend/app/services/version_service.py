@@ -281,7 +281,7 @@ class VersionService:
                     "message": e.message,
                 }
 
-            if restore_result.get("status") != "success":
+            if not restore_result.get("success"):
                 return {
                     "status": "error",
                     "message": f"恢复备份失败: {restore_result.get('message')}",

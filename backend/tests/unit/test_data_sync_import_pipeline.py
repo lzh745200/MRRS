@@ -278,3 +278,40 @@ class TestRecordDatetimeCoercion:
         db.expire_all()
         assert db.query(SupportedVillage).filter(SupportedVillage.id == 9301).first() is not None
         assert db.query(SupportedVillage).filter(SupportedVillage.id == 9302).first() is None
+
+
+class TestImportFailureAccounting:
+    """逐行失败必须反映到 success/message，而不是只看看整表异常。"""
+
+    async def test_failed_records_make_package_import_unsuccessful(
+        self, real_db_session, tmp_path
+    ):
+        db = real_db_session
+        package_file = tmp_path / "failed.zip"
+        package_file.write_bytes(b"pkg")
+        svc = _service()
+
+        @contextmanager
+        def _fake_db_ctx():
+            yield db
+
+        svc._get_db_context = _fake_db_ctx
+        with patch.object(
+            svc,
+            "_load_import_package",
+            new=AsyncMock(return_value={
+                "export_info": {"package_name": "failed"},
+                "data": {"supported_villages": [{"id": 1}]},
+            }),
+        ), patch.object(
+            svc,
+            "_import_table_data",
+            new=AsyncMock(return_value={
+                "total": 1, "success": 0, "failed": 1, "conflicts": [],
+            }),
+        ):
+            result = await svc.import_package(str(package_file), strategy="overwrite")
+
+        assert result["success"] is False
+        assert result["failed_records"] == 1
+        assert "失败" in result["message"]

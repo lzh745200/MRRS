@@ -12,9 +12,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import json
 import logging
+import zipfile
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -27,7 +32,11 @@ from app.core.response import success_response
 from app.core.transaction import safe_commit
 from app.models.org_grant import VALID_GRANT_LEVELS, OrgGrant
 from app.models.organization import Organization
-from app.services.effective_grant_service import clear_cache
+from app.services.effective_grant_service import (
+    VISIBLE_LEVELS,
+    clear_cache,
+    get_grant_matrix_for_org,
+)
 from app.services.grant_package_service import (
     GrantPackageError,
     apply_package,
@@ -150,6 +159,96 @@ async def import_grant_package(
     return success_response(data=result, message="授权包已应用")
 
 
+def _subtree_orgs(db: Session, root_id: int) -> list:
+    """按组织树顺序返回 root 及其全部下级（深度/环保护由 `_get_org_subtree` 提供）。"""
+    org_ids, _names = _get_org_subtree(db, root_id)
+    rows = (
+        db.query(Organization)
+        .filter(Organization.id.in_(org_ids))
+        .order_by(Organization.sort_order, Organization.id)
+        .all()
+    )
+    by_id = {org.id: org for org in rows}
+    return [by_id[org_id] for org_id in org_ids if org_id in by_id]
+
+
+def _parent_codes(orgs_by_id: dict, org: Organization) -> list:
+    """根 → 上级的单位编码链（仅作包内溯源元数据，不参与权限计算）。"""
+    codes = []
+    seen = set()
+    current = orgs_by_id.get(org.parent_id) if org.parent_id else None
+    while current is not None and current.id not in seen:
+        seen.add(current.id)
+        # 调用方已保证子树内每个单位都有 code，这里只做溯源，不再判空。
+        codes.append(current.code)
+        current = orgs_by_id.get(current.parent_id) if current.parent_id else None
+    return list(reversed(codes))
+
+
+def _tree_node(db: Session, org: Organization, children_by_parent: dict) -> dict:
+    """组织策略树的单个节点（显式矩阵 + 元信息 + 子节点）。"""
+    return {
+        "id": org.id,
+        "name": org.name,
+        "code": org.code,
+        "parent_id": org.parent_id,
+        "level": org.level,
+        "grant_version": org.grant_version or 0,
+        "grant_source": org.grant_source,
+        "signed": bool(org.grant_signature),
+        "inherit_from_parent": bool(org.inherit_from_parent),
+        "grants": _matrix_of(db, org.id),
+        "children": [
+            _tree_node(db, child, children_by_parent)
+            for child in children_by_parent.get(org.id, [])
+        ],
+    }
+
+
+@router.get("/tree", summary="查看组织策略树")
+def get_org_grant_tree(
+    root_id: int | None = Query(default=None, description="根单位 ID；缺省为当前用户所属单位"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """返回一棵组织子树：每个节点带自身显式矩阵与元信息，供上级配置界面使用。
+
+    只返回**显式**矩阵；继承后的有效值按选中节点单独取 `GET /org-grants/{id}`，
+    避免 98 个单位一次性把 ×15 个模块的有效矩阵全部算出来。
+    """
+    if root_id is None:
+        root_id = getattr(current_user, "organization_id", None)
+    if root_id is None and getattr(current_user, "is_superuser", False):
+        # 首次初始化的超级管理员不绑定单位（system/init.py 只建号不挂组织），
+        # 这里回落到组织树最顶层，避免默认超管打开页面就 400。
+        top = (
+            db.query(Organization)
+            .filter(
+                Organization.parent_id.is_(None),
+                Organization.is_active.is_(True),
+            )
+            .order_by(Organization.id.asc())
+            .first()
+        )
+        if top is not None:
+            root_id = int(top.id)
+    if not isinstance(root_id, int) or isinstance(root_id, bool) or root_id <= 0:
+        raise HTTPException(status_code=400, detail="缺少根单位 ID，且当前账号未绑定单位")
+
+    root = _require_admin_and_reach(db, current_user, root_id, "查看组织策略树")
+    orgs = _subtree_orgs(db, root_id)
+    if not orgs:
+        raise HTTPException(status_code=404, detail="单位不存在或组织树为空")
+
+    children_by_parent: dict = {}
+    for org in orgs:
+        children_by_parent.setdefault(org.parent_id, []).append(org)
+
+    return success_response(
+        data={"root_id": root_id, "node": _tree_node(db, root, children_by_parent)}
+    )
+
+
 @router.post("/{org_id}/export", summary="生成授权包（上级）")
 def export_grant_package(
     org_id: int,
@@ -198,6 +297,112 @@ def export_grant_package(
     )
 
 
+@router.post("/{org_id}/export-branch", summary="批量导出子树授权包（上级）")
+def export_grant_branch(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """把整棵子树的**有效矩阵**分别打成 v1 授权包，合并为一个 zip 下载。
+
+    每个单位仍是一个独立的 `r33-grant-package` v1 文件（下级导入零改动），
+    zip 只是分发容器；`manifest.json` 记录文件名/版本/哈希与跳过原因。
+    """
+    root = _require_admin_and_reach(db, current_user, org_id, "批量导出子树授权包")
+    orgs = _subtree_orgs(db, org_id)
+    if not orgs:
+        raise HTTPException(status_code=404, detail="单位不存在或组织树为空")
+
+    missing = [org for org in orgs if not org.code]
+    if missing:
+        names = "、".join(str(org.name or org.id) for org in missing)
+        raise HTTPException(
+            status_code=400,
+            detail="以下单位未填写单位编号（code），无法批量导出：%s" % names,
+        )
+
+    orgs_by_id = {org.id: org for org in orgs}
+    built = []  # [(org, version, package)]
+    skipped = []
+    for org in orgs:
+        matrix = get_grant_matrix_for_org(db, org)
+        grants = {
+            key: level
+            for key, level in matrix.levels.items()
+            if level in VISIBLE_LEVELS
+        }
+        if not grants:
+            # 空矩阵导入后会变成「active 但全部 none」→ 下级菜单全空。
+            # 宁可跳过并告警，也不下发一个会锁死单位的包。
+            skipped.append(
+                {
+                    "org_code": org.code,
+                    "org_name": org.name,
+                    "reason": "no_effective_grants",
+                }
+            )
+            continue
+        version = (org.grant_version or 0) + 1
+        try:
+            package = build_package(
+                org_code=org.code,
+                grants=grants,
+                version=version,
+                org_name=org.name,
+                parent_codes=_parent_codes(orgs_by_id, org),
+                private_key=settings.GRANT_SIGNING_KEY,
+            )
+        except GrantPackageError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        built.append((org, version, package))
+
+    # 先在内存里把 zip 完整构建出来，再统一落版本号：任何一步失败都不会
+    # 留下「版本号已递增但没有包」的半成品（下级会因此无法再次导入）。
+    buffer = io.BytesIO()
+    entries = []
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for org, version, package in built:
+            payload = export_package_bytes(package)
+            filename = "grant-%s-v%d.json" % (org.code, version)
+            archive.writestr(filename, payload)
+            entries.append(
+                {
+                    "file": filename,
+                    "org_code": org.code,
+                    "org_name": org.name,
+                    "version": version,
+                    "modules": len(package["grants"]),
+                    "signed": bool(package.get("signature")),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                }
+            )
+        manifest = {
+            "format": "r33-grant-batch",
+            "format_version": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "issuer_org_code": root.code,
+            "root_org_code": root.code,
+            "packages": entries,
+            "skipped": skipped,
+        }
+        archive.writestr(
+            "manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"),
+        )
+
+    for org, version, _package in built:
+        org.grant_version = version
+    safe_commit(db)
+    clear_cache()
+
+    filename = "grants-%s.zip" % root.code
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="%s"' % filename},
+    )
+
+
 @router.get("/{org_id}", summary="查看单位授权矩阵")
 def get_org_grants(
     org_id: int,
@@ -205,6 +410,7 @@ def get_org_grants(
     current_user=Depends(get_current_active_user),
 ):
     org = _require_admin_and_reach(db, current_user, org_id, "查看单位授权")
+    matrix = get_grant_matrix_for_org(db, org)
     return success_response(
         data={
             "organization_id": org.id,
@@ -215,7 +421,12 @@ def get_org_grants(
                 org.grant_applied_at.isoformat() if org.grant_applied_at else None
             ),
             "signed": bool(org.grant_signature),
+            # 显式矩阵（本机存储）与继承后的有效矩阵分开返回：
+            # 前端四态编辑需要同时看到"我写了什么"和"最终生效什么"。
             "grants": _matrix_of(db, org_id),
+            "active": matrix.active,
+            "effective": dict(matrix.levels) if matrix.active else {},
+            "sources": dict(matrix.sources) if matrix.active else {},
         }
     )
 

@@ -635,9 +635,8 @@ function goMessages() {
 async function loadUnreadCount() {
   try {
     const { getUnreadCount } = await import('@/api/message')
-    const res: any = await getUnreadCount()
-    const d = res?.data ?? res
-    unreadCount.value = Number(d?.total ?? d?.count ?? 0) || 0
+    // getUnreadCount 已归一为 number；不要再按 {data:{total}} 解构（会恒为 0）
+    unreadCount.value = Number((await getUnreadCount()) ?? 0) || 0
     // Electron 托盘角标与未读数联动（浏览器/麒麟模式无 electronAPI，可选链静默跳过）
     window.electronAPI?.updateTrayUnread?.(unreadCount.value)
     // T037：锁屏归来摘要——近 30 分钟内锁定过且有未读增量时弹一次

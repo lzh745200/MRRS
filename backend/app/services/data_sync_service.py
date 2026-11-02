@@ -447,7 +447,9 @@ class DataSyncService:
                 self._apply_report_ledger(db, import_data, result)
 
                 # 更新同步日志（有逐表错误时不能标记为 completed / success）
-                result_success = not result["errors"]
+                # 逐行失败不计入 errors（避免千行错误撑爆日志），必须单独看
+                # failed_records；否则“1000 条全失败”仍会返回 success=True。
+                result_success = not result["errors"] and result["failed_records"] == 0
                 sync_log.status = "completed" if result_success else "failed"
                 sync_log.total_records = result["total_records"]
                 sync_log.success_records = result["success_records"]
@@ -1111,7 +1113,9 @@ class DataSyncService:
                         self.logger.error(error_msg)
 
                 # 更新同步日志（逐表错误必须反映到 success 与日志状态）
-                result_success = not result["errors"]
+                # 逐行失败不计入 errors（避免千行错误撑爆日志），必须单独看
+                # failed_records；否则“1000 条全失败”仍会返回 success=True。
+                result_success = not result["errors"] and result["failed_records"] == 0
                 sync_log.status = "completed" if result_success else "failed"
                 sync_log.total_records = result["total_records"]
                 sync_log.success_records = result["success_records"]

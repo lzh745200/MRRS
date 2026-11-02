@@ -480,6 +480,24 @@ describe('轮询进度', () => {
     vm.stopPolling()
   })
 
+  it('连续 10 次进度接口失败 → 进入 error 终态并停止轮询', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.sessionInfo = { ...initResult }
+    apiGetProgress.mockRejectedValue(new Error('session gone'))
+    vm.startPolling()
+    for (let i = 0; i < 10; i += 1) {
+      await vi.advanceTimersByTimeAsync(500)
+    }
+    expect(vm.uploadState).toBe('error')
+    expect(ElMessage.error).toHaveBeenCalledWith('上传状态获取失败，请重试')
+    const callsAfterStop = apiGetProgress.mock.calls.length
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(apiGetProgress.mock.calls.length).toBe(callsAfterStop)
+  })
+
   it('卸载组件时停止轮询', async () => {
     vi.useFakeTimers()
     const wrapper = mountComp()

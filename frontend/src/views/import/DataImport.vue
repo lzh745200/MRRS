@@ -2,7 +2,7 @@
   <div class="data-import-page">
     <PageHeader
       title="数据导入"
-      subtitle="下载模板填写数据后上传，支持帮扶村、项目、资金、学校四种类型"
+      subtitle="下载模板填写数据后上传，支持帮扶村、项目、资金、学校、一户一档五种类型"
     />
 
     <!-- 模板下载区 -->
@@ -34,6 +34,43 @@
           </el-card>
         </el-col>
       </el-row>
+    </el-card>
+
+    <!-- 填报数据导出区（单条/批量导出后修改再回导） -->
+    <el-card class="export-section" shadow="never">
+      <template #header>
+        <span
+          ><el-icon><Download /></el-icon> 导出填报表格（修改后可回导）</span
+        >
+      </template>
+      <el-form :inline="true" :model="exportForm">
+        <el-form-item label="数据类型">
+          <el-select v-model="exportForm.entityType" placeholder="选择数据类型">
+            <el-option
+              v-for="tpl in templates"
+              :key="tpl.type"
+              :label="tpl.label"
+              :value="tpl.type"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="记录 ID（可选）">
+          <el-input
+            v-model="exportForm.ids"
+            placeholder="留空=导出全部；单条填一个 ID；多条用逗号分隔"
+            style="width: 320px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="exporting" @click="handleExportFill">
+            <el-icon><Download /></el-icon> 导出填报表格
+          </el-button>
+        </el-form-item>
+      </el-form>
+      <el-alert type="info" :closable="false">
+        导出的表格带 ID 列：修改后回导时按 ID 更新原记录（不会重复建档）；删除 ID
+        列或留空则按增量去重新增。单条填一个 ID，批量留空或填多个。
+      </el-alert>
     </el-card>
 
     <!-- 上传区 -->
@@ -186,10 +223,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Download, Upload, Document, Clock, View } from '@element-plus/icons-vue'
 import {
   downloadImportTemplateAndSave,
+  exportFillTemplateAndSave,
   importEntities,
   previewImportData,
   getImportHistory,
@@ -209,6 +248,7 @@ const templates = [
   { type: 'project', label: '项目', desc: '项目名称、类型、预算、日期等' },
   { type: 'fund', label: '资金', desc: '经费名称、金额、来源、用途等' },
   { type: 'school', label: '学校', desc: '学校名称、类型、学生数等' },
+  { type: 'household', label: '一户一档', desc: '帮扶村、户主、风险、收入等字段' },
 ]
 
 // ── Template download ──
@@ -224,6 +264,29 @@ async function handleDownloadTemplate(type: string) {
     ElMessage.error(typeof msg === 'string' ? msg : '模板下载失败')
   } finally {
     downloadingType.value = ''
+  }
+}
+
+// ── Fill template export ──
+const exporting = ref(false)
+const exportForm = ref({ entityType: 'supported_village', ids: '' })
+
+async function handleExportFill() {
+  const raw = String(exportForm.value.ids || '').trim()
+  const rawIds = raw ? raw.split(/[,，\s]+/).filter(Boolean) : []
+  if (rawIds.some((id) => !/^\d+$/.test(id))) {
+    ElMessage.warning('记录 ID 只能填数字，多条用逗号分隔')
+    return
+  }
+  const ids = rawIds.length ? rawIds.map(Number) : undefined
+  exporting.value = true
+  try {
+    await exportFillTemplateAndSave(exportForm.value.entityType, ids, '填报数据')
+    ElMessage.success('填报表格已导出')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '填报表格导出失败')
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -347,7 +410,14 @@ function statusLabel(status: string): string {
   return formatImportStatus(status).text
 }
 
-onMounted(loadHistory)
+const route = useRoute()
+onMounted(() => {
+  const entity = String(route.query.entity || '')
+  if (templates.some((tpl) => tpl.type === entity)) {
+    importForm.value.entityType = entity
+  }
+  loadHistory()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -367,6 +437,7 @@ onMounted(loadHistory)
   margin: 0;
 }
 .template-section,
+.export-section,
 .upload-section,
 .history-section {
   margin-bottom: 16px;

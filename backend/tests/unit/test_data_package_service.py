@@ -398,8 +398,8 @@ class TestDataPackageService:
                         json.dumps([{"id": 1}, {"id": 2}]).encode("utf-8"),
                     ]
                     result = await service.validate_package("/tmp/test.zip")
-                    assert len(result.warnings) >= 1
-                    assert "记录数不匹配" in result.warnings[0]
+                    assert result.is_valid is False
+                    assert any("记录数不匹配" in e.message for e in result.errors)
 
     async     def test_validate_package_json_decode_error(self, service):
         with patch("os.path.exists", return_value=True):

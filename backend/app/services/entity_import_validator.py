@@ -156,6 +156,27 @@ class EntityImportValidator:
         {"name": "description", "label": "学校简介", "required": False, "type": "str", "example": ""},
     ]
 
+    # ============== 一户一档导入定义 ==============
+    HOUSEHOLD_FIELDS: List[Dict[str, Any]] = [
+        {"name": "village_name", "label": "帮扶村名称", "required": True, "type": "str", "example": "某某村"},
+        {"name": "county", "label": "县/市", "required": False, "type": "str", "example": "某某县"},
+        {"name": "township", "label": "乡镇", "required": False, "type": "str", "example": "某某镇"},
+        {"name": "household_code", "label": "户编号", "required": False, "type": "str", "example": "H-001"},
+        {"name": "household_name", "label": "户主姓名", "required": True, "type": "str", "example": "张三"},
+        {"name": "address", "label": "详细地址", "required": False, "type": "str", "example": "某某村1组"},
+        {"name": "household_type", "label": "户类型", "required": False, "type": "household_type", "example": "一般户"},
+        {"name": "risk_type", "label": "风险类型", "required": False, "type": "risk_type", "example": "无"},
+        {"name": "risk_level", "label": "风险等级", "required": False, "type": "risk_level", "example": "低"},
+        {"name": "helper_name", "label": "帮扶责任人", "required": False, "type": "str", "example": "李四"},
+        {"name": "helper_phone", "label": "联系电话", "required": False, "type": "phone", "example": "13800138000"},
+        {"name": "annual_income", "label": "年收入(元)", "required": False, "type": "float", "example": "12000.00"},
+        {"name": "migrant_workers", "label": "务工人数", "required": False, "type": "int", "example": "2"},
+        {"name": "has_serious_illness", "label": "大病", "required": False, "type": "bool", "example": "否"},
+        {"name": "housing_safe", "label": "住房安全", "required": False, "type": "bool", "example": "是"},
+        {"name": "last_visit_date", "label": "最近走访日期", "required": False, "type": "date", "example": "2026-10-01"},
+        {"name": "monitoring_note", "label": "监测情况说明", "required": False, "type": "str", "example": ""},
+    ]
+
     ENTITY_CONFIGS: Dict[str, Dict[str, Any]] = {
         "project": {
             "fields": PROJECT_FIELDS,
@@ -174,6 +195,12 @@ class EntityImportValidator:
             "required": ["name"],
             "duplicate_key": "name",
             "label": "学校",
+        },
+        "household": {
+            "fields": HOUSEHOLD_FIELDS,
+            "required": ["village_name", "household_name"],
+            "duplicate_key": "household_code",
+            "label": "一户一档",
         },
     }
 
@@ -198,6 +225,12 @@ class EntityImportValidator:
         "fund_status": ["pending", "planned", "approved", "allocated", "in_use", "completed", "audited"],
         "school_type": ["primary", "middle", "high", "vocational", "other", "小学", "初中", "高中", "职业学校", "其他"],
         "support_status": ["active", "inactive", "completed", "帮扶中", "未帮扶", "已完成"],
+        "household_type": ["general", "poverty", "monitor", "一般户", "脱贫户", "监测户"],
+        "risk_type": [
+            "none", "income_drop", "illness", "housing", "sudden", "multiple",
+            "无", "收入骤减", "因病", "住房", "突发", "多重",
+        ],
+        "risk_level": ["low", "medium", "high", "低", "中", "高"],
     }
 
     def __init__(self, entity_type: str = "supported_village"):
@@ -205,9 +238,16 @@ class EntityImportValidator:
         self.config = self.ENTITY_CONFIGS.get(entity_type, {})
 
     def get_column_mapping(self) -> Dict[str, str]:
-        """Excel列名到字段名的映射"""
+        """Excel列名到字段名的映射。
+
+        R61：追加 `ID` 列（填报导出附带），回导时用于更新既有记录；
+        官方模板不含该列，因此不影响原有导入。
+        """
         fields = self.config.get("fields", [])
-        return {f["label"]: f["name"] for f in fields}
+        mapping = {f["label"]: f["name"] for f in fields}
+        mapping["ID"] = "id"
+        mapping["Id"] = "id"
+        return mapping
 
     def get_required_fields(self) -> List[str]:
         return self.config.get("required", [])
@@ -419,6 +459,10 @@ class EntityImportValidator:
         )
 
     def check_duplicates(self, rows: List[Dict[str, Any]]) -> List[ValidationError]:
+        # 一户一档的唯一键是“村 + 户编号”，且跨村同号合法；导入器内部已按
+        # (village_id, code/name) 做行级去重/跳过，这里不能再按单列整批判重。
+        if self.entity_type == "household":
+            return []
         key_field = self.config.get("duplicate_key", "name")
         seen: dict[str, int] = {}
         errors: list[ValidationError] = []
@@ -512,6 +556,24 @@ class EntityImportValidator:
                 "帮扶中": "active",
                 "未帮扶": "inactive",
                 "已完成": "completed",
+            },
+            "household_type": {
+                "一般户": "general",
+                "脱贫户": "poverty",
+                "监测户": "monitor",
+            },
+            "risk_type": {
+                "无": "none",
+                "收入骤减": "income_drop",
+                "因病": "illness",
+                "住房": "housing",
+                "突发": "sudden",
+                "多重": "multiple",
+            },
+            "risk_level": {
+                "低": "low",
+                "中": "medium",
+                "高": "high",
             },
         }
         if enum_type in mapping and value in mapping[enum_type]:

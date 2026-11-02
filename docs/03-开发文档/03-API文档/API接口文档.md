@@ -1,6 +1,6 @@
 # API 接口文档
 
-> **版本**:v1.17.1  **更新日期**:2026-10-24（端点清单按源码重新扫描；v1.17 新增 /self-check 与介质链路治理）
+> **版本**:v1.18.35  **更新日期**:2026-11-03（新增组织策略树、填报模板导出与一户一档导入端点）
 > **定位**:系统全部 HTTP 接口的清单与调用约定——**端点清单由脚本从源码自动提取**(与代码 100% 同步),业务导读人工维护。
 > **适用读者**:前后端开发者、联调与集成人员。零基础请先读《需求规格说明书》§3 理解业务流程。
 > **互动文档**:后端启动后(DEBUG 模式)访问 `http://127.0.0.1:8000/docs` 可在线调试(OpenAPI)。
@@ -9,7 +9,11 @@
 
 ## 1. 快速统计
 
-- **93 个路由模块文件（53 顶层 + 5 子包）/ 845 个端点**(5 个子包为 auth/data/import_export/monitoring/system;按 `@router` 装饰器扫描口径)
+- **93 个路由模块文件（53 顶层 + 5 子包）/ 849 个端点**(5 个子包为 auth/data/import_export/monitoring/system;按 `@router` 装饰器扫描口径)
+- **v1.18.35 变更**：新增 `GET /org-grants/tree`（组织策略树）、`POST /org-grants/{org_id}/export-branch`
+  （按子树导出每单位授权包 zip）、`GET /import/export-fill`（按模板表头导出填报数据，含 `ID` 列，
+  用于回导更新）、`POST /import/entities?entity_type=household`（一户一档导入）；`GET /org-grants/{org_id}`
+  新增 `active/effective/sources` 字段；**无删除端点**。端点总数 845 → **849**。
 - v1.14.0 变更:新增 `households`(`/households`)、`media`(`/media`)、`consumption`(`/consumption`) 三个模块与
   `/funds/ocr-voucher`、`/report-templates/{id}/export|print-data`;删除 `villages`(`/villages`)、`sentiment`(`/sentiment`)、
   `i18n`(`/system/i18n`) 模块(分别因遗留表清理、消费帮扶替换、国际化功能下线)。

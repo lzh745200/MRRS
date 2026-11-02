@@ -186,7 +186,7 @@
 <script setup lang="ts">
 import { DIALOG_SM } from '@/config/dialog'
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete, Loading, Calendar } from '@element-plus/icons-vue'
 import { listTodos, createTodo, updateTodo, deleteTodo, toggleTodo } from '@/api/todos'
 
@@ -307,6 +307,9 @@ async function handleToggle(todo: any) {
     const updated = response?.data ?? response
     todo.completed = updated?.completed ?? !todo.completed
     ElMessage.success(todo.completed ? '已完成' : '已取消完成')
+    // 列表按服务端 completed 筛选：本地只改字段会让已完成项留在“未完成”页，
+    // total 也不变；成功后重新拉取，保证列表/分页/计数一致。
+    await fetchTodos()
   } catch {
     ElMessage.error('操作失败')
   }
@@ -347,14 +350,27 @@ async function handleSave() {
   }
 }
 
+const deletingId = ref<number | null>(null)
+
 async function handleDelete(todo: any) {
+  try {
+    await ElMessageBox.confirm(`确认删除待办「${todo.title}」？`, '删除确认', {
+      type: 'warning',
+    })
+  } catch {
+    return // 用户取消
+  }
+  if (deletingId.value !== null) return
+  deletingId.value = todo.id
   try {
     await deleteTodo(todo.id)
     ElMessage.success('已删除')
     currentPage.value = 1
-    fetchTodos()
+    await fetchTodos()
   } catch {
     ElMessage.error('删除失败')
+  } finally {
+    deletingId.value = null
   }
 }
 

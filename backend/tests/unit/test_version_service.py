@@ -270,7 +270,7 @@ class TestRollback:
         service._save_version = MagicMock()
         service._save_history = MagicMock()
         with patch("app.services.backup_service.get_backup_service") as mock_get:
-            mock_get.return_value.restore_backup.return_value = {"status": "success"}
+            mock_get.return_value.restore_backup.return_value = {"success": True}
             result = service.rollback()
         assert result["status"] == "success"
         assert result["new_version"] == "1.0.0"
@@ -285,7 +285,7 @@ class TestRollback:
         service._save_version = MagicMock()
         service._save_history = MagicMock()
         with patch("app.services.backup_service.get_backup_service") as mock_get:
-            mock_get.return_value.restore_backup.return_value = {"status": "success"}
+            mock_get.return_value.restore_backup.return_value = {"success": True}
             result = service.rollback(target_version="2.0.0")
         assert result["status"] == "success"
         assert result["new_version"] == "2.0.0"

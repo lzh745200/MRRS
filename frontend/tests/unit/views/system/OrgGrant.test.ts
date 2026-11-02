@@ -1,20 +1,26 @@
 /**
  * views/system/OrgGrant.vue 测试（四指标 100%）
  *
- * 方案：mock 'element-plus'（只留 ElMessage）+ mock '@/api/orgGrants' +
- * mock '@/stores/menu'；el-* 组件 stub 成带插槽的真实标签（未解析的组件会丢弃插槽）。
- *
- * 覆盖：单位 ID 校验、加载成败、矩阵行构建（菜单与授权并集 + 去重）、
- * 保存（只提交非 none + 版本回填 + meta 为空的旁路）、导出成败、
- * 错误文案三级回退、签名标签两分支、单位编码缺省分支。
+ * 覆盖：组织树加载/过滤/选中、四态矩阵（继承/可操作/只读/不开放）、
+ * 显式 none 提交、有效值与来源展示、单包导出与子树批量导出、
+ * 错误文案三级回退、手工 ID 兜底。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-const { mockGet, mockSet, mockExport, mockTree, ElMessage, flatEntries } = vi.hoisted(() => ({
+const {
+  mockGet,
+  mockSet,
+  mockExport,
+  mockExportBranch,
+  mockTree,
+  ElMessage,
+  flatEntries,
+} = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockSet: vi.fn(),
   mockExport: vi.fn(),
+  mockExportBranch: vi.fn(),
   mockTree: vi.fn(),
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   flatEntries: [
@@ -28,8 +34,9 @@ vi.mock('@/api/orgGrants', () => ({
   getOrgGrants: mockGet,
   setOrgGrants: mockSet,
   exportGrantPackage: mockExport,
+  exportGrantBranch: mockExportBranch,
+  getOrgGrantTree: mockTree,
 }))
-vi.mock('@/api/organization', () => ({ getOrganizationTree: mockTree }))
 vi.mock('@/stores/menu', () => ({
   useMenuStore: () => ({ flatEntries }),
 }))
@@ -62,6 +69,11 @@ const STUBS = {
     props: ['label', 'value'],
     template: '<option :value="value">{{ label }}</option>',
   },
+  'el-tree': {
+    props: ['data', 'nodeKey', 'props', 'defaultExpandedKeys', 'highlightCurrent'],
+    emits: ['node-click'],
+    template: '<div class="tree"><slot /></div>',
+  },
 }
 
 function factory() {
@@ -76,13 +88,43 @@ const MATRIX = {
   grant_applied_at: null,
   signed: true,
   grants: { projects: 'view', legacy: 'edit' },
+  active: true,
+  effective: { projects: 'view', legacy: 'edit', dashboard: 'edit' },
+  sources: { dashboard: 'S01', projects: 'C001' },
+}
+
+const TREE = {
+  root_id: 1,
+  node: {
+    id: 1,
+    name: '省中心',
+    code: 'S01',
+    grant_version: 1,
+    grant_source: 'local',
+    signed: false,
+    inherit_from_parent: true,
+    grants: { dashboard: 'edit' },
+    children: [
+      {
+        id: 7,
+        name: '市分中心',
+        code: 'C001',
+        grant_version: 3,
+        grant_source: 'import',
+        signed: true,
+        inherit_from_parent: true,
+        grants: {},
+        children: [],
+      },
+    ],
+  },
 }
 
 describe('views/system/OrgGrant', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // 默认无单位可选（走"未加载到单位列表"提示），个别用例按需给树
-    mockTree.mockResolvedValue([])
+    mockTree.mockResolvedValue(TREE)
+    mockGet.mockResolvedValue(MATRIX)
   })
 
   it('初始态：只有说明，无矩阵与错误', () => {
@@ -90,6 +132,57 @@ describe('views/system/OrgGrant', () => {
     expect(wrapper.text()).toContain('单位授权配置')
     expect(wrapper.find('.descriptions').exists()).toBe(false)
     expect(wrapper.find('.matrix').exists()).toBe(false)
+  })
+
+  it('挂载即加载组织树，并展开根节点', async () => {
+    const wrapper = factory()
+    await flushPromises()
+    expect(mockTree).toHaveBeenCalled()
+    expect(wrapper.vm.treeLoadFailed).toBe(false)
+    expect(wrapper.vm.treeData[0].label).toBe('省中心（S01）')
+    expect(wrapper.vm.treeData[0].children[0].label).toBe('市分中心（C001）')
+  })
+
+  it('组织树加载失败：提示可改用手工 ID，手工输入仍可用', async () => {
+    mockTree.mockRejectedValue(new Error('boom'))
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.vm.treeLoadFailed).toBe(true)
+    expect(wrapper.text()).toContain('未能加载组织树')
+
+    wrapper.vm.toggleManual()
+    await wrapper.vm.$nextTick()
+    wrapper.vm.onOrgIdInput('7')
+    await wrapper.vm.load()
+    expect(mockGet).toHaveBeenCalledWith(7)
+  })
+
+  it('组织树返回空节点：按加载失败处理', async () => {
+    mockTree.mockResolvedValue({ root_id: 0, node: null })
+    const wrapper = factory()
+    await flushPromises()
+    expect(wrapper.vm.treeData).toEqual([])
+    expect(wrapper.vm.treeLoadFailed).toBe(true)
+  })
+
+  it('选中树节点：写入 ID、清空旧矩阵并立即加载', async () => {
+    const wrapper = factory()
+    await flushPromises()
+    wrapper.vm.onTreeSelect({ id: 7 })
+    await flushPromises()
+    expect(wrapper.vm.orgIdText).toBe('7')
+    expect(mockGet).toHaveBeenCalledWith(7)
+  })
+
+  it('按名称/编码过滤组织树：命中子节点保留父节点，无命中为空', async () => {
+    const wrapper = factory()
+    await flushPromises()
+    wrapper.vm.onSearch('C001')
+    expect(wrapper.vm.visibleTree[0].children).toHaveLength(1)
+    wrapper.vm.onSearch('不存在')
+    expect(wrapper.vm.visibleTree).toEqual([])
+    wrapper.vm.onSearch('')
+    expect(wrapper.vm.visibleTree).toHaveLength(1)
   })
 
   it('未填单位 ID 就加载：提示且不请求', async () => {
@@ -109,14 +202,10 @@ describe('views/system/OrgGrant', () => {
   it('onOrgIdInput 容忍 null', () => {
     const wrapper = factory()
     wrapper.vm.onOrgIdInput(null)
-    expect(wrapper.vm.buildRows({})).toEqual([
-      { key: 'dashboard', label: '工作台', level: 'none' },
-      { key: 'projects', label: '项目管理', level: 'none' },
-    ])
+    expect(wrapper.vm.orgIdText).toBe('')
   })
 
-  it('加载成功：渲染元信息、签名标签与矩阵行（菜单 ∪ 授权）', async () => {
-    mockGet.mockResolvedValue(MATRIX)
+  it('加载成功：渲染元信息、四态矩阵与有效值来源', async () => {
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
     await wrapper.vm.load()
@@ -126,13 +215,20 @@ describe('views/system/OrgGrant', () => {
     const text = wrapper.text()
     expect(text).toContain('C001')
     expect(text).toContain('已签名')
-    // 1 个单位选择器 + dashboard / projects / legacy 三行级别选择
-    expect(wrapper.findAll('select')).toHaveLength(4)
-    expect(wrapper.findAll('option')).toHaveLength(9 + 0) // 单位树为空，加上 3 行 × 3 级别
+    // 3 行 × 4 级别选项
+    expect(wrapper.findAll('option')).toHaveLength(12)
+    expect(text).toContain('继承：可操作（来自 S01）')
   })
 
-  it('加载成功（未签名 + 无单位编码）：走 info 标签与缺省文案', async () => {
-    mockGet.mockResolvedValue({ ...MATRIX, signed: false, org_code: null, grant_source: null })
+  it('加载成功（未签名 + 无编码/来源）：走 info 标签与缺省文案', async () => {
+    mockGet.mockResolvedValue({
+      ...MATRIX,
+      signed: false,
+      org_code: null,
+      grant_source: null,
+      effective: {},
+      sources: {},
+    })
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
     await wrapper.vm.load()
@@ -140,6 +236,7 @@ describe('views/system/OrgGrant', () => {
     expect(wrapper.text()).toContain('未签名')
     expect(wrapper.text()).toContain('（未填写）')
     expect(wrapper.text()).toContain('未授权')
+    expect(wrapper.text()).toContain('继承：不开放')
   })
 
   it('加载失败：清空矩阵并展示后端 detail', async () => {
@@ -147,68 +244,79 @@ describe('views/system/OrgGrant', () => {
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
     await wrapper.vm.load()
-    await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('单位不存在')
     expect(wrapper.find('.matrix').exists()).toBe(false)
   })
 
-  it('加载失败：无 detail 时取 Error.message', async () => {
+  it('加载失败：无 detail 时取 Error.message，再回退兜底文案', async () => {
     mockGet.mockRejectedValue(new Error('Network Error'))
-    const wrapper = factory()
-    wrapper.vm.onOrgIdInput('7')
-    await wrapper.vm.load()
-    expect(wrapper.text()).toContain('Network Error')
-  })
+    const wrapperA = factory()
+    wrapperA.vm.onOrgIdInput('7')
+    await wrapperA.vm.load()
+    expect(wrapperA.text()).toContain('Network Error')
 
-  it('加载失败：都取不到时用兜底文案', async () => {
     mockGet.mockRejectedValue({})
-    const wrapper = factory()
-    wrapper.vm.onOrgIdInput('7')
-    await wrapper.vm.load()
-    expect(wrapper.text()).toContain('操作失败')
+    const wrapperB = factory()
+    wrapperB.vm.onOrgIdInput('7')
+    await wrapperB.vm.load()
+    expect(wrapperB.text()).toContain('操作失败')
   })
 
-  it('buildRows 去重：菜单内重复 key 只保留一条', () => {
+  it('buildRows：菜单 ∪ 授权并去重，显式值覆盖为对应状态', () => {
     const wrapper = factory()
-    // 临时往 mock 的菜单里塞一个重复 key，覆盖去重分支
+    const rows = wrapper.vm.buildRows({
+      grants: { dashboard: 'none', projects: 'view' },
+      effective: { dashboard: 'edit', projects: 'view' },
+      sources: { dashboard: 'S01' },
+    })
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ key: 'dashboard', state: 'none', effectiveLabel: '' })
+    expect(rows[1]).toMatchObject({ key: 'projects', state: 'view' })
+  })
+
+  it('buildRows：菜单内重复 key 只保留一条，未显式配置为继承', () => {
     flatEntries.push({ key: 'dashboard', label: '工作台副本' })
     try {
-      const rows = wrapper.vm.buildRows({ dashboard: 'view' })
+      const wrapper = factory()
+      const rows = wrapper.vm.buildRows({ grants: {}, effective: {}, sources: {} })
       expect(rows).toHaveLength(2)
-      expect(rows[0]).toEqual({ key: 'dashboard', label: '工作台', level: 'view' })
+      expect(rows[0]).toMatchObject({ key: 'dashboard', state: 'inherit', effectiveLabel: '继承：不开放' })
     } finally {
       flatEntries.pop()
     }
   })
 
-  it('加载成功但 grants 缺失：按空矩阵渲染（全部不开放）', async () => {
-    mockGet.mockResolvedValue({ ...MATRIX, grants: undefined })
+  it('levelLabel：三种级别与未知值兜底', () => {
     const wrapper = factory()
-    wrapper.vm.onOrgIdInput('7')
-    await wrapper.vm.load()
-    await wrapper.vm.$nextTick()
-    // 1 个单位选择器 + dashboard / projects 两行级别选择
-    expect(wrapper.findAll('select')).toHaveLength(3)
+    expect(wrapper.vm.levelLabel('edit')).toBe('可操作')
+    expect(wrapper.vm.levelLabel('view')).toBe('只读')
+    expect(wrapper.vm.levelLabel('none')).toBe('不开放')
+    expect(wrapper.vm.levelLabel('weird')).toBe('不开放')
   })
 
-  it('保存：只提交非 none 的模块，并回填版本号', async () => {
-    mockGet.mockResolvedValue(MATRIX)
-    mockSet.mockResolvedValue({ organization_id: 7, grant_version: 4, modules: 2 })
+  it('保存：提交显式覆盖（含显式 none），回填版本并重新加载有效值', async () => {
+    mockSet.mockResolvedValue({ organization_id: 7, grant_version: 4, modules: 3 })
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
     await wrapper.vm.load()
     await wrapper.vm.$nextTick()
 
-    // 第一行（dashboard）是索引 1 —— 索引 0 是单位选择器
-    await wrapper.findAll('select')[1].setValue('edit')
+    // 第一行 dashboard 设为「不开放」——必须显式提交，才能压住继承
+    wrapper.vm.rows[0].state = 'none'
+    wrapper.vm.rows[1].state = 'edit'
     await wrapper.vm.save()
 
-    expect(mockSet).toHaveBeenCalledWith(7, { legacy: 'edit', projects: 'view', dashboard: 'edit' })
+    expect(mockSet).toHaveBeenCalledWith(7, {
+      dashboard: 'none',
+      projects: 'edit',
+      legacy: 'edit',
+    })
     expect(ElMessage.success).toHaveBeenCalled()
-    expect(wrapper.text()).toContain('4') // 版本号回填
+    // 保存后重新拉取，服务端版本已回填
+    expect(mockGet).toHaveBeenCalledTimes(2)
   })
 
-  it('保存：meta 为空时不回填版本号（旁路）', async () => {
+  it('保存：meta 为空时不重新加载（旁路）', async () => {
     mockSet.mockResolvedValue({ organization_id: 7, grant_version: 9, modules: 0 })
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
@@ -218,7 +326,6 @@ describe('views/system/OrgGrant', () => {
   })
 
   it('保存失败：展示错误且不提示成功', async () => {
-    mockGet.mockResolvedValue(MATRIX)
     mockSet.mockRejectedValue({ response: { data: { detail: '无权限' } } })
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
@@ -235,150 +342,57 @@ describe('views/system/OrgGrant', () => {
     expect(wrapper.text()).toContain('请先填写有效的单位 ID')
   })
 
-  it('导出成功：提示文件名', async () => {
+  it('导出单包：成功提示文件名，失败展示错误，未填 ID 不请求', async () => {
     mockExport.mockResolvedValue('grant-C001-v4.json')
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
     await wrapper.vm.exportPkg()
     expect(mockExport).toHaveBeenCalledWith(7)
     expect(ElMessage.success).toHaveBeenCalledWith('已导出 grant-C001-v4.json')
-  })
 
-  it('导出失败：展示错误', async () => {
     mockExport.mockRejectedValue(new Error('download failed'))
-    const wrapper = factory()
-    wrapper.vm.onOrgIdInput('7')
     await wrapper.vm.exportPkg()
     expect(wrapper.text()).toContain('download failed')
+
+    const blank = factory()
+    await blank.vm.exportPkg()
+    expect(mockExport).toHaveBeenCalledTimes(2)
+    expect(blank.text()).toContain('请先填写有效的单位 ID')
   })
 
-  it('导出未填 ID：提示且不请求', async () => {
-    const wrapper = factory()
-    await wrapper.vm.exportPkg()
-    expect(mockExport).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('请先填写有效的单位 ID')
-  })
-})
-
-describe('views/system/OrgGrant —— 单位选择器（v1.16.3）', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockTree.mockResolvedValue([])
-  })
-
-  it('拍平单位树：层级缩进 + 名称（编码）+ 缺字段与非法 id 兜底', () => {
-    const wrapper = factory()
-    const opts = wrapper.vm.flattenOrgs([
-      {
-        id: 1,
-        name: '省中心',
-        code: 'S01',
-        children: [{ id: 2, name: '市分中心', code: 'C02', children: [] }],
-      },
-      { id: 0, name: '非法ID' },
-      { id: 3 },
-    ])
-    expect(opts.map((o: any) => o.id)).toEqual([1, 2, 3])
-    expect(opts[0].label).toBe('省中心（S01）')
-    expect(opts[1].label.startsWith('　')).toBe(true)
-    expect(opts[1].label).toContain('市分中心（C02）')
-    expect(opts[2].label).toBe('未命名单位')
-  })
-
-  it('flattenOrgs 对非数组/空输入返回空列表（防脏数据）', () => {
-    const wrapper = factory()
-    expect(wrapper.vm.flattenOrgs(null)).toEqual([])
-    expect(wrapper.vm.flattenOrgs('x')).toEqual([])
-    expect(wrapper.vm.flattenOrgs([])).toEqual([])
-  })
-
-  it('挂载即拉取单位树；为空时提示可改用手工输入且手工仍可用', async () => {
-    const wrapper = factory()
-    await flushPromises()
-    expect(mockTree).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).toContain('未能加载单位列表')
-
-    wrapper.vm.toggleManual()
-    await wrapper.vm.$nextTick()
-    wrapper.vm.onOrgIdInput('7')
-    mockGet.mockResolvedValue(MATRIX)
-    await wrapper.vm.load()
-    expect(mockGet).toHaveBeenCalledWith(7)
-  })
-
-  it('单位树加载异常：置失败标志，手工输入仍可用', async () => {
-    mockTree.mockRejectedValue(new Error('boom'))
-    const wrapper = factory()
-    await flushPromises()
-    expect(wrapper.text()).toContain('未能加载单位列表')
-    wrapper.vm.toggleManual()
-    await wrapper.vm.$nextTick()
-    expect(wrapper.find('input.org-input').exists()).toBe(true)
-  })
-
-  it('选择单位：写入 ID 并清空上一个单位的矩阵（避免把 A 的矩阵存到 B）', async () => {
-    mockGet.mockResolvedValue(MATRIX)
+  it('导出子树：成功提示 zip 文件名，失败展示错误，未填 ID 不请求', async () => {
+    mockExportBranch.mockResolvedValue('grants-S01.zip')
     const wrapper = factory()
     wrapper.vm.onOrgIdInput('7')
-    await wrapper.vm.load()
-    await wrapper.vm.$nextTick()
-    expect(wrapper.find('.matrix').exists()).toBe(true)
+    await wrapper.vm.exportBranch()
+    expect(mockExportBranch).toHaveBeenCalledWith(7)
+    expect(ElMessage.success).toHaveBeenCalledWith('已导出发子树授权包 grants-S01.zip')
 
-    wrapper.vm.onOrgSelect('8')
-    await wrapper.vm.$nextTick()
-    expect(wrapper.find('.matrix').exists()).toBe(false)
-    expect(wrapper.find('.descriptions').exists()).toBe(false)
+    mockExportBranch.mockRejectedValue(new Error('zip failed'))
+    await wrapper.vm.exportBranch()
+    expect(wrapper.text()).toContain('zip failed')
 
-    wrapper.vm.onOrgSelect(null)
-    await wrapper.vm.load()
-    expect(wrapper.text()).toContain('请先填写有效的单位 ID')
+    const blank = factory()
+    await blank.vm.exportBranch()
+    expect(mockExportBranch).toHaveBeenCalledTimes(2)
+    expect(blank.text()).toContain('请先填写有效的单位 ID')
   })
 
-  it('切换手工模式：非法值清空、合法值保留，可切回选择器', async () => {
-    mockTree.mockResolvedValue([{ id: 1, name: '省中心', code: 'S01' }])
+  it('切换手工模式：非法值清空、合法值保留，可切回组织树', async () => {
     const wrapper = factory()
     await flushPromises()
-    expect(wrapper.find('select.org-input').exists()).toBe(true)
+    expect(wrapper.vm.manualMode).toBe(false)
 
-    wrapper.vm.onOrgSelect('abc')
+    wrapper.vm.onOrgIdInput('abc')
     wrapper.vm.toggleManual()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('input.org-input').exists()).toBe(true)
     expect(wrapper.vm.orgIdText).toBe('')
 
-    // 合法值保留：手工模式下填 7，切回选择器后值仍在
     wrapper.vm.onOrgIdInput('7')
     wrapper.vm.toggleManual()
     await wrapper.vm.$nextTick()
+    expect(wrapper.vm.manualMode).toBe(false)
     expect(wrapper.vm.orgIdText).toBe('7')
-    expect(wrapper.find('select.org-input').exists()).toBe(true)
-  })
-
-  it('有单位时下拉渲染「名称（编码）」选项', async () => {
-    mockTree.mockResolvedValue([{ id: 5, name: '帮扶总站', code: 'F05' }])
-    const wrapper = factory()
-    await flushPromises()
-    const option = wrapper.findAll('option').find((o) => o.text().includes('帮扶总站'))
-    expect(option).toBeTruthy()
-    expect(option!.text()).toContain('F05')
-  })
-
-  it('后端真实信封 {code,data,items} 也能渲染单位下拉（回归：下拉恒空）', async () => {
-    // `success_response(data=tree)` 的真实形态：数组被拦截器同时展开到 data 与 items。
-    const tree = [{ id: 5, name: '帮扶总站', code: 'F05', children: [] }]
-    mockTree.mockResolvedValue({ code: 200, success: true, message: '成功', data: tree, items: tree })
-    const wrapper = factory()
-    await flushPromises()
-    expect(wrapper.vm.orgOptions).toEqual([{ id: 5, label: '帮扶总站（F05）' }])
-    expect(wrapper.vm.orgLoadFailed).toBe(false)
-    expect(wrapper.findAll('option').some((o) => o.text().includes('帮扶总站'))).toBe(true)
   })
 })
-
-  it('组织树返回非数组 → 空列表并标记加载失败（分支兜底）', async () => {
-    mockTree.mockResolvedValueOnce({ not: 'array' })
-    const wrapper = factory()
-    await flushPromises()
-    expect(wrapper.vm.orgOptions).toEqual([])
-    expect(wrapper.vm.orgLoadFailed).toBe(true)
-  })
