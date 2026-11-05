@@ -19,6 +19,10 @@
 .PARAMETER NoLaunch
   Diagnose only; print the chosen temp directory and exit.
 
+.PARAMETER TempDir
+  Explicit writable temp directory. Useful when the default user Temp is
+  blocked by policy/ACL in enterprise images.
+
 .PARAMETER Persist
   Also write TEMP/TMP to the current user's environment. An already-running
   Explorer does not refresh its environment: sign out/restart or launch the
@@ -33,6 +37,7 @@
 [CmdletBinding()]
 param(
   [string]$Installer = "",
+  [string]$TempDir = "",
   [switch]$NoLaunch,
   [switch]$Persist
 )
@@ -46,7 +51,7 @@ function Test-WritableDir([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return $false }
     $probe = Join-Path $Path (".mrrs-write-probe-{0}.tmp" -f [guid]::NewGuid().ToString('N'))
     [IO.File]::WriteAllText($probe, 'ok')
-    Remove-Item -LiteralPath $probe -Force
+    [IO.File]::Delete($probe)
     return $true
   } catch {
     return $false
@@ -75,7 +80,13 @@ $currentOk = Test-WritableDir $env:TEMP
 Write-Step "Current TEMP writable: $currentOk"
 
 $chosen = $null
-if ($currentOk) {
+if ($TempDir) {
+  try { New-Item -ItemType Directory -Path $TempDir -Force | Out-Null } catch { }
+  if (-not (Test-WritableDir $TempDir)) {
+    throw "Explicit -TempDir is not writable: $TempDir"
+  }
+  $chosen = $TempDir
+} elseif ($currentOk) {
   $chosen = $env:TEMP
 } else {
   $fallbacks = @(
