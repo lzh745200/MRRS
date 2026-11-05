@@ -6,6 +6,7 @@
     W6-T1 签名管线的「构建后校验」环节（短期项 8，2026-11-01）。
     证书未到位时可以正常跑（只报告 NotSigned），证书到位后配合
     -RequireSignature 作为发版硬门禁：任何未签名/签名无效的产物都会失败。
+    内网自签名证书用 -AllowUntrustedRoot 放行「签名者匹配但根不受信」的状态。
 
     判定口径：
     - Valid             → 通过（打印签名主体与时间戳）
@@ -29,7 +30,13 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Path,
 
-    [switch]$RequireSignature
+    [switch]$RequireSignature,
+
+    # 内网自签名证书：运行器不写根存储（Windows 会弹交互确认，CI 会挂起），
+    # 改为接受「签名存在且签名者指纹匹配，但根证书不受信」的状态。
+    [switch]$AllowUntrustedRoot,
+
+    [string]$ExpectedThumbprint = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,6 +76,13 @@ foreach ($file in $targets) {
     if ($status -eq 'NotSigned') {
         Write-Host ("[WARN] {0}`n       未签名（证书未配置时属预期）" -f $rel) -ForegroundColor Yellow
         $unsigned += $rel
+        continue
+    }
+    $thumb = ''
+    if ($null -ne $sig.SignerCertificate) { $thumb = $sig.SignerCertificate.Thumbprint }
+    if ($AllowUntrustedRoot -and ($status -eq 'UnknownError' -or $status -eq 'NotTrusted') -and
+        ($ExpectedThumbprint -eq '' -or $thumb -eq $ExpectedThumbprint)) {
+        Write-Host ("[OK-SELF] {0}`n       自签名已签名（根未受信任，签名者={1}）" -f $rel, $thumb) -ForegroundColor Green
         continue
     }
     Write-Host ("[FAIL] {0}`n       签名状态：{1} {2}" -f $rel, $status, $sig.StatusMessage) -ForegroundColor Red

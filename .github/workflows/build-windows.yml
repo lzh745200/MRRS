@@ -319,6 +319,8 @@ jobs:
       # docs/04-部署文档/01-Windows部署/代码签名.md
       - name: Sign backend exe (optional, W6-T1)
         shell: pwsh
+        # 签名/验签异常时快速失败，避免运行器无交互等待把 job 拖满（2026-11-05 曾挂 28 分钟）
+        timeout-minutes: 12
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -339,29 +341,40 @@ jobs:
             # electron-builder 惯例：CSC_LINK 也可以是 base64 编码的 PFX
             [IO.File]::WriteAllBytes($cert, [Convert]::FromBase64String($env:CSC_LINK))
           }
-          # 内网自签名证书没有公共 CA 链：签名后运行器必须信任它，否则
-          # signtool verify /pa 与后续 Get-AuthenticodeSignature 会以
-          # "根证书不受信任" 判失败。仅当证书自签名（Subject == Issuer）时
-          # 导入 CurrentUser\Root 与 TrustedPublisher；公共 CA 证书保持
-          # 系统链校验、不做该导入。导入只作用于本次一次性运行器，
-          # 目标机仍需通过组策略安装同一 .cer（见代码签名.md 第六节）。
+          # 内网自签名证书没有公共 CA 链。把证书写入 Root 存储时 Windows 会弹出
+          # 交互确认，CI 无交互会话会永久挂起（2026-11-05 实测 28 分钟未返回）；
+          # 因此不在运行器里信任证书，而是记录指纹，把「签名存在、签名者匹配、
+          # 但根不受信」作为自签名构建的合法状态（篡改会表现为 HashMismatch）。
+          # 目标机仍需通过组策略/certutil 信任同一 .cer（见代码签名.md 第六节）。
           $plainPwd = ConvertTo-SecureString $env:CSC_KEY_PASSWORD -AsPlainText -Force
           $pfxCert = Get-PfxCertificate -FilePath $cert -Password $plainPwd
           if ($pfxCert.Subject -eq $pfxCert.Issuer) {
-            $cerFile = Join-Path $env:RUNNER_TEMP "codesign.cer"
-            Export-Certificate -Cert $pfxCert -FilePath $cerFile | Out-Null
-            Import-Certificate -FilePath $cerFile -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
-            Import-Certificate -FilePath $cerFile -CertStoreLocation Cert:\CurrentUser\TrustedPublisher | Out-Null
-            Write-Host "检测到自签名证书（$($pfxCert.Thumbprint)）：已导入本次运行器受信任根/发布者（仅用于验签）"
+            $env:SELF_SIGNED_SIGNING = "1"
+            "SELF_SIGNED_SIGNING=1" >> $env:GITHUB_ENV
+            "CODESIGN_THUMBPRINT=$($pfxCert.Thumbprint)" >> $env:GITHUB_ENV
+            Write-Host "检测到自签名证书（$($pfxCert.Thumbprint)）：按自签名口径验签（不写运行器根存储）"
           }
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
             Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $signtool) { throw "未找到 signtool.exe（Windows SDK）" }
           $target = "backend/dist/assistance-backend/assistance-backend.exe"
           & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $cert /p $env:CSC_KEY_PASSWORD $target
-          if ($LASTEXITCODE -ne 0) { throw "signtool sign 失败 (exit $LASTEXITCODE)" }
-          & $signtool.FullName verify /pa /all $target
-          if ($LASTEXITCODE -ne 0) { throw "signtool verify 失败 (exit $LASTEXITCODE)" }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "带时间戳签名失败（exit $LASTEXITCODE），回退为无时间戳签名（内网构建可接受）"
+            & $signtool.FullName sign /fd SHA256 /f $cert /p $env:CSC_KEY_PASSWORD $target
+            if ($LASTEXITCODE -ne 0) { throw "signtool sign 失败 (exit $LASTEXITCODE)" }
+          }
+          if ($env:SELF_SIGNED_SIGNING -eq "1") {
+            $sig = Get-AuthenticodeSignature -LiteralPath $target
+            $signed = ($null -ne $sig.SignerCertificate) -and
+                      ($sig.SignerCertificate.Thumbprint -eq $pfxCert.Thumbprint) -and
+                      ($sig.Status -ne "HashMismatch") -and ($sig.Status -ne "NotSigned")
+            if (-not $signed) { throw "自签名校验失败：status=$($sig.Status)" }
+            Write-Host "自签名校验通过（status=$($sig.Status)，签名者指纹匹配）"
+          } else {
+            & $signtool.FullName verify /pa /all $target
+            if ($LASTEXITCODE -ne 0) { throw "signtool verify 失败 (exit $LASTEXITCODE)" }
+          }
           Remove-Item $cert -Force
           Write-Host "后端 exe 已签名并通过验证"
 
@@ -580,11 +593,16 @@ jobs:
           $line = "Authenticode: status=$($sig.Status) signer=$($sig.SignerCertificate.Subject)"
           Write-Host $line
           if ($env:SIGN_EXPECT_SIGNED -eq '1') {
-            if ($sig.Status -ne 'Valid') {
+            $selfSignedOk = $false
+            if ($env:SELF_SIGNED_SIGNING -eq '1' -and $null -ne $sig.SignerCertificate) {
+              $selfSignedOk = ($sig.SignerCertificate.Thumbprint -eq $env:CODESIGN_THUMBPRINT) -and
+                              ($sig.Status -in @('Valid', 'UnknownError', 'NotTrusted'))
+            }
+            if ($sig.Status -ne 'Valid' -and -not $selfSignedOk) {
               Write-Host "::error::期望签名但校验未通过：$($sig.Status)（检查 CSC_LINK/CSC_KEY_PASSWORD 与时间戳服务）"
               throw "installer signature invalid: $($sig.Status)"
             }
-            Write-Host "签名校验通过（Valid）"
+            Write-Host "签名校验通过（status=$($sig.Status)，自签名=$selfSignedOk）"
           } else {
             Write-Warning "未配置代码签名证书（CSC_LINK），安装包未签名；完整性以 SHA256SUMS 为准"
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "> ⚠️ 本构建未做代码签名（未配置 CSC_LINK），请以 SHA256SUMS 校验完整性。"
@@ -602,7 +620,9 @@ jobs:
         # "Cannot convert value System.String to SwitchParameter"（v1.18.33 tag 构建即因此失败）。
         # 这里按环境变量分成两条明确命令：需要门禁时只带开关名，不需要时完全不写。
         run: |
-          if ($env:SIGN_EXPECT_SIGNED -eq '1') {
+          if ($env:SIGN_EXPECT_SIGNED -eq '1' -and $env:SELF_SIGNED_SIGNING -eq '1') {
+            & ./scripts/verify_installer_signature.ps1 -Path dist/electron -RequireSignature -AllowUntrustedRoot -ExpectedThumbprint $env:CODESIGN_THUMBPRINT
+          } elseif ($env:SIGN_EXPECT_SIGNED -eq '1') {
             & ./scripts/verify_installer_signature.ps1 -Path dist/electron -RequireSignature
           } else {
             & ./scripts/verify_installer_signature.ps1 -Path dist/electron

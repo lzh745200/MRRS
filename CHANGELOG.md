@@ -106,9 +106,10 @@
   指纹 `8203900B6DA54201A49BDAF923B2F20D76CA35A1`，2031-11-05 到期），公钥证书随仓库
   发布（`docs/04-部署文档/01-Windows部署/MRRS-Internal-CodeSigning.cer`），私钥仅存于
   GitHub Secrets（`CSC_LINK` / `CSC_KEY_PASSWORD`）。
-- `build-windows.yml` 的签名步骤在检测到自签名（Subject == Issuer）时，把公钥证书临时
-  导入本次运行器的 `CurrentUser\Root` 与 `CurrentUser\TrustedPublisher`，使
-  `signtool verify /pa` 与 `Get-AuthenticodeSignature` 不再因「根证书不受信任」误红；
+- `build-windows.yml` 的签名步骤在检测到自签名（Subject == Issuer）时记录证书指纹，
+  按「签名存在 + 签名者匹配 + 根不受信」的自签名口径验签（不写运行器 Root 存储：
+  Windows 会弹交互确认导致 CI 挂起，2026-11-05 实测 28 分钟未返回）；
+  `verify_installer_signature.ps1` 增 `-AllowUntrustedRoot/-ExpectedThumbprint`。
   目标机仍需用组策略/`certutil` 信任同一 `.cer`（见代码签名.md 第六节）。
 - v1.18.35 发布时尚未接入证书，该版资产未签名；之后的构建与发布自动签名。
 
