@@ -1,3 +1,33 @@
+## [1.18.36] - 2026-11-06 — 内网自签名代码签名接入（签名版安装包）
+
+> 面向内网离线部署的签名版安装包：CI 用内网自签名证书给后端 exe、安装器与卸载器签名；
+> 运行器不写根存储（会挂起），改用签名者指纹口径验签；目标机经 GPO 或证书安装信任。
+> 功能与 1.18.35 一致，本版只新增代码签名与发布流水线加固。
+
+### 代码签名（2026-11-06）
+
+- 新增内网自签名代码签名证书（`CN=MRRS Internal Code Signing, O=MRRS, C=CN`，
+  指纹 `8203900B6DA54201A49BDAF923B2F20D76CA35A1`，2031-11-05 到期），PFX 经 GitHub
+  Secrets `CSC_LINK` / `CSC_KEY_PASSWORD` 注入；公钥证书随仓库发布
+  （`docs/04-部署文档/01-Windows部署/MRRS-Internal-CodeSigning.cer`）。
+- `build-windows.yml` 签名步骤：`signtool sign /fd SHA256`（时间戳失败回退无时间戳）
+  签名后端 exe、安装器与卸载器；自签名时以**签名者指纹**校验
+  （`SELF_SIGNED_SIGNING` + `CODESIGN_THUMBPRINT`），**不写运行器根存储**（Windows 会弹
+  交互确认，非交互 runner 会永久挂起）；签名步骤加 12 分钟超时。
+- `scripts/verify_installer_signature.ps1` 增 `-AllowUntrustedRoot` / `-ExpectedThumbprint`：
+  自签名且指纹匹配时输出 `[OK-SELF]` 并计为有效签名；`Verify installer signature` /
+  `Verify all exe signatures` 相应放行自签名未受信状态。
+- 目标机需通过 GPO 或 `certutil -addstore Root <cer>` 信任该证书（仅内网部署）；安装包
+  同时内置 VC++ Redistributable 并在安装期校验 SHA256。
+- 文档：`docs/04-部署文档/01-Windows部署/代码签名.md` 增加内网自签名章节；终端用户
+  安装说明见本版发布说明。
+
+### 验证（沿用 1.18.35 基线 + 本版签名构建）
+
+- 后端 15,686 例 / 覆盖率 100.00%；前端 348 文件 / 7,508 用例；CI 9/9 全绿。
+- 签名构建 run 42046510963 全部步骤通过，`Sign backend exe` 与安装包验签均
+  `SIGNATURE_CHECK_PASS`；产物签名者指纹与证书一致。
+
 ## [1.18.35] - 2026-11-02 — 组织策略树与每单位授权包分发（R48）
 
 > 面向「1 省 + 9 市 + 88 县」的离线授权分发：上级按组织树维护差异矩阵，服务端按继承规则

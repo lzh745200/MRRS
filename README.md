@@ -1,15 +1,19 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.35
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.36
 
-![Version](https://img.shields.io/badge/version-1.18.35-blue)
+![Version](https://img.shields.io/badge/version-1.18.36-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-23%2C194-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.35）
+## 本版亮点（v1.18.36）
 
+- **签名版安装包（内网自签名）**：CI 用 `signtool` 对后端 exe、安装器与卸载器签名，
+  并以签名者指纹口径验签（不写运行器根存储）；目标机通过 GPO 或
+  `certutil -addstore -f Root MRRS-Internal-CodeSigning.cer` 信任后签名状态显示为 Valid。
+  安装包内置 VC++ Redistributable 与全部运行时，离线下载即可安装。
 - **组织策略树授权**：上级按组织树配置差异矩阵，服务端按继承规则计算每个单位的**有效矩阵**并
   逐单位生成既有 `r33-grant-package` v1 包（`POST /org-grants/{id}/export-branch` 打 zip +
   manifest + sha256，空矩阵跳过并告警）；下级仍用现有导入页，协议零改动、数据库零迁移。

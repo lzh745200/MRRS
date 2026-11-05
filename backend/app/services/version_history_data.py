@@ -4044,4 +4044,29 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.36",
+        "date": "2026-11-06",
+        "description": "内网自签名代码签名接入（签名版安装包）",
+        "features": [
+            (
+                "新增内网自签名代码签名证书（CN=MRRS Internal Code Signing, O=MRRS, C=CN，指纹 8203900B6DA54201A49BDAF923B2F20D7"
+                "6CA35A1，2031-11-05 到期），PFX 经 GitHubSecrets CSC_LINK / CSC_KEY_PASSWORD 注入；"
+            ),
+            (
+                "build-windows.yml 签名步骤：signtool sign /fd SHA256（时间戳失败回退无时间戳）签名后端 exe、安装器与卸载器；自签名时以签名者指纹校验（SELF"
+                "_SIGNED_SIGNING + CODESIGN_THUMBPRINT），不写运行器根存储（Windows 会弹交互确认，非交互 runner 会永久挂起）；签名步骤加 12 分钟超时"
+                "。"
+            ),
+            (
+                "scripts/verify_installer_signature.ps1 增 -AllowUntrustedRoot / -ExpectedThumbprint：自签名且指纹匹配时输出"
+                " [OK-SELF] 并计为有效签名；Verify installer signature /Verify all exe signatures 相应放行自签名未受信状态。"
+            ),
+            (
+                "目标机需通过 GPO 或 certutil -addstore Root <cer> 信任该证书（仅内网部署）；安装包同时内置 VC++ Redistributable 并在安装期校验 S"
+                "HA256。"
+            ),
+            "文档：docs/04-部署文档/01-Windows部署/代码签名.md 增加内网自签名章节；终端用户安装说明见本版发布说明。",
+        ],
+    },
 ]
