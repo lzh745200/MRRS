@@ -100,6 +100,18 @@
   一致），修复 CI「Alembic migration health check」在仅装 alembic 的环境下无法导入
   `app.utils.sqlite_migration` 的问题。
 
+### 内网代码签名接入（2026-11-05）
+
+- 军队内网无公共 CA：生成并接入自签名代码签名证书（`CN=MRRS Internal Code Signing`，
+  指纹 `8203900B6DA54201A49BDAF923B2F20D76CA35A1`，2031-11-05 到期），公钥证书随仓库
+  发布（`docs/04-部署文档/01-Windows部署/MRRS-Internal-CodeSigning.cer`），私钥仅存于
+  GitHub Secrets（`CSC_LINK` / `CSC_KEY_PASSWORD`）。
+- `build-windows.yml` 的签名步骤在检测到自签名（Subject == Issuer）时，把公钥证书临时
+  导入本次运行器的 `CurrentUser\Root` 与 `CurrentUser\TrustedPublisher`，使
+  `signtool verify /pa` 与 `Get-AuthenticodeSignature` 不再因「根证书不受信任」误红；
+  目标机仍需用组策略/`certutil` 信任同一 `.cer`（见代码签名.md 第六节）。
+- v1.18.35 发布时尚未接入证书，该版资产未签名；之后的构建与发布自动签名。
+
 ## [1.18.34] - 2026-11-01 — 路线图长期项收口（Electron 45 / 两阶段导入 / 可观测性 / 故障注入）
 
 > 依据审计报告 §5「长期演进」逐项落地。本轮聚焦「运行环境安全寿命 + 导入可预览可回滚 +

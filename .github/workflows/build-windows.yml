@@ -339,6 +339,21 @@ jobs:
             # electron-builder 惯例：CSC_LINK 也可以是 base64 编码的 PFX
             [IO.File]::WriteAllBytes($cert, [Convert]::FromBase64String($env:CSC_LINK))
           }
+          # 内网自签名证书没有公共 CA 链：签名后运行器必须信任它，否则
+          # signtool verify /pa 与后续 Get-AuthenticodeSignature 会以
+          # "根证书不受信任" 判失败。仅当证书自签名（Subject == Issuer）时
+          # 导入 CurrentUser\Root 与 TrustedPublisher；公共 CA 证书保持
+          # 系统链校验、不做该导入。导入只作用于本次一次性运行器，
+          # 目标机仍需通过组策略安装同一 .cer（见代码签名.md 第六节）。
+          $plainPwd = ConvertTo-SecureString $env:CSC_KEY_PASSWORD -AsPlainText -Force
+          $pfxCert = Get-PfxCertificate -FilePath $cert -Password $plainPwd
+          if ($pfxCert.Subject -eq $pfxCert.Issuer) {
+            $cerFile = Join-Path $env:RUNNER_TEMP "codesign.cer"
+            Export-Certificate -Cert $pfxCert -FilePath $cerFile | Out-Null
+            Import-Certificate -FilePath $cerFile -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
+            Import-Certificate -FilePath $cerFile -CertStoreLocation Cert:\CurrentUser\TrustedPublisher | Out-Null
+            Write-Host "检测到自签名证书（$($pfxCert.Thumbprint)）：已导入本次运行器受信任根/发布者（仅用于验签）"
+          }
           $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" |
             Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $signtool) { throw "未找到 signtool.exe（Windows SDK）" }
