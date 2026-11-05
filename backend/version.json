@@ -1,7 +1,7 @@
 {
   "version": "1.18.36",
-  "build": "20261106",
-  "release_date": "2026-11-06",
+  "build": "20261105",
+  "release_date": "2026-11-05",
   "description": "内网自签名代码签名接入（签名版安装包）",
   "features": [
     "普通/加密导出与 Excel 导入移入线程池，ZIP 数据 JSON 流式写入，大包不再阻塞全站",

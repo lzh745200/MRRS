@@ -4046,7 +4046,7 @@ VERSION_HISTORY_DATA = [
     },
     {
         "version": "1.18.36",
-        "date": "2026-11-06",
+        "date": "2026-11-05",
         "description": "内网自签名代码签名接入（签名版安装包）",
         "features": [
             (
