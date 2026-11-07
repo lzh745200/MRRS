@@ -452,3 +452,39 @@ class TestApprovalSubmitEntityOwnership:
                     current_user=_user(role="user"),
                 )
         guard.assert_called_once()
+
+
+class TestFundImportProjectOrgGuard:
+    """资金导入不能把本组织资金挂到兄弟组织的项目上（P0 数据隔离）。"""
+
+    def test_foreign_project_code_is_rejected(self, real_db_session):
+        from app.models.fund import Fund
+        from app.models.organization import Organization
+        from app.models.project import Project
+        from app.services.excel_importer_service import ImportMode, ImportResult
+
+        db = real_db_session
+        own = Organization(name="本组织", code="ORG-A")
+        other = Organization(name="兄弟组织", code="ORG-B")
+        db.add_all([own, other])
+        db.commit()
+        project = Project(
+            name="兄弟项目", code="P-FOREIGN", organization_id=other.id,
+            type="other", status="pending",
+        )
+        db.add(project)
+        db.commit()
+
+        user = _user(role="admin", organization_id=own.id)
+        svc = ExcelImporterService(db=db, current_user=user)
+        result = ImportResult(success=False)
+        result = svc._import_funds(
+            [{"name": "本组织资金", "code": "F-001", "amount": 10, "project_code": "P-FOREIGN"}],
+            result,
+            MagicMock(),
+            ImportMode.INCREMENTAL,
+        )
+
+        assert result.success is False
+        assert result.failed_rows == 1
+        assert db.query(Fund).count() == 0

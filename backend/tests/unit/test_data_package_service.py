@@ -1357,3 +1357,101 @@ class TestDataPackageService:
 
         result = service.get_packages_by_org(1, status="validated", type_filter="report")
         assert len(result) == 1
+
+
+class TestPackageContentChecksum:
+    """数据包内容校验：导出写逐文件 SHA256，导入拒绝被篡改/截断的数据。"""
+
+    def test_export_writes_data_checksums(self, service, tmp_path):
+        from app.schemas.data_package import DataPackageManifest
+
+        path = tmp_path / "package.zip"
+        manifest = DataPackageManifest(data_types=["villages"])
+        service._create_zip_package(
+            str(path), manifest, {"villages": [{"id": 1}, {"id": 2}]}
+        )
+        with zipfile.ZipFile(path) as zf:
+            written = json.loads(zf.read("manifest.json").decode("utf-8"))
+        assert written["record_counts"]["villages"] == 2
+        assert len(written["data_checksums"]["villages"]) == 64
+
+    async def test_validate_rejects_tampered_data_file(self, service):
+        with patch("os.path.exists", return_value=True), patch(
+            "zipfile.is_zipfile", return_value=True
+        ), patch("zipfile.ZipFile") as mock_zip:
+            m = MagicMock()
+            mock_zip.return_value.__enter__ = MagicMock(return_value=m)
+            mock_zip.return_value.__exit__ = MagicMock()
+            m.namelist.return_value = ["manifest.json", "data/villages.json"]
+            m.read.side_effect = [
+                json.dumps({
+                    "version": "1.0",
+                    "data_types": ["villages"],
+                    "record_counts": {"villages": 1},
+                    "data_checksums": {"villages": "0" * 64},
+                }).encode("utf-8"),
+                json.dumps([{"id": 1}]).encode("utf-8"),
+            ]
+            result = await service.validate_package("/tmp/test.zip")
+        assert result.is_valid is False
+        assert any("内容 SHA256 不匹配" in e.message for e in result.errors)
+
+
+class TestPackageUnassignedRecords:
+    def test_iter_can_include_unassigned_org_rows(self, service):
+        model = _export_model("unassigned_probe", ["id"], organization_id=1)
+        service.db.execute.return_value = []
+        list(service._iter_export_data_type(7, model, include_unassigned=True))
+        sql = str(service.db.execute.call_args.args[0])
+        assert "OR organization_id IS NULL" in sql
+
+    def test_count_unassigned_without_org_column_is_zero(self, service):
+        model = _export_model("no_org_probe", ["id"])
+        assert service._count_unassigned(model) == 0
+
+    async def test_validate_warns_unassigned_and_legacy_no_checksum(self, service):
+        with patch("os.path.exists", return_value=True), patch(
+            "zipfile.is_zipfile", return_value=True
+        ), patch("zipfile.ZipFile") as mock_zip:
+            m = MagicMock()
+            mock_zip.return_value.__enter__ = MagicMock(return_value=m)
+            mock_zip.return_value.__exit__ = MagicMock()
+            m.namelist.return_value = ["manifest.json", "data/villages.json"]
+            m.read.side_effect = [
+                json.dumps({
+                    "version": "1.1",
+                    "data_types": ["villages"],
+                    "record_counts": {"villages": 1},
+                    "unassigned_counts": {"villages": 2},
+                }).encode("utf-8"),
+                json.dumps([{"id": 1}]).encode("utf-8"),
+            ]
+            result = await service.validate_package("/tmp/test.zip")
+        assert any("未归属组织" in w for w in result.warnings)
+        assert any("旧包未提供内容校验和" in w for w in result.warnings)
+
+
+class TestPackageUnassignedIncludedNoWarning:
+    async def test_included_unassigned_rows_do_not_claim_missing(self, service):
+        with patch("os.path.exists", return_value=True), patch(
+            "zipfile.is_zipfile", return_value=True
+        ), patch("zipfile.ZipFile") as mock_zip:
+            m = MagicMock()
+            mock_zip.return_value.__enter__ = MagicMock(return_value=m)
+            mock_zip.return_value.__exit__ = MagicMock()
+            m.namelist.return_value = ["manifest.json", "data/villages.json"]
+            m.read.side_effect = [
+                json.dumps({
+                    "version": "1.0",
+                    "data_types": ["villages"],
+                    "record_counts": {"villages": 1},
+                    "unassigned_counts": {"villages": 1},
+                    "include_unassigned": True,
+                    "data_checksums": {"villages": __import__("hashlib").sha256(
+                        json.dumps([{"id": 1}]).encode("utf-8")
+                    ).hexdigest()},
+                }).encode("utf-8"),
+                json.dumps([{"id": 1}]).encode("utf-8"),
+            ]
+            result = await service.validate_package("/tmp/test.zip")
+        assert not any("未包含在本包内" in w for w in result.warnings)

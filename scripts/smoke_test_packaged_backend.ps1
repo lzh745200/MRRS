@@ -189,6 +189,17 @@ Write-Host "[smoke] exe=$exe"
 Write-Host "[smoke] frontend=$(if ($frontendDirAbs) { $frontendDirAbs } else { '<none>' })"
 Write-Host "[smoke] map-tiles=$(if ($mapTilesDirAbs) { $mapTilesDirAbs } else { '<none>' })"
 Write-Host "[smoke] port=$Port timeout=${TimeoutSeconds}s version=$(if ($Version) { $Version } else { '<any>' })"
+# Windows PowerShell 5.1 Start-Process 在环境同时存在 HTTPS_PROXY/https_proxy
+# 这类仅大小写不同的键时会抛“字典中的关键字已添加”。启动前去掉大写重复项，
+# 代理仍保留小写键（或由系统默认代理接管）。
+[Environment]::SetEnvironmentVariable('HTTP_PROXY', $null, 'Process')
+[Environment]::SetEnvironmentVariable('HTTPS_PROXY', $null, 'Process')
+[Environment]::SetEnvironmentVariable('ALL_PROXY', $null, 'Process')
+[Environment]::SetEnvironmentVariable('NO_PROXY', $null, 'Process')
+[Environment]::SetEnvironmentVariable('http_proxy', $null, 'Process')
+[Environment]::SetEnvironmentVariable('https_proxy', $null, 'Process')
+[Environment]::SetEnvironmentVariable('all_proxy', $null, 'Process')
+[Environment]::SetEnvironmentVariable('no_proxy', $null, 'Process')
 $proc = Start-Process -FilePath $exe -WorkingDirectory $workingDir -PassThru `
     -RedirectStandardOutput $outLog -RedirectStandardError $errLog
 Write-Host "[smoke] pid=$($proc.Id)"

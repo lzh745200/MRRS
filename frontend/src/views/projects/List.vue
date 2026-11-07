@@ -575,16 +575,25 @@ const handleBatchRestore = async () => {
   } catch {
     return
   }
-  try {
-    for (const row of selectedRows.value) {
+  // 逐条收集结果：第 N 条失败不能把前 N-1 条已成功的操作说成整批失败。
+  const failedRows: typeof selectedRows.value = []
+  let successCount = 0
+  for (const row of selectedRows.value) {
+    try {
       await restoreProject(row.id)
+      successCount += 1
+    } catch {
+      failedRows.push(row)
     }
-    ElMessage.success(`已恢复 ${selectedRows.value.length} 个项目`)
-    clearSelection()
-    loadData()
-  } catch {
-    ElMessage.error('批量恢复失败')
   }
+  if (failedRows.length > 0) {
+    selectedRows.value = failedRows
+    ElMessage.warning(`批量恢复完成：成功 ${successCount} 条，失败 ${failedRows.length} 条`)
+  } else {
+    ElMessage.success(`已恢复 ${successCount} 个项目`)
+    clearSelection()
+  }
+  loadData()
 }
 
 const handleBatchPurge = async () => {
@@ -600,15 +609,25 @@ const handleBatchPurge = async () => {
     return
   }
   loading.value = true
+  const failedRows: typeof selectedRows.value = []
+  let successCount = 0
   try {
     for (const row of selectedRows.value) {
-      await purgeProject(row.id, confirmPassword)
+      try {
+        await purgeProject(row.id, confirmPassword)
+        successCount += 1
+      } catch {
+        failedRows.push(row)
+      }
     }
-    ElMessage.success(`已彻底删除 ${selectedRows.value.length} 个项目及关联数据`)
-    clearSelection()
+    if (failedRows.length > 0) {
+      selectedRows.value = failedRows
+      ElMessage.warning(`批量彻底删除完成：成功 ${successCount} 条，失败 ${failedRows.length} 条`)
+    } else {
+      ElMessage.success(`已彻底删除 ${successCount} 个项目及关联数据`)
+      clearSelection()
+    }
     loadData()
-  } catch {
-    ElMessage.error('批量彻底删除失败')
   } finally {
     loading.value = false
   }

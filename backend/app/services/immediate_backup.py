@@ -40,6 +40,7 @@ def trigger_immediate_backup(
 
             if delay > 0:
                 time.sleep(delay)
+            from app.core.config import settings
             from app.core.transaction import get_db_context
             from app.services.backup_service import BackupService
             from app.services.system_config_service import get_config
@@ -47,9 +48,12 @@ def trigger_immediate_backup(
             with get_db_context() as db:
                 target_dir = (get_config("backup_target_dir", "") or "").strip()
                 svc = BackupService(db, backup_dir=target_dir) if target_dir else BackupService(db)
+                # 包含 uploads：即时备份用于回退最近一次导入/删除，
+                # 只备库会导致恢复后附件与记录错位。大附件部署可改环境变量
+                # AUTO_BACKUP_INCLUDE_UPLOADS=false 统一退出。
                 svc.create_backup(
                     description=description,
-                    include_uploads=False,
+                    include_uploads=settings.AUTO_BACKUP_INCLUDE_UPLOADS,
                 )
                 logger.info("即时备份完成: %s", description)
             return True

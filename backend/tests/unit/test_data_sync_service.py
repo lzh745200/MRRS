@@ -508,7 +508,9 @@ class TestDataSyncService:
         existing.keys.return_value = ["id", "name"]
         db.execute.return_value.fetchone.return_value = existing
         result = await service._import_table_data(db, "supported_villages", [{"id": 1}], "skip", 1)
-        assert result["success"] == 1
+        # skip 表示没有写入：success=0、skipped=1，不能把跳过行伪装成成功。
+        assert result["success"] == 0
+        assert result["skipped"] == 1
         db.commit.assert_called_once()
 
     @pytest.mark.asyncio

@@ -1208,6 +1208,10 @@ class BackupService:
                 self._validate_backup_schema_version(backup_db_path)
 
             database_restored = self._restore_database_from_backup(temp_dir)
+            if database_restored:
+                # 旧备份可能落后当前代码；恢复后立即迁移，避免进程按旧 schema
+                # 提供接口。失败会进入下方通用 except → 回滚 pre_restore 快照。
+                self._migrate_restored_database()
             if not database_restored:
                 # fail-loud：备份包缺库、或恢复后完整性校验未通过时，生产库可能已被
                 # 替换为不可用文件。原实现丢弃该返回值照样返回 success=True，
@@ -1223,7 +1227,15 @@ class BackupService:
                 "message": "系统恢复成功",
                 "database_restored": database_restored,
                 "uploads_restored": uploads_restored,
+                # 自动备份默认不含 uploads；此时数据库已回退但附件仍是当前版本，
+                # 必须让调用方显式核对，不能只藏在一个布尔字段里。
+                "attachments_need_review": not uploads_restored,
             }
+            if not uploads_restored:
+                result["message"] = (
+                    "系统恢复成功，但备份未包含上传附件；请核对附件与记录是否匹配，"
+                    "必要时从含 uploads 的备份恢复。"
+                )
             if key_mismatch:
                 # 让调用方/前端能明确区分「强制的跨密钥恢复」与普通恢复
                 result["key_mismatch"] = key_mismatch
@@ -1247,6 +1259,57 @@ class BackupService:
 
         finally:
             self._cleanup_temp(temp_dir, decrypted_temp_path)
+
+    def _migrate_restored_database(self) -> None:
+        """恢复后把备份库迁移到当前 head。
+
+        旧备份（revision 落后）恢复成功但进程仍按新 schema 查询，会在第一个
+        新列访问处 `OperationalError`；仅提示“建议重启”不足以闭环。
+        与启动迁移同口径：无 alembic_version 但已有业务表 → stamp head；
+        否则 upgrade head。失败向上抛，由恢复事务回滚到 pre_restore 快照。
+        """
+        from alembic import command as alembic_command
+        from alembic.config import Config as AlembicConfig
+
+        backend_dir = Path(__file__).resolve().parents[2]
+        alembic_ini = backend_dir / "alembic.ini"
+        if not alembic_ini.exists():
+            logger.warning("恢复后迁移跳过：alembic.ini 不存在")
+            return
+
+        cfg = AlembicConfig(str(alembic_ini))
+        # alembic/env.py 默认用 settings.DATABASE_URL 覆盖 sqlalchemy.url；
+        # 恢复后的路径可能不是当前 settings（测试/多实例），必须走显式逃生口，
+        # 否则迁移会打到错误的库。
+        cfg.set_main_option("alembic.url_override", f"sqlite:///{self.database_path}")
+        cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+
+        has_version = False
+        has_users = False
+        conn = sqlite3.connect(self.database_path)
+        try:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            has_version = "alembic_version" in tables
+            has_users = "users" in tables
+        finally:
+            conn.close()
+
+        if not has_version and has_users:
+            # 极老备份：表已存在但没有版本号，重放历史迁移会撞表；直接 stamp。
+            alembic_command.stamp(cfg, "head")
+            logger.info("恢复后迁移：无 alembic_version，已 stamp 到 head")
+        else:
+            alembic_command.upgrade(cfg, "head")
+            logger.info("恢复后迁移：upgrade head 完成")
+
+        # Alembic 使用独立连接并在 env.py 内释放；此处不再调用
+        # engine.dispose()，避免与 _restore_database_from_backup 的释放重复，
+        # 也避免测试/运行期池已关闭时再次 dispose 抛 "pool closed"。
 
     def _query_backup_records(self):
         """查询备份记录（仅匹配备份文件条目，排除 backup_* 配置键）。
@@ -1713,44 +1776,69 @@ class BackupService:
                 # 获取文件列表
                 file_list = zipf.namelist()
 
-            # 验证数据库文件（如果存在）
-            db_verified = False
-            if "data/rural_revitalization.db" in file_list:
-                # 提取数据库文件到临时位置
-                temp_dir = tempfile.mkdtemp(prefix="verify_")
+            # 验证数据库文件：不能只认新文件名。历史备份可能是
+            # data/assistance.db / data/assistance_management.db / 根目录库；
+            # 原实现找不到新路径时直接跳过校验并返回 ok，掩盖“不可恢复”的包。
+            normalized_members = {n.replace("\\", "/"): n for n in file_list}
+            preferred = (
+                "data/rural_revitalization.db",
+                "data/assistance.db",
+                "data/assistance_management.db",
+                "rural_revitalization.db",
+            )
+            db_member = next(
+                (normalized_members[p] for p in preferred if p in normalized_members),
+                None,
+            )
+            if db_member is None:
+                # 兜底：data/ 下或根目录下的唯一 .db；不接受任意深层路径，避免误判。
+                candidates = [
+                    original for normalized, original in normalized_members.items()
+                    if normalized.lower().endswith((".db", ".sqlite", ".sqlite3"))
+                    and ("/" not in normalized or normalized.startswith("data/"))
+                ]
+                db_member = candidates[0] if len(candidates) == 1 else None
 
+            if db_member is None:
+                return {
+                    "status": "error",
+                    "message": "备份文件验证失败：未找到数据库文件",
+                    "file_hash": file_hash,
+                    "file_count": len(file_list),
+                    "backup_info": backup_info,
+                    "database_verified": False,
+                }
+
+            temp_dir = tempfile.mkdtemp(prefix="verify_")
+            temp_db_path = os.path.join(temp_dir, "verify.db")
+            try:
+                with zipfile.ZipFile(backup_file_path, "r") as zipf, \
+                     zipf.open(db_member) as src, open(temp_db_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst, 1024 * 1024)
+
+                conn = sqlite3.connect(temp_db_path)
                 try:
-                    with zipfile.ZipFile(backup_file_path, "r") as zipf:
-                        zipf.extract("data/rural_revitalization.db", temp_dir)
-
-                    temp_db_path = os.path.join(temp_dir, "data/rural_revitalization.db")
-
-                    # 验证数据库完整性
-                    conn = sqlite3.connect(temp_db_path)
                     cursor = conn.cursor()
                     cursor.execute("PRAGMA integrity_check")
                     result = cursor.fetchone()
+                finally:
                     conn.close()
 
-                    db_verified = result and result[0] == "ok"
+                db_verified = bool(result and result[0] == "ok")
+            finally:
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
 
-                finally:
-                    # 清理临时文件
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir, ignore_errors=True)
-
-                if not db_verified:
-                    # fail-loud：原实现只要 ZIP 结构完好就返回 status="ok"，
-                    # 把「备份存在但库已损坏」这一最坏故障模式判为「验证通过」，
-                    # 掩盖了备份不可还原的事实
-                    return {
-                        "status": "error",
-                        "message": "备份文件验证失败：数据库完整性校验未通过",
-                        "file_hash": file_hash,
-                        "file_count": len(file_list),
-                        "backup_info": backup_info,
-                        "database_verified": False,
-                    }
+            if not db_verified:
+                # fail-loud：备份存在但库损坏时，绝不能返回“验证通过”。
+                return {
+                    "status": "error",
+                    "message": "备份文件验证失败：数据库完整性校验未通过",
+                    "file_hash": file_hash,
+                    "file_count": len(file_list),
+                    "backup_info": backup_info,
+                    "database_verified": False,
+                }
 
             return {
                 "status": "ok",

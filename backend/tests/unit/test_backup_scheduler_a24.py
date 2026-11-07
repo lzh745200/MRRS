@@ -70,6 +70,11 @@ class TestStartAlreadyStarted:
         assert bm._scheduler_started is True
 
 
+def test_schedules_daily_database_maintenance():
+    _start_with_fake_now(datetime(2025, 1, 7, 10, 0, 0))
+    assert any(t.name == "scheduler-database_maintenance" for t in FakeTimer.instances)
+
+
 class TestDailyJobClosure:
     def test_run_async_job_success(self):
         _start_with_fake_now(datetime(2025, 1, 7, 10, 0, 0))

@@ -989,7 +989,7 @@ class TestCreateIncrementalBackup:
 
 
 class TestVerifyBackup:
-    def test_verify_success_no_db(self, tmp_path):
+    def test_verify_no_db_is_error(self, tmp_path):
         bdir = str(tmp_path / "backups")
         os.makedirs(bdir)
         zip_path = os.path.join(bdir, "good.zip")
@@ -998,7 +998,8 @@ class TestVerifyBackup:
             zf.writestr("backup_info.json", json.dumps({"ts": "2025"}))
         svc = _make_svc(MagicMock(), bdir, "/d/db.db", "/u")
         result = svc.verify_backup(zip_path)
-        assert result["status"] == "ok"
+        assert result["status"] == "error"
+        assert "未找到数据库文件" in result["message"]
 
     def test_verify_success_with_db(self, tmp_path):
         bdir = str(tmp_path / "backups")
@@ -1016,6 +1017,23 @@ class TestVerifyBackup:
         svc = _make_svc(MagicMock(), bdir, db_file, "/u")
         result = svc.verify_backup(zip_path)
         assert result["status"] == "ok"
+
+    def test_verify_legacy_db_member_path(self, tmp_path):
+        bdir = str(tmp_path / "backups")
+        os.makedirs(bdir)
+        db_file = str(tmp_path / "legacy.db")
+        conn = sqlite3.connect(db_file)
+        conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+        conn.commit()
+        conn.close()
+        zip_path = os.path.join(bdir, "legacy.zip")
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.write(db_file, "data/assistance.db")
+            zf.writestr("backup_info.json", json.dumps({"ts": "2025"}))
+        svc = _make_svc(MagicMock(), bdir, db_file, "/u")
+        result = svc.verify_backup(zip_path)
+        assert result["status"] == "ok"
+        assert result["database_verified"] is True
 
     def test_verify_file_not_found(self, tmp_path):
         svc = _make_svc(MagicMock(), str(tmp_path / "b"), "/d/db", "/u")
@@ -1063,7 +1081,8 @@ class TestVerifyBackup:
             zf.writestr("random.txt", "hello")
         svc = _make_svc(MagicMock(), bdir, "/d/db", "/u")
         result = svc.verify_backup(zip_path)
-        assert result["status"] == "ok"
+        assert result["status"] == "error"
+        assert "未找到数据库文件" in result["message"]
 
     def test_verify_exception(self, tmp_path):
         bdir = str(tmp_path / "backups")

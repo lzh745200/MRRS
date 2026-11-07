@@ -203,7 +203,9 @@ class TestImportData:
         patcher = patch.object(service, "validator")
         mock_val = patcher.start()
         mock_val.parse_excel_headers.return_value = {0: "village_name"}
-        mock_val.validate_batch.return_value = MagicMock(is_valid=True, errors=[])
+        _ok_validation = MagicMock(is_valid=True, errors=[])
+        mock_val.validate_batch.return_value = _ok_validation
+        mock_val.validate_import_data.return_value = _ok_validation
         mock_val.check_duplicates.return_value = []
         mock_val.convert_row_types.side_effect = lambda r: r
         if validator_cls:
@@ -242,7 +244,7 @@ class TestImportData:
             "app.services.excel_importer_service._HAS_PANDAS_FAST_READ", False
         ), patch.object(service, "validator") as mock_val:
             mock_val.parse_excel_headers.return_value = {0: "village_name"}
-            mock_val.validate_batch.return_value = MagicMock(
+            mock_val.validate_import_data.return_value = MagicMock(
                 is_valid=False,
                 errors=[
                     MagicMock(
@@ -949,3 +951,55 @@ class TestImportOwnershipFallback:
         created = db.add.call_args[0][0]
         assert created.created_by == 9
         assert created.organization_id == expected_org
+
+
+class TestFundProjectCrossOrgGuard:
+    """资金行的 ``project_code`` 关联必须过组织可达校验。
+
+    历史风险：导入器预加载项目映射时若只保留 project_id，填了兄弟单位
+    ``project_code`` 的资金行会被静默挂到跨组织项目上（台账可见性错乱）。
+    修复后逐行调用 ``_assert_org_reachable``，跨组织行拒绝、其余行继续。
+    """
+
+    @staticmethod
+    def _run(db, project_org_id):
+        user = SimpleNamespace(id=9, organization_id=1, role="admin", is_superuser=False)
+        svc = ExcelImporterService(db, current_user=user)
+        validator = MagicMock()
+        validator.convert_row_types.return_value = {
+            "name": "F-cross",
+            "project_code": "XM-9",
+        }
+        project = SimpleNamespace(code="XM-9", id=99, organization_id=project_org_id)
+        db.query.return_value.all.return_value = [project]
+        # 预加载项目映射走的是 query(Project).filter(...).all()，需单独打桩。
+        db.query.return_value.filter.return_value.all.return_value = [project]
+        with patch(
+            "app.services.excel_importer_service.EntityImportValidator",
+            return_value=validator,
+        ), patch(
+            "app.core.data_permission._get_org_subtree",
+            return_value=([1], []),
+        ):
+            return svc._import_funds(
+                [{"name": "F-cross", "project_code": "XM-9"}],
+                ImportResult(success=True),
+                MagicMock(),
+                ImportMode.FULL,
+            )
+
+    def test_cross_org_project_rejected(self, db):
+        result = self._run(db, 2)
+
+        assert result.success_rows == 0
+        assert result.failed_rows == 1
+        assert "无权向组织 2 导入" in result.errors[0].message
+        db.add.assert_not_called()
+
+    def test_same_org_project_accepted(self, db):
+        result = self._run(db, 1)
+
+        assert result.success_rows == 1
+        assert result.failed_rows == 0
+        created = db.add.call_args[0][0]
+        assert created.project_id == 99

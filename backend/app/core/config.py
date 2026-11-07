@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.37"
+    PROJECT_VERSION: str = "1.18.38"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -240,6 +240,9 @@ class Settings(BaseSettings):
     LOG_RETENTION: str = "30 days"
     LOG_MAX_SIZE_MB: int = 50  # 单个日志文件最大大小（MB）
     LOG_BACKUP_COUNT: int = 5  # 保留的日志备份文件数量
+    # 自动/即时备份默认包含 uploads：否则恢复后数据库已回退、附件仍是新版本，
+    # 会造成附件错挂/404。超大附件部署可显式设为 false 并自行做文件级备份。
+    AUTO_BACKUP_INCLUDE_UPLOADS: bool = True
 
     # 文件上传配置
     UPLOAD_DIR: str = "./uploads"

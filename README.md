@@ -1,14 +1,31 @@
-﻿# 帮扶管理信息系统
+# 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.37
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.38
 
-![Version](https://img.shields.io/badge/version-1.18.37-blue)
+![Version](https://img.shields.io/badge/version-1.18.38-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C204-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C232-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.37）
+## 本版亮点（v1.18.38）
+
+- **数据隔离可解释**：数据包导出请求新增 `include_unassigned`（默认 false）与 `unassigned_counts`，
+  默认仍按组织隔离；需要上报历史 NULL 记录时必须显式勾选，报表包页面已提供复选框。
+- **数据包可校验**：`manifest.data_checksums` 记录每个 `data/<type>.json` 的 SHA256，导入时逐文件校验，
+  旧包无校验和显式告警；同时修复**增量导出恒 500**（请求模型缺 `include_unassigned` 字段）。
+- **导入三入口同口径**：`/validate`、`/preview`、`/import` 统一使用 `parse_excel`（表头探测/示例行/英文表头一致），
+  统一 1000 行上限、县/梯次校验与文件内查重；新增 `validate_county` / `validate_tiered_level` 兼容开关。
+- **历史备份可恢复**：恢复后自动执行 `alembic upgrade head`（无版本但已有业务表时 stamp，失败回滚快照）；
+  备份验证兼容 `data/assistance.db` 等历史库名，找不到数据库文件时 fail-closed；未含附件时提示人工核对。
+- **资源与一致性**：数据库健康检查 6 处连接改 `closing`，`db-optimize` 改同步端点；`data_sync` 的 `skip`
+  独立计数不再冒充成功；项目批量恢复/彻底删除逐条计数；政策附件孤儿回收补齐 `category=policies`。
+- **运维默认更稳**：每日 03:10 轻量数据库维护（optimize + WAL checkpoint + integrity_check，不 VACUUM）；
+  自动/即时备份默认包含 `uploads`，避免库与附件错位（大附件部署可用 `AUTO_BACKUP_INCLUDE_UPLOADS=false` 关闭）。
+- 🧪 验证：后端 12 段全量 **15,712 passed**（覆盖率 **100.00%**）；前端 **348 files / 7,520 tests** 全绿；
+  flake8 / type-check / lint / 三层对齐 / 文档数字 / CHANGELOG / 硬编码色 / 路由鉴权门禁全部通过。
+
+## 历史亮点（v1.18.37）
 
 - **安装器不再被 VC++ 校验卡死**：VC++ Redistributable 是可选双保险（应用已由 PyInstaller
   捆绑 `VCRUNTIME140/MSVCP140`），哈希不符时改为**告警并跳过该组件**，不再在升级到 4% 时

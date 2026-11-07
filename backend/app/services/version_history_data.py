@@ -4084,4 +4084,38 @@ VERSION_HISTORY_DATA = [
             "新增 backend/tests/unit/test_installer_vcredist_nonfatal.py 守护“哈希失败不 Abort / 单反斜杠 / 重试”三项契约。",
         ],
     },
+    {
+        "version": "1.18.38",
+        "date": "2026-11-07",
+        "description": "全量缺陷收口（数据隔离/恢复/导入/资源）",
+        "features": [
+            "资金 Excel 导入的 project_code 关联增加组织可达校验：跨组织项目行直接拒绝，避免资金挂到兄弟单位项目。",
+            "数据包导出新增 unassigned_counts（未归属组织记录数）与 include_unassigned 显式开关；默认仍按组织隔离，不静默隐藏历史 NULL 记录。",
+            "数据包 manifest.data_checksums 写入每个 data/<type>.json 的 SHA256，导入时逐文件校验；旧包无校验和时显式告警，记录数不符继续阻断。",
+            (
+                "修复增量导出（/data-packages/incremental/export）因 IncrementalExportRequest 缺少 include_unassigned 字段导致"
+                "的 500：请求模型补齐该开关，端点统一透传；新增 test_include_unassigned_forwarded 守护。"
+            ),
+            (
+                "/validate、/preview 与 /import 统一使用 ExcelImporterService.parse_excel（表头探测/示例行/英文表头一致），并统一 1000 行"
+                "上限与县/梯次校验；预览增加 mode、文件内查重与失败提示。"
+            ),
+            (
+                "备份恢复后自动执行 alembic upgrade head（无版本但已有业务表时 stamp），失败回滚 pre_restore 快照；不含 uploads 的备份返回 attachme"
+                "nts_need_review 与明确文案。"
+            ),
+            (
+                "数据库健康检查 6 处 SQLite 连接改为 contextlib.closing，异常路径不再泄漏句柄；/system/admin/db-optimize 改为同步端点（线程池执行）并"
+                "确保关闭连接。"
+            ),
+            "data_sync 的 skip 不再计入 success，新增 skipped 计数。",
+            "项目批量恢复/彻底删除改为逐条收集：部分失败继续处理，提示成功/失败数并保留失败项。",
+            (
+                "政策附件新增孤儿回收：后端只删除 policies 目录、UUID 文件名且未被任何政策引用的文件；前端只回收本次新上传且已移除的 URL；el-upload 补 category=pol"
+                "icies，修复清理请求因目录不匹配恒 400 的问题。"
+            ),
+            "备份验证兼容历史库成员路径（data/assistance.db 等），且缺少数据库文件时 fail-closed，不再“无库也算验证通过”。",
+            "每日 03:10 注册轻量数据库维护（PRAGMA optimize + WAL checkpoint + integrity_check，线程池执行，不执行 VACUUM）。",
+        ],
+    },
 ]

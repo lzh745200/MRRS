@@ -162,6 +162,7 @@ class OneClickReportRequest(BaseModel):
     data_types: Optional[List[str]] = None
     remarks: Optional[str] = None
     description: Optional[str] = None
+    include_unassigned: bool = False
 
 
 @router.post("/one-click-report")
@@ -213,6 +214,7 @@ async def one_click_report(
             package_type=PackageType.report,
             owner_id=_export_owner_scope(current_user),
             exported_by_name=_user_display_name(current_user),
+            include_unassigned=bool(body.include_unassigned) if body else False,
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
@@ -495,6 +497,7 @@ async def export_data_package(
             since_sync_version=data.since_sync_version if data.incremental else None,
             owner_id=_export_owner_scope(current_user),
             exported_by_name=_user_display_name(current_user),
+            include_unassigned=data.include_unassigned,
         )
 
         duration_ms = int((time.time() - start_time) * 1000)
@@ -702,6 +705,7 @@ class IncrementalExportRequest(BaseModel):
     data_types: List[str] = []
     base_package_id: int
     description: Optional[str] = None
+    include_unassigned: bool = False
 
 
 class IncrementalImportRequest(BaseModel):
@@ -886,6 +890,7 @@ async def incremental_export(
             owner_id=_export_owner_scope(current_user),
             exported_by_name=_user_display_name(current_user),
             base_package_id=data.base_package_id,
+            include_unassigned=data.include_unassigned,
         )
 
         # DataPackageExportResult 无 record_counts/total_records 字段，从 manifest 取

@@ -67,6 +67,8 @@ class DataPackageExportRequest(BaseModel):
     type: PackageType = PackageType.report  # task: 任务包, report: 上报包
     incremental: bool = False  # 增量包: 仅导出 sync_version 大于 since_sync_version 的记录
     since_sync_version: Optional[int] = None  # 增量基准版本（配合 incremental=True）
+    # 是否把 organization_id IS NULL 的历史记录一并纳入；默认 false 防止跨组织泄露。
+    include_unassigned: bool = False
 
     @field_validator("data_types")
     @classmethod
@@ -86,6 +88,12 @@ class DataPackageManifest(BaseModel):
     org_name: Optional[str] = ""
     data_types: List[str] = Field(default_factory=list)
     record_counts: Dict[str, int] = Field(default_factory=dict)
+    # 每个 data/<type>.json 的 SHA256；旧包无此字段，导入时仅告警不阻断
+    data_checksums: Dict[str, str] = Field(default_factory=dict)
+    # 导出时发现但未纳入的“未归属组织”记录数（NULL organization_id），
+    # 供接收端/运维显式判断是否存在历史遗留数据。
+    unassigned_counts: Dict[str, int] = Field(default_factory=dict)
+    include_unassigned: bool = False
     export_time: Optional[datetime] = None
     exported_by: Optional[str] = None
     description: Optional[str] = None

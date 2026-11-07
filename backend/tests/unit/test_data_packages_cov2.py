@@ -325,6 +325,24 @@ class TestIncrementalExport:
         assert resp.status_code == 200
         assert resp.json()["data"]["total_records"] == 3
 
+    def test_include_unassigned_forwarded(self, ctx):
+        """`include_unassigned=true` 必须透传到服务层。
+
+        历史缺陷：请求体模型缺该字段，端点直接 `data.include_unassigned`
+        会抛 AttributeError → 增量导出恒 500（本用例同时兜住 schema 回退）。
+        """
+        ctx["svc"].export_package = AsyncMock(return_value=SimpleNamespace(
+            package_id=9, file_name="inc.zip", file_size=100, package_code="PKG9",
+            manifest=SimpleNamespace(record_counts={"villages": 3}),
+        ))
+        with patch.object(dp, "get_org_with_fallback", return_value=5):
+            resp = ctx["client"].post(
+                self.URL,
+                json={"base_package_id": 1, "include_unassigned": True},
+            )
+        assert resp.status_code == 200
+        assert ctx["svc"].export_package.await_args.kwargs["include_unassigned"] is True
+
     def test_business_error_400(self, ctx):
         # 覆盖 data_packages.py:827-828 —— BusinessError → 400
         ctx["svc"].export_package = AsyncMock(side_effect=BusinessError("配额不足"))

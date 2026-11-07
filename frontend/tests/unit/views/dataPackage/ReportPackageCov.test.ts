@@ -199,6 +199,23 @@ describe('步骤 1 交互与 generatePackage', () => {
     expect(vm.currentStep).toBe(0)
   })
 
+  it('未归属记录复选框 v-model 可切换', async () => {
+    const checkboxStub = {
+      name: 'ElCheckbox',
+      props: ['modelValue'],
+      emits: ['update:modelValue'],
+      template:
+        '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+    }
+    const wrapper = mountComp({ 'el-checkbox': checkboxStub })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const inputs = wrapper.findAll('input[type="checkbox"]')
+    expect(inputs.length).toBeGreaterThan(0)
+    await inputs.at(-1)!.setValue(true)
+    expect(vm.form.includeUnassigned).toBe(true)
+  })
+
   it('点击「生成数据包」：package_id 直取 + 备注缺省 → 自动触发下载并进步骤 2', async () => {
     const clickSpy = spyAnchorClick()
     postMock.mockImplementation((url: string) => {
@@ -218,6 +235,7 @@ describe('步骤 1 交互与 generatePackage', () => {
       data_types: vm.form.dataTypes,
       description: `${vm.form.year}年度数据上报`,
       type: 'report',
+      include_unassigned: false,
     })
     expect(vm.packageId).toBe('pkg-1')
     expect(vm.currentStep).toBe(2)
@@ -243,6 +261,7 @@ describe('步骤 1 交互与 generatePackage', () => {
       data_types: vm.form.dataTypes,
       description: '人工备注',
       type: 'report',
+      include_unassigned: false,
     })
     expect(vm.packageId).toBe('pkg-2')
 

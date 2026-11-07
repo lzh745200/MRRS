@@ -381,13 +381,19 @@ async def get_system_logs(
 
 
 @router.post("/db-optimize", summary="一键数据库优化")
-async def optimize_database(
+def optimize_database(
     current_user=Depends(get_current_user),
 ):
-    """执行 WAL checkpoint + PRAGMA optimize，返回优化前后空间对比"""
+    """执行 WAL checkpoint + PRAGMA optimize，返回优化前后空间对比。
+
+    同步端点：FastAPI 会放到线程池执行；async 端点里做 WAL checkpoint /
+    PRAGMA optimize 会阻塞事件循环（库大时可达数秒）。连接用 closing 保证
+    异常路径也释放。
+    """
     require_admin(current_user, error_message="仅管理员可执行数据库优化")
     import os
     import sqlite3
+    from contextlib import closing
     from urllib.parse import unquote
     from app.core.database import engine
 
@@ -424,11 +430,10 @@ async def optimize_database(
         raise HTTPException(status_code=404, detail="数据库文件不存在")
 
     size_before = os.path.getsize(db_path)
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    cursor.execute("PRAGMA optimize")
-    conn.close()
+    with closing(sqlite3.connect(db_path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        cursor.execute("PRAGMA optimize")
     size_after = os.path.getsize(db_path)
 
     saved = size_before - size_after

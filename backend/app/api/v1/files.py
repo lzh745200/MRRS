@@ -8,15 +8,22 @@
 图片魔数嗅探、返回体字段与 success_response 包装。
 """
 
+import json
 import logging
+import re
 import uuid
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.database import get_db
 from app.core.office_formats import DOCUMENT_UPLOAD_EXTS
 from app.core.security import get_current_user
 from app.core.response import success_response
+from app.models.policy import Policy
 from app.utils.upload_helper import save_upload_file
 
 logger = logging.getLogger(__name__)
@@ -120,3 +127,49 @@ async def upload_file(
         },
         message="上传成功",
     )
+
+
+# 只允许清理 /files/upload 的 policies 附件；文件名必须是本端点生成的
+# {uuid16}.{ext}，防止通过路径/通配删除任意文件。
+_ORPHAN_POLICY_PREFIX = "/uploads/generic/policies/"
+_ORPHAN_NAME_RE = re.compile(r"^[0-9a-f]{16}\.[A-Za-z0-9]{1,10}$")
+
+
+@router.delete("/uploaded", summary="删除未被引用的通用上传文件")
+def delete_orphan_upload(
+    url: str = Query(..., description="上传返回的 /uploads/... URL"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """回收“上传后取消/移除”留下的孤儿文件。
+
+    安全边界：
+    - 只接受 policies 子目录 + UUID 文件名，拒绝路径遍历；
+    - 只删除**未被任何政策引用**的文件，已保存附件返回 409；
+    - 任何已登录用户均可调用，但只能清理无引用文件（不可借机删他人附件）。
+    """
+    if not url.startswith(_ORPHAN_POLICY_PREFIX):
+        raise HTTPException(status_code=400, detail="只允许清理政策附件目录")
+    name = url[len(_ORPHAN_POLICY_PREFIX):]
+    if "/" in name or "\\" in name or not _ORPHAN_NAME_RE.fullmatch(name):
+        raise HTTPException(status_code=400, detail="非法的附件文件名")
+
+    for policy in db.query(Policy).all():
+        raw = policy.attachment_urls
+        try:
+            urls = json.loads(raw) if isinstance(raw, str) and raw else raw
+        except (TypeError, ValueError):
+            continue
+        if isinstance(urls, list) and url in urls:
+            raise HTTPException(status_code=409, detail="附件仍被政策引用，拒绝删除")
+
+    uploads_root = Path(settings.UPLOAD_DIR).resolve()
+    target = (uploads_root / "generic" / "policies" / name).resolve()
+    # 双重校验：resolve 后必须仍在 policies 目录内
+    if target.parent != (uploads_root / "generic" / "policies").resolve():
+        raise HTTPException(status_code=400, detail="非法的附件路径")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="附件不存在")
+    target.unlink()
+    logger.info("清理孤儿政策附件: user=%s, file=%s", getattr(current_user, "username", "?"), name)
+    return success_response(message="已清理未引用附件")

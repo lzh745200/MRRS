@@ -5,6 +5,7 @@
 
 import logging
 import sqlite3
+from contextlib import closing
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -163,14 +164,11 @@ class DatabaseHealthService:
                 self.stats["integrity_errors"] += 1
                 return {"status": "error", "message": error_msg}
 
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-
-            # 执行完整性检查
-            cursor.execute("PRAGMA integrity_check")
-            result = cursor.fetchone()
-
-            conn.close()
+            # closing 保证 PRAGMA 抛错时也关闭连接（异常路径不再泄漏句柄）
+            with closing(sqlite3.connect(str(self.db_path))) as conn:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA integrity_check")
+                result = cursor.fetchone()
 
             if result and result[0] == "ok":
                 logger.info("数据库完整性检查通过")
@@ -211,21 +209,18 @@ class DatabaseHealthService:
             if not self.db_path.exists():
                 return {"status": "error", "message": "数据库文件不存在"}
 
-            conn = sqlite3.connect(str(self.db_path), timeout=5)
-            cursor = conn.cursor()
+            with closing(sqlite3.connect(str(self.db_path), timeout=5)) as conn:
+                cursor = conn.cursor()
+                # 检查数据库是否可访问
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
 
-            # 检查数据库是否可访问
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
+                # 获取表数量
+                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+                table_count = cursor.fetchone()[0]
 
-            # 获取数据库大小
+            # 获取数据库大小（不依赖连接，放 with 外避免无谓占用）
             db_size = self.db_path.stat().st_size
-
-            # 获取表数量
-            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
-            table_count = cursor.fetchone()[0]
-
-            conn.close()
 
             self.stats["last_quick_check"] = datetime.now().isoformat()
 
@@ -300,12 +295,11 @@ class DatabaseHealthService:
             wal_path = Path(str(self.db_path) + "-wal")
             size_before = wal_path.stat().st_size if wal_path.exists() else 0
 
-            conn = sqlite3.connect(str(self.db_path), timeout=5)
-            cursor = conn.cursor()
-            # TRUNCATE：checkpoint 并将 -wal 截断为 0 字节
-            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            result = cursor.fetchone()
-            conn.close()
+            with closing(sqlite3.connect(str(self.db_path), timeout=5)) as conn:
+                cursor = conn.cursor()
+                # TRUNCATE：checkpoint 并将 -wal 截断为 0 字节
+                cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                result = cursor.fetchone()
 
             size_after = wal_path.stat().st_size if wal_path.exists() else 0
             self.stats["last_wal_checkpoint"] = datetime.now().isoformat()
@@ -340,24 +334,21 @@ class DatabaseHealthService:
             if not self.db_path.exists():
                 return {"status": "error", "message": "数据库文件不存在"}
 
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-
-            # 获取所有索引
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
-            indexes = cursor.fetchall()
-
-            # 检查每个索引
             issues = []
-            for (index_name,) in indexes:
-                try:
-                    cursor.execute(f"PRAGMA index_info({index_name})")
-                    cursor.fetchall()
-                except Exception as e:
-                    logger.warning('check_indexes 兜底失败（已降级）: %s', e, exc_info=True)
-                    issues.append(f"索引 {index_name} 异常: {e}")
+            with closing(sqlite3.connect(str(self.db_path))) as conn:
+                cursor = conn.cursor()
+                # 获取所有索引
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
+                indexes = cursor.fetchall()
 
-            conn.close()
+                # 检查每个索引
+                for (index_name,) in indexes:
+                    try:
+                        cursor.execute(f"PRAGMA index_info({index_name})")
+                        cursor.fetchall()
+                    except Exception as e:
+                        logger.warning('check_indexes 兜底失败（已降级）: %s', e, exc_info=True)
+                        issues.append(f"索引 {index_name} 异常: {e}")
 
             if issues:
                 return {
@@ -385,13 +376,10 @@ class DatabaseHealthService:
             if not self.db_path.exists():
                 return {"status": "error", "message": "数据库文件不存在"}
 
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-
-            # 执行ANALYZE
-            cursor.execute("ANALYZE")
-
-            conn.close()
+            with closing(sqlite3.connect(str(self.db_path))) as conn:
+                cursor = conn.cursor()
+                # 执行ANALYZE
+                cursor.execute("ANALYZE")
 
             logger.info("数据库统计信息分析完成")
 
@@ -408,33 +396,30 @@ class DatabaseHealthService:
             if not self.db_path.exists():
                 return {"status": "error", "message": "数据库文件不存在"}
 
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
+            with closing(sqlite3.connect(str(self.db_path))) as conn:
+                cursor = conn.cursor()
+                # 表数量
+                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+                table_count = cursor.fetchone()[0]
 
-            # 数据库大小
+                # 索引数量
+                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
+                index_count = cursor.fetchone()[0]
+
+                # 页大小
+                cursor.execute("PRAGMA page_size")
+                page_size = cursor.fetchone()[0]
+
+                # 页数量
+                cursor.execute("PRAGMA page_count")
+                page_count = cursor.fetchone()[0]
+
+                # 空闲页数量
+                cursor.execute("PRAGMA freelist_count")
+                freelist_count = cursor.fetchone()[0]
+
+            # 数据库大小（不依赖连接）
             db_size = self.db_path.stat().st_size
-
-            # 表数量
-            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
-            table_count = cursor.fetchone()[0]
-
-            # 索引数量
-            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'")
-            index_count = cursor.fetchone()[0]
-
-            # 页大小
-            cursor.execute("PRAGMA page_size")
-            page_size = cursor.fetchone()[0]
-
-            # 页数量
-            cursor.execute("PRAGMA page_count")
-            page_count = cursor.fetchone()[0]
-
-            # 空闲页数量
-            cursor.execute("PRAGMA freelist_count")
-            freelist_count = cursor.fetchone()[0]
-
-            conn.close()
 
             return {
                 "status": "ok",

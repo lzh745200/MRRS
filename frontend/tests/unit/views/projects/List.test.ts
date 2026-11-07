@@ -1075,7 +1075,7 @@ describe('回收站深度分支与视图切换', () => {
       expect(ElMessage.error).not.toHaveBeenCalled()
     })
 
-    it('中途失败 → 「批量恢复失败」，不清空选中也不刷新', async () => {
+    it('中途失败 → 继续处理剩余项，提示成功/失败数并保留失败项', async () => {
       projectApiMock.restore
         .mockResolvedValueOnce({})
         .mockRejectedValueOnce(new Error('boom'))
@@ -1086,12 +1086,13 @@ describe('回收站深度分支与视图切换', () => {
       projectApiMock.list.mockClear()
       await vm.handleBatchRestore()
       await flushPromises()
-      // for-of 在第 2 项抛错后中断，第 3 项未调用
-      expect(projectApiMock.restore).toHaveBeenCalledTimes(2)
-      expect(ElMessage.error).toHaveBeenCalledWith('批量恢复失败')
+      // 第 2 项失败不阻断第 3 项；已成功的 1、3 不清空
+      expect(projectApiMock.restore).toHaveBeenCalledTimes(3)
+      expect(ElMessage.warning).toHaveBeenCalledWith('批量恢复完成：成功 2 条，失败 1 条')
       expect(ElMessage.success).not.toHaveBeenCalled()
-      expect(vm.selectedRows).toHaveLength(3)
-      expect(projectApiMock.list).not.toHaveBeenCalled()
+      expect(vm.selectedRows).toHaveLength(1)
+      expect(vm.selectedRows[0].id).toBe(projectRow2.id)
+      expect(projectApiMock.list).toHaveBeenCalled()
     })
 
     it('选中为空数组 → 循环不执行，仍提示已恢复 0 个', async () => {
@@ -1151,7 +1152,7 @@ describe('回收站深度分支与视图切换', () => {
       expect(vm.loading).toBe(false)
     })
 
-    it('中途失败 → 「批量彻底删除失败」，finally 仍释放 loading', async () => {
+    it('中途失败 → 继续处理剩余项，提示成功/失败数并 finally 释放 loading', async () => {
       projectApiMock.purge
         .mockResolvedValueOnce({})
         .mockRejectedValueOnce(new Error('fail'))
@@ -1163,11 +1164,11 @@ describe('回收站深度分支与视图切换', () => {
       await vm.handleBatchPurge()
       await flushPromises()
       expect(projectApiMock.purge).toHaveBeenCalledTimes(2)
-      expect(ElMessage.error).toHaveBeenCalledWith('批量彻底删除失败')
+      expect(ElMessage.warning).toHaveBeenCalledWith('批量彻底删除完成：成功 1 条，失败 1 条')
       expect(ElMessage.success).not.toHaveBeenCalled()
       expect(vm.loading).toBe(false)
-      expect(vm.selectedRows).toHaveLength(2)
-      expect(projectApiMock.list).not.toHaveBeenCalled()
+      expect(vm.selectedRows).toHaveLength(1)
+      expect(projectApiMock.list).toHaveBeenCalled()
     })
   })
 })

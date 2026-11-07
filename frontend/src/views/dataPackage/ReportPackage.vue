@@ -53,6 +53,14 @@
             <el-checkbox value="rural_works">乡村工作</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
+        <el-form-item label="未归属记录">
+          <el-checkbox v-model="form.includeUnassigned">
+            包含未归属组织的历史记录（organization_id 为空）
+          </el-checkbox>
+          <div class="form-hint">
+            默认不包含，避免把无归属数据交给接收组织；如确需上报历史遗留数据请勾选。
+          </div>
+        </el-form-item>
         <el-form-item label="备注说明">
           <el-input v-model="form.remarks" type="textarea" :rows="3" placeholder="可选填写备注" />
         </el-form-item>
@@ -181,6 +189,7 @@ const form = reactive({
     'rural_works',
   ] as string[],
   remarks: '',
+  includeUnassigned: false,
 })
 
 const previewCounts = ref<Record<string, number>>({})
@@ -243,6 +252,7 @@ async function generatePackage() {
       data_types: form.dataTypes,
       description: form.remarks || `${form.year}年度数据上报`,
       type: 'report',
+      include_unassigned: form.includeUnassigned,
     })
     packageId.value = data?.package_id || data?.id || data?.data?.id || ''
     currentStep.value = 2

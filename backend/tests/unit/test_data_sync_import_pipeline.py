@@ -59,7 +59,7 @@ class TestImportWritesBumpSyncVersion:
             db, "supported_villages", [payload], "overwrite", 1
         )
 
-        assert result == {"total": 1, "success": 1, "failed": 0, "conflicts": []}
+        assert result == {"total": 1, "success": 1, "failed": 0, "skipped": 0, "conflicts": []}
         db.expire_all()
         stored = db.query(SupportedVillage).filter(SupportedVillage.id == rid).one()
         assert stored.village_name == "导入更新后的村名"
@@ -146,7 +146,7 @@ class TestImportInsertPath:
             db, "supported_villages", [payload], "skip", 1
         )
 
-        assert result == {"total": 1, "success": 1, "failed": 0, "conflicts": []}
+        assert result == {"total": 1, "success": 1, "failed": 0, "skipped": 0, "conflicts": []}
         db.expire_all()
         copied = db.query(SupportedVillage).filter(SupportedVillage.id == 5001).one()
         assert copied.village_name == "复制村"
@@ -307,7 +307,7 @@ class TestImportFailureAccounting:
             svc,
             "_import_table_data",
             new=AsyncMock(return_value={
-                "total": 1, "success": 0, "failed": 1, "conflicts": [],
+                "total": 1, "success": 0, "failed": 1, "skipped": 0, "conflicts": [],
             }),
         ):
             result = await svc.import_package(str(package_file), strategy="overwrite")
@@ -315,3 +315,17 @@ class TestImportFailureAccounting:
         assert result["success"] is False
         assert result["failed_records"] == 1
         assert "失败" in result["message"]
+
+
+class TestSkipAccounting:
+    async def test_skip_strategy_does_not_count_as_success(self, real_db_session):
+        db = real_db_session
+        village = SupportedVillage(village_name="已存在", organization_id=1)
+        db.add(village)
+        db.commit()
+        payload = _raw_row(db, "supported_villages", village.id)
+        result = await _service()._import_table_data(
+            db, "supported_villages", [payload], "skip", 1
+        )
+        assert result["skipped"] == 1
+        assert result["success"] == 0

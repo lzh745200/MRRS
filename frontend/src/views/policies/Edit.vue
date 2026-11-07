@@ -148,6 +148,7 @@
             class="upload-demo"
             :action="uploadAction"
             :headers="uploadHeaders"
+            :data="{ category: 'policies' }"
             :file-list="fileList"
             :on-success="handleUploadSuccess"
             :on-remove="handleUploadRemove"
@@ -181,6 +182,7 @@
 
 <script setup lang="ts">
 import { getErrorMessage } from '@/utils/getErrorMessage'
+import { del } from '@/api/request'
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import {
   ElMessage,
@@ -229,6 +231,20 @@ const formData = reactive({
 })
 
 const fileList = ref<UploadFile[]>([])
+// 本次新建但尚未保存成功的上传 URL；取消/移除时只回收这些，绝不碰历史附件
+const newUploadUrls = new Set<string>()
+
+async function cleanupNewUploads() {
+  const urls = Array.from(newUploadUrls)
+  newUploadUrls.clear()
+  for (const url of urls) {
+    try {
+      await del(`/files/uploaded?url=${encodeURIComponent(url)}`)
+    } catch {
+      // 清理是尽力而为：文件被政策引用/已被清理/网络失败都不影响主流程
+    }
+  }
+}
 
 // ── ③ 录入效率：草稿自动保存 + 未保存离开拦截 ──────────────────────────
 // 草稿按业务键隔离：新建与编辑不同记录互不污染。
@@ -369,6 +385,7 @@ type UploadedFileLike = UploadFile & {
 const handleUploadSuccess = (response: any, _file: UploadFile) => {
   const url = response?.data?.url ?? response?.url
   if (url) {
+    newUploadUrls.add(url)
     formData.attachment_urls.push(url)
     // 关键：回填 file.url，否则点"移除"无法从 attachment_urls 中删除该附件
     ;(_file as UploadedFileLike).url = url
@@ -385,6 +402,10 @@ const handleUploadRemove = (file: UploadFile) => {
   const index = formData.attachment_urls.findIndex((u) => typeof u === 'string' && u.trim() === url)
   if (index > -1) {
     formData.attachment_urls.splice(index, 1)
+  }
+  if (newUploadUrls.delete(url)) {
+    // 仅回收本次会话新上传、且已从表单移除的文件
+    void del(`/files/uploaded?url=${encodeURIComponent(url)}`).catch(() => {})
   }
 }
 
@@ -457,6 +478,7 @@ const handleSubmit = async () => {
       // 提交成功：清掉草稿并复位脏标记（否则下次进来会"复活"已提交的数据）
       clearDraft()
       isDirty.value = false
+      newUploadUrls.clear() // 已保存，附件已被政策引用，不能再回收
       pushSafe('/policies')
     } catch (error: any) {
       ElMessage.error(getErrorMessage(error, '保存失败'))
@@ -497,6 +519,8 @@ onBeforeUnmount(() => {
   stopDirtyWatch()
   // 离开前立刻落盘一次（防抖窗口内离开也不能丢）
   flushDraft()
+  // 未保存就离开：回收本次新上传、仍未被政策引用的文件
+  void cleanupNewUploads()
 })
 </script>
 

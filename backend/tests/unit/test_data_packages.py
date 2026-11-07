@@ -129,11 +129,13 @@ class TestOneClickReport:
             with _override_deps(client_with_mocked_auth, svc=mock_svc, hist=MagicMock()):
                 resp = client_with_mocked_auth.post(
                     f"{BASE}/one-click-report",
-                    json={"year": 2024, "data_types": ["schools"], "remarks": "annual report"},
+                    json={"year": 2024, "data_types": ["schools"], "remarks": "annual report",
+                          "include_unassigned": True},
                 )
                 assert resp.status_code == 200
                 _, kwargs = mock_svc.export_package.call_args
                 assert kwargs["data_types"] == ["schools"]
+                assert kwargs["include_unassigned"] is True
 
     def test_error(self, client_with_mocked_auth):
         with patch("app.api.v1.data.data.data_packages.get_org_with_fallback", return_value=1):

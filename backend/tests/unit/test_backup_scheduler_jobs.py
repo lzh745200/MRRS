@@ -130,6 +130,7 @@ class TestAutoBackupJob:
             with patch.object(bm, "_send_backup_reminder"):
                 await bm.auto_backup_job()  # 不抛出
         BS.return_value.create_backup.assert_called_once()
+        assert BS.return_value.create_backup.call_args.kwargs["include_uploads"] is True
 
     async def test_old_last_backup_proceeds(self):
         """last_backup_time 已超过间隔 → 正常落盘（覆盖间隔判定的放行侧）。"""

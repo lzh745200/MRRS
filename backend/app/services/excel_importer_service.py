@@ -265,6 +265,8 @@ class ExcelImporterService:
         user_id: int,
         mode: ImportMode = ImportMode.INCREMENTAL,
         entity_type: str = "supported_village",
+        validate_county: bool = True,
+        validate_tiered_level: bool = True,
     ) -> ImportResult:
         """
         导入Excel数据
@@ -333,7 +335,13 @@ class ExcelImporterService:
             validation_result: Any
             duplicate_errors: Any
             if entity_type == "supported_village":
-                validation_result = self.validator.validate_batch(rows)
+                # 与 /validate 同口径：县/市范围、梯次等级也必须校验，
+                # 否则预览通过、导入落库后才发现脏数据。
+                validation_result = self.validator.validate_import_data(
+                    rows,
+                    validate_county=validate_county,
+                    validate_tiered_level=validate_tiered_level,
+                )
                 duplicate_errors = self.validator.check_duplicates(rows)
                 rows = [self.validator.convert_row_types(r) for r in rows]
             else:
@@ -1026,8 +1034,12 @@ class ExcelImporterService:
             # W18-D2：软删除（避免物理删除后无法恢复）
             self._soft_delete_scoped(Fund)
 
-        # 预加载项目编号映射
-        project_map = {p.code: p.id for p in self.db.query(Project).all() if p.code}
+        # 预加载项目编号映射。必须保留 Project 对象（含 organization_id）：
+        # 资金行可能填了别的组织的 project_code，仅取 id 会把资金挂到跨组织项目上。
+        project_map = {
+            p.code: p for p in self.db.query(Project).filter(Project.is_active.is_(True)).all()
+            if p.code
+        }
 
         for row_idx, row in enumerate(rows, 1):
             converted = validator.convert_row_types(row)
@@ -1074,7 +1086,10 @@ class ExcelImporterService:
                     fund_data["created_by"] = getattr(self.current_user, "id", None)
                 project_code = converted.get("project_code")
                 if project_code and project_code in project_map:
-                    fund_data["project_id"] = project_map[project_code]
+                    project = project_map[project_code]
+                    # 与项目/学校导入同口径：跨组织关联直接拒绝该行，不能静默挂账。
+                    self._assert_org_reachable(project.organization_id)
+                    fund_data["project_id"] = project.id
 
                 with self.db.begin_nested():
                     fund = Fund(**fund_data)
@@ -1085,7 +1100,9 @@ class ExcelImporterService:
                 if name:
                     existing_names.add(name.lower())
             except Exception as e:
-                logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
+                # R61-6：此前沿用表头解析的兜底文案，资金行失败时日志会误导排障；
+                # 这里按实际上下文记录（权限/数据库/校验都走同一逐行拒绝路径）。
+                logger.warning('资金导入行失败（已降级，该行被拒绝）: %s', e, exc_info=True)
                 result.errors.append(
                     ImportError(
                         row_number=row_idx,
@@ -1197,6 +1214,8 @@ class ExcelImporterService:
         user_id: int,
         mode: ImportMode = ImportMode.INCREMENTAL,
         entity_type: str = "supported_village",
+        validate_county: bool = True,
+        validate_tiered_level: bool = True,
     ) -> ImportResult:
         """
         异步导入Excel数据（可用于API端点、CLI或后台任务）
@@ -1253,6 +1272,8 @@ class ExcelImporterService:
             user_id=user_id,
             mode=mode,
             entity_type=entity_type,
+            validate_county=validate_county,
+            validate_tiered_level=validate_tiered_level,
         )
 
     def get_import_history(

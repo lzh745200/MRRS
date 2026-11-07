@@ -20,6 +20,7 @@ import threading
 from datetime import datetime, time, timedelta
 from typing import Optional
 
+from app.core.config import settings
 from app.core.transaction import get_db_context
 from app.services.backup_service import BackupService
 from app.services.system_config_service import get_config, get_int_config
@@ -232,12 +233,14 @@ async def auto_backup_job():
                     generate=lambda: __import__("secrets").token_urlsafe(32),
                 )
                 backup = backup_service.create_backup(
-                    description="自动备份", include_uploads=False,
+                    description="自动备份",
+                    include_uploads=settings.AUTO_BACKUP_INCLUDE_UPLOADS,
                     password=backup_password,
                 )
             else:
                 backup = backup_service.create_backup(
-                    description="自动备份", include_uploads=False,
+                    description="自动备份",
+                    include_uploads=settings.AUTO_BACKUP_INCLUDE_UPLOADS,
                 )
             logger.info("自动备份完成: %s, 大小: %d 字节", backup.file_name, backup.file_size or 0)
 
@@ -530,32 +533,45 @@ async def weekly_report_job():
             logger.error("工作周报生成失败: %s", e, exc_info=True)
 
 
+def _database_maintenance_sync() -> None:
+    """同步数据库维护（在线程池执行，不阻塞事件循环）。
+
+    只做 PRAGMA optimize + WAL checkpoint + integrity_check，**不做 VACUUM**：
+    VACUUM 会生成大量临时文件并与备份/导入争抢写锁，独立维护线程已在
+    main.py 禁用。integrity_check 失败只记录日志，不在这里修复/删库。
+    """
+    import sqlite3
+    from contextlib import closing
+    from app.utils.paths import get_database_path
+
+    db_path = str(get_database_path().absolute())
+    if not os.path.exists(db_path):
+        logger.warning("数据库文件不存在，跳过维护")
+        return
+
+    before_size = os.path.getsize(db_path)
+    with closing(sqlite3.connect(db_path, timeout=10)) as conn:
+        conn.execute("PRAGMA optimize")
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("PRAGMA integrity_check")
+
+    after_size = os.path.getsize(db_path)
+    saved_kb = round((before_size - after_size) / 1024, 1)
+    logger.info(
+        "数据库维护完成 (优化前: %.1fMB, 优化后: %.1fMB, 节省: %.1fKB)",
+        before_size / 1024 / 1024, after_size / 1024 / 1024, saved_kb,
+    )
+
+
 async def database_maintenance_job():
-    """定时数据库维护（每日 03:00）：VACUUM + WAL checkpoint + PRAGMA optimize"""
+    """每日轻量维护（03:10）：optimize + WAL checkpoint + integrity_check。
+
+    在线程池执行，避免 integrity_check/checkpoint 阻塞事件循环；不执行 VACUUM。
+    """
     try:
-        import sqlite3
-        from app.utils.paths import get_database_path
+        from app.core.async_utils import run_in_thread
 
-        db_path = str(get_database_path().absolute())
-        if not os.path.exists(db_path):
-            logger.warning("数据库文件不存在，跳过维护")
-            return
-
-        before_size = os.path.getsize(db_path)
-        conn = sqlite3.connect(db_path)
-        try:
-            conn.execute("PRAGMA optimize")
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            conn.execute("PRAGMA integrity_check")
-        finally:
-            conn.close()
-
-        after_size = os.path.getsize(db_path)
-        saved_kb = round((before_size - after_size) / 1024, 1)
-        logger.info(
-            "数据库维护完成 (优化前: %.1fMB, 优化后: %.1fMB, 节省: %.1fKB)",
-            before_size / 1024 / 1024, after_size / 1024 / 1024, saved_kb,
-        )
+        await run_in_thread(_database_maintenance_sync)
     except Exception as e:
         logger.error("数据库维护失败: %s", e, exc_info=True)
 
@@ -1019,6 +1035,7 @@ def start_backup_scheduler():
     # 判定一次：距上次备份超过 backup_interval_days（或从未备份）→ 立即补跑一次。
     # 一次性、不重排；判定口径与 auto_backup_job 完全一致，补跑后当日 02:00 正常跳过。
     _schedule_backup_catchup()
+    _schedule_daily(database_maintenance_job, 3, 10, "database_maintenance")
     _schedule_daily(auto_package_job, 3, 0, "auto_package")
     _schedule_daily(message_cleanup_job, 3, 30, "message_cleanup")
     # R27：过期/已吊销登录会话回收（user_sessions 只增不减）
@@ -1044,7 +1061,7 @@ def start_backup_scheduler():
     logger.info(
         "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 启动补跑 + 自动打包 + 消息清理"
         " + 过期导出回收 + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发"
-        " + 分片清理 + 数据包清理 + 审计日志清理）"
+        " + 分片清理 + 数据包清理 + 审计日志清理 + 数据库维护）"
     )
 
 

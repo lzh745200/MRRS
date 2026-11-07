@@ -45,6 +45,9 @@ VALID_ENTITY_TYPES = frozenset({"supported_village", "project", "fund", "school"
 # 的 MAX_FILE_SIZE=10MB 业务口径一致）。此处用模块常量而非读校验器实例属性：
 # mock 环境下实例属性为 MagicMock，比较会抛 TypeError。
 _IMPORT_MAX_FILE_SIZE = 10 * 1024 * 1024
+# 与 ExcelImporterService.MAX_ROWS 保持同一口径；用模块常量避免测试替换
+# ExcelImporterService 为 MagicMock 时 MAX_ROWS 变成 Mock 导致比较 TypeError。
+_IMPORT_MAX_ROWS = 1000
 _IMPORT_MAX_FILE_SIZE_MSG = f"文件大小超过限制，最大允许 {_IMPORT_MAX_FILE_SIZE / (1024 * 1024)}MB"
 
 router = APIRouter(prefix="/import", tags=["数据导入"])
@@ -245,9 +248,11 @@ async def import_entities(
     mode: str = Query("incremental", description="导入模式: incremental(增量) / full(全量覆盖)"),
     entity_type: str = Query(
         "supported_village",
-        description="实体类型: supported_village, project, fund, school",
+        description="实体类型: supported_village, project, fund, school, household",
     ),
     dry_run: bool = Query(False, description="仅校验不实际导入，返回错误行号+修正建议"),
+    validate_county: bool = Query(True, description="是否校验县/市范围"),
+    validate_tiered_level: bool = Query(True, description="是否校验梯次等级"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -256,7 +261,7 @@ async def import_entities(
 
     - file: Excel文件，支持 .xlsx 和 .xls 格式
     - mode: 导入模式（incremental / full）
-    - entity_type: 实体类型（supported_village, project, fund, school）
+    - entity_type: 实体类型（supported_village, project, fund, school, household）
     - dry_run: 仅校验不导入，返回错误行号 + 修正建议
     """
     return await _import_entities(
@@ -264,6 +269,8 @@ async def import_entities(
         mode=mode,
         entity_type=entity_type,
         dry_run=dry_run,
+        validate_county=validate_county,
+        validate_tiered_level=validate_tiered_level,
         current_user=current_user,
         db=db,
     )
@@ -276,6 +283,8 @@ async def _import_entities(
     current_user: User,
     db: Session,
     dry_run: bool = False,
+    validate_county: bool = True,
+    validate_tiered_level: bool = True,
 ) -> ImportResultResponse:
     """通用实体导入内部处理。dry_run=True 仅校验不写入数据库。"""
     try:
@@ -346,6 +355,8 @@ async def _import_entities(
                 user_id=current_user.id,
                 mode=import_mode,
                 entity_type=entity_type,
+                validate_county=validate_county,
+                validate_tiered_level=validate_tiered_level,
             )
         finally:
             try:
@@ -364,6 +375,8 @@ async def _import_entities(
             user_id=current_user.id,
             mode=import_mode,
             entity_type=entity_type,
+            validate_county=validate_county,
+            validate_tiered_level=validate_tiered_level,
         )
         # 单机防丢失：数据导入成功后触发一次即时备份（后台线程，不阻塞响应）
         from app.services.immediate_backup import trigger_immediate_backup
@@ -463,7 +476,7 @@ async def validate_import_data(
     file: UploadFile = File(..., description="Excel文件 (.xlsx/.xls)"),
     entity_type: str = Query(
         "supported_village",
-        description="实体类型: supported_village, project, fund, school",
+        description="实体类型: supported_village, project, fund, school, household",
     ),
     validate_county: bool = Query(True, description="是否验证县 / 市字段"),
     validate_tiered_level: bool = Query(True, description="是否验证梯次等级字段"),
@@ -499,7 +512,20 @@ async def validate_import_data(
     )
 
     try:
-        rows = await run_in_thread(_parse_excel_rows, file_content, header_parser, example_markers)
+        # 与 /import 共用 ExcelImporterService.parse_excel：表头探测、示例行跳过、
+        # 英文表头/ID 回导映射必须完全一致，否则会出现“校验通过、导入失败”。
+        parser = ExcelImporterService(None)
+        rows, _headers = await run_in_thread(parser.parse_excel, file_content, entity_type)
+        if len(rows) > _IMPORT_MAX_ROWS:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"数据行数超过限制，单次最多导入 {_IMPORT_MAX_ROWS} 条记录，"
+                    f"当前 {len(rows)} 条"
+                ),
+            )
+    except HTTPException:
+        raise
     except Exception:
         # R28 §3：面向用户的文案保持泛化（W1 不变量 #6：异常原文不出站），
         # 但真实原因必须进日志——原实现把解析异常静默吞掉，模板/编码类问题
@@ -633,9 +659,22 @@ def _existing_names(db: Session, column, duplicate_field: str, rows=None) -> set
     return found
 
 
-def _build_preview_row_response(row, idx, validator, existing_names, duplicate_field):
-    """处理单行预览数据，返回错误列表和重复标记"""
-    row_errors = validator.validate_row(row, idx)
+def _build_preview_row_response(row, idx, validator, existing_names, duplicate_field, file_dup_errors=None):
+    """处理单行预览数据，返回错误列表和重复标记。
+
+    帮扶村预览必须走与 /validate、/import 相同的增强校验（县/市、梯次等级），
+    不能只用 validate_row，否则预览会漏掉导入阶段才拒绝的字段。
+    """
+    # 测试会把这个类替换为 MagicMock；用类名判断，避免 isinstance 的第二个参数
+    # 在 mock 场景下不是 type 而抛 TypeError。
+    if type(validator).__name__ == "DataValidatorService":
+        row_errors = validator.validate_import_data(
+            [row], validate_county=True, validate_tiered_level=True
+        ).errors
+    else:
+        row_errors = validator.validate_row(row, idx)
+    if file_dup_errors:
+        row_errors = list(row_errors) + list(file_dup_errors)
     is_dup = False
     dup_value = (row.get(duplicate_field) or "").strip()
     if dup_value and dup_value.lower() in existing_names:
@@ -655,12 +694,13 @@ def _to_import_error_response(e):
 
 
 @router.post("/preview", response_model=ImportPreviewResponse)
-async def preview_import_data(
+async def preview_import_data(  # noqa: C901 - 预览含解析/校验/查重多分支
     file: UploadFile = File(..., description="Excel文件 (.xlsx/.xls)"),
     entity_type: str = Query(
         "supported_village",
-        description="实体类型: supported_village, project, fund, school",
+        description="实体类型: supported_village, project, fund, school, household",
     ),
+    mode: str = Query("incremental", pattern="^(incremental|full)$", description="导入模式"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -708,10 +748,28 @@ async def preview_import_data(
         logger.error("Excel 预览解析失败（preview）", exc_info=True)
         raise HTTPException(status_code=400, detail="Excel文件解析失败，请稍后重试或联系管理员")
 
+    if len(rows) > _IMPORT_MAX_ROWS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"数据行数超过限制，单次最多导入 {_IMPORT_MAX_ROWS} 条记录，"
+                f"当前 {len(rows)} 条"
+            ),
+        )
+
     # R28-M14：按导入行名称 IN 查询（替代原全表扫描）
     existing_names = _existing_names(
         db, _preview_duplicate_column(entity_type, duplicate_field), duplicate_field, rows
     )
+
+    # 文件内重复与导入器 check_duplicates 同口径：预览必须提前暴露，
+    # 否则用户看到“全部有效”，点导入却被整批拒绝。
+    file_dup_map: Dict[int, list] = {}
+    try:
+        for dup_error in validator.check_duplicates(rows):
+            file_dup_map.setdefault(dup_error.row_number, []).append(dup_error)
+    except Exception:
+        logger.warning("预览文件内查重失败（降级为仅数据库查重）", exc_info=True)
 
     preview_rows = []
     valid_count = 0
@@ -719,7 +777,9 @@ async def preview_import_data(
     db_dup_count = 0
 
     for idx, row in enumerate(rows, 1):
-        row_errors, is_dup = _build_preview_row_response(row, idx, validator, existing_names, duplicate_field)
+        row_errors, is_dup = _build_preview_row_response(
+            row, idx, validator, existing_names, duplicate_field, file_dup_map.get(idx)
+        )
 
         if is_dup:
             db_dup_count += 1
@@ -741,7 +801,12 @@ async def preview_import_data(
 
     warnings = validator._generate_warnings(rows) if rows else []
     if db_dup_count > 0:
-        warnings.insert(0, f"发现 {db_dup_count} 条记录与数据库已有记录重复（增量导入时将被跳过）")
+        if mode == "full":
+            warnings.insert(0, f"发现 {db_dup_count} 条记录与数据库已有记录重复（全量模式将软删重建）")
+        else:
+            warnings.insert(0, f"发现 {db_dup_count} 条记录与数据库已有记录重复（增量导入时将被跳过）")
+    if file_dup_map:
+        warnings.insert(0, f"文件内存在 {sum(len(v) for v in file_dup_map.values())} 条重复，导入将被拒绝")
 
     return ImportPreviewResponse(
         total_rows=len(rows),

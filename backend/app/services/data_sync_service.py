@@ -522,7 +522,10 @@ class DataSyncService:
         影响（此前裸 SQL 失败后无回滚点，失败条目的部分写入会被末尾 commit 固化）。
         """
         safe_table = self._validate_table_name(table_name)
-        result: Dict[str, Any] = {"total": len(records), "success": 0, "failed": 0, "conflicts": []}
+        result: Dict[str, Any] = {
+            "total": len(records), "success": 0, "failed": 0,
+            "skipped": 0, "conflicts": [],
+        }
 
         for record in records:
             try:
@@ -538,7 +541,9 @@ class DataSyncService:
                         if existing:
                             # 处理冲突
                             if strategy == "skip":
-                                result["success"] += 1
+                                # skip 表示“没有写入”，不能计入 success；
+                                # 否则回执把跳过行伪装成成功写入。
+                                result["skipped"] += 1
                                 continue
                             elif strategy == "overwrite":
                                 # 更新记录
@@ -1184,7 +1189,6 @@ class DataSyncService:
                             # 记录存在，根据策略处理
                             if strategy == "skip":
                                 result["skipped"] += 1
-                                result["success"] += 1
                             elif strategy == "overwrite":
                                 await self._update_record(db, table_name, record)
                                 result["updated"] += 1
@@ -1198,6 +1202,7 @@ class DataSyncService:
                                     result["updated"] += 1
                                 else:
                                     result["skipped"] += 1
+                                    continue
                                 result["success"] += 1
                         else:
                             # 记录不存在，插入

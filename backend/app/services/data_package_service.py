@@ -229,6 +229,7 @@ class DataPackageService:
         owner_id: Optional[int] = None,
         exported_by_name: Optional[str] = None,
         base_package_id: Optional[int] = None,
+        include_unassigned: bool = False,
     ) -> DataPackageExportResult:
         """导出数据包（incremental=True 时按 sync_version 或 updated_at 时间过滤变更记录）
 
@@ -251,7 +252,12 @@ class DataPackageService:
                     since_sync_version=since_sync_version if incremental else None,
                     since_time=since_time if incremental else None,
                     owner_id=owner_id,
+                    include_unassigned=include_unassigned,
                 )
+
+        unassigned_counts: Dict[str, int] = {}
+        for data_type, model in ((t, DATA_TYPE_MODELS[t]) for t in data_types if t in DATA_TYPE_MODELS):
+            unassigned_counts[data_type] = self._count_unassigned(model)
 
         manifest = DataPackageManifest(
             version=CURRENT_VERSION,
@@ -261,6 +267,8 @@ class DataPackageService:
             export_time=datetime.now(timezone.utc),
             data_types=data_types,
             record_counts={},
+            unassigned_counts=unassigned_counts,
+            include_unassigned=include_unassigned,
             exported_by=str(export_by),
             description=description,
             checksum="",
@@ -331,6 +339,7 @@ class DataPackageService:
         since_sync_version: Optional[int] = None,
         since_time: Optional[datetime] = None,
         owner_id: Optional[int] = None,
+        include_unassigned: bool = False,
     ):
         """逐行导出指定类型的数据（内存上限为单行，不 fetchall）。"""
         # W18-D8：改用 raw SQL 拉取 —— 走 ORM 时 EncryptedText 的 TypeDecorator 会把
@@ -349,10 +358,16 @@ class DataPackageService:
         params: Dict[str, Any] = {}
         conditions = []
         if hasattr(model, "org_id"):
-            conditions.append("org_id = :org_id")
+            if include_unassigned:
+                conditions.append("(org_id = :org_id OR org_id IS NULL)")
+            else:
+                conditions.append("org_id = :org_id")
             params["org_id"] = org_id
         elif hasattr(model, "organization_id"):
-            conditions.append("organization_id = :org_id")
+            if include_unassigned:
+                conditions.append("(organization_id = :org_id OR organization_id IS NULL)")
+            else:
+                conditions.append("organization_id = :org_id")
             params["org_id"] = org_id
         if owner_id is not None and hasattr(model, "created_by"):
             conditions.append("created_by = :owner_id")
@@ -380,6 +395,19 @@ class DataPackageService:
                 record_dict[col_name] = _normalize_export_data_value(value)
             yield record_dict
 
+    def _count_unassigned(self, model: Any) -> int:
+        """统计某模型中 organization_id/org_id 为 NULL 的历史记录数。"""
+        # 不能用 `col_a or col_b`：SQLAlchemy InstrumentedAttribute 的布尔值
+        # 未定义，会抛 TypeError（真实模型导出时必现）。
+        col = getattr(model, "organization_id", None)
+        if col is None:
+            col = getattr(model, "org_id", None)
+        if col is None:
+            return 0
+        from sqlalchemy import func
+
+        return int(self.db.query(func.count()).select_from(model).filter(col.is_(None)).scalar() or 0)
+
     def _create_zip_package(
         self,
         file_path: str,
@@ -388,26 +416,33 @@ class DataPackageService:
     ) -> Dict[str, int]:
         """流式创建 ZIP：逐表逐行序列化，不把整表 JSON 放入内存。"""
         record_counts: Dict[str, int] = {}
+        data_checksums: Dict[str, str] = {}
         with zipfile.ZipFile(file_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for data_type, records in data_dict.items():
                 count = 0
+                hasher = hashlib.sha256()
                 with zf.open(f"data/{data_type}.json", "w", force_zip64=True) as fp:
                     fp.write(b"[")
+                    hasher.update(b"[")
                     for record in records:
                         if count:
                             fp.write(b",")
-                        fp.write(
-                            json.dumps(
-                                record,
-                                ensure_ascii=False,
-                                cls=CustomJSONEncoder,
-                                separators=(",", ":"),
-                            ).encode("utf-8")
-                        )
+                            hasher.update(b",")
+                        chunk = json.dumps(
+                            record,
+                            ensure_ascii=False,
+                            cls=CustomJSONEncoder,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                        fp.write(chunk)
+                        hasher.update(chunk)
                         count += 1
                     fp.write(b"]")
+                    hasher.update(b"]")
                 record_counts[data_type] = count
+                data_checksums[data_type] = hasher.hexdigest()
             manifest.record_counts = record_counts
+            manifest.data_checksums = data_checksums
             zf.writestr("manifest.json", manifest.model_dump_json(indent=2))
         return record_counts
 
@@ -502,7 +537,9 @@ class DataPackageService:
         """在线程池中验证数据包，避免 ZIP 解压/JSON 解析阻塞事件循环。"""
         return await run_in_thread(self._validate_package_sync, file_path)
 
-    def _validate_package_sync(self, file_path: str) -> DataPackageValidationResult:
+    def _validate_package_sync(  # noqa: C901 - 完整性校验分支多，拆分风险高
+        self, file_path: str
+    ) -> DataPackageValidationResult:
         """验证数据包（同步实现，只做 CPU/文件 I/O）。"""
         errors = []
         warnings: list[Any] = []
@@ -540,6 +577,14 @@ class DataPackageService:
                     errors.append(DataPackageValidationError(field="manifest", message=f"manifest格式错误: {str(e)}"))
 
                 self._check_pii_key_fingerprint(manifest_dict, errors)
+                for unassigned_type, unassigned_count in (
+                    manifest_dict.get("unassigned_counts") or {}
+                ).items():
+                    if unassigned_count and not manifest_dict.get("include_unassigned"):
+                        warnings.append(
+                            f"{unassigned_type}: 导出时存在 {unassigned_count} 条未归属组织"
+                            "（organization_id IS NULL）记录，未包含在本包内"
+                        )
 
                 for data_type in manifest_dict.get("data_types", []):
                     data_file = f"data/{data_type}.json"
@@ -551,8 +596,27 @@ class DataPackageService:
                         ))
                     else:
                         try:
-                            data_content = read_zip_member(zf, data_file).decode("utf-8")
+                            data_bytes = read_zip_member(zf, data_file)
+                            data_content = data_bytes.decode("utf-8")
                             data = json.loads(data_content)
+                            expected_digest = (manifest_dict.get("data_checksums") or {}).get(data_type)
+                            if expected_digest:
+                                actual_digest = hashlib.sha256(data_bytes).hexdigest()
+                                if actual_digest.lower() != str(expected_digest).lower():
+                                    errors.append(DataPackageValidationError(
+                                        field=data_type,
+                                        message=(
+                                            f"{data_type}: 内容 SHA256 不匹配"
+                                            "（包内数据可能被截断或篡改）"
+                                        ),
+                                        data_type=data_type,
+                                    ))
+                            else:
+                                # 旧包（含历史 1.0）没有逐文件 checksum：保留兼容，
+                                # 但必须显式告警，不能静默当作“完整”。
+                                warnings.append(
+                                    f"{data_type}: 旧包未提供内容校验和，已跳过 SHA256 校验"
+                                )
                             expected_count = manifest_dict.get("record_counts", {}).get(data_type, 0)
                             actual_count = len(data)
                             if actual_count != expected_count:

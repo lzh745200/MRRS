@@ -25,6 +25,7 @@ const {
   validateMock,
   messageBoxConfirmMock,
   onBeforeRouteLeaveMock,
+  delMock,
 } = vi.hoisted(() => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
   pushSafeMock: vi.fn(),
@@ -41,6 +42,7 @@ const {
   getLevelOptionsMock: vi.fn(),
   authStorageMock: { getToken: vi.fn() },
   validateMock: vi.fn(),
+  delMock: vi.fn(() => Promise.resolve({ success: true })),
 }))
 
 // ③ 离开拦截（useDirtyGuard）会 import onBeforeRouteLeave：只 mock useRoute 会让 setup 直接抛错。
@@ -69,6 +71,7 @@ vi.mock('@/api/policy', () => ({
 
 vi.mock('@/api/request', () => ({
   getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+  del: delMock,
 }))
 
 vi.mock('@/utils/authStorage', () => ({
@@ -134,9 +137,10 @@ function mountComp() {
         },
         'el-radio': { template: '<div class="el-radio-stub" />' },
         'el-upload': {
+          name: 'ElUpload',
           template:
             '<div class="el-upload-stub" @click="beforeUpload && beforeUpload({ type: \'image/png\', size: 100 })"><slot /><slot name="tip" /></div>',
-          props: ['beforeUpload', 'onSuccess', 'onRemove', 'fileList'],
+          props: ['beforeUpload', 'onSuccess', 'onRemove', 'fileList', 'data'],
         },
         'el-button': {
           template: '<button class="el-button-stub" @click="$emit(\'click\')"><slot /></button>',
@@ -374,6 +378,39 @@ describe('上传处理', () => {
     expect(vm.formData.attachment_urls).toHaveLength(1)
   })
 
+  it('handleUploadRemove：本次新上传的文件才调用孤儿回收', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const url = '/uploads/generic/policies/0123456789abcdef.pdf'
+    vm.handleUploadSuccess({ url }, { url } as any)
+    vm.handleUploadRemove({ url } as any)
+    expect(vm.formData.attachment_urls).toEqual([])
+  })
+
+  it('清理接口失败时静默，不影响移除附件', async () => {
+    delMock.mockRejectedValueOnce(new Error('network'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const url = '/uploads/generic/policies/0123456789abcdef.pdf'
+    vm.handleUploadSuccess({ url }, { url } as any)
+    vm.handleUploadRemove({ url } as any)
+    await flushPromises()
+    expect(vm.formData.attachment_urls).toEqual([])
+  })
+
+  it('离页清理失败静默（cleanup catch 分支）', async () => {
+    delMock.mockRejectedValueOnce(new Error('network'))
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const url = '/uploads/generic/policies/0123456789abcdef.pdf'
+    vm.handleUploadSuccess({ url }, { url } as any)
+    wrapper.unmount()
+    await flushPromises()
+  })
+
   it('handleUploadRemove：有 url 删除；无 url 忽略', async () => {
     const wrapper = mountComp()
     await flushPromises()
@@ -559,6 +596,13 @@ describe('导航与模板', () => {
     expect(vm.formData.publish_date).toBe('2024-01-01T00:00:00')
     expect(vm.formData.effective_date).toBe('2024-01-01T00:00:00')
     expect(vm.formData.status).toBe('invalid')
+  })
+
+  it('附件上传携带 category=policies（孤儿清理只认该目录）', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const upload = wrapper.findComponent({ name: 'ElUpload' })
+    expect(upload.props('data')).toEqual({ category: 'policies' })
   })
 
   it('上传控件触发 beforeUpload', async () => {

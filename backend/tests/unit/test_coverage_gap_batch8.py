@@ -442,6 +442,7 @@ class TestBackupSchedulerExtras:
         mock_service = MagicMock()
         mock_service.create_backup.return_value = record
         mock_service.cleanup_old_backups.return_value = 0
+        mock_service.cleanup_by_retention_days.return_value = 0
 
         with patch("app.services.backup_scheduler.get_db_context", return_value=cm), \
              patch("app.services.backup_scheduler.get_config", side_effect=config_side_effect), \
@@ -477,6 +478,7 @@ class TestBackupSchedulerExtras:
         mock_service = MagicMock()
         mock_service.create_backup.return_value = record
         mock_service.cleanup_old_backups.return_value = 0
+        mock_service.cleanup_by_retention_days.return_value = 0
 
         with patch("app.services.backup_scheduler.get_db_context", return_value=cm), \
              patch("app.services.backup_scheduler.get_config", side_effect=config_side_effect), \
@@ -485,7 +487,7 @@ class TestBackupSchedulerExtras:
              patch("app.services.backup_scheduler.BackupService", return_value=mock_service):
             await auto_backup_job()
         mock_service.create_backup.assert_called_once_with(
-            description="自动备份", include_uploads=False, password="persisted-key-32chars"
+            description="自动备份", include_uploads=True, password="persisted-key-32chars"
         )
 
     @pytest.mark.asyncio
