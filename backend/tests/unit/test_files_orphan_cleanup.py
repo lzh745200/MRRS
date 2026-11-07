@@ -65,3 +65,29 @@ def test_rejects_unsafe_paths(url):
     with pytest.raises(HTTPException) as exc:
         delete_orphan_upload(url=url, db=_DB(), current_user=_user())
     assert exc.value.status_code == 400
+
+
+def test_missing_file_returns_404(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    with pytest.raises(HTTPException) as exc:
+        delete_orphan_upload(
+            url="/uploads/generic/policies/0123456789abcdef.pdf",
+            db=_DB(),
+            current_user=_user(),
+        )
+    assert exc.value.status_code == 404
+
+
+def test_invalid_policy_json_is_tolerated(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path))
+    target_dir = tmp_path / "generic" / "policies"
+    target_dir.mkdir(parents=True)
+    name = "0123456789abcdef.pdf"
+    (target_dir / name).write_bytes(b"pdf")
+    policy = SimpleNamespace(attachment_urls="{not-json")
+    result = delete_orphan_upload(
+        url=f"/uploads/generic/policies/{name}",
+        db=_DB([policy]),
+        current_user=_user(),
+    )
+    assert result["success"] is True
