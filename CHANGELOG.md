@@ -12,6 +12,10 @@
 - `/validate`、`/preview` 与 `/import` 统一使用 `ExcelImporterService.parse_excel`（表头探测/示例行/英文表头一致），并统一 1000 行上限与县/梯次校验；预览增加 `mode`、文件内查重与失败提示。
 - 备份恢复后自动执行 `alembic upgrade head`（无版本但已有业务表时 stamp），失败回滚 pre_restore 快照；不含 uploads 的备份返回 `attachments_need_review` 与明确文案。
 
+### 前端产物
+
+- 数据包上报新增“包含未归属组织历史记录”选项与相关提示，构建产物 br 分块由 114 增至 115、总体积 9,651,306 B；已按门禁要求更新 `scripts/gate_baselines/dist_size.json`。
+
 ### 资源与一致性
 
 - 数据库健康检查 6 处 SQLite 连接改为 `contextlib.closing`，异常路径不再泄漏句柄；`/system/admin/db-optimize` 改为同步端点（线程池执行）并确保关闭连接。
