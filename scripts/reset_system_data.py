@@ -29,7 +29,7 @@ BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND))
 
 from app.core.config import settings  # noqa: E402
-from app.utils.paths import get_backup_path, get_runtime_uploads_path  # noqa: E402
+from app.utils.paths import get_backup_path  # noqa: E402
 
 # settings 已按 backend/.env + 动态默认值解析出真实路径
 _db_url = settings.DATABASE_URL
