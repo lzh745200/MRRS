@@ -4069,4 +4069,19 @@ VERSION_HISTORY_DATA = [
             "文档：docs/04-部署文档/01-Windows部署/代码签名.md 增加内网自签名章节；终端用户安装说明见本版发布说明。",
         ],
     },
+    {
+        "version": "1.18.37",
+        "date": "2026-11-07",
+        "description": "安装器 VC++ 校验非阻断与打包冒烟自隔离",
+        "features": [
+            (
+                "修复升级安装到 4% 时因 VC++ Redistributable 的 SHA256 校验不符直接 Abort 的问题：该组件是可选双保险（应用已由 PyInstaller 捆绑 VCR"
+                "UNTIME140/MSVCP140），现改为告警并跳过该组件，不阻断主程序安装；实际哈希写入安装目录 verify_x64_hash.txt / verify_x86_hash.txt "
+                "供排障。"
+            ),
+            "修正 NSIS 钩子中 $INSTDIR\\\\... 双反斜杠路径（NSIS 反斜杠不是转义符，双写会生成错误路径），统一为单反斜杠。",
+            "校验脚本增加 10×500ms 重试，适配升级时旧卸载器/解压尚未完成导致的瞬时读文件竞态；校验工具不可用时仍按原策略跳过。",
+            "新增 backend/tests/unit/test_installer_vcredist_nonfatal.py 守护“哈希失败不 Abort / 单反斜杠 / 重试”三项契约。",
+        ],
+    },
 ]

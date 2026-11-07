@@ -1,15 +1,21 @@
-# 帮扶管理信息系统
+﻿# 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.36
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.37
 
-![Version](https://img.shields.io/badge/version-1.18.36-blue)
+![Version](https://img.shields.io/badge/version-1.18.37-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C194-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C204-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.36）
+## 本版亮点（v1.18.37）
 
+- **安装器不再被 VC++ 校验卡死**：VC++ Redistributable 是可选双保险（应用已由 PyInstaller
+  捆绑 `VCRUNTIME140/MSVCP140`），哈希不符时改为**告警并跳过该组件**，不再在升级到 4% 时
+  `Abort`；同时修正 NSIS 钩子的双反斜杠路径并给校验脚本加重试。
+- **打包冒烟自隔离**：`scripts/smoke_test_packaged_backend.ps1` 默认使用私有
+  `APPDATA`/`LOCALAPPDATA` 并自动注入 `FRONTEND_DIST_PATH`，受限沙箱/CI 可直接对安装包
+  解包产物验证「装完能启动」，不再因写 AppData 被阻断而假挂起。
 - **签名版安装包（内网自签名）**：CI 用 `signtool` 对后端 exe、安装器与卸载器签名，
   并以签名者指纹口径验签（不写运行器根存储）；目标机通过 GPO 或
   `certutil -addstore -f Root MRRS-Internal-CodeSigning.cer` 信任后签名状态显示为 Valid。
@@ -29,8 +35,8 @@
   版本回退工具（<3.35 无 `DROP COLUMN`、<3.25 无 `RENAME COLUMN` 时自动重建表）。
 - **运维收敛**：组织级 `data_scope` 影子观测（默认 `off`，不改变查询结果）；写闸门
   `grant_guard` 与组织模块策略共用判定，**更严者生效**，默认行为不变。
-- 🧪 验证：后端 12 段全量 **15,686 passed**（覆盖率 **100.00%**，48,189 行 / 12,160 分支）；
-  前端 **348 files / 7,508 tests** 全绿；flake8 / type-check / lint / 三层对齐 / 文档数字 /
+- 🧪 验证：后端 12 段全量 **15,689 passed**（覆盖率 **100.00%**，48,189 行 / 12,160 分支）；
+  前端 **348 files / 7,515 tests** 全绿；flake8 / type-check / lint / 三层对齐 / 文档数字 /
   CHANGELOG / 硬编码色 / 路由鉴权门禁全部通过。
 
 ## 历史亮点（v1.18.34）

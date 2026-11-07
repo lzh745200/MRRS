@@ -1,3 +1,23 @@
+## [1.18.37] - 2026-11-07 — 安装器 VC++ 校验非阻断与打包冒烟自隔离
+
+### 安装可靠性
+
+- 修复升级安装到 4% 时因 `VC++ Redistributable` 的 SHA256 校验不符直接 `Abort` 的问题：该组件是可选双保险（应用已由 PyInstaller 捆绑 `VCRUNTIME140/MSVCP140`），现改为**告警并跳过该组件**，不阻断主程序安装；实际哈希写入安装目录 `verify_x64_hash.txt` / `verify_x86_hash.txt` 供排障。
+- 修正 NSIS 钩子中 `$INSTDIR\\...` 双反斜杠路径（NSIS 反斜杠不是转义符，双写会生成错误路径），统一为单反斜杠。
+- 校验脚本增加 10×500ms 重试，适配升级时旧卸载器/解压尚未完成导致的瞬时读文件竞态；校验工具不可用时仍按原策略跳过。
+- 新增 `backend/tests/unit/test_installer_vcredist_nonfatal.py` 守护“哈希失败不 Abort / 单反斜杠 / 重试”三项契约。
+
+### 打包与验证（2026-11-07）
+
+- `scripts/smoke_test_packaged_backend.ps1` 新增 `-FrontendDist` / `-MapTilesDir` /
+  `-NoIsolateUserDirs`：默认把子进程 `APPDATA`/`LOCALAPPDATA` 指向 run 目录下的私有
+  profile，避免沙箱或受限终端阻断写用户目录时卡在“初始化安全密钥…”，同时不污染本机配置；
+  自动把 `<resources>/frontend` 注入 `FRONTEND_DIST_PATH`、`<resources>/map-tiles`
+  注入 `MAP_TILES_DIR`，使解包后的 `GET /` 与离线瓦片在冒烟中可验证。
+- 验证：后端 12 段全量 **15,689 passed**（覆盖率 **100.00%**，48,205 stmts / 0 miss；
+  12,162 branches / 0 partial）；前端 **348 文件 / 7,515 用例**全通过（覆盖率 100%）；
+  Electron **23 passed**；flake8 / 三层对齐 / 文档数字 / changelog / 棘轮门禁全绿。
+
 ## [1.18.36] - 2026-11-05 — 内网自签名代码签名接入（签名版安装包）
 
 > 面向内网离线部署的签名版安装包：CI 用内网自签名证书给后端 exe、安装器与卸载器签名；

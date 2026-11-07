@@ -34,6 +34,21 @@
 .PARAMETER Keep
     Keep the run directory (stdout.log / stderr.log / data / logs) for investigation.
 
+.PARAMETER FrontendDist
+    Frontend build directory containing index.html. Default: auto-detect
+    ``<resources>/frontend`` next to the backend, then ``frontend/dist`` in the repo.
+    Passed to the backend as ``FRONTEND_DIST_PATH`` so ``GET /`` works in unpacked runs.
+
+.PARAMETER MapTilesDir
+    Optional offline map-tiles directory, passed as ``MAP_TILES_DIR``. Auto-detected
+    from ``<resources>/map-tiles`` when present.
+
+.PARAMETER NoIsolateUserDirs
+    By default the child process gets private ``APPDATA``/``LOCALAPPDATA`` under the
+    run directory. This makes the smoke test hermetic and avoids startup hangs when
+    a sandbox blocks writes to the real user profile. Pass this switch to inherit
+    the current user profile instead.
+
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke_test_packaged_backend.ps1 `
         -BackendDir 'dist\electron\win-unpacked\resources\backend\assistance-backend' -Version 1.18.31
@@ -47,6 +62,9 @@ param(
     [int]$Port = 18124,
     [string]$Version = '',
     [int]$TimeoutSeconds = 120,
+    [string]$FrontendDist = '',
+    [string]$MapTilesDir = '',
+    [switch]$NoIsolateUserDirs,
     [switch]$Keep
 )
 
@@ -72,6 +90,38 @@ if (-not (Test-Path -LiteralPath $backendDirAbs)) {
 }
 $exe = Resolve-BackendExe -dir $backendDirAbs
 $workingDir = Split-Path -Parent $exe
+# <resources>\backend\assistance-backend\assistance-backend.exe -> <resources>
+$resourcesDir = Split-Path -Parent (Split-Path -Parent $workingDir)
+
+function Resolve-FrontendDist {
+    param([string]$explicit, [string]$resources, [string]$repo)
+    $candidates = @()
+    if ($explicit) { $candidates += $explicit }
+    $candidates += (Join-Path $resources 'frontend')
+    $candidates += (Join-Path $repo 'frontend\dist')
+    $candidates += (Join-Path $repo 'resources\frontend')
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path -LiteralPath (Join-Path $c 'index.html'))) {
+            return (Resolve-Path -LiteralPath $c).Path
+        }
+    }
+    return ''
+}
+
+function Resolve-MapTilesDir {
+    param([string]$explicit, [string]$resources)
+    if ($explicit) {
+        if (Test-Path -LiteralPath $explicit) { return (Resolve-Path -LiteralPath $explicit).Path }
+        Write-Host "[smoke] WARN -MapTilesDir not found: $explicit" -ForegroundColor Yellow
+        return ''
+    }
+    $candidate = Join-Path $resources 'map-tiles'
+    if (Test-Path -LiteralPath $candidate) { return (Resolve-Path -LiteralPath $candidate).Path }
+    return ''
+}
+
+$frontendDirAbs = Resolve-FrontendDist -explicit $FrontendDist -resources $resourcesDir -repo $repoRoot
+$mapTilesDirAbs = Resolve-MapTilesDir -explicit $MapTilesDir -resources $resourcesDir
 
 # A leftover instance on the same port would make the poll below hit the wrong
 # process and report a false PASS. Fail fast instead of guessing.
@@ -88,7 +138,10 @@ $logsDir = Join-Path $runDir 'logs'
 $uploadsDir = Join-Path $runDir 'uploads'
 $cacheDir = Join-Path $runDir 'cache'
 $exportsDir = Join-Path $runDir 'exports'
-foreach ($d in @($dataDir, $logsDir, $uploadsDir, $cacheDir, $exportsDir)) {
+$profileDir = Join-Path $runDir 'profile'
+$appDataRoaming = Join-Path $profileDir 'AppData\Roaming'
+$appDataLocal = Join-Path $profileDir 'AppData\Local'
+foreach ($d in @($dataDir, $logsDir, $uploadsDir, $cacheDir, $exportsDir, $appDataRoaming, $appDataLocal)) {
     New-Item -ItemType Directory -Force -Path $d | Out-Null
 }
 $outLog = Join-Path $runDir 'stdout.log'
@@ -116,8 +169,25 @@ $env:ENCRYPTION_KEY = $encryptionKey
 $env:INTERNAL_BACKUP_KEY = 'smoke-backup-key-0123456789abcdef'
 $env:INTERNAL_SHUTDOWN_KEY = 'smoke-shutdown-key-0123456789abcdef'
 $env:ENABLE_AUTO_MIGRATION = 'false'
+if (-not $NoIsolateUserDirs) {
+    # Hermetic run: never touch the real user profile. Besides keeping the host
+    # clean, this avoids startup hangs on machines where a sandbox blocks writes
+    # to %LOCALAPPDATA% (frozen backend resolves its data dir from there).
+    $env:APPDATA = $appDataRoaming
+    $env:LOCALAPPDATA = $appDataLocal
+}
+if ($frontendDirAbs) {
+    $env:FRONTEND_DIST_PATH = $frontendDirAbs
+} else {
+    Write-Host '[smoke] WARN frontend dist not found; GET / will 404 (pass -FrontendDist)' -ForegroundColor Yellow
+}
+if ($mapTilesDirAbs) {
+    $env:MAP_TILES_DIR = $mapTilesDirAbs
+}
 
 Write-Host "[smoke] exe=$exe"
+Write-Host "[smoke] frontend=$(if ($frontendDirAbs) { $frontendDirAbs } else { '<none>' })"
+Write-Host "[smoke] map-tiles=$(if ($mapTilesDirAbs) { $mapTilesDirAbs } else { '<none>' })"
 Write-Host "[smoke] port=$Port timeout=${TimeoutSeconds}s version=$(if ($Version) { $Version } else { '<any>' })"
 $proc = Start-Process -FilePath $exe -WorkingDirectory $workingDir -PassThru `
     -RedirectStandardOutput $outLog -RedirectStandardError $errLog

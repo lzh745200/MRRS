@@ -87,21 +87,28 @@
   ;            或策略阻断/PS 过旧无 Get-FileHash）→ 不执行无法校验的二进制、
   ;            跳过 redist 安装但不阻断部署 —— 应用由 Layer 1（PyInstaller
   ;            捆绑 vcruntime DLL）覆盖，构建期拉取另有钉扎校验。
-  IfFileExists "$INSTDIR\\resources\\vcredist\\vc_redist.x64.exe" 0 try_x86_redist
+  IfFileExists "$INSTDIR\resources\vcredist\vc_redist.x64.exe" 0 try_x86_redist
     DetailPrint "正在校验 VC++ Redistributable (x64) 完整性..."
     ; 校验脚本以文件形式写出后 -File 执行 —— 不用 -Command 行内脚本：
     ; 行内脚本要过 NSIS/命令行/PS 多层解析，极易损坏（v1.11.0 教训）
-    FileOpen $1 "$INSTDIR\\verify_x64.ps1" w
+    FileOpen $1 "$INSTDIR\verify_x64.ps1" w
     FileWrite $1 "$$ErrorActionPreference = 'Stop'$\n"
-    FileWrite $1 "try {$\n"
-    FileWrite $1 "  $$h = (Get-FileHash -ErrorAction Stop -Algorithm SHA256 -LiteralPath '$INSTDIR\\resources\\vcredist\\vc_redist.x64.exe').Hash$\n"
-    FileWrite $1 "  if ($$h -ieq '${VCREDIST_X64_SHA256}') { exit 0 } else { exit 1 }$\n"
-    FileWrite $1 "} catch {$\n"
-    FileWrite $1 "  $$_ | Out-File -LiteralPath '$INSTDIR\\verify_x64_err.txt'$\n"
-    FileWrite $1 "  exit 3$\n"
+    FileWrite $1 "$$path = '$INSTDIR\resources\vcredist\vc_redist.x64.exe'$\n"
+    FileWrite $1 "for ($$i = 0; $$i -lt 10; $$i++) {$\n"
+    FileWrite $1 "  try {$\n"
+    FileWrite $1 "    if (Test-Path -LiteralPath $$path) {$\n"
+    FileWrite $1 "      $$h = (Get-FileHash -ErrorAction Stop -Algorithm SHA256 -LiteralPath $$path).Hash$\n"
+    FileWrite $1 "      if ($$h -ieq '${VCREDIST_X64_SHA256}') { exit 0 }$\n"
+    FileWrite $1 "    }$\n"
+    FileWrite $1 "  } catch { }$\n"
+    FileWrite $1 "  Start-Sleep -Milliseconds 500$\n"
     FileWrite $1 "}$\n"
+    FileWrite $1 "if (Test-Path -LiteralPath $$path) {$\n"
+    FileWrite $1 "  (Get-FileHash -Algorithm SHA256 -LiteralPath $$path).Hash | Out-File -LiteralPath '$INSTDIR\verify_x64_hash.txt'$\n"
+    FileWrite $1 "}$\n"
+    FileWrite $1 "exit 1$\n"
     FileClose $1
-    nsExec::Exec 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\\verify_x64.ps1"'
+    nsExec::Exec 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\verify_x64.ps1"'
     Pop $0
     StrCmp $0 "0" vcredist_x64_ok
     StrCmp $0 "1" vcredist_hash_fail
@@ -109,23 +116,30 @@
     Goto try_x86_redist
   vcredist_x64_ok:
     DetailPrint "正在安装 VC++ Redistributable (x64)..."
-    nsExec::Exec '"$INSTDIR\\resources\\vcredist\\vc_redist.x64.exe" /install /quiet /norestart'
+    nsExec::Exec '"$INSTDIR\resources\vcredist\vc_redist.x64.exe" /install /quiet /norestart'
     Pop $0
     Goto vcredist_done
   try_x86_redist:
-  IfFileExists "$INSTDIR\\resources\\vcredist\\vc_redist.x86.exe" 0 vcredist_done
+  IfFileExists "$INSTDIR\resources\vcredist\vc_redist.x86.exe" 0 vcredist_done
     DetailPrint "正在校验 VC++ Redistributable (x86) 完整性..."
-    FileOpen $1 "$INSTDIR\\verify_x86.ps1" w
+    FileOpen $1 "$INSTDIR\verify_x86.ps1" w
     FileWrite $1 "$$ErrorActionPreference = 'Stop'$\n"
-    FileWrite $1 "try {$\n"
-    FileWrite $1 "  $$h = (Get-FileHash -ErrorAction Stop -Algorithm SHA256 -LiteralPath '$INSTDIR\\resources\\vcredist\\vc_redist.x86.exe').Hash$\n"
-    FileWrite $1 "  if ($$h -ieq '${VCREDIST_X86_SHA256}') { exit 0 } else { exit 1 }$\n"
-    FileWrite $1 "} catch {$\n"
-    FileWrite $1 "  $$_ | Out-File -LiteralPath '$INSTDIR\\verify_x86_err.txt'$\n"
-    FileWrite $1 "  exit 3$\n"
+    FileWrite $1 "$$path = '$INSTDIR\resources\vcredist\vc_redist.x86.exe'$\n"
+    FileWrite $1 "for ($$i = 0; $$i -lt 10; $$i++) {$\n"
+    FileWrite $1 "  try {$\n"
+    FileWrite $1 "    if (Test-Path -LiteralPath $$path) {$\n"
+    FileWrite $1 "      $$h = (Get-FileHash -ErrorAction Stop -Algorithm SHA256 -LiteralPath $$path).Hash$\n"
+    FileWrite $1 "      if ($$h -ieq '${VCREDIST_X86_SHA256}') { exit 0 }$\n"
+    FileWrite $1 "    }$\n"
+    FileWrite $1 "  } catch { }$\n"
+    FileWrite $1 "  Start-Sleep -Milliseconds 500$\n"
     FileWrite $1 "}$\n"
+    FileWrite $1 "if (Test-Path -LiteralPath $$path) {$\n"
+    FileWrite $1 "  (Get-FileHash -Algorithm SHA256 -LiteralPath $$path).Hash | Out-File -LiteralPath '$INSTDIR\verify_x86_hash.txt'$\n"
+    FileWrite $1 "}$\n"
+    FileWrite $1 "exit 1$\n"
     FileClose $1
-    nsExec::Exec 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\\verify_x86.ps1"'
+    nsExec::Exec 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\verify_x86.ps1"'
     Pop $0
     StrCmp $0 "0" vcredist_x86_ok
     StrCmp $0 "1" vcredist_hash_fail
@@ -133,27 +147,32 @@
     Goto vcredist_done
   vcredist_x86_ok:
     DetailPrint "正在安装 VC++ Redistributable (x86)..."
-    nsExec::Exec '"$INSTDIR\\resources\\vcredist\\vc_redist.x86.exe" /install /quiet /norestart'
+    nsExec::Exec '"$INSTDIR\resources\vcredist\vc_redist.x86.exe" /install /quiet /norestart'
     Pop $0
     Goto vcredist_done
   vcredist_hash_fail:
-    MessageBox MB_ICONSTOP "VC++ Redistributable 完整性校验失败（SHA256 不匹配）。$\n$\n安装包可能已损坏或被篡改，安装已中止。请从官方渠道重新获取安装包。" /SD IDOK
-    Abort
+    ; VC++ Redistributable 是可选“双保险”：应用目录已捆绑
+    ; VCRUNTIME140/MSVCP140（PyInstaller Layer 1），哈希不符不应阻断整个安装。
+    ; 只告警并跳过该组件的静默安装，避免现场因微软短链/杀软改写/升级竞态
+    ; 导致“装不上”；实际哈希写入 verify_*_hash.txt 供排障。
+    DetailPrint "警告：VC++ Redistributable 哈希校验未通过，已跳过该组件安装（应用自带运行时 DLL）"
+    MessageBox MB_ICONEXCLAMATION "VC++ Redistributable 校验未通过，已跳过该可选组件。$\n$\n应用自带运行时 DLL，通常不影响使用；如启动报缺少运行库，请手动安装 VC++ 2015-2022 x64 运行库。" /SD IDOK
+    Goto vcredist_done
   vcredist_done:
   ; 清理一次性校验脚本（err 文件保留作诊断证据；减少 Program Files 下的 .ps1 暴露面）
-  Delete "$INSTDIR\\verify_x64.ps1"
-  Delete "$INSTDIR\\verify_x86.ps1"
+  Delete "$INSTDIR\verify_x64.ps1"
+  Delete "$INSTDIR\verify_x86.ps1"
 
   ; ─── 创建桌面快捷方式（圆形图标）───
   ; electron-builder 默认创建开始菜单快捷方式，但桌面快捷方式可能因
   ; oneClick=false + 用户取消而未创建。此处强制创建桌面快捷方式。
-  IfFileExists "$INSTDIR\\帮扶管理系统.exe" 0 skip_desktop_shortcut
+  IfFileExists "$INSTDIR\帮扶管理系统.exe" 0 skip_desktop_shortcut
     ; 尝试使用独立 ICO 文件，回退到 EXE 内嵌图标
-    IfFileExists "$INSTDIR\\resources\\app-circle.ico" 0 use_exe_icon
-      CreateShortCut "$DESKTOP\\帮扶管理系统.lnk" "$INSTDIR\\帮扶管理系统.exe" "" "$INSTDIR\\resources\\app-circle.ico" 0
+    IfFileExists "$INSTDIR\resources\app-circle.ico" 0 use_exe_icon
+      CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$INSTDIR\resources\app-circle.ico" 0
       Goto shortcut_created
     use_exe_icon:
-      CreateShortCut "$DESKTOP\\帮扶管理系统.lnk" "$INSTDIR\\帮扶管理系统.exe" "" "$INSTDIR\\帮扶管理系统.exe" 0
+      CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$INSTDIR\帮扶管理系统.exe" 0
     shortcut_created:
     DetailPrint "已创建桌面快捷方式（圆形图标）"
   skip_desktop_shortcut:
@@ -168,8 +187,8 @@
   Pop $0
 
   ; 删除桌面快捷方式
-  IfFileExists "$DESKTOP\\帮扶管理系统.lnk" 0 skip_del_desktop
-    Delete "$DESKTOP\\帮扶管理系统.lnk"
+  IfFileExists "$DESKTOP\帮扶管理系统.lnk" 0 skip_del_desktop
+    Delete "$DESKTOP\帮扶管理系统.lnk"
     DetailPrint "已删除桌面快捷方式"
   skip_del_desktop:
 
