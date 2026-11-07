@@ -768,7 +768,8 @@ async def preview_import_data(  # noqa: C901 - 预览含解析/校验/查重多�
     try:
         for dup_error in validator.check_duplicates(rows):
             file_dup_map.setdefault(dup_error.row_number, []).append(dup_error)
-    except Exception:
+    except (TypeError, ValueError, KeyError, AttributeError):
+        # 校验器契约异常时降级为仅数据库查重，避免预览整体 500。
         logger.warning("预览文件内查重失败（降级为仅数据库查重）", exc_info=True)
 
     preview_rows = []

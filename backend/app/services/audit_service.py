@@ -326,23 +326,37 @@ class AuditService:
         if end_date:
             query = query.filter(AuditLog.created_at <= end_date)
 
-        action_counts = dict(
-            query.with_entities(AuditLog.action, func.count(AuditLog.id)).group_by(AuditLog.action).all()
-        )
+        action_counts: Dict[str, int] = {
+            str(action): int(count)
+            for action, count in query.with_entities(
+                AuditLog.action, func.count(AuditLog.id)
+            ).group_by(AuditLog.action).all()
+        }
 
-        status_counts = dict(
-            query.with_entities(AuditLog.status, func.count(AuditLog.id)).group_by(AuditLog.status).all()
-        )
+        status_counts: Dict[str, int] = {
+            str(status): int(count)
+            for status, count in query.with_entities(
+                AuditLog.status, func.count(AuditLog.id)
+            ).group_by(AuditLog.status).all()
+        }
 
-        level_counts = dict(query.with_entities(AuditLog.level, func.count(AuditLog.id)).group_by(AuditLog.level).all())
+        level_counts: Dict[str, int] = {
+            str(level): int(count)
+            for level, count in query.with_entities(
+                AuditLog.level, func.count(AuditLog.id)
+            ).group_by(AuditLog.level).all()
+        }
 
-        top_users = dict(
-            query.with_entities(AuditLog.username, func.count(AuditLog.id))
+        top_users: Dict[str, int] = {
+            str(username): int(count)
+            for username, count in query.with_entities(
+                AuditLog.username, func.count(AuditLog.id)
+            )
             .group_by(AuditLog.username)
             .order_by(func.count(AuditLog.id).desc())
             .limit(10)
             .all()
-        )
+        }
 
         recent_activity = query.order_by(desc(AuditLog.created_at)).limit(20).all()
 
