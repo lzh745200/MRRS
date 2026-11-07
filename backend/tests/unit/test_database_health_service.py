@@ -179,7 +179,7 @@ class TestDatabaseHealthService:
                 ]
                 execute_side_effect = [
                     None,
-                    Exception("Index corruption"),
+                    sqlite3.DatabaseError("Index corruption"),
                 ]
                 mock_cursor.execute.side_effect = execute_side_effect
                 mock_conn.cursor.return_value = mock_cursor
