@@ -346,7 +346,7 @@ class DatabaseHealthService:
                     try:
                         cursor.execute(f"PRAGMA index_info({index_name})")
                         cursor.fetchall()
-                    except sqlite3.Error as e:
+                    except Exception as e:  # 索引损坏需逐索引降级，不能中断整表检查
                         logger.warning('check_indexes 兜底失败（已降级）: %s', e, exc_info=True)
                         issues.append(f"索引 {index_name} 异常: {e}")
 
