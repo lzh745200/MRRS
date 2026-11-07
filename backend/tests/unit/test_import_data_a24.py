@@ -217,3 +217,17 @@ class TestPreviewImportData:
         assert resp.rows[1].errors[0].error_code == "REQUIRED_FIELD"
         assert resp.rows[1].errors[0].value is None
         assert "重复" in resp.warnings[0]
+
+
+def test_preview_row_merges_file_duplicate_errors():
+    """文件内重复必须并到该行错误列表，不能只显示“有效”。"""
+    from app.api.v1.import_export.import_data import _build_preview_row_response
+
+    validator = MagicMock()
+    validator.validate_row.return_value = []
+    dup = MagicMock(row_number=1, field_name="name", message="duplicate")
+    errors, is_dup = _build_preview_row_response(
+        {"name": "A"}, 1, validator, set(), "name", [dup]
+    )
+    assert errors == [dup]
+    assert is_dup is False

@@ -1455,3 +1455,12 @@ class TestPackageUnassignedIncludedNoWarning:
             ]
             result = await service.validate_package("/tmp/test.zip")
         assert not any("未包含在本包内" in w for w in result.warnings)
+
+
+class TestPackageUnassignedOrgIdColumn:
+    def test_iter_includes_null_for_org_id_column(self, service):
+        model = _export_model("org_id_probe", ["id"], org_id=1)
+        service.db.execute.return_value = []
+        list(service._iter_export_data_type(7, model, include_unassigned=True))
+        sql = str(service.db.execute.call_args.args[0])
+        assert "OR org_id IS NULL" in sql
