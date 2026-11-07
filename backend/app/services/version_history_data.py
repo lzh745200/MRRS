@@ -4105,6 +4105,10 @@ VERSION_HISTORY_DATA = [
                 "nts_need_review 与明确文案。"
             ),
             (
+                "数据包上报新增“包含未归属组织历史记录”选项与相关提示，构建产物 br 分块由 114 增至 115、总体积 9,651,306 B；已按门禁要求更新 scripts/gate_basel"
+                "ines/dist_size.json。"
+            ),
+            (
                 "数据库健康检查 6 处 SQLite 连接改为 contextlib.closing，异常路径不再泄漏句柄；/system/admin/db-optimize 改为同步端点（线程池执行）并"
                 "确保关闭连接。"
             ),
@@ -4115,7 +4119,6 @@ VERSION_HISTORY_DATA = [
                 "icies，修复清理请求因目录不匹配恒 400 的问题。"
             ),
             "备份验证兼容历史库成员路径（data/assistance.db 等），且缺少数据库文件时 fail-closed，不再“无库也算验证通过”。",
-            "每日 03:10 注册轻量数据库维护（PRAGMA optimize + WAL checkpoint + integrity_check，线程池执行，不执行 VACUUM）。",
         ],
     },
 ]
