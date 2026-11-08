@@ -4167,4 +4167,16 @@ VERSION_HISTORY_DATA = [
             "回归测试锁定“无 MessageBox / 无安装期哈希 / 记录退出码 / app-local DLL”四项契约。",
         ],
     },
+    {
+        "version": "1.18.41",
+        "date": "2026-11-08",
+        "description": "数据包乡村工作与预览失败语义修复",
+        "features": [
+            (
+                "数据包支持前端已暴露的“乡村工作”类型：DATA_TYPE_MODELS、RECORD_MODELS 注册 RuralWork，业务键为 organization_id + code；此前"
+                "勾选后不会生成 data/rural_works.json，接口仍返回成功，属于静默丢数据。"
+            ),
+            "数据包预览失败不再伪造“每种类型 0 条”并进入下一步；现在提示后端/网络错误、停留在当前步骤，避免用户误以为数据为空而生成空包。",
+        ],
+    },
 ]

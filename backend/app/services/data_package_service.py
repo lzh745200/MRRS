@@ -34,6 +34,7 @@ from app.core.json_encoder import CustomJSONEncoder
 from app.core.logging import logger
 from app.models.data_package import DataPackage, PackageStatus, PackageType
 from app.models.project import Fund, Project
+from app.models.rural_work import RuralWork
 from app.models.school import School
 from app.models.supported_village import SupportedVillage
 from app.utils.upload_helper import ensure_zip_within_limit, read_zip_member
@@ -67,6 +68,7 @@ DATA_TYPE_MODELS = {
     "projects": Project,
     "funds": Fund,
     "schools": School,
+    "rural_works": RuralWork,
 }
 
 
@@ -108,6 +110,7 @@ BUSINESS_KEYS: Dict[str, tuple] = {
     "projects": ("organization_id", "code"),
     "funds": ("organization_id", "code"),
     "schools": ("organization_id", "code"),
+    "rural_works": ("organization_id", "code"),
 }
 
 

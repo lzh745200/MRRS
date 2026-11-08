@@ -44,6 +44,7 @@ from app.core.logging import logger
 from app.models.base import is_datetime_type
 from app.models.fund import Fund, FundSource, FundStatus, FundType
 from app.models.project import Project, ProjectStatus, ProjectType
+from app.models.rural_work import RuralWork
 from app.models.school import School, SchoolType, SupportStatus
 from app.models.supported_village import SupportedVillage
 
@@ -53,6 +54,7 @@ RECORD_MODELS = {
     "projects": Project,
     "funds": Fund,
     "schools": School,
+    "rural_works": RuralWork,
 }
 
 # 系统列：不参与必填派生/数值派生/日期派生

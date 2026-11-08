@@ -231,13 +231,13 @@ async function previewData() {
     })
     previewCounts.value = data?.counts || data?.data?.counts || {}
     currentStep.value = 1
-  } catch {
-    // 预览失败时用模拟数据让流程可继续
+  } catch (error: any) {
+    // 预览失败必须暴露给用户：旧实现伪造“每种类型 0 条”并允许继续，
+    // 用户会以为数据为空而生成空包，掩盖网络/权限/服务端错误。
     previewCounts.value = {}
-    for (const t of form.dataTypes) {
-      previewCounts.value[t] = 0
-    }
-    currentStep.value = 1
+    currentStep.value = 0
+    ElMessage.error(getErrorMessage(error, '预览失败，请稍后重试'))
+    return
   } finally {
     previewing.value = false
   }

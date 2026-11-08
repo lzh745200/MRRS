@@ -176,15 +176,16 @@ describe('previewData 预览', () => {
     expect(vm.currentStep).toBe(1)
   })
 
-  it('失败：catch 回退模拟数据（每种类型置 0）仍进步骤 1', async () => {
+  it('失败：不伪造 0 条数据、不进入下一步，并提示错误', async () => {
     postMock.mockRejectedValue(new Error('net'))
     const wrapper = mountComp()
     const vm = wrapper.vm as any
     vm.form.dataTypes = ['villages', 'funds']
     await vm.previewData()
-    expect(vm.previewCounts).toEqual({ villages: 0, funds: 0 })
-    expect(vm.currentStep).toBe(1)
+    expect(vm.previewCounts).toEqual({})
+    expect(vm.currentStep).toBe(0)
     expect(vm.previewing).toBe(false)
+    expect(ElMessage.error).toHaveBeenCalledWith('net')
   })
 })
 
