@@ -41,10 +41,22 @@ def _run(coro):
 # ── reports：输出目录限制 ──────────────────────────────────────────────
 
 
-def test_safe_output_dir_cross_drive_returns_400(monkeypatch):
-    monkeypatch.setattr("app.utils.paths.get_runtime_uploads_path", lambda: Path("C:/base"))
+def test_safe_output_dir_commonpath_error_returns_400(monkeypatch):
+    """commonpath 在跨盘（Windows）或异常路径下抛 ValueError 时必须 fail-closed 返回 400。
+
+    该分支在 Linux CI 上无法用真实路径触发（无盘符概念），因此直接注入 ValueError，
+    保证两个平台对同一安全兜底都有覆盖。
+    """
+    import os as _os
+
+    monkeypatch.setattr("app.utils.paths.get_runtime_uploads_path", lambda: Path("/base"))
+
+    def _boom(_paths):
+        raise ValueError("different drives")
+
+    monkeypatch.setattr(_os.path, "commonpath", _boom)
     with pytest.raises(HTTPException) as exc:
-        reports_mod._safe_output_dir("Z:/evil")
+        reports_mod._safe_output_dir("/evil")
     assert exc.value.status_code == 400
 
 
