@@ -107,7 +107,7 @@ def _ensure_contract_access(contract, current_user, db: Session) -> None:
     if getattr(contract, "project_id", None):
         _get_project_or_403(contract.project_id, current_user, db)
     else:
-        _assert_standalone_record_access(contract, current_user, "合同")
+        _assert_standalone_record_access(contract, current_user, "合同", db=db)
 
 
 def _scope_lifecycle_records(query, model, current_user):
@@ -121,25 +121,42 @@ def _scope_lifecycle_records(query, model, current_user):
     return query.filter(model.created_by == _get_username(current_user))
 
 
-def _assert_standalone_record_access(record, current_user, kind: str = "记录") -> None:
-    """project_id 为空时的兜底授权（2026-10-29 审计）。
+def _assert_standalone_record_access(
+    record, current_user, kind: str = "记录", db: Session = None
+) -> None:
+    """project_id 为空时的兜底授权（2026-10-29 审计；2026-11-07 深审收紧）。
 
     ``project_id`` 有值时由 :func:`_get_project_or_403` 走项目级数据权限；
-    **为空时原实现完全不校验** —— 而这些表（FundContract / FundTransferVoucher /
-    结算单 / 订单）都没有 organization_id 列，无法用组织过滤，于是任意登录用户
-    都能读写其它单位的合同金额、供应商、付款明细（跨组织财务数据泄漏）。
+    为空时这些表（FundContract / FundTransferVoucher / 结算单 / 订单）都没有
+    organization_id 列，原实现只按创建人用户名兜底。
 
-    兜底口径：创建人本人 或 管理员可访问，其余 403。
-    ``created_by`` 在写入侧存的是用户名（见 :func:`_get_username`）。
+    2026-11-07 深度审计 P1：``is_admin`` 直接放行会让**部门级 admin** 跨组织
+    读写他单位合同金额/供应商/付款明细。现收紧为：
+
+    * 创建人本人 → 放行；
+    * 超管 → 放行；
+    * 部门级 admin → 仅当创建人所属组织在本人组织子树内才放行；
+    * 归属缺失/无法判定 → fail-closed 403。
     """
-    from app.core.permission_utils import is_admin
-
-    if is_admin(current_user):
-        return
     owner = getattr(record, "created_by", None)
     me = getattr(current_user, "username", None)
     if owner and me and str(owner) == str(me):
         return
+
+    from app.core.permission_utils import is_admin, is_superuser
+
+    if is_superuser(current_user):
+        return
+    if is_admin(current_user):
+        org_id = getattr(current_user, "organization_id", None)
+        if db is not None and owner and org_id:
+            from app.core.data_permission import _get_org_subtree
+            from app.models.user import User
+
+            owner_user = db.query(User).filter(User.username == str(owner)).first()
+            ids, _ = _get_org_subtree(db, org_id)
+            if owner_user is not None and owner_user.organization_id in set(ids or []):
+                return
     raise HTTPException(status_code=403, detail=f"无权访问该{kind}（非创建人且非管理员）")
 
 
@@ -903,7 +920,7 @@ async def get_transfer_voucher(
         _get_project_or_403(v.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(v, current_user)
+        _assert_standalone_record_access(v, current_user, db=db)
     return success_response(data=_voucher_to_dict(v))
 
 
@@ -924,7 +941,7 @@ async def update_transfer_voucher(
         _get_project_or_403(v.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(v, current_user)
+        _assert_standalone_record_access(v, current_user, db=db)
     if v.status == VoucherStatus.CONFIRMED.value:
         raise HTTPException(status_code=400, detail="已确认凭证不可修改")
 
@@ -962,7 +979,7 @@ async def delete_transfer_voucher(
         _get_project_or_403(v.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(v, current_user)
+        _assert_standalone_record_access(v, current_user, db=db)
     if v.status != VoucherStatus.DRAFT.value:
         raise HTTPException(status_code=400, detail="仅草稿状态凭证可删除")
 
@@ -987,7 +1004,7 @@ async def confirm_transfer_voucher(
         _get_project_or_403(v.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(v, current_user)
+        _assert_standalone_record_access(v, current_user, db=db)
     if v.status not in (VoucherStatus.DRAFT.value, VoucherStatus.SUBMITTED.value):
         raise HTTPException(status_code=400, detail=f"当前状态 {v.status} 不允许确认")
 
@@ -1026,7 +1043,7 @@ async def upload_voucher_attachment(
         _get_project_or_403(v.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(v, current_user)
+        _assert_standalone_record_access(v, current_user, db=db)
 
     from ...models.fund import FundAttachment
     from ...utils.upload_helper import save_upload_file
@@ -1214,7 +1231,7 @@ async def get_contract(
         _get_project_or_403(c.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(c, current_user)
+        _assert_standalone_record_access(c, current_user, db=db)
     # 合同允许不挂项目（ContractCreate.project_id 可选，前端从菜单进入合同管理时
     # 无 project_id 上下文）。历史缺陷：详情端无条件调 _get_project_or_403，导致
     # 这类合同"创建成功但详情恒 400"，而同一资源的更新/删除/附件却放行 —— 同一资源
@@ -1251,7 +1268,7 @@ async def update_contract(
         _get_project_or_403(c.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(c, current_user)
+        _assert_standalone_record_access(c, current_user, db=db)
 
     for key, val in data.model_dump(exclude_unset=True).items():
         setattr(c, key, val)
@@ -1276,7 +1293,7 @@ async def delete_contract(
         _get_project_or_403(c.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(c, current_user)
+        _assert_standalone_record_access(c, current_user, db=db)
     if c.status != ContractStatus.DRAFT.value:
         raise HTTPException(status_code=400, detail="仅草稿状态合同可删除")
 
@@ -1319,7 +1336,7 @@ async def create_contract_payment(
         _get_project_or_403(c.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(c, current_user)
+        _assert_standalone_record_access(c, current_user, db=db)
 
     # 生成付款编号
     count = (
@@ -1742,7 +1759,7 @@ async def update_settlement(
         _get_project_or_403(s.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(s, current_user)
+        _assert_standalone_record_access(s, current_user, db=db)
     if s.status == SettlementStatus.APPROVED.value:
         raise HTTPException(status_code=400, detail="已审批决算不可修改")
 
@@ -1782,7 +1799,7 @@ async def approve_settlement(
         _get_project_or_403(s.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(s, current_user)
+        _assert_standalone_record_access(s, current_user, db=db)
     # 幂等守卫：仅 SUBMITTED（或 DRAFT 直接提交）可审批，重复审批拒绝，
     # 避免覆盖 auditor/audit_opinion/performance_* 审计字段并重复写工作日志
     if s.status not in (
@@ -2007,7 +2024,7 @@ async def issue_allocation_order(
         _get_project_or_403(order.project_id, current_user, db)
     else:
         # project_id 为空：无组织列可过滤，按创建人 / 管理员兜底
-        _assert_standalone_record_access(order, current_user)
+        _assert_standalone_record_access(order, current_user, db=db)
     if order.status != "draft":
         raise HTTPException(status_code=400, detail="仅草稿状态可下达")
 

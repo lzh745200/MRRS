@@ -1422,9 +1422,14 @@ async def preview_fund_attachment(
     if not mime_type:
         mime_type = att.file_type or "application/octet-stream"
 
-    # 图片、PDF、文本等可内联预览的类型使用 inline 模式
+    # 2026-11-07 深审 P1：只允许安全的二进制类型内联；text/html、image/svg+xml
+    # 等可执行类型一律走下载（同源 /uploads + 无 sandbox iframe 会形成存储型 XSS）。
     inline_types = (
-        "image/", "application/pd", "text/",
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )

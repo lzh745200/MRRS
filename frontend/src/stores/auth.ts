@@ -130,11 +130,12 @@ export const useAuthStore = defineStore('auth', () => {
         timeout: 3000,
       })
         .then(() => undefined)
-        .catch(() => {
-          /* 吊销失败静默：本地清理照常执行 */
+        .catch((error: unknown) => {
+          // 吊销失败不阻塞本地清理，但不能静默吞掉（否则服务端令牌残留无人知晓）。
+          console.warn('[auth] 服务端登出失败，已继续本地清理', error)
         })
-    } catch {
-      /* 静默 */
+    } catch (error: unknown) {
+      console.warn('[auth] 登出请求创建失败，已继续本地清理', error)
     }
     token.value = ''
     refreshToken.value = ''

@@ -482,6 +482,33 @@ class TestDatabaseMaintenanceJob:
         with patch("app.utils.paths.get_database_path", return_value=missing):
             await bm.database_maintenance_job()  # 提前返回
 
+    async def test_integrity_check_failure_is_logged(self, tmp_path, caplog):
+        """integrity_check 非 ok 时必须留下 error 日志（此前结果被丢弃）。"""
+        db_file = tmp_path / "broken.db"
+        db_file.write_bytes(b"x")
+
+        class _Cursor:
+            def __init__(self, value):
+                self._value = value
+
+            def fetchone(self):
+                return (self._value,)
+
+        class _Conn:
+            def execute(self, sql):
+                if "integrity_check" in sql:
+                    return _Cursor("database disk image is malformed")
+                return _Cursor("ok")
+
+            def close(self):
+                pass
+
+        with patch("app.utils.paths.get_database_path", return_value=db_file), \
+                patch("sqlite3.connect", return_value=_Conn()):
+            await bm.database_maintenance_job()
+
+        assert "完整性检查未通过" in caplog.text
+
     async def test_exception_is_logged(self):
         with patch("app.utils.paths.get_database_path",
                    side_effect=RuntimeError("path boom")):

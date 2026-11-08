@@ -170,7 +170,11 @@ class FillTemplateService:
                     continue
                 definition = fields.get(field, {})
                 value = self._value_of(record, field, definition.get("type", "str"))
-                sheet.cell(row=row, column=col, value=value)
+                cell = sheet.cell(row=row, column=col, value=value)
+                if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+                    # R61 审计：用户数据以公式前缀开头时强制按文本写入，
+                    # 防止 Excel/WPS 把业务数据当公式执行（公式注入）。
+                    cell.data_type = "s"
             sheet.cell(row=row, column=id_col, value=record.id)
 
         buffer = io.BytesIO()

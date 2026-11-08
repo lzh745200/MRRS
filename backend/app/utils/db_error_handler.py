@@ -16,7 +16,7 @@ from sqlalchemy.exc import (
 )
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import BusinessError, map_db_exception
+from app.core.exceptions import AppError, BusinessError, map_db_exception
 from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,10 @@ def _handle_db_exception(func_name: str, db: Session | None, exc: Exception) -> 
             raise HTTPException(status_code=503, detail="磁盘空间不足，请清理后重试")
         raise HTTPException(status_code=503, detail="数据库操作失败，请稍后重试")
 
-    if isinstance(exc, (HTTPException, BusinessError)):
+    if isinstance(exc, (HTTPException, BusinessError, AppError)):
+        # AppError 由 app.core.exceptions 注册的全局处理器翻译为对应状态码。
+        # 若被当作未知异常吞掉，端点内抛出的 400/403/404/409 会全部变成 500
+        # （2026-11-08 审计：create_project 的“帮扶村不存在”即因此恒 500）。
         raise exc
 
     if isinstance(exc, SQLAlchemyError):

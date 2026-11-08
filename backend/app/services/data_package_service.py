@@ -12,6 +12,7 @@ Data Package Service
 import hashlib
 import json
 import os
+import re
 import shutil
 import time
 import uuid
@@ -54,6 +55,11 @@ from app.core.transaction import safe_commit
 # 支持的数据包版本
 SUPPORTED_VERSIONS = ["1.0", "1.1"]
 CURRENT_VERSION = "1.0"
+
+# R61 审计：仅当字符串以严格 ISO 日期时间形态出现时才尝试转 datetime。
+# 旧实现「含字母 T 就尝试解析」会把 "PART-TIME" 这类文本列误转成 datetime，
+# 进而改变导入值的类型/格式；这里用前缀正则把判定收敛到真实时间串。
+_ISO_DATETIME_T_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}")
 
 # 数据类型映射
 DATA_TYPE_MODELS = {
@@ -885,6 +891,7 @@ class DataPackageService:
                     # 依赖方向由导出顺序保证（DATA_TYPE_MODELS 为 村→项目→经费→学校），
                     # 与 manifest.data_types 的生成顺序一致。
                     fk_remap: Dict[str, Dict[Any, Any]] = {}
+                    bulk_write_errors = 0
 
                     for data_type in data_types:
                         if data_type not in DATA_TYPE_MODELS:
@@ -924,6 +931,15 @@ class DataPackageService:
                         skipped_counts[data_type] = skip + len(rejected)
                         error_counts[data_type] = len(errs)
                         errors.extend(errs)
+                        bulk_write_errors += len(errs)
+
+                # 审计 P1-4：组级写入失败不能报 success 并置 imported——
+                # 否则数据只导入了一部分且无法重导。整体回滚，标记 failed 供重试。
+                if bulk_write_errors:
+                    raise RuntimeError(
+                        "数据包部分记录写入失败（%d 条），本次导入已整体回滚，请修复后重新导入"
+                        % bulk_write_errors
+                    )
 
                 package.status = _package_status(PackageStatus.imported.value)
                 package.imported_at = datetime.now(timezone.utc)
@@ -980,7 +996,7 @@ class DataPackageService:
                     continue
                 except ValueError:
                     pass
-            elif isinstance(v, str) and "T" in v:
+            elif isinstance(v, str) and _ISO_DATETIME_T_RE.match(v.strip()):
                 try:
                     parsed = datetime.fromisoformat(v.replace("Z", "+00:00"))
                     if parsed.tzinfo is not None:

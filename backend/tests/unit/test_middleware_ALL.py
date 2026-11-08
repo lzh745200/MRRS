@@ -370,7 +370,8 @@ class TestCsrfFunctions:
 
     def test_is_path_exempt_exact_prefix_match(self):
         from app.middleware.csrf_middleware import _is_path_exempt
-        assert _is_path_exempt("/health-check") is True
+        # 2026-11-08 CSRF P2：豁免改为路径边界匹配，`/health-check` 不再被 `/health` 前缀误豁免
+        assert _is_path_exempt("/health-check") is False
 
     def test_is_path_exempt_csrf_token_path(self):
         from app.middleware.csrf_middleware import _is_path_exempt

@@ -126,9 +126,14 @@ def _token_expired(token: str) -> bool:
 
 
 def _is_path_exempt(path: str) -> bool:
-    """检查请求路径是否在 CSRF 豁免列表中"""
+    """检查请求路径是否在 CSRF 豁免列表中。
+
+    R61 审计加固：前缀匹配必须落在路径边界上（``/api/v1/auth/login``
+    可豁免 ``/api/v1/auth/login/extra``，但不得把 ``/api/v1/auth/login-x``
+    这类同前缀的其它路由一并豁免），避免未来新增路由被误放行。
+    """
     for prefix in _CSRF_EXEMPT_PATH_PREFIXES:
-        if path == prefix or path.startswith(prefix):
+        if path == prefix or path.startswith(prefix.rstrip("/") + "/"):
             return True
     return False
 
@@ -227,11 +232,22 @@ class CSRFMiddleware:
             return
 
         # 本机内部通道豁免：Electron 自动备份携带启动时注入环境变量的
-        # X-Internal-Backup 密钥（与 shutdown 端点同一内部密钥模式）
+        # X-Internal-Backup 密钥（与 shutdown 端点同一内部密钥模式）。
+        # R61 审计加固：内部密钥只放行备份/关机这两类内部端点，不再对任意
+        # 路径生效——密钥一旦泄漏，影响面被限制在备份与关机操作内。
         internal_key = os.getenv("INTERNAL_BACKUP_KEY", "")
         if internal_key and headers.get("X-Internal-Backup", "") == internal_key:
-            await self.app(scope, receive, send)
-            return
+            internal_prefixes = ("/api/v1/system/backup", "/api/v1/shutdown")
+            if path == "/api/v1/shutdown" or any(
+                path == p or path.startswith(p + "/") for p in internal_prefixes
+            ):
+                await self.app(scope, receive, send)
+                return
+            logger.warning(
+                "内部备份密钥用于非备份/关机路径，已按普通请求校验 CSRF | method=%s path=%s",
+                method,
+                path,
+            )
 
         # ── 状态变更请求（POST/PUT/DELETE/PATCH）验证 CSRF token ──
         cookies = self._parse_cookies(headers)

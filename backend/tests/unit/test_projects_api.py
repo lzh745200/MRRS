@@ -472,7 +472,9 @@ class TestProjectsAPI:
         resp = client.post(
             "/api/v1/projects", json={"name": "重复", "code": "PRJ-EXISTING"}
         )
-        assert resp.status_code == 500  # AppError → handle_db_errors_async → 500
+        # AppError 由全局处理器翻译为 400；此前被 db_error_handler 误包成 500
+        assert resp.status_code == 400
+        assert "已存在" in str(resp.json())
 
     def test_create_project_validation_error(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)
@@ -545,7 +547,7 @@ class TestProjectsAPI:
             "/api/v1/projects/1",
             json={"start_date": "2026-12-01", "end_date": "2026-01-01"},
         )
-        assert resp.status_code == 500  # AppError → handle_db_errors_async → 500
+        assert resp.status_code == 400  # AppError 由全局处理器翻译，不再是 500
 
     @patch("app.api.v1.projects.get_client_ip", return_value="127.0.0.1")
     def test_update_project_status_change(

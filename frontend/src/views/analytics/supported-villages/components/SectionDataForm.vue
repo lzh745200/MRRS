@@ -769,7 +769,13 @@
     >
       <div class="preview-container">
         <img v-if="previewType === 'image'" :src="previewUrl" alt="预览" class="preview-image" />
-        <iframe v-else-if="previewType === 'pdf'" :src="previewUrl" class="preview-pdf" />
+        <iframe
+          v-else-if="previewType === 'pdf'"
+          :src="previewUrl"
+          sandbox=""
+          referrerpolicy="no-referrer"
+          class="preview-pdf"
+        />
         <div v-else class="preview-unsupported">
           <el-icon :size="48" color="var(--color-info)"><Document /></el-icon>
           <p>该文件类型不支持在线预览，请下载后查看</p>

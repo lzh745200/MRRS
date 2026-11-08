@@ -378,10 +378,21 @@ class MachineCodeService:
             .first()
         )
         if not org:
-            org = Organization(name=org_name_clean)
+            # 设计约定（2026-09-06）：组织通行码允许「find-or-create」——跨机器注册时
+            # 目标单位在本机尚不存在，凭单位名 + 管理员下发的通行码自建档。
+            # 审计 P1-5 的结构化修复：建档时补齐 path，避免产生 path=NULL 的根组织
+            # 破坏组织树可见性；level/code 仍由管理员后续维护（通行码本身不携带编码）。
+            org = Organization(name=org_name_clean, is_active=True)
             self.db.add(org)
-            safe_commit(self.db)
+            self.db.flush()
+            if not org.path:  # pragma: no branch — 新建实例必无 path，此处仅防御
+                org.path = f"/{org.id}/"
+            self.db.commit()
             self.db.refresh(org)
+            logger.info(
+                "组织通行码自验证：本机无该单位，按 find-or-create 建立占位组织 org=%s（id=%s）",
+                org_name_clean, org.id,
+            )
 
         record = (
             self.db.query(MachineCode)

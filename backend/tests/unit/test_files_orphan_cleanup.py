@@ -11,14 +11,16 @@ from app.core.config import settings
 
 
 class _DB:
-    def __init__(self, policies=None):
-        self._policies = policies or []
+    """模拟 ``db.query(Policy.attachment_urls).all()`` 返回的 1 元组列表。"""
+
+    def __init__(self, urls=None):
+        self._urls = urls or []
 
     def query(self, _model):
         return self
 
     def all(self):
-        return self._policies
+        return [(url,) for url in self._urls]
 
 
 def _user():
@@ -41,13 +43,11 @@ def test_delete_unreferenced_policy_file(tmp_path, monkeypatch):
 
 
 def test_refuses_referenced_policy_file(tmp_path):
-    policy = SimpleNamespace(
-        attachment_urls=json.dumps(["/uploads/generic/policies/0123456789abcdef.pdf"])
-    )
+    raw_urls = json.dumps(["/uploads/generic/policies/0123456789abcdef.pdf"])
     with pytest.raises(HTTPException) as exc:
         delete_orphan_upload(
             url="/uploads/generic/policies/0123456789abcdef.pdf",
-            db=_DB([policy]),
+            db=_DB([raw_urls]),
             current_user=_user(),
         )
     assert exc.value.status_code == 409
@@ -84,10 +84,9 @@ def test_invalid_policy_json_is_tolerated(tmp_path, monkeypatch):
     target_dir.mkdir(parents=True)
     name = "0123456789abcdef.pdf"
     (target_dir / name).write_bytes(b"pdf")
-    policy = SimpleNamespace(attachment_urls="{not-json")
     result = delete_orphan_upload(
         url=f"/uploads/generic/policies/{name}",
-        db=_DB([policy]),
+        db=_DB(["{not-json"]),
         current_user=_user(),
     )
     assert result["success"] is True

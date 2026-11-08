@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import mimetypes
 import os
 import uuid
 from typing import Callable, Iterable, Optional, Set, cast
@@ -91,6 +92,21 @@ _IMAGE_MAGIC = {
 }
 
 
+def _validate_upload_extension(ext: str, allowed: Iterable[str], status_code: int) -> None:
+    """扩展名必填 + 白名单校验（2026-11-07 深审 P1）。
+
+    历史行为在 ``ext == ""`` 时直接跳过白名单，配合 Windows 的尾点规范化
+    （``payload.`` → ``payload``，或 ``payload.js.`` → ``payload.js``）可把
+    HTML/JS 送进公开的 ``/uploads`` 静态目录。这里改为显式拒绝无扩展名。
+    """
+    ext = (ext or "").lower().lstrip(".")
+    allowed_set = {e.lower().lstrip(".") for e in allowed}
+    if not ext:
+        raise HTTPException(status_code=status_code, detail="文件必须包含扩展名")
+    if ext not in allowed_set:
+        raise HTTPException(status_code=status_code, detail=f"不支持的文件类型: .{ext}")
+
+
 def _safe_extension(filename: str) -> str:
     """提取文件扩展名（小写、去点）；无扩展名返回空串。"""
     if not filename or "." not in filename:
@@ -133,6 +149,10 @@ def _sanitize_file_name(name: str, fallback: str = "upload") -> str:
     base = (name or "").replace("\\", "/").split("/")[-1].strip()
     cleaned = "".join(c for c in base if c.isprintable() and c not in "\x00/\\:")
     cleaned = cleaned.lstrip(".").strip()
+    # 2026-11-07 深审 P1：Windows 会规范化尾点/尾空格（payload.js. → payload.js），
+    # 若不在入口剥掉，白名单校验的扩展名与实际落盘/静态托管的扩展名会不一致，
+    # 形成「无扩展名放行 → 实际以 .js/.html 提供」的绕过链。
+    cleaned = cleaned.rstrip(". ").strip()
     if not cleaned or cleaned in (".", ".."):
         return fallback
     return cleaned
@@ -301,7 +321,27 @@ def read_zip_member(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"压缩包成员 {name} 解压后超过限制（{max_bytes // (1024 * 1024)}MB）",
         )
-    return zf.read(name)
+    # R61: 中央目录声明的 file_size 不可信（可伪造），必须按实际解压字节数逐块计数。
+    chunks: list[bytes] = []
+    total = 0
+    with zf.open(name) as fp:
+        while True:
+            chunk = fp.read(1024 * 1024)
+            if not isinstance(chunk, (bytes, bytearray)):
+                # 测试替身/非真实文件对象的兼容：其 read() 可能返回 Mock（真值且
+                # len()==0），逐块循环会永不终止（R61 实测曾把 pytest 拖到 11GB）。
+                # 此时回退到一次性读取，保持 ``zf.read`` 的既有语义。
+                return zf.read(name)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail=f"压缩包成员 {name} 实际解压后超过限制（{max_bytes // (1024 * 1024)}MB）",
+                )
+            chunks.append(chunk)
+    return b"".join(chunks)
 
 
 async def save_upload_file(
@@ -350,12 +390,7 @@ async def save_upload_file(
         _allowed = list(settings.allowed_file_types_list) + list(DEFAULT_ALLOWED_EXTENSIONS)
     else:
         _allowed = list(allowed_extensions)
-    _allowed_set = {e.lower().lstrip(".") for e in _allowed}
-    if ext and ext not in _allowed_set:
-        raise HTTPException(
-            status_code=type_status_code,
-            detail=f"不支持的文件类型: .{ext}",
-        )
+    _validate_upload_extension(ext, _allowed, type_status_code)
 
     # 2. 存储目录（归一化 + 绝对路径，防路径遍历）
     base_upload = os.path.abspath(settings.UPLOAD_DIR)
@@ -432,7 +467,9 @@ async def save_upload_file(
         "file_name": orig_name,
         "file_path": file_path,
         "file_size": written,
-        "file_type": file.content_type or "application/octet-stream",
+        # 2026-11-07 深审 P1：MIME 由服务端按落盘扩展名判定，不再信任客户端
+        # content_type（客户端可声明 text/html 让公开 /uploads 以 HTML 执行）。
+        "file_type": mimetypes.guess_type(orig_name)[0] or "application/octet-stream",
         "url": url,
         "sha256": sha256,
     }

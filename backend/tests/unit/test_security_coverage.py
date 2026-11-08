@@ -520,13 +520,28 @@ class TestRequireDataPermissionOrgPath:
     """require_data_permission 组织归属匹配分支"""
 
     def test_org_match_passes_without_created_by(self):
-        """同组织记录即使非本人创建也放行"""
+        """显式 data_scope=org 时，同组织记录即使非本人创建也放行"""
         from app.core.data_permission import require_data_permission
         user = Mock()
         user.id = 5
         user.organization_id = 7
+        user.role = "user"
+        user.data_scope = "org"
         user.is_superuser = False
         assert require_data_permission(user, organization_id=7, created_by=None, db=Mock()) is True
+
+    def test_default_user_same_org_without_creator_denied(self):
+        """未显式配置 org 的普通用户按 OWN 判定，同组织他人记录 403（审计 P1 修复）"""
+        from app.core.data_permission import require_data_permission
+        user = Mock()
+        user.id = 5
+        user.organization_id = 7
+        user.role = "user"
+        user.data_scope = "self"
+        user.is_superuser = False
+        with pytest.raises(HTTPException) as exc:
+            require_data_permission(user, organization_id=7, created_by=None, db=Mock())
+        assert exc.value.status_code == 403
 
     def test_org_mismatch_and_creator_mismatch_raises_403(self):
         from app.core.data_permission import require_data_permission

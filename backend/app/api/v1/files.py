@@ -154,8 +154,9 @@ def delete_orphan_upload(
     if "/" in name or "\\" in name or not _ORPHAN_NAME_RE.fullmatch(name):
         raise HTTPException(status_code=400, detail="非法的附件文件名")
 
-    for policy in db.query(Policy).all():
-        raw = policy.attachment_urls
+    # 只取 attachment_urls 列：政策正文（content）可能是大文本，整行加载
+    # 会在政策数量多时把大量内容读进内存，这里只为判断引用关系。
+    for (raw,) in db.query(Policy.attachment_urls).all():
         try:
             urls = json.loads(raw) if isinstance(raw, str) and raw else raw
         except (TypeError, ValueError):

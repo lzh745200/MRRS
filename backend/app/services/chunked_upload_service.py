@@ -19,7 +19,15 @@ from typing import Any, Dict, List, Optional, cast
 
 import aiofiles
 
+from app.utils.upload_helper import _safe_extension, _sanitize_file_name
+
 logger = logging.getLogger(__name__)
+
+# 深审 P2：分片上传最终文件落在 /uploads 静态目录（同源），禁止可直接执行的
+# Web 扩展名，避免存储型 XSS。普通业务附件类型不受影响。
+_BLOCKED_UPLOAD_EXTENSIONS = {
+    "html", "htm", "xhtml", "shtml", "svg", "js", "mjs", "xml", "xsl", "xslt", "htc", "wasm",
+}
 
 
 class ChunkUploadStatus(str, Enum):
@@ -260,6 +268,14 @@ class ChunkedUploadService:
             raise ValueError(
                 "File size exceeds maximum limit of " f"{ChunkedUploadConfig.MAX_FILE_SIZE / 1024 / 1024 / 1024:.1f}GB"
             )
+
+        # 深审 P2：分片上传与一次性上传共用文件名净化；拒绝 Web/脚本扩展名，
+        # 防止任意扩展名（如 .html/.svg）落到 /uploads 造成存储型 XSS。
+        safe_name = _sanitize_file_name(file_name)
+        ext = _safe_extension(safe_name)
+        if ext in _BLOCKED_UPLOAD_EXTENSIONS:
+            raise ValueError(f"不支持的文件类型: .{ext}")
+        file_name = safe_name
 
         # 确定分片大小
         chunk_size = chunk_size or self.default_chunk_size

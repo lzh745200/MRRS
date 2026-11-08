@@ -398,8 +398,9 @@ function readRequestedVersion(argv) {
     candidates.push(arg);
   }
   for (const raw of candidates) {
-    const v = String(raw).replace(/^v/, "").trim();
-    if (/^\d+\.\d+\.\d+/.test(v)) return v;
+    const v = String(raw).trim().replace(/^v/, "");
+    // 2026-11-07 深审 P1：完整锚定 semver，拒绝 v1.2.3;curl... 之类附带内容
+    if (/^\d+\.\d+\.\d+$/.test(v)) return v;
   }
   return null;
 }

@@ -85,6 +85,30 @@ def get_db():
     raise NotImplementedError("get_db must be mocked or overridden")
 
 
+def _apply_batch_scope(query, model, *, organization_id, is_superuser, user_id):
+    """按组织/本人收窄批量操作范围（2026-11-07 深审 P2）。
+
+    * 超管：不限制；
+    * 有 ``organization_id`` 列：限本组织（缺组织 → 拒绝，fail-closed）；
+    * 无组织列但有 ``user_id`` 列（如 work_logs）：限本人记录；
+    * 两者皆无：拒绝。
+    返回 ``(query, error)``；error 非空表示应拒绝。
+    """
+    if is_superuser:
+        return query, None
+    org_col = getattr(model, "organization_id", None)
+    if org_col is not None:
+        if organization_id is None:
+            return query, "账号未绑定组织，禁止批量操作该表数据"
+        return query.filter(org_col == organization_id), None
+    user_col = getattr(model, "user_id", None)
+    if user_col is not None:
+        if user_id is None:
+            return query, "缺少用户身份，禁止批量操作该表数据"
+        return query.filter(user_col == user_id), None
+    return query, "该表缺少组织/用户归属列，禁止批量操作"
+
+
 class BatchService:
     """批量操作服务 — 支持新旧两种接口风格。"""
 
@@ -141,7 +165,8 @@ class BatchService:
 
     async def batch_update(self, table_name: str, ids: List[int],
                            updates: dict, *, organization_id: int | None = None,
-                           is_superuser: bool = False, **kwargs) -> Dict[str, Any]:
+                           is_superuser: bool = False,
+                           user_id: int | None = None, **kwargs) -> Dict[str, Any]:
         self._validate_table_name(table_name)
         _reject_protected_table(table_name)
         model = _resolve_model(table_name)
@@ -159,21 +184,21 @@ class BatchService:
             # —— 操作者 organization_id 为 None（未绑组织的 admin、role=super_admin 但
             # is_superuser=False 等）时三个条件整体短路，直接走全量分支，按裸 id 列表
             # 跨组织批量改/删，违反 ADR-0002 fail-closed。
-            org_col = getattr(model, 'organization_id', None)
-            if is_superuser or org_col is None:
-                # 超管：全局；模型本身无组织列：该表不需要组织隔离（按模型结构判定）
-                instances = base_query.all()
-            elif organization_id is None:
-                # 非超管且账号未绑定组织 → 不得操作任何记录（fail-closed）
+            scoped, scope_error = _apply_batch_scope(
+                base_query, model,
+                organization_id=organization_id,
+                is_superuser=is_superuser,
+                user_id=user_id,
+            )
+            if scope_error:
                 return {
                     "success": False,
                     "success_count": 0,
                     "skipped": total_matched,
-                    "error": "账号未绑定组织，无权批量操作该表数据",
+                    "error": scope_error,
                 }
-            else:
-                instances = base_query.filter(org_col == organization_id).all()
-                skipped = total_matched - len(instances)
+            instances = scoped.all()
+            skipped = total_matched - len(instances)
             for inst in instances:
                 for k, v in safe_updates.items():
                     if hasattr(inst, k):
@@ -185,7 +210,8 @@ class BatchService:
     async def batch_delete(self, table_name: str, ids: List[int],
                            soft_delete: bool = False, *,
                            organization_id: int | None = None,
-                           is_superuser: bool = False, **kwargs) -> Dict[str, Any]:
+                           is_superuser: bool = False,
+                           user_id: int | None = None, **kwargs) -> Dict[str, Any]:
         self._validate_table_name(table_name)
         _reject_protected_table(table_name)
         model = _resolve_model(table_name)
@@ -196,19 +222,21 @@ class BatchService:
             base_query = self.db.query(model).filter(model.id.in_(ids))
             total_matched = base_query.count()
             # 数据隔离：非超级管理员只能操作本组织数据（同 batch_update 的 fail-closed 口径）
-            org_col = getattr(model, 'organization_id', None)
-            if is_superuser or org_col is None:
-                instances = base_query.all()
-            elif organization_id is None:
+            scoped, scope_error = _apply_batch_scope(
+                base_query, model,
+                organization_id=organization_id,
+                is_superuser=is_superuser,
+                user_id=user_id,
+            )
+            if scope_error:
                 return {
                     "success": False,
                     "success_count": 0,
                     "skipped": total_matched,
-                    "error": "账号未绑定组织，无权批量删除该表数据",
+                    "error": scope_error,
                 }
-            else:
-                instances = base_query.filter(org_col == organization_id).all()
-                skipped = total_matched - len(instances)
+            instances = scoped.all()
+            skipped = total_matched - len(instances)
             for inst in instances:
                 if soft_delete:
                     # 优先使用 is_active 列（SupportedVillage/School/Project/Fund）
@@ -227,7 +255,8 @@ class BatchService:
     async def batch_export(self, table_name: str, ids: List[int],
                            format: str = "xlsx", *,
                            organization_id: int | None = None,
-                           is_superuser: bool = False, **kwargs) -> Dict[str, Any]:
+                           is_superuser: bool = False,
+                           user_id: int | None = None, **kwargs) -> Dict[str, Any]:
         self._validate_table_name(table_name)
         # P0 越权/信息泄露封堵（与 batch_update / batch_delete / validate_batch 同口径）：
         # 原实现漏了本守卫，导致 `batch_export("users")` 可把 User.to_dict() 整表导出，
@@ -245,16 +274,20 @@ class BatchService:
                 query = query.filter(model.id.in_(ids))
             # 数据隔离（S2 红线）：非超管只能导出本组织数据，与 update/delete 一致。
             # fail-closed：账号未绑定组织时不能因为 organization_id=None 就跳过过滤。
-            org_col = getattr(model, 'organization_id', None)
-            if not is_superuser and org_col is not None:
-                if organization_id is None:
-                    return {
-                        "success": False,
-                        "data": "",
-                        "exported_count": 0,
-                        "error": "账号未绑定组织，禁止批量导出",
-                    }
-                query = query.filter(org_col == organization_id)
+            scoped, scope_error = _apply_batch_scope(
+                query, model,
+                organization_id=organization_id,
+                is_superuser=is_superuser,
+                user_id=user_id,
+            )
+            if scope_error:
+                return {
+                    "success": False,
+                    "data": "",
+                    "exported_count": 0,
+                    "error": scope_error,
+                }
+            query = scoped
             records = [r.to_dict() for r in query.all()]
             wb = Workbook()
             ws = wb.active
@@ -276,7 +309,8 @@ class BatchService:
     async def validate_batch(self, table_name: str,
                              ids: List[int], *,
                              organization_id: int | None = None,
-                             is_superuser: bool = False, **kwargs) -> Dict[str, Any]:
+                             is_superuser: bool = False,
+                             user_id: int | None = None, **kwargs) -> Dict[str, Any]:
         self._validate_table_name(table_name)
         _reject_protected_table(table_name)
         model = _resolve_model(table_name)
@@ -284,15 +318,19 @@ class BatchService:
         if self.db:
             # 批量 COUNT 查询替代逐条 GET（避免 N+1）
             query = self.db.query(model).filter(model.id.in_(ids))
-            org_col = getattr(model, 'organization_id', None)
-            if not is_superuser and org_col is not None:
-                if organization_id is None:
-                    return {
-                        "success": False,
-                        "existing_count": 0,
-                        "error": "账号未绑定组织，禁止批量校验",
-                    }
-                query = query.filter(org_col == organization_id)
+            scoped, scope_error = _apply_batch_scope(
+                query, model,
+                organization_id=organization_id,
+                is_superuser=is_superuser,
+                user_id=user_id,
+            )
+            if scope_error:
+                return {
+                    "success": False,
+                    "existing_count": 0,
+                    "error": scope_error,
+                }
+            query = scoped
             existing_count = query.count()
         return {"success": True, "existing_count": existing_count}
 

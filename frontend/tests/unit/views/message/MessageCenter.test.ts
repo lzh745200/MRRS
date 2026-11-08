@@ -465,7 +465,7 @@ describe('跳转与格式化', () => {
     const vm = wrapper.vm as any
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     vm.handleGoToLink(msg2) // https
-    expect(openSpy).toHaveBeenCalledWith('https://example.com/detail', '_blank')
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/detail', '_blank', 'noopener,noreferrer')
     vm.handleGoToLink(msg1) // 内部
     expect(mockPushSafe).toHaveBeenCalledWith('/system/config')
     vm.handleGoToLink(msg3) // 无 link

@@ -125,7 +125,11 @@ class TestCSRFASGIBranches:
         try:
             with patch.dict(os.environ, {"INTERNAL_BACKUP_KEY": "k123"}):
                 called, _ = await _run(
-                    mw, _make_scope(headers={"X-Internal-Backup": "k123"})
+                    mw,
+                    _make_scope(
+                        path="/api/v1/system/backup/export",
+                        headers={"X-Internal-Backup": "k123"},
+                    ),
                 )
             assert called is True
         finally:

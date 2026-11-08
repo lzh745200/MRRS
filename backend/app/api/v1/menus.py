@@ -1521,6 +1521,26 @@ async def get_user_menu_config(
     }
 
 
+def _assert_menu_config_target_allowed(db, current_user, target_user) -> None:
+    """菜单配置写入的目标用户授权（2026-11-07 深度审计 P2）。
+
+    * 超管：可改任何非自己用户；
+    * 其他 admin：目标不得是 super_admin，且目标组织必须在本人组织子树内。
+    """
+    from app.core.data_permission import assert_org_reachable
+    from app.core.permission_utils import is_superuser
+
+    if is_superuser(current_user):
+        return
+    if (getattr(target_user, "role", "") or "") == "super_admin" or getattr(
+        target_user, "is_superuser", False
+    ):
+        raise HTTPException(status_code=403, detail="无权修改超级管理员的菜单权限")
+    assert_org_reachable(
+        db, current_user, getattr(target_user, "organization_id", None), action="修改菜单"
+    )
+
+
 @router.put(
     "/user-menus/{user_id}",
     summary="设置用户的菜单权限",
@@ -1549,6 +1569,10 @@ async def set_user_menu_config(
     # 不能修改自己的菜单配置（防止管理员锁死自己）
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="不能修改自己的菜单权限")
+
+    # 2026-11-07 审计 P2：部门级 admin 不得跨组织改菜单；也不得裁剪 super_admin，
+    # 否则可用 menu_keys=[] 造成他组织/超管账号的可用性 DoS。
+    _assert_menu_config_target_allowed(db, current_user, user)
 
     # 获取所有有效的菜单 key（含历史兼容 key，保证旧配置可再次保存）
     all_valid_keys = set(_iter_definition_keys())

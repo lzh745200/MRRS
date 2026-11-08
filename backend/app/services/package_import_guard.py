@@ -91,28 +91,35 @@ def find_previous_import(db: Session, checksum: str) -> Optional[Dict[str, Any]]
     if not checksum:
         return None
     try:
-        row = (
+        rows = (
             db.query(AuditLog)
             .filter(
                 AuditLog.action == PACKAGE_IMPORT_ACTION,
                 AuditLog.resource_id == checksum,
             )
             .order_by(AuditLog.id.desc())
-            .first()
+            .limit(20)
+            .all()
         )
     except Exception:  # pragma: no cover - 防御：查询故障不阻断导入
         logger.debug("数据包台账查询失败", exc_info=True)
         return None
-    # 只认真实 ORM 行：测试里的 MagicMock 桩 / 其它类型一律视为未命中
-    if not isinstance(row, AuditLog):
-        return None
-    payload = row.new_value if isinstance(row.new_value, dict) else {}
-    return {
-        "username": row.username or "",
-        "created_at": _json_safe(payload.get("imported_at") or row.created_at),
-        "package_type": row.resource_type or "",
-        "file_name": payload.get("file_name") or "",
-    }
+    for row in rows:
+        # 只认真实 ORM 行：测试里的 MagicMock 桩 / 其它类型一律视为未命中
+        if not isinstance(row, AuditLog):
+            continue
+        payload = row.new_value if isinstance(row.new_value, dict) else {}
+        # 深审 P2：失败/部分失败的导入不应阻断同一包的再次导入。
+        # 旧台账无 result 字段时按成功处理（保持向后兼容）。
+        if payload.get("result", "success") != "success":
+            continue
+        return {
+            "username": row.username or "",
+            "created_at": _json_safe(payload.get("imported_at") or row.created_at),
+            "package_type": row.resource_type or "",
+            "file_name": payload.get("file_name") or "",
+        }
+    return None
 
 
 def build_duplicate_message(previous: Dict[str, Any]) -> str:

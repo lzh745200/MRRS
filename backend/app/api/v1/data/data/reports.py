@@ -38,6 +38,31 @@ from app.core.transaction import safe_commit
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_output_dir(raw: Optional[str]) -> Optional[str]:
+    """订阅输出目录限制（2026-11-07 深度审计 P1）。
+
+    原实现把用户可控的 ``output_dir`` 直接落库，调度任务 ``mkdir(parents=True)``
+    后写文件，可指向任意本机目录甚至 UNC 共享。这里强制 realpath 必须落在
+    系统上传目录内；空值保持 None（调度侧回退默认目录）。
+    """
+    if not raw:
+        return None
+    import os
+
+    from app.utils.paths import get_runtime_uploads_path
+
+    base = os.path.realpath(str(get_runtime_uploads_path()))
+    target = os.path.realpath(os.path.expanduser(str(raw)))
+    try:
+        common = os.path.commonpath([base, target])
+    except ValueError:
+        common = ""
+    if common != base:
+        raise HTTPException(status_code=400, detail="订阅输出目录必须位于系统上传目录内")
+    return target
+
+
 router = APIRouter(prefix="/reports", tags=["报表管理"])
 
 
@@ -372,7 +397,7 @@ async def create_subscription(
             send_day=subscription.send_day,
             send_time=subscription.send_time,
             email=subscription.email,
-            output_dir=subscription.output_dir,
+            output_dir=_safe_output_dir(subscription.output_dir),
             output_format=subscription.output_format,
             is_active=True,
         )
@@ -491,6 +516,10 @@ async def update_subscription(
 
         # 更新字段
         update_dict = update_data.model_dump(exclude_unset=True)
+
+        # 输出目录限制（2026-11-07 审计 P1：禁止任意路径/UNC 写入）
+        if "output_dir" in update_dict:
+            update_dict["output_dir"] = _safe_output_dir(update_dict["output_dir"])
 
         # 处理JSON字段
         if "village_ids" in update_dict:  # noqa: E501 —— ReportSubscriptionUpdate schema 未暴露该字段，model_dump 永不包含，分支不可达（模型列保留供未来扩展）

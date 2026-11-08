@@ -41,7 +41,7 @@ class TestFindPreviousImport:
 
     def test_no_record_returns_none(self):
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
         assert find_previous_import(db, "abc") is None
 
     def test_hit_returns_ledger_fields(self):
@@ -52,7 +52,7 @@ class TestFindPreviousImport:
             new_value={"imported_at": "2026-10-23T08:00:00", "file_name": "a.zip"},
         )
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = row
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
         info = find_previous_import(db, "abc")
         assert info["username"] == "admin"
         assert info["package_type"] == "data_package"
@@ -62,11 +62,37 @@ class TestFindPreviousImport:
     def test_hit_with_non_dict_payload_falls_back(self):
         row = AuditLog(username="u", created_at=None, resource_type=None, new_value="raw")
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = row
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
         info = find_previous_import(db, "abc")
         assert info["username"] == "u"
         assert info["file_name"] == ""
         assert info["created_at"] is None
+
+    def test_failed_import_does_not_block_reimport(self):
+        """深审 P2：失败台账不参与查重，同一包可重试。"""
+        failed = AuditLog(
+            username="u",
+            created_at=None,
+            resource_type="data_package",
+            new_value={"result": "failed"},
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [failed]
+        assert find_previous_import(db, "abc") is None
+
+    def test_skips_failed_rows_and_returns_earlier_success(self):
+        failed = AuditLog(username="u", created_at=None, resource_type="data_package", new_value={"result": "failed"})
+        ok = AuditLog(
+            username="admin",
+            created_at=datetime(2026, 10, 23, 8, 0, 0),
+            resource_type="data_package",
+            new_value={"result": "success"},
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [failed, ok]
+        info = find_previous_import(db, "abc")
+        assert info is not None
+        assert info["username"] == "admin"
 
 
 class TestJsonSafeBranches:
@@ -78,7 +104,7 @@ class TestJsonSafeBranches:
             new_value={},
         )
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = row
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
         info = find_previous_import(db, "abc")
         assert info["created_at"] == "2026-10-23T09:30:00"
 
@@ -90,7 +116,7 @@ class TestJsonSafeBranches:
             new_value={"imported_at": object()},
         )
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = row
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
         info = find_previous_import(db, "abc")
         assert isinstance(info["created_at"], str)
 
@@ -166,7 +192,7 @@ class TestAssertNotDuplicate:
 
     def _db_returning(self, row):
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = row
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
         return db
 
     def test_unreadable_package_skips_check(self, tmp_path):
@@ -221,7 +247,7 @@ class TestContentChecksum:
 class TestAssertContentNotDuplicate:
     def _db_returning(self, row):
         db = MagicMock()
-        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = row
+        db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
         return db
 
     def test_empty_content_skips(self):

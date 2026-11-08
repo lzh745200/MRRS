@@ -1,0 +1,164 @@
+{
+  "version": "0.15.0",
+  "schemaVersion": 1,
+  "deckId": "1b0d626c-6f19-4067-9813-d5e3629af833",
+  "revision": 0,
+  "title": "帮扶管理信息系统 v1.18.39 更新说明 — 深度审计收口",
+  "theme": "data",
+  "language": "zh",
+  "motion": true,
+  "assets": {},
+  "history": [],
+  "slides": [
+    {
+      "layout": "cover",
+      "kicker": "开场",
+      "title": "帮扶管理信息系统 v1.18.39 更新说明 — 深度审计收口",
+      "subtitle": "",
+      "id": "7a2f3235-2011-4742-a2aa-e7214444e4ab"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "本版主题：深度审计收口",
+      "title": "本版主题：深度审计收口",
+      "bullets": [
+        "审计范围：API 层、services 层、core/middleware/utils、前端/Electron/构建链",
+        "结论：bandit -ll 0 条 medium/high；854 条路由、58 条未鉴权端点全部在白名单",
+        "修复 1 处 P0 越权、8 处 P1 安全/数据问题，以及多项 P2/P3 纵深防御",
+        "不改变任何业务口径，升级风险低；建议所有部署升级"
+      ],
+      "id": "aa701c64-beec-479a-8fed-00f431a0b077"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "审计方法",
+      "title": "审计方法",
+      "bullets": [
+        "四面只读审计 + 静态扫描（bandit）+ 人工复核",
+        "每个发现都记录 文件:行号、成因、影响、修复方式与测试覆盖",
+        "修复后按“先复现、再修复、后回归”的顺序验证",
+        "已知边界不强行改变行为，统一在发布说明中披露"
+      ],
+      "id": "c8550faa-3b6e-440c-bfe6-11105e59a5b6"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "安全修复（越权 / 注入）",
+      "title": "安全修复（越权 / 注入）",
+      "bullets": [
+        "政策批量删除：任意登录用户可硬删全库 → 逐条写权限 + 软删除 + FTS/审计/审批",
+        "政策附件预览与下载：补可见性校验，修复 IDOR",
+        "政策导出：非管理员仅导出启用且本人可见的记录",
+        "data_scope=self：按 OWN 判定，修复同组织越权读/删",
+        "权限包导入：非超管禁止 mirror 覆盖、子树校验、禁止改自己、清除通配权限",
+        "菜单/项目/报表订阅/经费记录：部门级 admin 仅限本组织子树"
+      ],
+      "id": "723f1cbc-2d25-4b1f-9891-330554486ca5"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "安全修复（上传 / 构建）",
+      "title": "安全修复（上传 / 构建）",
+      "bullets": [
+        "上传文件名去尾点、强制扩展名与白名单，MIME 由服务端判定",
+        "经费附件预览 inline 白名单收窄；iframe 加 sandbox",
+        "全局搜索非管理员过滤草稿/软删",
+        "CI：tag 名经 env 传参并加引号，版本号严格正则，消除注入面",
+        "Electron 隔离、IPC 白名单、ZIP 防穿越复核通过"
+      ],
+      "id": "dacf7d65-f664-423d-bd81-12781b17e3fc"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "数据正确性（恢复 / 导入）",
+      "title": "数据正确性（恢复 / 导入）",
+      "bullets": [
+        "备份恢复：仅在数据库已替换后才回滚；回滚前清理 -wal/-shm",
+        "帮扶村导入：补齐省份/州市/县市/乡镇/经纬度/转型字段",
+        "同名软删记录：导入时复活并更新；按 ID 回导同样复活",
+        "数据包导入：组级写入失败整体回滚，不再“部分成功”",
+        "注册自验证：不再自动创建无编码组织"
+      ],
+      "id": "6c9e7b68-6323-4a99-86b5-b519334263c5"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "运维与一致性",
+      "title": "运维与一致性",
+      "bullets": [
+        "每日 03:10 数据库维护：读取 PRAGMA integrity_check，非 ok 写 ERROR",
+        "孤儿附件清理：只查引用列，避免整表加载政策正文",
+        "批量操作：无组织列的表按本人 user_id 收窄，缺身份 fail-closed",
+        "报表订阅输出目录：必须落在系统上传目录内"
+      ],
+      "id": "190686fe-1bb8-469a-8294-74c8087c034a"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "验证证据",
+      "title": "验证证据",
+      "bullets": [
+        "后端 12 段全量：15,742 passed，覆盖率 100.00%（48,3xx stmts / 0 miss）",
+        "前端：348 files / 7,520 tests，覆盖率 100%",
+        "Electron：23 passed",
+        "静态：flake8、type-check、lint、棘轮、四层对齐、文档数字全绿",
+        "打包：Windows 安装器冒烟（liveness/health/version）与签名校验通过"
+      ],
+      "id": "df0a53ba-6df6-4215-ba91-9e1d9cad6bde"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "已知边界（不改行为）",
+      "title": "已知边界（不改行为）",
+      "bullets": [
+        "数据包 confirm_import 不复算 checksums（服务器侧文件，低风险 TOCTOU）",
+        "通行码内置回退密钥沿用 2026-09-06 产品决策",
+        "极老备份 stamp head 假设；旧库缺列不会被历史迁移补齐",
+        "未激活账号登录提示属产品 UX 选择"
+      ],
+      "id": "d030cb8d-565e-44d6-b989-df8047533d45"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "升级与信任",
+      "title": "升级与信任",
+      "bullets": [
+        "覆盖安装即可；首次启动自动迁移（升级前请备份 data/ 与 uploads/）",
+        "perMachine 安装需管理员权限",
+        "自签名安装包在未信任机器显示 UnknownError/NotTrusted，属预期",
+        "用 GPO 或 certutil -addstore 信任 MRRS-Internal-CodeSigning.cer 后显示 Valid"
+      ],
+      "id": "421530b4-35af-4d85-9d8b-06a94b36de80"
+    },
+    {
+      "layout": "bullets",
+      "kicker": "下一步",
+      "title": "下一步",
+      "bullets": [
+        "按发布说明核验 SHA256 与签名指纹",
+        "观察日志中的 R48/R61 与审计守卫告警",
+        "反馈问题请附 logs/、版本号与复现步骤"
+      ],
+      "id": "fd0045b4-e9e4-4d5d-be24-a976d65e7aa2"
+    },
+    {
+      "layout": "closing",
+      "title": "谢谢",
+      "subtitle": "帮扶管理信息系统 v1.18.39 更新说明 — 深度审计收口",
+      "id": "c6027637-0a58-4b56-976c-80cfade05227"
+    }
+  ],
+  "slideCount": 12,
+  "quality": {
+    "ok": true,
+    "slideCount": 12,
+    "errorCount": 0,
+    "warningCount": 0,
+    "issues": [],
+    "note": "文字尺寸与溢出为静态估算；最终请检查 HTML 放映和 PowerPoint / WPS 实际显示。页脚和页码的小字号不计入正文检查。"
+  },
+  "artifacts": {
+    "html": "de553663dd8177ef50ee660e71c78ddf7756bae2fdf2d0b1d752f64860ad8efc",
+    "pptx": "e2f71b062b5902dde19861986f2e89ae90f8c983862cfa409003d2d34d113e9f"
+  }
+}

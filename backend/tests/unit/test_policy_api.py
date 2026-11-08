@@ -849,14 +849,101 @@ class TestPolicyAPI:
         assert resp.status_code == 200
 
     def test_batch_delete_policies(self, client, mock_db, admin_user):
+        from types import SimpleNamespace
+
         _setup_client(client, mock_db, admin_user)
+        # 2026-11-07 审计 P0：批量删除改为逐条归属校验 + 软删，测试同步到新契约
+        p1 = SimpleNamespace(id=1, title="p1", is_active=True, created_by=1, status="active")
+        p2 = SimpleNamespace(id=2, title="p2", is_active=True, created_by=1, status="active")
         q = MagicMock()
-        q.filter.return_value.delete.return_value = 2
+        q.filter.return_value.all.return_value = [p1, p2]
         mock_db.query.return_value = q
-        with patch("app.core.cache.cache_manager.delete", AsyncMock()):
+        with patch("app.core.cache.cache_manager.delete", AsyncMock()), patch(
+            "app.services.policy_fts_service.remove_policy_from_fts"
+        ), patch("app.api.v1.policy.write_work_log"):
             resp = client.post("/api/v1/policies/batch-delete", json={"ids": [1, 2]})
         assert resp.status_code == 200
         assert resp.json()["data"]["deleted"] == 2
+
+    def test_assert_policy_readable_branches(self, admin_user):
+        from types import SimpleNamespace
+
+        from app.api.v1.policy import _assert_policy_readable
+
+        active = SimpleNamespace(is_active=True, status="active", created_by=999)
+        _assert_policy_readable(active, admin_user)  # 管理员放行
+
+        regular = SimpleNamespace(id=7, role="user", is_superuser=False, organization_id=2)
+        _assert_policy_readable(active, regular)  # 已发布对所有人可读
+
+        mine = SimpleNamespace(is_active=True, status="draft", created_by=7)
+        _assert_policy_readable(mine, regular)  # 创建人可读自己的草稿
+
+        import pytest as _pytest
+
+        with _pytest.raises(Exception) as exc:
+            _assert_policy_readable(
+                SimpleNamespace(is_active=True, status="draft", created_by=999), regular
+            )
+        assert getattr(exc.value, "status_code", None) == 403
+        with _pytest.raises(Exception) as exc2:
+            _assert_policy_readable(
+                SimpleNamespace(is_active=False, status="active", created_by=7), regular
+            )
+        assert getattr(exc2.value, "status_code", None) == 404
+
+    def test_batch_delete_policies_forbidden_for_other_creator(self, client, mock_db):
+        from types import SimpleNamespace
+
+        user = MagicMock()
+        user.id = 7
+        user.username = "u"
+        user.role = "user"
+        user.is_superuser = False
+        user.organization_id = 2
+        _setup_client(client, mock_db, user)
+        q = MagicMock()
+        q.filter.return_value.all.return_value = [
+            SimpleNamespace(id=1, title="other", is_active=True, created_by=999, status="active")
+        ]
+        mock_db.query.return_value = q
+        resp = client.post("/api/v1/policies/batch-delete", json={"ids": [1]})
+        assert resp.status_code == 403
+
+    def test_preview_policy_draft_forbidden(self, client, mock_db):
+        from types import SimpleNamespace
+
+        user = MagicMock()
+        user.id = 7
+        user.username = "u"
+        user.role = "user"
+        user.is_superuser = False
+        user.organization_id = 2
+        _setup_client(client, mock_db, user)
+        draft = MagicMock(spec=Policy)
+        draft.id = 1
+        draft.title = "他人草稿"
+        draft.content = "secret"
+        draft.file_path = None
+        draft.file_type = None
+        draft.status = "draft"
+        draft.created_by = 999
+        draft.is_active = True
+        mock_db.query.return_value.filter.return_value.first.return_value = draft
+        resp = client.get("/api/v1/policies/1/preview")
+        assert resp.status_code == 403
+
+    def test_export_excel_filters_for_regular_user(self, client, mock_db):
+        user = MagicMock()
+        user.id = 7
+        user.username = "u"
+        user.role = "user"
+        user.is_superuser = False
+        user.organization_id = 2
+        _setup_client(client, mock_db, user)
+        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.all.return_value = []
+        resp = client.get("/api/v1/policies/export/excel")
+        assert resp.status_code == 200
 
     def test_batch_delete_policies_no_ids(self, client, mock_db, admin_user):
         _setup_client(client, mock_db, admin_user)

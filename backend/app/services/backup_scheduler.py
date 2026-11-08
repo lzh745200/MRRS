@@ -553,7 +553,12 @@ def _database_maintenance_sync() -> None:
     with closing(sqlite3.connect(db_path, timeout=10)) as conn:
         conn.execute("PRAGMA optimize")
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        conn.execute("PRAGMA integrity_check")
+        row = conn.execute("PRAGMA integrity_check").fetchone()
+        integrity = str(row[0]) if row and row[0] is not None else ""
+        if integrity.lower() != "ok":
+            # 只告警不修复：integrity_check 失败时继续使用可能扩大损坏，
+            # 由管理员走备份恢复流程；这里至少要在日志里留下明确信号。
+            logger.error("数据库完整性检查未通过: %s", integrity[:200] or "(空结果)")
 
     after_size = os.path.getsize(db_path)
     saved_kb = round((before_size - after_size) / 1024, 1)

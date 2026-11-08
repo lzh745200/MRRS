@@ -30,11 +30,24 @@ from app.services.office_reader import read_rows
 from app.core.transaction import safe_commit
 
 # R61：帮扶村可写字段（创建与按 ID 更新共用，避免字段清单漂移）
+# 审计 P1-2：补齐模板中的 省份 / 州·市 / 县·市 三列与模型已有的乡镇/经纬度/转型字段，
+# 避免校验通过的列在落库时被白名单静默丢弃。注意 ``prefecture`` 不是模型列，
+# 在 _create_village / _apply_update 中映射到 ``city``。
 _VILLAGE_FIELDS = frozenset({
     "sequence_no",
     "department",
     "support_unit",
     "village_name",
+    "province",
+    "city",
+    "county",
+    "township",
+    "latitude",
+    "longitude",
+    "transition_status",
+    "transition_fund_military_total",
+    "transition_fund_local_total",
+    "transition_fund_items",
     "region_scope",
     "is_three_regions",
     "is_border_area",
@@ -520,14 +533,23 @@ class ExcelImporterService:
             for row in rows
             if row.get("village_name", "")
         })
-        existing_names = set()
+        active_names = set()
+        inactive_by_name: Dict[str, SupportedVillage] = {}
         if imported_names:
             existing = (
-                self.db.query(sql_func.lower(SupportedVillage.village_name))
+                self.db.query(SupportedVillage)
                 .filter(sql_func.lower(SupportedVillage.village_name).in_(imported_names))
                 .all()
             )
-            existing_names = {r[0] for r in existing if r[0]}
+            for item in existing:
+                key = (item.village_name or "").lower()
+                if not key:
+                    continue
+                if getattr(item, "is_active", True):
+                    active_names.add(key)
+                else:
+                    # 审计 P1-3：同名软删记录保留引用，导入时复活并更新，而非"跳过但 0 新增"
+                    inactive_by_name.setdefault(key, item)
 
         for row_idx, row in enumerate(rows, 1):
             # 转换数据类型
@@ -551,9 +573,20 @@ class ExcelImporterService:
                 continue
 
             village_name = converted_row.get("village_name", "")
-            if village_name and village_name.lower() in existing_names:
+            name_key = village_name.lower() if village_name else ""
+            if name_key and name_key in active_names:
                 # 跳过已存在的记录
                 result.skipped_rows += 1
+                continue
+
+            # 审计 P1-3：同名记录曾被软删 → 复活并更新，避免重导后列表不可见
+            if name_key and name_key in inactive_by_name:
+                revived = inactive_by_name.pop(name_key)
+                with self.db.begin_nested():
+                    self._apply_update(revived, converted_row)
+                result.created_ids.append(revived.id)
+                result.success_rows += 1
+                active_names.add(name_key)
                 continue
 
             # 创建新记录
@@ -564,8 +597,8 @@ class ExcelImporterService:
                 result.success_rows += 1
 
                 # 添加到已存在集合，避免同批次重复
-                if village_name:
-                    existing_names.add(village_name.lower())
+                if name_key:
+                    active_names.add(name_key)
 
             except Exception as e:
                 logger.warning('_parse_headers 兜底失败（已降级）: %s', e, exc_info=True)
@@ -600,12 +633,18 @@ class ExcelImporterService:
     def _apply_update(self, instance: Any, data: Dict[str, Any]) -> None:
         """按 ORM 列白名单更新（ID 回导），跳过归属/时间/主键列。"""
         skip = {"id", "created_at", "updated_at", "organization_id", "created_by"}
+        # 审计 P1-2：prefecture(州/市) 映射到模型列 city
+        if data.get("city") is None and data.get("prefecture") is not None:
+            data = {**data, "city": data["prefecture"]}
         for column in instance.__table__.columns.keys():
             if column in skip or column not in data:
                 continue
             value = data[column]
             if value is not None:
                 setattr(instance, column, value)
+        # 审计 P1-3：按 ID 回导命中已软删记录时复活，避免"更新成功但列表不可见"
+        if "is_active" in instance.__table__.columns and hasattr(instance, "is_active"):
+            instance.is_active = True
         self.db.flush()
 
     def _assert_org_reachable(self, target_org_id: Any) -> None:
@@ -714,7 +753,10 @@ class ExcelImporterService:
         Returns:
             SupportedVillage: 创建的记录
         """
-        # 过滤掉None值和非模型字段
+        # 过滤掉None值和非模型字段；prefecture(州/市) 映射到模型列 city
+        data = dict(data)
+        if data.get("city") is None and data.get("prefecture") is not None:
+            data["city"] = data["prefecture"]
         filtered_data = {k: v for k, v in data.items() if k in _VILLAGE_FIELDS and v is not None}
 
         # 设置布尔字段的默认值

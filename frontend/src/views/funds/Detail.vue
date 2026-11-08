@@ -681,6 +681,8 @@
         <iframe
           v-if="previewUrl"
           :src="previewUrl"
+          sandbox=""
+          referrerpolicy="no-referrer"
           style="width: 100%; height: 70vh; border: none"
         />
       </el-dialog>

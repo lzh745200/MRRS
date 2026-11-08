@@ -41,10 +41,26 @@ class TestInternalBackupBypass:
         monkeypatch.setenv("INTERNAL_BACKUP_KEY", "backup-secret")
 
         mw = CSRFMiddleware(app=MagicMock())
-        called, status = await _drive(mw, _scope(internal_backup="backup-secret"))
+        called, status = await _drive(
+            mw,
+            _scope(path="/api/v1/system/backup/create", internal_backup="backup-secret"),
+        )
 
         assert called is True
         assert status is None  # 未产出 403 响应，直接透传下游
+
+    async def test_internal_backup_key_limited_to_backup_paths(self, monkeypatch):
+        """R61 审计：内部密钥只放行备份/关机端点，其它路径仍须 CSRF。"""
+        monkeypatch.setattr(settings, "CSRF_ENABLED", True)
+        monkeypatch.setenv("INTERNAL_BACKUP_KEY", "backup-secret")
+
+        mw = CSRFMiddleware(app=MagicMock())
+        called, status = await _drive(
+            mw, _scope(path="/api/v1/system/users", internal_backup="backup-secret")
+        )
+
+        assert called is False
+        assert status == 403
 
     async def test_wrong_internal_key_falls_through_to_403(self, monkeypatch):
         # 对照组：内部密钥不匹配 → 继续 CSRF 校验，缺少 token 返回 403

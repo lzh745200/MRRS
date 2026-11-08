@@ -513,6 +513,7 @@ class PermissionPackageService:
         overwrite_existing: bool = True,
         mode: Optional[str] = None,
         allow_privileged: bool = True,
+        caller: Any = None,
     ) -> Dict[str, Any]:
         """确认导入权限配置包。
 
@@ -530,6 +531,15 @@ class PermissionPackageService:
         merge_mode = (mode == "merge") or (
             mode is None and not overwrite_existing
         )
+
+        # 审计 P1（2026-11-08）：完全替换会重建全库 RBAC，仅允许超管/离线首装执行；
+        # 部门级 admin 只能走 merge（只补空、不清理），且用户组织变更受子树校验。
+        if not merge_mode and not allow_privileged:
+            return {
+                "success": False,
+                "errors": ["仅超级管理员可执行完全替换导入，请改用「合并模式」"],
+                "message": "仅超级管理员可执行完全替换导入，请改用「合并模式」",
+            }
 
         parsed = self._parse_import_zip(file_path)
         if not parsed:
@@ -599,6 +609,7 @@ class PermissionPackageService:
             stats, errors = self._import_user_legacy(
                 user_legacy_data, stats, errors,
                 merge_mode=merge_mode, allow_privileged=allow_privileged,
+                caller=caller,
             )
 
             self.db.commit()
@@ -987,10 +998,30 @@ class PermissionPackageService:
                 )
         return role, data_scope
 
-    def _import_user_legacy(
-        self, user_legacy_data, stats, errors, merge_mode=False, allow_privileged=True
+    # C901：权限包导入的越权边界必须集中在一处审计
+    def _import_user_legacy(  # noqa: C901
+        self, user_legacy_data, stats, errors, merge_mode=False, allow_privileged=True,
+        caller=None,
     ):
-        """导入遗留权限字段。"""
+        """导入遗留权限字段。
+
+        审计 P1（2026-11-08）：非超管导入时强制三项边界——
+        1) 目标用户的新组织必须在调用者子树内（跨组织跳过并记错）；
+        2) 不允许修改调用者自身的组织/角色/权限（防自提权）；
+        3) 权限串含 ``*:*`` 等通配符时清空（非超管不得授予通配权限）。
+        """
+        allowed_org_ids = None
+        if not allow_privileged and caller is not None:
+            try:
+                from app.core.data_permission import _get_org_subtree
+
+                caller_org = getattr(caller, "organization_id", None)
+                if caller_org:
+                    allowed_org_ids, _ = _get_org_subtree(self.db, caller_org)
+                    allowed_org_ids = set(allowed_org_ids or [])
+            except Exception:  # noqa: BLE001 - 子树解析失败按最严处理（空集）
+                logger.warning("权限包导入：调用者组织子树解析失败，按跨组织拒绝", exc_info=True)
+                allowed_org_ids = set()
         for legacy_data in user_legacy_data:
             username = ""
             try:
@@ -1004,17 +1035,31 @@ class PermissionPackageService:
                 role, data_scope = self._sanitize_legacy_privilege(
                     legacy_data, allow_privileged, stats
                 )
+                # 审计 P1：非超管不得修改调用者自身（防自提权/自换组织）
+                if (
+                    not allow_privileged
+                    and caller is not None
+                    and getattr(user, "id", None) == getattr(caller, "id", None)
+                ):
+                    errors.append(f"用户遗留权限「{username}」：不允许导入时修改调用者自身")
+                    continue
+                permissions_value = legacy_data.get("permissions", "")
+                if not allow_privileged and "*" in str(permissions_value or ""):
+                    permissions_value = ""
+                    errors.append(
+                        f"用户遗留权限「{username}」：非超管导入已忽略通配权限"
+                    )
                 if merge_mode:
                     # merge 语义：目标字段为空/默认时才填充，不覆盖既有配置
                     if not getattr(user, "permissions", ""):
-                        user.permissions = legacy_data.get("permissions", "")
+                        user.permissions = permissions_value
                     if getattr(user, "data_scope", "org") in (None, "", "org"):
                         user.data_scope = data_scope
                     if (getattr(user, "role", "user") or "user") == "user":
                         user.role = role
                 else:
                     user.role = role
-                    user.permissions = legacy_data.get("permissions", "")
+                    user.permissions = permissions_value
                     user.data_scope = data_scope
                 # 恢复组织关联：优先按组织编码匹配（跨机器稳定），
                 # 回退按导出机原始 ID，均失败则置空（用户可通过界面重新指定）
@@ -1037,6 +1082,12 @@ class PermissionPackageService:
                             .first()
                         )
                     if org:
+                        # 审计 P1：非超管只能把用户放到调用者子树内的组织
+                        if allowed_org_ids is not None and org.id not in allowed_org_ids:
+                            errors.append(
+                                f"用户遗留权限「{username}」：目标组织 {org.id} 不在调用者管辖范围内，已跳过"
+                            )
+                            continue
                         user.organization_id = org.id
                     elif merge_mode and getattr(user, "organization_id", None):
                         # merge 模式：目标机已有组织归属且包内找不到匹配 → 保留原值

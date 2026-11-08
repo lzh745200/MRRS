@@ -4121,4 +4121,29 @@ VERSION_HISTORY_DATA = [
             "备份验证兼容历史库成员路径（data/assistance.db 等），且缺少数据库文件时 fail-closed，不再“无库也算验证通过”。",
         ],
     },
+    {
+        "version": "1.18.39",
+        "date": "2026-11-07",
+        "description": "深度审计收口（越权 / 恢复 / 导入 / 上传 / 构建）",
+        "features": [
+            (
+                "对 API 层、services 层、core/middleware/utils、前端/Electron/构建四条线做只读审计：bandit -ll 0 条 medium/high；che"
+                "ck_route_auth 854 条路由、58 条未鉴权全在白名单；MD5/SHA1 均带 usedforsecurity=False；"
+            ),
+            "政策批量删除：原实现任意登录用户可按 ID 硬删全库 → 逐条 _assert_policy_writable、软删除，并同步 FTS、工作日志与变更审批。",
+            "政策附件预览/下载补 _assert_policy_readable（管理员 / 启用 / 作者），修复 IDOR。",
+            "政策导出：非管理员仅导出启用且“启用状态或本人创建”的记录，修复草稿与软删泄露。",
+            "政策列表 limit 上限 200；政策分类维护仅管理员。",
+            "全局搜索：非管理员过滤软删与他人草稿。",
+            "菜单配置：部门级 admin 仅能改本组织子树用户，且不得裁剪 super_admin（防 DoS）。",
+            "项目创建：village_id 经数据域校验，越权 404。",
+            "权限包导入：非超管禁止 mirror 覆盖；被写入用户须在调用者子树内、不得改自己、清除含 * 的通配权限。",
+            (
+                "data_scope=\"self\"：require_data_permission 显式按用户 self 配置收紧为“仅本人”（创建人仍放行）；未显式配置的用户保留既有“本组织记录可访"
+                "问”契约，修复同组织越权读/删。"
+            ),
+            "报表订阅 output_dir：realpath 必须落在系统上传目录内，否则 400。",
+            "经费独立记录：部门级 admin 仅可读写本组织子树（14 处端点统一校验）。",
+        ],
+    },
 ]

@@ -101,21 +101,34 @@ def _append_project_results(items: List, q: str, each: int, db: Session, current
         logger.warning("搜索帮扶项目失败: %s", e)
 
 
-def _append_policy_results(items: List, q: str, each: int, db: Session) -> None:
-    """搜索政策法规并追加到结果列表（全局公开）"""
+def _append_policy_results(
+    items: List, q: str, each: int, db: Session, current_user=None
+) -> None:
+    """搜索政策法规并追加到结果列表（2026-11-07 审计 P2：与政策列表同可见性）。
+
+    此前无条件返回全库命中，草稿与已软删政策会经全局搜索泄露标题/文号；
+    现对非管理员追加 ``is_active`` 与（已发布或本人创建）过滤。
+    """
     try:
-        rows = (
-            db.query(Policy)
-            .filter(
-                or_(
-                    Policy.title.ilike(f"%{_escape_like(q)}%", escape="\\"),
-                    Policy.keywords.ilike(f"%{_escape_like(q)}%", escape="\\"),
-                    Policy.issuing_authority.ilike(f"%{_escape_like(q)}%", escape="\\"),
-                )
+        query = db.query(Policy).filter(
+            or_(
+                Policy.title.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                Policy.keywords.ilike(f"%{_escape_like(q)}%", escape="\\"),
+                Policy.issuing_authority.ilike(f"%{_escape_like(q)}%", escape="\\"),
             )
-            .limit(each)
-            .all()
         )
+        if current_user is not None:
+            from app.core.permission_utils import is_admin
+
+            if not is_admin(current_user):
+                query = query.filter(
+                    Policy.is_active.is_(True),
+                    or_(
+                        Policy.status == "active",
+                        Policy.created_by == getattr(current_user, "id", None),
+                    ),
+                )
+        rows = query.limit(each).all()
         for r in rows:
             items.append(
                 SearchItem(
@@ -279,7 +292,7 @@ async def global_search(
         sess = SessionLocal()
         try:
             result = []
-            _append_policy_results(result, q, each, sess)
+            _append_policy_results(result, q, each, sess, current_user=current_user)
             return result
         finally:
             sess.close()

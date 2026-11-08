@@ -293,6 +293,18 @@ class TestChunkedUploadService:
         with pytest.raises(ValueError, match="exceeds maximum limit"):
             service.create_session("f.bin", ChunkedUploadConfig.MAX_FILE_SIZE + 1, 1)
 
+    def test_create_session_rejects_web_executable_extensions(self):
+        """深审 P2：分片最终文件在 /uploads 同源托管，禁止 html/svg 等可执行扩展名。"""
+        service = ChunkedUploadService(temp_dir=".", final_dir=".")
+        for name in ("payload.html", "payload.svg", "payload.js", "payload.xml"):
+            with pytest.raises(ValueError, match="不支持的文件类型"):
+                service.create_session(name, 100, 1)
+
+    def test_create_session_sanitizes_traversal_file_name(self):
+        service = ChunkedUploadService(temp_dir=".", final_dir=".")
+        session = service.create_session("../evil.pdf", 100, 1)
+        assert session.file_name == "evil.pdf"
+
     def test_create_session_default_chunk_size(self):
         service = ChunkedUploadService(temp_dir=".", final_dir=".")
         session = service.create_session("f.bin", 10_000_000, 1)

@@ -1,14 +1,30 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.38
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.39
 
-![Version](https://img.shields.io/badge/version-1.18.38-blue)
+![Version](https://img.shields.io/badge/version-1.18.39-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C232-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C294-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.38）
+## 本版亮点（v1.18.39）
+
+- **深度审计收口**：对 API / services / core / 前端构建链逐模块只读审计（`bandit -ll` 0 条 medium/high、
+  854 条路由中 58 条未鉴权全在白名单），发现并修复 **1 个 P0、7 个 P1 与一批 P2**，发布说明逐项列出。
+- **越权修复**：政策批量删除曾允许任意登录用户硬删全库 → 逐条权限校验 + 软删除 + FTS/日志/审批同步；
+  政策附件预览/下载补可见性校验；政策导出/全局搜索过滤草稿与软删；`data_scope="self"` 不再能读/删同组织他人记录；
+  权限包导入禁止非超管 mirror 覆盖、目标用户限本组织子树；菜单配置、项目 `village_id`、经费独立记录、
+  报表订阅 `output_dir`、批量操作均按数据域收窄。
+- **恢复与导入正确性**：恢复仅在数据库确实被替换后回滚，回滚前释放连接并清理 `-wal/-shm`；
+  帮扶村导入补齐省/市/县/乡镇/经纬度并支持软删记录“复活”；数据包部分写入失败整体回滚；
+  注册自验证不再自动建组织；填报模板导出把 `= + - @` 开头的值强制写成文本（防公式注入）。
+- **上传与构建硬化**：文件名去尾点/空格、扩展名白名单、服务端判定 MIME、预览 inline 白名单 + `iframe sandbox`；
+  CI tag 名改为 `env` 传参并加引号，消除命令注入面；CSRF 豁免改路径边界匹配并收窄内部备份密钥。
+- 🧪 验证：后端 12 段全量 **15,774 passed**（覆盖率 **100.00%**）；前端 **348 files / 7,520 tests** 全绿；
+  flake8 / type-check / lint / 三层对齐 / 文档数字 / CHANGELOG / 硬编码色 / 路由鉴权门禁全部通过。
+
+## 历史亮点（v1.18.38）
 
 - **数据隔离可解释**：数据包导出请求新增 `include_unassigned`（默认 false）与 `unassigned_counts`，
   默认仍按组织隔离；需要上报历史 NULL 记录时必须显式勾选，报表包页面已提供复选框。

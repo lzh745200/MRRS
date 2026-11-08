@@ -242,13 +242,33 @@ class TestStandaloneRecordAccess:
     合同/凭证/结算单。兜底口径：创建人本人 或 管理员。
     """
 
-    def test_admin_allowed(self):
+    def test_admin_allowed(self, monkeypatch):
+        from app.api.v1.fund_lifecycle import _assert_standalone_record_access
+
+        # 审计 P1（2026-11-07）后：部门级 admin 需要 db 才能解析记录归属组织，
+        # 无 db 时 fail-closed；这里覆盖“同子树内放行”的正向路径。
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = MagicMock(
+            organization_id=3
+        )
+        monkeypatch.setattr(
+            "app.core.data_permission._get_org_subtree", lambda *a, **k: ([1, 3], [])
+        )
+        record = MagicMock(created_by="other_user")
+        user = MagicMock(username="admin", role="admin", is_superuser=False, organization_id=1)
+        # 不抛即通过
+        assert _assert_standalone_record_access(record, user, db=db) is None
+
+    def test_admin_without_db_fail_closed(self):
+        from fastapi import HTTPException
+
         from app.api.v1.fund_lifecycle import _assert_standalone_record_access
 
         record = MagicMock(created_by="other_user")
-        user = MagicMock(username="admin", role="admin", is_superuser=False)
-        # 不抛即通过
-        assert _assert_standalone_record_access(record, user) is None
+        user = MagicMock(username="admin", role="admin", is_superuser=False, organization_id=1)
+        with pytest.raises(HTTPException) as ei:
+            _assert_standalone_record_access(record, user, db=None)
+        assert ei.value.status_code == 403
 
     def test_creator_allowed(self):
         from app.api.v1.fund_lifecycle import _assert_standalone_record_access

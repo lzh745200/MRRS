@@ -244,12 +244,19 @@ jobs:
       - name: Sync version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
-        run: node scripts/sync-version.js --write ${{ github.ref_name }}
+        env:
+          # 2026-11-07 深审 P1：禁止把 github.ref_name 内联进 shell（tag 可含 ; $()）。
+          REF_NAME: ${{ github.ref_name }}
+        run: node scripts/sync-version.js --write "$REF_NAME"
 
       # 5b. 生成构建元数据
       - name: Generate build info
         shell: bash
-        run: python scripts/generate_build_info.py ${{ github.ref_name || 'dev' }}
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION_ARG="${REF_NAME:-dev}"
+          python scripts/generate_build_info.py "$VERSION_ARG"
 
       # 6. 安装 Python 依赖 + PyInstaller
       - name: Install Python deps
@@ -559,8 +566,8 @@ jobs:
           if (-not $exe) { throw "dist/electron/*.exe not found" }
           $sevenZip = "C:\Program Files\7-Zip\7z.exe"
           if (-not (Test-Path $sevenZip)) {
-            Write-Warning "7-Zip 不可用，跳过安装包内容抽查（onedir 级验证已通过）"
-            exit 0
+            # 深审 P3：安装包内容抽查是发布门禁的一部分，工具缺失不能静默放行。
+            throw "7-Zip 不可用，无法执行安装包内容抽查（请安装 7-Zip 后重试）"
           }
           $listing = Join-Path $env:RUNNER_TEMP "installer-listing.txt"
           & $sevenZip l $exe.FullName | Out-File -FilePath $listing -Encoding utf8

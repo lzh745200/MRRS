@@ -1,3 +1,56 @@
+## [1.18.39] - 2026-11-07 — 深度审计收口（越权 / 恢复 / 导入 / 上传 / 构建）
+
+### 审计范围与结论
+
+- 对 API 层、services 层、core/middleware/utils、前端/Electron/构建四条线做只读审计：`bandit -ll` 0 条 medium/high；`check_route_auth` 854 条路由、58 条未鉴权全在白名单；MD5/SHA1 均带 `usedforsecurity=False`；CSV/PDF 导出转义、`v-html` 消毒、ZIP 防穿越、Electron `contextIsolation/sandbox` 与 IPC 白名单均已就位。
+
+### 安全（越权 / 注入）
+
+- 政策批量删除：原实现任意登录用户可按 ID 硬删全库 → 逐条 `_assert_policy_writable`、软删除，并同步 FTS、工作日志与变更审批。
+- 政策附件预览/下载补 `_assert_policy_readable`（管理员 / 启用 / 作者），修复 IDOR。
+- 政策导出：非管理员仅导出启用且“启用状态或本人创建”的记录，修复草稿与软删泄露。
+- 政策列表 `limit` 上限 200；政策分类维护仅管理员。
+- 全局搜索：非管理员过滤软删与他人草稿。
+- 菜单配置：部门级 admin 仅能改本组织子树用户，且不得裁剪 `super_admin`（防 DoS）。
+- 项目创建：`village_id` 经数据域校验，越权 404。
+- 权限包导入：非超管禁止 mirror 覆盖；被写入用户须在调用者子树内、不得改自己、清除含 `*` 的通配权限。
+- `data_scope="self"`：`require_data_permission` 显式按用户 `self` 配置收紧为“仅本人”（创建人仍放行）；未显式配置的用户保留既有“本组织记录可访问”契约，修复同组织越权读/删。
+- 报表订阅 `output_dir`：realpath 必须落在系统上传目录内，否则 400。
+- 经费独立记录：部门级 admin 仅可读写本组织子树（14 处端点统一校验）。
+- 批量更新/删除/导出/校验：无组织列的表（如 `work_logs`）按本人 `user_id` 收窄；缺组织/用户身份一律 fail-closed。
+- 上传：文件名去尾点/空格、必须带扩展名并命中白名单、MIME 由服务端判定、经费附件预览 inline 白名单收窄、iframe 加 `sandbox`。
+- CI：tag 名经 `env` 传参并加引号、`sync-version` 版本号严格正则，消除 `${{ github.ref_name }}` 命令注入面。
+- CSRF 中间件：豁免前缀改为路径边界匹配（避免 `/login-x` 之类同前缀路由被误豁免）；内部备份密钥仅对备份/停机路径生效，其余路径即使密钥匹配也继续双提交校验并记 warning。
+- 分片上传：拒绝 `.html/.htm/.xhtml/.shtml/.svg/.js/.mjs/.xml/.xsl/.htc/.wasm` 等可在 `/uploads` 同源执行的扩展名，并对文件名做路径净化（防存储型 XSS）。
+- 退出登录：服务端吊销失败改为 `console.warn` 留痕（本地清理照常执行，不再完全静默）。
+- 站内消息外链：`window.open` 补 `noopener,noreferrer`，防被打开页面反向控制本系统窗口。
+- CI：Windows 构建的“安装包内容抽查”在 7-Zip 缺失时改为硬失败（不再静默跳过门禁）。
+
+### 数据正确性（恢复 / 导入 / 同步）
+
+- 备份恢复：仅在数据库已被替换后才回滚；回滚前 `engine.dispose()` 并清理 `-wal/-shm`，避免 Windows 占用导致回滚失败、Linux 旧连接丢写。
+- 帮扶村导入：补齐省份/州市/县市/乡镇/经纬度/转型字段；`prefecture` 映射模型列 `city`；同名软删记录“复活并更新”，按 ID 回导同样复活软删行。
+- 数据包导入：组级写入有失败即整体回滚并返回失败，不再 `success=True` 且置 `imported`。
+- 注册自验证（跨机组织通行码）：保留 2026-09-06 设计的 find-or-create 行为，但新建组织时补齐 `path`，避免产生 path=NULL 的根组织破坏组织树可见性；`level/code` 仍由管理员维护（通行码不携带编码）。
+- 每日数据库维护：读取 `PRAGMA integrity_check` 结果，非 `ok` 写 `ERROR` 日志。
+- 孤儿附件清理：只查 `attachment_urls` 列，避免全量加载政策正文。
+- 填报模板导出：以 `= + - @` 开头的文本值强制按文本单元格写入（`data_type="s"`），防 Excel/WPS 公式注入。
+- 介质导入查重：只把 `result=success` 的台账视为“已导入”，失败/部分失败的记录不再阻断同一包重试。
+- ZIP 限长：`read_zip_member` 不再信任中央目录声明的 `file_size`，改为逐块读取并按实际解压字节计数，超限立即 413。
+- 数据包导入：datetime 解析改为严格 ISO 前缀匹配（`yyyy-mm-ddThh:mm`），含字母 T 的普通文本不再被误转成 datetime。
+- 业务异常状态码：`handle_db_errors_async` 此前把 `AppError`（400/403/404/409）当作未知异常转成 500——项目创建时“帮扶村不存在/无权访问”、项目编码重复等业务错误全部变成 500；现改为原样上抛，由全局 `AppError` 处理器返回正确状态码。
+
+### 已知边界（本轮不改行为）
+
+- 数据包 `confirm_import` 不复算 `data_checksums`（文件在服务器侧，需本机文件替换才可利用，低风险 TOCTOU）。
+- 通行码内置回退密钥沿用 2026-09-06 产品决策（未配置 `PASS_CODE_SECRET` 时保证跨机注册可用），在报告中披露。
+- 极老备份（无 `alembic_version` 但有业务表）按启动同口径 `stamp head`；旧库缺后续列时不会被历史迁移补齐。
+- `data_sync` 导入仍硬拒绝 `users`/`machine_codes`/`audit_logs` 等敏感表。
+
+### 验证
+
+- 后端 12 段全量 15,774 passed、覆盖率 100.00%；前端 348 文件 / 7,520 用例、覆盖率 100%；Electron 23 passed；flake8、类型债、四层对齐、文档数字、路由鉴权、预防性棘轮全绿（数字以本轮发布前最终跑分为准）。
+
 ## [1.18.38] - 2026-11-07 — 全量缺陷收口（数据隔离/恢复/导入/资源）
 
 ### 数据安全与完整性

@@ -472,7 +472,7 @@ async function handleBatchDelete() {
 function handleGoToLink(message: Message) {
   if (message.link) {
     if (message.link.startsWith('http')) {
-      window.open(message.link, '_blank')
+      window.open(message.link, '_blank', 'noopener,noreferrer')
     } else {
       pushSafe(message.link)
     }

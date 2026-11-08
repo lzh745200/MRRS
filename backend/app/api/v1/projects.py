@@ -823,6 +823,18 @@ async def create_project(
     if db.query(Project).filter(Project.code == code).first():
         raise AppError.bad_request("项目编码已存在")
 
+    # 2026-11-07 审计 P2：village_id 必须存在且在当前用户数据域内
+    if data.village_id:
+        from app.services.data_scope_query import scoped_filter
+
+        village = scoped_filter(
+            db.query(SupportedVillage).filter(SupportedVillage.id == data.village_id),
+            SupportedVillage,
+            current_user,
+        ).first()
+        if village is None:
+            raise AppError.not_found("帮扶村不存在或无权访问")
+
     project = Project(
         name=data.name,
         code=code,

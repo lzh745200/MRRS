@@ -132,6 +132,7 @@ async def batch_update(
             table_name=request.table_name, ids=request.ids, updates=request.updates,
             organization_id=getattr(current_user, 'organization_id', None),
             is_superuser=is_superuser(current_user),
+            user_id=getattr(current_user, 'id', None),
         )
         # 审计日志（失败不阻断主操作）
         try:
@@ -177,6 +178,7 @@ async def batch_delete(
             soft_delete=request.soft_delete,
             organization_id=getattr(current_user, 'organization_id', None),
             is_superuser=is_superuser(current_user),
+            user_id=getattr(current_user, 'id', None),
         )
         # 审计日志（失败不阻断主操作）
         try:
@@ -213,6 +215,7 @@ async def batch_export(
             table_name=request.table_name, ids=request.ids, format=request.format,
             organization_id=getattr(current_user, 'organization_id', None),
             is_superuser=is_superuser(current_user),
+            user_id=getattr(current_user, 'id', None),
         )
         return success_response(data=result)
     except ValidationError:
@@ -248,6 +251,7 @@ async def validate_batch(
             table_name=table_name, ids=ids,
             organization_id=getattr(current_user, 'organization_id', None),
             is_superuser=is_superuser(current_user),
+            user_id=getattr(current_user, 'id', None),
         )
         return success_response(data=result)
     except ValidationError:

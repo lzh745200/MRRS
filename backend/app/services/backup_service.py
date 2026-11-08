@@ -869,6 +869,8 @@ class BackupService:
             # R10-F1：覆盖复制带 3 次退避重试——Windows 上目标文件可能被
             # 杀软/资源管理器/在途请求短暂占用，瞬态占用不该让恢复整体失败
             _copy_database_with_retry(backup_db_path, self.database_path, coordinator)
+            # 审计 P1-1：标记生产库已被替换，供上层决定是否回滚
+            self._db_replaced = True
         finally:
             # copy 后再次 dispose: 清理恢复窗口期间新建的池连接,
             # 使后续请求重新打开已替换的数据库文件
@@ -945,7 +947,8 @@ class BackupService:
                            snapshot_db_path, exc_info=True)
             return snapshot_db_path
 
-    def _rollback_to_snapshots(self, snapshot_db_path, snapshot_uploads_dir):
+    # C901：回滚分支多（连接释放/残留清理/原子替换/快照保全），保留单函数便于审计
+    def _rollback_to_snapshots(self, snapshot_db_path, snapshot_uploads_dir):  # noqa: C901
         """恢复失败时回滚到快照（W18-D11：原子替换 + 失败可自救）。
 
         原实现 unlink+copy 两步：Windows 上库文件被后台线程占用时 unlink 失败 →
@@ -955,6 +958,21 @@ class BackupService:
         """
         if snapshot_db_path and os.path.exists(snapshot_db_path):
             replaced = False
+            # 审计 P1-1：回滚前必须先释放连接池并清理 -wal/-shm，否则 Windows
+            # 上目标文件被占用会让 os.replace 失败、Linux 上旧连接继续持有已
+            # unlink 的 inode，回滚后写入可能丢失。
+            try:
+                from app.core.database import engine as _rb_engine
+                _rb_engine.dispose()
+            except Exception:  # noqa: BLE001 - 释放失败不应阻断回滚，但必须留痕
+                logger.warning("回滚前释放连接池失败（继续尝试）", exc_info=True)
+            for suffix in ("-wal", "-shm"):
+                stale = f"{self.database_path}{suffix}"
+                if os.path.exists(stale):
+                    try:
+                        os.unlink(stale)
+                    except OSError:
+                        logger.warning("回滚前清理残留 %s 失败: %s", suffix, stale)
             if os.path.exists(self.database_path):
                 try:
                     # 原子换名：Windows 上目标被独占打开时仍可能失败，但不会出现
@@ -1186,6 +1204,9 @@ class BackupService:
         temp_dir = tempfile.mkdtemp(prefix="restore_")
         snapshot_db_path = None
         snapshot_uploads_dir = None
+        # 审计 P1-1：是否已真正替换生产库。仅当替换发生后才允许在异常路径回滚，
+        # 否则 zip 损坏/缺库/schema 版本过高时会对未改动的现场库做无意义回滚。
+        self._db_replaced = False
 
         try:
             # 密钥一致性闸门（批次 2）：**必须在建快照与覆盖生产库之前**。
@@ -1254,8 +1275,13 @@ class BackupService:
             raise
 
         except Exception as e:
-            self._rollback_to_snapshots(snapshot_db_path, snapshot_uploads_dir)
-            raise BackupRestoreError(f"恢复失败，已回滚到原始状态: {e}")
+            if getattr(self, "_db_replaced", False):
+                self._rollback_to_snapshots(snapshot_db_path, snapshot_uploads_dir)
+                raise BackupRestoreError(f"恢复失败，已回滚到原始状态: {e}")
+            # 审计 P1-1：生产库尚未被替换（zip 损坏/缺库/schema 版本过高/快照失败等），
+            # 回滚只会对未改动的现场库做无意义覆盖（且可能因占用失败掩盖原始错误）。
+            logger.info("恢复在替换生产库前失败，跳过回滚: %s", e)
+            raise BackupRestoreError(f"恢复失败，未改动现有数据: {e}")
 
         finally:
             self._cleanup_temp(temp_dir, decrypted_temp_path)

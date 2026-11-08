@@ -78,6 +78,27 @@ def _assert_policy_writable(policy, current_user) -> None:
     raise HTTPException(status_code=403, detail="无权修改他人创建的政策")
 
 
+def _assert_policy_readable(policy, current_user) -> None:
+    """政策读操作归属守卫（2026-11-07 深度审计 P1「附件 IDOR」）。
+
+    与 ``get_policy`` 的可见性口径保持一致：管理员 / 已发布（status=active）/
+    创建人本人可读；其余（含他人草稿、已软删、created_by 为空的历史脏数据）
+    fail-closed。附件预览与下载此前只按裸 ID 取记录，任意登录用户可按 id
+    读取他人未发布草稿的正文或附件，本函数把读侧补齐。
+    """
+    from app.core.permission_utils import is_admin
+
+    if is_admin(current_user):
+        return
+    if getattr(policy, "is_active", True) is False:
+        raise HTTPException(status_code=404, detail="政策不存在")
+    if (getattr(policy, "status", "") or "") == "active":
+        return
+    if getattr(policy, "created_by", None) == getattr(current_user, "id", None):
+        return
+    raise HTTPException(status_code=403, detail="无权查看该政策")
+
+
 def _apply_policy_approval_result(db: Session, task) -> None:
     """审批通过后**真正应用**政策状态变更（W27 真门禁）。
 
@@ -455,8 +476,12 @@ async def create_category(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """创建政策分类"""
+    """创建政策分类（2026-11-07 审计 P2：全局字典写操作需管理员）"""
     require_policy_operator_role(current_user)
+    from app.core.permission_utils import is_admin
+
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可维护政策分类")
     if data.code:
         existing = db.query(PolicyCategory).filter(PolicyCategory.code == data.code).first()
         if existing:
@@ -479,8 +504,12 @@ async def update_category(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """更新政策分类"""
+    """更新政策分类（2026-11-07 审计 P2：全局字典写操作需管理员）"""
     require_policy_operator_role(current_user)
+    from app.core.permission_utils import is_admin
+
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可维护政策分类")
     category = db.query(PolicyCategory).filter(PolicyCategory.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="分类不存在")
@@ -501,8 +530,12 @@ async def delete_category(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """删除政策分类"""
+    """删除政策分类（2026-11-07 审计 P2：全局字典写操作需管理员）"""
     require_policy_operator_role(current_user)
+    from app.core.permission_utils import is_admin
+
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可维护政策分类")
     category = db.query(PolicyCategory).filter(PolicyCategory.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="分类不存在")
@@ -708,8 +741,14 @@ def _build_export_workbook(policies_list: List[Policy]):
     return wb
 
 
-def _query_policies_for_export(db: Session, params: dict) -> List[Policy]:
-    """根据筛选条件查询要导出的政策"""
+def _query_policies_for_export(
+    db: Session, params: dict, current_user=None
+) -> List[Policy]:
+    """根据筛选条件查询要导出的政策（2026-11-07 审计：与列表共用可见性口径）。
+
+    非管理员导出时必须与列表一致：只看未删除且（已发布或本人创建）的政策，
+    否则草稿/软删记录会经导出/PDF 正文链路泄露给任意登录用户。
+    """
     query = db.query(Policy)
     if params.get("category"):
         query = query.filter(Policy.category == params["category"])
@@ -720,6 +759,19 @@ def _query_policies_for_export(db: Session, params: dict) -> List[Policy]:
     if params.get("search"):
         kw = params["search"]
         query = query.filter((Policy.title.contains(kw)) | (Policy.keywords.contains(kw)))
+    if current_user is not None:
+        from app.core.permission_utils import is_admin
+
+        if not is_admin(current_user):
+            from sqlalchemy import or_
+
+            query = query.filter(
+                Policy.is_active.is_(True),
+                or_(
+                    Policy.status == "active",
+                    Policy.created_by == getattr(current_user, "id", None),
+                ),
+            )
     return query.order_by(Policy.created_at.desc()).all()
 
 
@@ -875,6 +927,7 @@ async def export_policies_excel(
             "status": status,
             "search": search,
         },
+        current_user=current_user,
     )
     wb = _build_export_workbook(policies_list)
 
@@ -907,6 +960,7 @@ async def export_policies_pdf(
             "status": status,
             "search": search,
         },
+        current_user=current_user,
     )
     pdf_bytes = _build_policies_pdf(policies_list)
 
@@ -935,6 +989,7 @@ async def export_policies_wps(
             "status": status,
             "search": search,
         },
+        current_user=current_user,
     )
     wb = _build_export_workbook(policies_list)
 
@@ -1069,6 +1124,8 @@ async def preview_policy_file(
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+    # 可见性守卫（审计 P1）：附件预览同样不得绕过草稿/软删口径
+    _assert_policy_readable(policy, current_user)
 
     # 纵深防御：历史脏数据可能带越界的 file_path，包含性校验失败即 400（不读盘）
     safe_file_path = _resolve_safe_upload_path(policy.file_path) if policy.file_path else None
@@ -1146,6 +1203,8 @@ async def download_policy_file(
     policy = db.query(Policy).filter(Policy.id == policy_id).first()
     if not policy:
         raise HTTPException(status_code=404, detail="政策不存在")
+    # 可见性守卫（审计 P1）：下载同样不得绕过草稿/软删口径
+    _assert_policy_readable(policy, current_user)
     if not policy.file_path:
         raise HTTPException(status_code=404, detail="附件文件不存在")
     # 纵深防御：越界的 file_path（历史脏数据）一律 400，绝不交给 FileResponse
@@ -1200,9 +1259,39 @@ async def batch_delete_policies(data: dict, current_user=Depends(get_current_use
     if len(ids) > 1000:
         raise HTTPException(status_code=422, detail="单次最多删除1000条")
 
-    deleted = db.query(Policy).filter(Policy.id.in_(ids)).delete(synchronize_session=False)
+    policies = db.query(Policy).filter(Policy.id.in_(ids)).all()
+    # W26-P0-3 补漏（2026-11-07 审计 P0）：批量删除此前用裸 ID 物理删除，
+    # 任意 user 角色即可抹掉全库政策。改为逐条归属校验（任一不可写即整体
+    # 403，fail-closed），并统一软删（与单删一致），保留可追溯性。
+    for policy in policies:
+        _assert_policy_writable(policy, current_user)
+
+    deleted = 0
+    for policy in policies:
+        policy.is_active = False
+        deleted += 1
     safe_commit(db)
     await _invalidate_policy_list_cache()
+    # FTS 索引同步 + 逐条审计（软删不再物理删除）
+    from app.services.policy_fts_service import remove_policy_from_fts
+
+    for policy in policies:
+        try:
+            remove_policy_from_fts(db, policy.id)
+        except Exception:
+            logger.warning("政策 FTS 索引同步失败（不影响主流程）", exc_info=True)
+        try:
+            write_work_log(
+                db,
+                "policy",
+                "delete",
+                policy.id,
+                f"批量删除政策: {policy.title}",
+                user_id=current_user.id,
+                username=getattr(current_user, "username", ""),
+            )
+        except Exception:
+            logger.debug("记录工作日志失败", exc_info=True)
     # 数据变更自动创建审批任务：政策批量删除进入待审批板块（审计留痕）
     approval_task_id = submit_entity_change_approval(
         db,
@@ -1225,7 +1314,7 @@ async def batch_delete_policies(data: dict, current_user=Depends(get_current_use
 async def get_policies(
     # 前端参数 (store 发送)
     skip: Optional[int] = Query(None, description="偏移量"),
-    limit: Optional[int] = Query(None, description="数量限制"),
+    limit: Optional[int] = Query(None, ge=1, le=200, description="数量限制"),
     category: Optional[str] = Query(None, description="分类: military/local"),
     organization_level: Optional[str] = Query(None, description="组织层级"),
     search: Optional[str] = Query(None, description="搜索关键字"),

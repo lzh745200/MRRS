@@ -41,7 +41,8 @@ class TestSaveUploadFile:
 
         assert info["file_name"] == "report.txt"
         assert info["file_size"] == len(b"hello world")
-        assert info["file_type"] == "application/octet-stream"
+        # 2026-11-07 深审 P1：MIME 由服务端按扩展名判定（不再信任客户端）
+        assert info["file_type"] == "text/plain"
         saved = tmp_path / "funds" / "123"
         assert saved.is_dir()
         files = list(saved.iterdir())
@@ -75,17 +76,21 @@ class TestSaveUploadFile:
         assert "不支持的文件类型" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_save_filename_without_extension_skips_type_check(self, mock_settings, tmp_path):
+    async def test_save_filename_without_extension_rejected(self, mock_settings, tmp_path):
+        # 2026-11-07 深审 P1：无扩展名不再跳过白名单（防 Windows 尾点规范化绕过）
         file = _upload(b"data", "noext")
-        info = await save_upload_file(file, sub_dir="plain", allowed_extensions={"pdf"})
-        assert info["file_name"] == "noext"
+        with pytest.raises(HTTPException) as exc_info:
+            await save_upload_file(file, sub_dir="plain", allowed_extensions={"pdf"})
+        assert exc_info.value.status_code == 400
+        assert "扩展名" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_save_filename_none(self, mock_settings, tmp_path):
+    async def test_save_filename_none_rejected(self, mock_settings, tmp_path):
         file = _upload(b"data", None)
-        info = await save_upload_file(file, sub_dir="noname")
-        assert info["file_name"] == "unknown"
-        assert "_unknown" in info["file_path"]
+        with pytest.raises(HTTPException) as exc_info:
+            await save_upload_file(file, sub_dir="noname")
+        assert exc_info.value.status_code == 400
+        assert "扩展名" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_save_write_failure(self, mock_settings):
@@ -146,3 +151,43 @@ class TestDeleteAttachmentFile:
         with patch.object(uh.os, "remove", side_effect=OSError("denied")):
             assert delete_attachment_file(str(f)) is False
         assert f.exists()
+
+
+class TestReadZipMemberStreaming:
+    """R61: 压缩包声明体积可伪造，逐块读取必须按实际字节数限长。"""
+
+    def test_forged_declared_size_still_limited(self, monkeypatch):
+        import io
+
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+
+        from app.utils import upload_helper
+
+        class FakeFp:
+            def __init__(self, data):
+                self._buf = io.BytesIO(data)
+
+            def read(self, n=-1):
+                return self._buf.read(n)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        class FakeZip:
+            def getinfo(self, name):
+                return SimpleNamespace(file_size=10)
+
+            def open(self, name):
+                return FakeFp(b"x" * (2 * 1024 * 1024))
+
+        with pytest.raises(HTTPException) as exc:
+            upload_helper.read_zip_member(
+                FakeZip(), "big.txt", max_bytes=1024 * 1024
+            )
+        assert exc.value.status_code == 413
+        assert "实际解压" in str(exc.value.detail)

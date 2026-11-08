@@ -268,15 +268,38 @@ apply_data_scope = apply_scope_to_query
 
 
 def require_data_permission(current_user, organization_id=None, created_by=None, db=None, error_message="无权执行此操作"):
-    """检查数据权限。超级管理员自动通过；其他用户需通过归属/组织检查。"""
-    if is_superuser(current_user):
+    """检查数据权限。超级管理员自动通过；其他用户按数据范围判定。
+
+    审计 P1（2026-11-08）：此前只做"同组织放行"，导致 ``data_scope="self"``
+    的普通用户仍可读取/删除同组织他人记录（详情接口会解密 PII）。现按
+    :func:`get_data_scope` 的角色语义分支，并显式尊重用户列的 ``self`` 配置：
+
+    * ALL（超管/超管标识）→ 放行；
+    * OWN_DEPT → 记录组织必须与用户组织一致（NULL 一律拒绝）；
+    * OWN → 记录 ``created_by`` 必须是用户本人（NULL 一律拒绝，fail-closed）。
+    """
+    scope = get_data_scope(current_user)
+    # 用户表上的 data_scope 是显式配置，语义上优先于角色默认值：
+    # self/own → 仅本人；org/dept/own_dept → 同组织；all 只对管理员生效（不放大普通用户）。
+    # 未显式配置时保持既有“有组织的用户可访问本组织记录”的契约（OWN_DEPT），
+    # 只有显式 self 的账号才被收紧为仅本人（审计 P1 的真实修复目标）。
+    explicit_scope = str(getattr(current_user, "data_scope", "") or "").strip().lower()
+    if explicit_scope == "self":
+        scope = DataScope.OWN
+    elif explicit_scope in ("org", "org_children", "dept", "own_dept"):
+        scope = DataScope.OWN_DEPT
+    elif scope != DataScope.ALL and _get_user_org_id(current_user) is not None:
+        scope = DataScope.OWN_DEPT
+    if scope == DataScope.ALL:
         return True
-    # 检查是否为用户自己的记录
-    if created_by is not None and created_by == getattr(current_user, "id", None):
+    # 创建人本人始终可访问（与既有契约一致）；显式 self 用户也只有这一条通路。
+    user_id = getattr(current_user, "id", None)
+    if created_by is not None and user_id is not None and created_by == user_id:
         return True
-    # 检查是否为用户本组织的记录
-    if organization_id is not None and organization_id == getattr(current_user, "organization_id", None):
-        return True
+    if scope == DataScope.OWN_DEPT:
+        user_org = _get_user_org_id(current_user)
+        if organization_id is not None and user_org is not None and organization_id == user_org:
+            return True
     raise HTTPException(status_code=403, detail=error_message)
 
 

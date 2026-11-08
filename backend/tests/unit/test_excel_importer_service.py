@@ -445,7 +445,9 @@ class TestImportData:
             mock_val.convert_row_types.side_effect = lambda r: r
 
             mock_filter = db.query.return_value.filter.return_value
-            mock_filter.all.return_value = [("existing",)]
+            mock_filter.all.return_value = [
+                SimpleNamespace(village_name="existing", is_active=True)
+            ]
             data = _make_excel_bytes(["定点帮扶村"], [["existing"]])
             result = service.import_data(
                 data, "test.xlsx", 100, 1, ImportMode.INCREMENTAL

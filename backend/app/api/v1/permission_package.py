@@ -358,6 +358,7 @@ def confirm_import_permission_package(
             overwrite_existing=body.overwrite_existing,
             mode=body.mode,
             allow_privileged=allow_privileged,
+            caller=current_user,
         )
     finally:
         # Clean up the uploaded file after import (success or failure)

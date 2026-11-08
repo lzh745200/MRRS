@@ -133,3 +133,16 @@ def test_export_fill_rejects_unknown_entity(auth_client_with_db):
     client, _db = auth_client_with_db
     resp = _export(client, "policy")
     assert resp.status_code == 400
+
+
+def test_export_fill_forces_formula_like_text_to_string(auth_client_with_db):
+    """R61 审计：以 = + - @ 开头的业务数据必须按文本写入，不能被当公式执行。"""
+    client, db = auth_client_with_db
+    _seed_village(db, "=1+1")
+
+    ws = _sheet(_export(client))
+    header_row, headers = _find_header(ws)
+    row = _row_for(ws, header_row, headers, "定点帮扶村", "=1+1")
+    cell = ws.cell(row=row, column=headers.index("定点帮扶村") + 1)
+    assert cell.value == "=1+1"
+    assert cell.data_type == "s"  # s=字符串；f=公式

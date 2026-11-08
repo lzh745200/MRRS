@@ -131,12 +131,14 @@ class TestBatchOperationsAuditFail:
 class TestFilesUploadGaps:
 
     def test_upload_filename_without_extension(self, client_with_mocked_auth):
+        # 2026-11-08 上传安全加固（审计 P1）：无扩展名文件一律拒绝，
+        # 防止以未知 Content-Type 内联托管造成存储型 XSS。
         resp = client_with_mocked_auth.post(
             "/api/v1/files/upload",
             files={"file": ("noextfile", b"data", "text/plain")},
         )
-        assert resp.status_code == 200
-        assert resp.json()["data"]["file_size"] == 4
+        assert resp.status_code == 400
+        assert "扩展名" in resp.json()["detail"]
 
     def test_upload_too_large_returns_413(self, client_with_mocked_auth):
         from app.core.config import settings
