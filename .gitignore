@@ -514,3 +514,8 @@ backend/.pytest-segmented.lock
 
 # 临时提交信息文件（构建/发布脚本生成，不入库）
 .gitmsg*.txt
+# 本地调试临时文件（不得提交）
+/_*.json
+/_*.py
+/_*.txt
+/_blog.txt
