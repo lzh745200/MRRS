@@ -4,7 +4,7 @@
 ; 通过 package.json build.nsis.include 注入到 electron-builder 生成的 NSIS
 ; 安装脚本中，实现以下功能：
 ;   1. 安装前终止旧进程（升级覆盖安装场景，避免文件占用）
-;   2. 校验并静默安装 VC++ Redistributable（双保险 Layer 2；Layer 1 由
+;   2. 静默安装 VC++ Redistributable（构建期校验，安装期不阻断；Layer 1 由
 ;      PyInstaller 自动捆绑 vcruntime140.dll 等核心 DLL）
 ;   3. 创建桌面快捷方式（使用圆形图标）
 ;   4. 卸载前终止运行进程（避免卸载时文件占用导致失败）
@@ -51,6 +51,26 @@
 !endif
 
 ; ----------------------------------------------------------------------------
+; VC++ 安装宏：静默安装 + 退出码记录，不弹窗、不阻断。
+; 0/1638=成功/已安装；3010/1641=成功但需重启。其他返回码写日志后继续。
+; ----------------------------------------------------------------------------
+!macro InstallVCRedist ARCH FILE
+  IfFileExists "$INSTDIR\resources\vcredist\${FILE}" 0 vcredist_${ARCH}_done
+    DetailPrint "正在安装 VC++ 运行库 (${ARCH})..."
+    nsExec::Exec '"$INSTDIR\resources\vcredist\${FILE}" /install /quiet /norestart'
+    Pop $0
+    FileOpen $1 "$INSTDIR\install-vcredist.log" a
+    FileWrite $1 "${ARCH}: exit=$0$\r$\n"
+    FileClose $1
+    StrCmp $0 "0" vcredist_${ARCH}_done
+    StrCmp $0 "1638" vcredist_${ARCH}_done
+    StrCmp $0 "3010" vcredist_${ARCH}_done
+    StrCmp $0 "1641" vcredist_${ARCH}_done
+    DetailPrint "VC++ (${ARCH}) 未安装（exit=$0），继续；应用已内置运行时 DLL"
+  vcredist_${ARCH}_done:
+!macroend
+
+; ----------------------------------------------------------------------------
 ; 安装钩子：终止旧进程 + VC++ 校验安装 + 创建桌面快捷方式
 ; ----------------------------------------------------------------------------
 !macro customInstall
@@ -76,92 +96,15 @@
   nsExec::Exec 'taskkill /F /IM "帮扶管理系统.exe" /IM "assistance-backend.exe"'
   Pop $0
 
-  ; 静默安装 VC++ Redistributable（双保险 Layer 2，先校验 SHA256）
-  ; 根据实际存在的安装器文件判断架构（CI 仅放置匹配架构的 vc_redist）
-  ;
-  ; 安装期校验三态语义（v1.11.0 真机故障复盘，2026-08-30）：
-  ;   exit 0 = 哈希匹配 → 静默安装
-  ;   exit 1 = 哈希确证不匹配（PowerShell 正常运行且结果不同）→ 真实损坏/
-  ;            篡改信号 → 弹窗中止安装
-  ;   exit 3 / nsExec error = 校验基础设施不可用（无 PowerShell/被安全软件
-  ;            或策略阻断/PS 过旧无 Get-FileHash）→ 不执行无法校验的二进制、
-  ;            跳过 redist 安装但不阻断部署 —— 应用由 Layer 1（PyInstaller
-  ;            捆绑 vcruntime DLL）覆盖，构建期拉取另有钉扎校验。
-  IfFileExists "$INSTDIR\resources\vcredist\vc_redist.x64.exe" 0 try_x86_redist
-    DetailPrint "正在校验 VC++ Redistributable (x64) 完整性..."
-    ; 校验脚本以文件形式写出后 -File 执行 —— 不用 -Command 行内脚本：
-    ; 行内脚本要过 NSIS/命令行/PS 多层解析，极易损坏（v1.11.0 教训）
-    FileOpen $1 "$INSTDIR\verify_x64.ps1" w
-    FileWrite $1 "$$ErrorActionPreference = 'Stop'$\n"
-    FileWrite $1 "$$path = '$INSTDIR\resources\vcredist\vc_redist.x64.exe'$\n"
-    FileWrite $1 "for ($$i = 0; $$i -lt 10; $$i++) {$\n"
-    FileWrite $1 "  try {$\n"
-    FileWrite $1 "    if (Test-Path -LiteralPath $$path) {$\n"
-    FileWrite $1 "      $$h = (Get-FileHash -ErrorAction Stop -Algorithm SHA256 -LiteralPath $$path).Hash$\n"
-    FileWrite $1 "      if ($$h -ieq '${VCREDIST_X64_SHA256}') { exit 0 }$\n"
-    FileWrite $1 "    }$\n"
-    FileWrite $1 "  } catch { }$\n"
-    FileWrite $1 "  Start-Sleep -Milliseconds 500$\n"
-    FileWrite $1 "}$\n"
-    FileWrite $1 "if (Test-Path -LiteralPath $$path) {$\n"
-    FileWrite $1 "  (Get-FileHash -Algorithm SHA256 -LiteralPath $$path).Hash | Out-File -LiteralPath '$INSTDIR\verify_x64_hash.txt'$\n"
-    FileWrite $1 "}$\n"
-    FileWrite $1 "exit 1$\n"
-    FileClose $1
-    nsExec::Exec 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\verify_x64.ps1"'
-    Pop $0
-    StrCmp $0 "0" vcredist_x64_ok
-    StrCmp $0 "1" vcredist_hash_fail
-    DetailPrint "警告：完整性校验工具不可用，跳过 VC++ (x64) 安装期校验及其安装（应用内置运行时 DLL 兜底）"
-    Goto try_x86_redist
-  vcredist_x64_ok:
-    DetailPrint "正在安装 VC++ Redistributable (x64)..."
-    nsExec::Exec '"$INSTDIR\resources\vcredist\vc_redist.x64.exe" /install /quiet /norestart'
-    Pop $0
-    Goto vcredist_done
-  try_x86_redist:
-  IfFileExists "$INSTDIR\resources\vcredist\vc_redist.x86.exe" 0 vcredist_done
-    DetailPrint "正在校验 VC++ Redistributable (x86) 完整性..."
-    FileOpen $1 "$INSTDIR\verify_x86.ps1" w
-    FileWrite $1 "$$ErrorActionPreference = 'Stop'$\n"
-    FileWrite $1 "$$path = '$INSTDIR\resources\vcredist\vc_redist.x86.exe'$\n"
-    FileWrite $1 "for ($$i = 0; $$i -lt 10; $$i++) {$\n"
-    FileWrite $1 "  try {$\n"
-    FileWrite $1 "    if (Test-Path -LiteralPath $$path) {$\n"
-    FileWrite $1 "      $$h = (Get-FileHash -ErrorAction Stop -Algorithm SHA256 -LiteralPath $$path).Hash$\n"
-    FileWrite $1 "      if ($$h -ieq '${VCREDIST_X86_SHA256}') { exit 0 }$\n"
-    FileWrite $1 "    }$\n"
-    FileWrite $1 "  } catch { }$\n"
-    FileWrite $1 "  Start-Sleep -Milliseconds 500$\n"
-    FileWrite $1 "}$\n"
-    FileWrite $1 "if (Test-Path -LiteralPath $$path) {$\n"
-    FileWrite $1 "  (Get-FileHash -Algorithm SHA256 -LiteralPath $$path).Hash | Out-File -LiteralPath '$INSTDIR\verify_x86_hash.txt'$\n"
-    FileWrite $1 "}$\n"
-    FileWrite $1 "exit 1$\n"
-    FileClose $1
-    nsExec::Exec 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\verify_x86.ps1"'
-    Pop $0
-    StrCmp $0 "0" vcredist_x86_ok
-    StrCmp $0 "1" vcredist_hash_fail
-    DetailPrint "警告：完整性校验工具不可用，跳过 VC++ (x86) 安装期校验及其安装（应用内置运行时 DLL 兜底）"
-    Goto vcredist_done
-  vcredist_x86_ok:
-    DetailPrint "正在安装 VC++ Redistributable (x86)..."
-    nsExec::Exec '"$INSTDIR\resources\vcredist\vc_redist.x86.exe" /install /quiet /norestart'
-    Pop $0
-    Goto vcredist_done
-  vcredist_hash_fail:
-    ; VC++ Redistributable 是可选“双保险”：应用目录已捆绑
-    ; VCRUNTIME140/MSVCP140（PyInstaller Layer 1），哈希不符不应阻断整个安装。
-    ; 只告警并跳过该组件的静默安装，避免现场因微软短链/杀软改写/升级竞态
-    ; 导致“装不上”；实际哈希写入 verify_*_hash.txt 供排障。
-    DetailPrint "警告：VC++ Redistributable 哈希校验未通过，已跳过该组件安装（应用自带运行时 DLL）"
-    MessageBox MB_ICONEXCLAMATION "VC++ Redistributable 校验未通过，已跳过该可选组件。$\n$\n应用自带运行时 DLL，通常不影响使用；如启动报缺少运行库，请手动安装 VC++ 2015-2022 x64 运行库。" /SD IDOK
-    Goto vcredist_done
-  vcredist_done:
-  ; 清理一次性校验脚本（err 文件保留作诊断证据；减少 Program Files 下的 .ps1 暴露面）
+  ; 安装 VC++ Redistributable（Layer 2 双保险）。
+  ; 供应链 SHA256 已在**构建期**由 scripts/verify_vcredist_bundle.py 钉扎校验，
+  ; 安装期不再用系统脚本复算：安装目录含中文、安全软件/策略限制、文件解压暂存，
+  ; 都会让校验误报并弹窗；应用本身已由 PyInstaller + Electron app-local DLL
+  ; 自带运行时，VC++ 安装失败不应阻断/惊吓用户。
   Delete "$INSTDIR\verify_x64.ps1"
   Delete "$INSTDIR\verify_x86.ps1"
+  !insertmacro InstallVCRedist "x64" "vc_redist.x64.exe"
+  !insertmacro InstallVCRedist "x86" "vc_redist.x86.exe"
 
   ; ─── 创建桌面快捷方式（圆形图标）───
   ; electron-builder 默认创建开始菜单快捷方式，但桌面快捷方式可能因

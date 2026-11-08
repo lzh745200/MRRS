@@ -21,6 +21,8 @@ $env:PYTHONIOENCODING = 'utf-8'
 Write-Host "=== STEP 1/5: fetch vcredist ==="
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build\fetch_vcredist.ps1
 if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD-FAIL] fetch_vcredist exit=$LASTEXITCODE"; exit 1 }
+python scripts\verify_vcredist_bundle.py
+if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD-FAIL] verify_vcredist_bundle exit=$LASTEXITCODE"; exit 1 }
 
 Write-Host "=== STEP 2/5: frontend build ==="
 Push-Location frontend

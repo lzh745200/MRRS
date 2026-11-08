@@ -1,3 +1,13 @@
+## [1.18.40] - 2026-11-08 — 安装器 VC++ 运行库彻底修复
+
+### 安装器
+
+- 移除安装期脚本复算 SHA256：中文安装路径、安全软件/组策略限制、解压暂存都会让校验返回 1，被误判为篡改并弹出“校验未通过”警告。
+- 供应链完整性前移到构建期：新增 `scripts/verify_vcredist_bundle.py`，在 `fetch_vcredist.ps1` 后硬校验 `vc_redist.x64/x86` 钉扎 SHA256；文件缺失/篡改直接构建失败。
+- 安装期改为 `/install /quiet /norestart`，只把 0/1638/3010/1641 及失败退出码写入 `install-vcredist.log`，不弹窗、不 Abort、不阻断主程序。
+- Electron 根目录通过 `extraFiles` 自带 `vcruntime140.dll`、`vcruntime140_1.dll`、`msvcp140.dll` 等 app-local 运行库，与 PyInstaller `_internal` 双兜底；即使 VC++ 安装失败也能启动。
+- 回归测试锁定“无 MessageBox / 无安装期哈希 / 记录退出码 / app-local DLL”四项契约。
+
 ## [1.18.39] - 2026-11-07 — 深度审计收口（越权 / 恢复 / 导入 / 上传 / 构建）
 
 ### 审计范围与结论

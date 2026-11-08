@@ -421,6 +421,12 @@ jobs:
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/fetch_vcredist.ps1
 
+      # 安装期不再用 PowerShell 复算哈希（中文路径/策略限制会误报弹窗）。
+      # 供应链完整性改由构建期硬校验；缺失/篡改直接让构建失败。
+      - name: Verify bundled VC++ Redistributable hashes
+        shell: bash
+        run: python scripts/verify_vcredist_bundle.py
+
       # 10. electron-builder 打包（CSC_LINK/CSC_KEY_PASSWORD 由 8.5 步按需写入
       #     GITHUB_ENV——secret 缺失时不设置，避免空串被当作证书路径）
       #

@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.18.39",
+  "version": "1.18.40",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -47,6 +47,19 @@
       "!frontend/dist{,/**/*}",
       "node_modules/**/*",
       "resources/icons/app-circle-256.png"
+    ],
+    "extraFiles": [
+      {
+        "from": "backend/dist/assistance-backend/_internal",
+        "to": ".",
+        "filter": [
+          "vcruntime140.dll",
+          "vcruntime140_1.dll",
+          "msvcp140.dll",
+          "MSVCP140_1.dll",
+          "VCOMP140.DLL"
+        ]
+      }
     ],
     "extraResources": [
       {
