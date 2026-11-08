@@ -537,7 +537,7 @@ class ExcelImporterService:
         inactive_by_name: Dict[str, SupportedVillage] = {}
         if imported_names:
             existing = (
-                self.db.query(SupportedVillage)
+                self.db.query(SupportedVillage)  # nosec:soft-delete —— 需包含软删行以复活同名记录（审计 P1-3）
                 .filter(sql_func.lower(SupportedVillage.village_name).in_(imported_names))
                 .all()
             )
