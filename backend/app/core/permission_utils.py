@@ -38,6 +38,27 @@ def is_superuser(user) -> bool:
     return False
 
 
+def _authz_admin(user, error_message: str) -> None:
+    """授权门面收口（延迟导入避免 permission_utils ↔ authorize 循环）。"""
+    from app.core.authorize import authorize
+
+    if not authorize(user, "admin", "system", legacy_allowed=is_admin(user)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_message,
+        )
+
+
+def _authz_superuser(user, error_message: str) -> None:
+    from app.core.authorize import authorize
+
+    if not authorize(user, "superuser", "system", legacy_allowed=is_superuser(user)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_message,
+        )
+
+
 def is_admin(user) -> bool:
     """检查用户是否为管理员（包括超级管理员）。
 
@@ -115,12 +136,7 @@ def require_admin(func=_UNSET, *, error_message: str = "需要管理员权限"):
                     detail="未提供用户认证信息",
                 )
 
-            if not is_admin(current_user):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=error_message,
-                )
-
+            _authz_admin(current_user, error_message)
             return await func(*args, **kwargs)
 
         return wrapper
@@ -128,11 +144,7 @@ def require_admin(func=_UNSET, *, error_message: str = "需要管理员权限"):
     # 直接调用模式：参数是「用户对象」（含 None 等非法值）—— 一律 fail-closed。
     # 原实现以 isinstance(getattr(func, "role", None), str) 判定，使 role 为 None/枚举、
     # 或载荷缺 role 的用户对象落入装饰器分支并返回 wrapper，校验被静默跳过。
-    if not is_admin(func):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=error_message,
-        )
+    _authz_admin(func, error_message)
     return None
 
 
@@ -177,21 +189,12 @@ def require_superuser(func=_UNSET, *, error_message: str = "仅超级管理员�
                     detail="未提供用户认证信息",
                 )
 
-            if not is_superuser(current_user):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=error_message,
-                )
-
+            _authz_superuser(current_user, error_message)
             return await func(*args, **kwargs)
 
         return wrapper
 
-    if not is_superuser(func):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=error_message,
-        )
+    _authz_superuser(func, error_message)
     return None
 
 

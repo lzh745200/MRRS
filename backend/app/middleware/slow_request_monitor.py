@@ -9,10 +9,13 @@ Usage（在 main.py 中注册）:
     app.add_middleware(SlowRequestMiddleware, slow_api_ms=500, slow_sql_ms=200)
 """
 
+import json
 import logging
+import os
 import threading
 import time
-from collections import deque
+from collections import defaultdict, deque
+from pathlib import Path
 from typing import Any, Deque, Dict, List
 
 logger = logging.getLogger("performance.slow")
@@ -21,6 +24,42 @@ logger = logging.getLogger("performance.slow")
 _MAX_RECORDS = 200
 _slow_apis: Deque[Dict[str, Any]] = deque(maxlen=_MAX_RECORDS)
 _slow_sqls: Deque[Dict[str, Any]] = deque(maxlen=_MAX_RECORDS)
+
+# 路由级耗时样本（按路由模板聚合，避免 /users/1 /users/2 把基数炸开）。
+# 每个路由最多保留 200 个样本，足够算 p50/p95/p99，且不会无界增长。
+_route_samples: Dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=200))
+_route_errors: Dict[str, int] = defaultdict(int)
+_route_lock = threading.Lock()
+
+# 慢 SQL 落盘：JSONL 按大小轮转，绝不写数据库（SQL 事件里写库会递归）。
+_SLOW_SQL_LOG_MAX_BYTES = 10 * 1024 * 1024
+_slow_sql_file_lock = threading.Lock()
+
+
+def _slow_sql_log_path() -> Path:
+    return Path(os.getenv("SLOW_SQL_LOG_PATH", "logs/slow-sql.jsonl"))
+
+
+def _append_slow_sql_jsonl(record: Dict[str, Any]) -> None:
+    """把慢 SQL 追加到 JSONL；失败只告警，绝不影响请求。"""
+    if os.getenv("SLOW_SQL_LOG_ENABLED", "1") == "0":
+        return
+    try:
+        path = _slow_sql_log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _slow_sql_file_lock:
+            if path.exists() and path.stat().st_size >= _SLOW_SQL_LOG_MAX_BYTES:
+                rotated = path.with_suffix(path.suffix + ".1")
+                try:
+                    rotated.unlink(missing_ok=True)
+                    path.rename(rotated)
+                except OSError:
+                    pass
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except (OSError, TypeError, ValueError) as exc:  # 观测失败不得影响业务
+        logger.debug("慢 SQL JSONL 写入失败: %s", exc)
+
 
 # ── 计数器 ──
 # R12-2：这些计数由并发线程写入 —— total_requests/slow_api_count 来自 ASGI
@@ -48,6 +87,39 @@ def get_slow_api_records(limit: int = 50) -> List[Dict[str, Any]]:
 def get_slow_sql_records(limit: int = 50) -> List[Dict[str, Any]]:
     """获取最近慢 SQL 记录（最新在前）"""
     return list(reversed(_slow_sqls))[:limit]
+
+
+def _record_route(path: str, elapsed_ms: float, status: int) -> None:
+    with _route_lock:
+        _route_samples[path].append(elapsed_ms)
+        if status >= 500:
+            _route_errors[path] += 1
+
+
+def _percentile(samples: List[float], pct: float) -> float:
+    if not samples:
+        return 0.0
+    ordered = sorted(samples)
+    index = min(len(ordered) - 1, max(0, int(round((pct / 100.0) * len(ordered) - 0.5))))
+    return round(ordered[index], 2)
+
+
+def get_route_stats(limit: int = 20) -> List[Dict[str, Any]]:
+    """按路由模板返回 p50/p95/p99、请求数与 5xx 数（进程内样本）。"""
+    with _route_lock:
+        rows = []
+        for path, samples in _route_samples.items():
+            values = list(samples)
+            rows.append({
+                "path": path,
+                "count": len(values),
+                "p50_ms": _percentile(values, 50),
+                "p95_ms": _percentile(values, 95),
+                "p99_ms": _percentile(values, 99),
+                "errors_5xx": _route_errors.get(path, 0),
+            })
+    rows.sort(key=lambda item: (item["p95_ms"], item["count"]), reverse=True)
+    return rows[:limit]
 
 
 def get_slow_stats() -> Dict[str, Any]:
@@ -126,11 +198,13 @@ class SlowRequestMiddleware:
                     # 令牌、身份证/手机号等 PII，进环形缓冲与 warning 日志即外泄
                     # （深审 #35）。
                     params_summary = _summarize_params(parameters)
-                    _slow_sqls.append({
+                    record = {
                         "sql": sql_short,
                         "params": params_summary,
                         "elapsed_ms": round(elapsed, 2),
-                    })
+                    }
+                    _slow_sqls.append(record)
+                    _append_slow_sql_jsonl(record)
                     logger.warning(
                         "慢SQL %.2fms: %s | params=%s",
                         elapsed, sql_short, params_summary,
@@ -152,6 +226,9 @@ class SlowRequestMiddleware:
                 elapsed = (time.perf_counter() - start) * 1000
                 _bump("total_requests")
                 status = message.get("status", 0)
+                route = scope.get("route")
+                route_path = getattr(route, "path", None) or path
+                _record_route(route_path, elapsed, status)
                 if elapsed > self.slow_api_ms:
                     _bump("slow_api_count")
                     _slow_apis.append({

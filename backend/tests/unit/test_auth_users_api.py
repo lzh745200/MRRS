@@ -719,6 +719,35 @@ class TestRoleOptions:
             assert [r["label"] for r in roles] == ["超级管理员", "系统管理员", "普通用户", "访客"]
         _clear_overrides(client, get_current_user)
 
+    def test_form_options_aggregates_and_etag(self, client):
+        _setup_admin_user(client)
+        with patch("app.api.v1.auth.users.require_admin") as mock_req:
+            mock_req.return_value = None
+            response = client.get(f"{self.prefix}/form-options?scope=create")
+            assert response.status_code == 200
+            payload = response.json()["data"]
+            assert [r["value"] for r in payload["roles"]] == [
+                "super_admin",
+                "admin",
+                "user",
+                "viewer",
+            ]
+            assert [s["value"] for s in payload["data_scopes"]] == [
+                "all",
+                "org_children",
+                "org",
+                "self",
+            ]
+            assert isinstance(payload["organization_tree"], list)
+            etag = response.headers.get("etag")
+            assert etag
+            cached = client.get(
+                f"{self.prefix}/form-options?scope=create",
+                headers={"If-None-Match": etag},
+            )
+            assert cached.status_code == 304
+        _clear_overrides(client, get_current_user)
+
     def test_practical_role_contract_is_four(self):
         """users.role 只允许四个实用角色；历史值只能在入口归一化，不得重新入列。"""
         from app.core.constants import ALL_ROLES, PRACTICAL_ROLES, normalize_role

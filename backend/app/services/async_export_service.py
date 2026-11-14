@@ -627,6 +627,44 @@ class AsyncExportService:
         )
         return export_task
 
+    async def retry_export_task(self, task_id: str, user_id: int) -> ExportTask:
+        """重试失败/过期/取消的导出任务：复制原参数生成新 task_id，再入队。
+
+        旧任务保留历史记录，不做原地状态回滚；这样重试链可审计，也不会与
+        仍在轮询旧 task_id 的客户端混淆。
+        """
+        old = (
+            self.db.query(ExportTask)
+            .filter(ExportTask.task_id == task_id, ExportTask.user_id == user_id)
+            .first()
+        )
+        if old is None:
+            raise ValueError("导出任务不存在")
+        if old.status not in (
+            ExportStatus.FAILED.value,
+            ExportStatus.EXPIRED.value,
+        ):
+            raise ValueError("只有失败/过期的导出任务可以重试")
+
+        new_task = ExportTask(
+            user_id=user_id,
+            task_id=str(_uuid.uuid4()),
+            export_type=old.export_type,
+            query_params=old.query_params,
+            file_name=old.file_name,
+            file_size=0,
+            record_count=old.record_count or 0,
+            status=ExportStatus.PENDING.value,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        )
+        self.db.add(new_task)
+        safe_commit(self.db)
+        self.db.refresh(new_task)
+        await task_queue.submit(
+            _run_export_task, new_task.task_id, name=f"async-export-retry-{old.export_type}"
+        )
+        return new_task
+
     # ── 任务查询 ──
 
     def get_export_task(self, task_id: str) -> Optional[ExportTask]:

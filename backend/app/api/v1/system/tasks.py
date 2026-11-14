@@ -145,6 +145,9 @@ def _create_task_record(task_type: str, task_name: str, created_by: str = None, 
         "created_by": created_by,
         "params": params or {},
         "result": None,
+        # 2026-11-14：本接口当前只演示状态机，不执行真实导入/导出。
+        # 显式标记，避免前端把模拟进度当成真实任务。
+        "simulated": True,
     }
     with _tasks_lock:
         _tasks[task_id] = record

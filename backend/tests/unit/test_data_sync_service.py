@@ -774,7 +774,7 @@ class TestDataSyncService:
 
     @pytest.mark.asyncio
     async def test_export_encrypted_full(self, tmp_path, service):
-        def _fake_create(data, output_path, password):
+        def _fake_create(data, output_path, password, **kwargs):
             # 真实落一个文件：哈希断言必须基于真实字节，不能靠 mock sha256 自证
             Path(output_path).write_bytes(b"fake-rrs-bytes")
 
@@ -794,7 +794,7 @@ class TestDataSyncService:
 
     @pytest.mark.asyncio
     async def test_export_encrypted_selective(self, tmp_path, service):
-        def _fake_create(data, output_path, password):
+        def _fake_create(data, output_path, password, **kwargs):
             Path(output_path).write_bytes(b"selective-bytes")
 
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
@@ -815,7 +815,7 @@ class TestDataSyncService:
 
     @pytest.mark.asyncio
     async def test_export_encrypted_skip_unknown(self, tmp_path, service):
-        def _fake_create(data, output_path, password):
+        def _fake_create(data, output_path, password, **kwargs):
             Path(output_path).write_bytes(b"skip-bytes")
 
         with patch("app.services.data_sync_service.get_db") as mock_get_db:
@@ -835,7 +835,7 @@ class TestDataSyncService:
 
     @pytest.mark.asyncio
     async def test_export_encrypted_export_error(self, tmp_path, service):
-        def _fake_create(data, output_path, password):
+        def _fake_create(data, output_path, password, **kwargs):
             Path(output_path).write_bytes(b"err-bytes")
 
         service.sync_dir = tmp_path

@@ -269,3 +269,69 @@ class TestSqlEventListeners:
         assert len(srm._slow_sqls) == 1
         assert "SELECT" in srm._slow_sqls[0]["sql"]
         assert srm._slow_sqls[0]["elapsed_ms"] > 0
+
+
+# ==============================================================================
+# 路由直方图 / 慢 SQL JSONL（2026-11-14）
+# ==============================================================================
+
+
+class TestRouteStatsAndJsonl:
+    def test_route_percentiles_and_error_count(self):
+        srm._route_samples.clear()
+        srm._route_errors.clear()
+        for value in (10, 20, 30, 40, 50):
+            srm._record_route("/api/v1/items/{item_id}", float(value), 200)
+        srm._record_route("/api/v1/items/{item_id}", 60.0, 500)
+
+        rows = srm.get_route_stats(limit=5)
+        assert rows[0]["path"] == "/api/v1/items/{item_id}"
+        assert rows[0]["count"] == 6
+        assert rows[0]["p50_ms"] == 30.0
+        assert rows[0]["p95_ms"] == 60.0
+        assert rows[0]["errors_5xx"] == 1
+
+    def test_percentile_empty_and_single(self):
+        assert srm._percentile([], 95) == 0.0
+        assert srm._percentile([12.5], 99) == 12.5
+
+    def test_append_slow_sql_jsonl_and_rotation(self, tmp_path, monkeypatch):
+        target = tmp_path / "slow-sql.jsonl"
+        monkeypatch.setenv("SLOW_SQL_LOG_PATH", str(target))
+        monkeypatch.setenv("SLOW_SQL_LOG_ENABLED", "1")
+
+        srm._append_slow_sql_jsonl({"sql": "select 1", "elapsed_ms": 1.0})
+        assert target.exists()
+        assert "select 1" in target.read_text(encoding="utf-8")
+
+        # 达到阈值后下一次写入先轮转，旧文件改名为 .1
+        monkeypatch.setattr(srm, "_SLOW_SQL_LOG_MAX_BYTES", 1)
+        srm._append_slow_sql_jsonl({"sql": "select 2", "elapsed_ms": 2.0})
+        assert target.with_suffix(".jsonl.1").exists()
+
+    def test_append_slow_sql_jsonl_disabled(self, tmp_path, monkeypatch):
+        target = tmp_path / "disabled.jsonl"
+        monkeypatch.setenv("SLOW_SQL_LOG_PATH", str(target))
+        monkeypatch.setenv("SLOW_SQL_LOG_ENABLED", "0")
+        srm._append_slow_sql_jsonl({"sql": "select 1"})
+        assert not target.exists()
+
+
+def test_append_slow_sql_jsonl_swallows_io_error(tmp_path, monkeypatch):
+    target = tmp_path / "as-dir"
+    target.mkdir()
+    monkeypatch.setenv("SLOW_SQL_LOG_PATH", str(target))
+    monkeypatch.setenv("SLOW_SQL_LOG_ENABLED", "1")
+    # 目标是目录 → open('a') 抛 OSError，必须被吞掉且不留异常
+    srm._append_slow_sql_jsonl({"sql": "select 1"})
+
+
+def test_append_slow_sql_jsonl_rotation_failure_is_ignored(tmp_path, monkeypatch):
+    target = tmp_path / "rotate.jsonl"
+    target.write_text("old\n", encoding="utf-8")
+    monkeypatch.setenv("SLOW_SQL_LOG_PATH", str(target))
+    monkeypatch.setenv("SLOW_SQL_LOG_ENABLED", "1")
+    monkeypatch.setattr(srm, "_SLOW_SQL_LOG_MAX_BYTES", 0)
+    monkeypatch.setattr(srm.Path, "rename", lambda *a, **k: (_ for _ in ()).throw(OSError("busy")))
+    srm._append_slow_sql_jsonl({"sql": "select 3"})
+    assert "select 3" in target.read_text(encoding="utf-8")

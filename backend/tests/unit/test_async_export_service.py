@@ -335,3 +335,60 @@ class TestGetUserExportTasks:
         self._make_query_chain(db, expected)
         tasks, total = self._svc(db).get_user_export_tasks(1, page=2, page_size=10)
         assert tasks == expected
+
+
+class TestRetryExportTask:
+    """retry_export_task：失败/取消/过期可重试，运行中拒绝。"""
+
+    def _svc(self, db):
+        from app.services.async_export_service import AsyncExportService
+        return AsyncExportService(db)
+
+    @patch("app.services.async_export_service.task_queue")
+    @patch("app.services.async_export_service.safe_commit")
+    def test_retry_failed_creates_new_task(self, mock_commit, mock_queue):
+        import asyncio
+
+        from app.models.export_task import ExportStatus, ExportTask
+
+        old = ExportTask(
+            user_id=1,
+            task_id="old",
+            export_type="supported_villages",
+            query_params={"page": 1},
+            status=ExportStatus.FAILED.value,
+            record_count=3,
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = old
+        mock_queue.submit = AsyncMock()
+        svc = self._svc(db)
+
+        task = asyncio.run(svc.retry_export_task("old", 1))
+        assert task.task_id != "old"
+        assert task.status == ExportStatus.PENDING.value
+        db.add.assert_called_once()
+        mock_commit.assert_called_once()
+
+    def test_retry_missing_or_running_rejected(self):
+        import asyncio
+
+        import pytest
+
+        from app.models.export_task import ExportStatus, ExportTask
+
+        db = MagicMock()
+        svc = self._svc(db)
+        db.query.return_value.filter.return_value.first.return_value = None
+        with pytest.raises(ValueError, match="不存在"):
+            asyncio.run(svc.retry_export_task("none", 1))
+
+        running = ExportTask(
+            user_id=1,
+            task_id="running",
+            export_type="x",
+            status=ExportStatus.PROCESSING.value,
+        )
+        db.query.return_value.filter.return_value.first.return_value = running
+        with pytest.raises(ValueError, match="只有失败"):
+            asyncio.run(svc.retry_export_task("running", 1))

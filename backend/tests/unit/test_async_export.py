@@ -462,3 +462,36 @@ class TestEndpointsRunOffEventLoop:
         from app.api.v1.import_export import async_export
 
         assert inspect.iscoroutinefunction(async_export.export_villages)
+
+
+class TestRetryExportTask:
+    """POST /api/v1/async-export/tasks/{task_id}/retry"""
+
+    def test_retry_success(self, client_with_mocked_auth):
+        task = MagicMock()
+        task.id = 1
+        task.task_id = "new"
+        task.export_type = "supported_villages"
+        task.status = ExportStatus.PENDING.value
+        task.record_count = 3
+        task.file_name = "a.xlsx"
+        task.file_size = 0
+        task.error_message = None
+        task.created_at = datetime.now(timezone.utc)
+        task.started_at = task.completed_at = None
+        task.expires_at = None
+        task.is_downloadable = False
+        svc = MagicMock()
+        svc.retry_export_task = AsyncMock(return_value=task)
+        with patch("app.api.v1.import_export.async_export.AsyncExportService", return_value=svc):
+            resp = client_with_mocked_auth.post(f"{BASE}/tasks/old/retry")
+        assert resp.status_code == 200
+        assert resp.json()["task_id"] == "new"
+
+    def test_retry_rejected(self, client_with_mocked_auth):
+        svc = MagicMock()
+        svc.retry_export_task = AsyncMock(side_effect=ValueError("只有失败/过期的导出任务可以重试"))
+        with patch("app.api.v1.import_export.async_export.AsyncExportService", return_value=svc):
+            resp = client_with_mocked_auth.post(f"{BASE}/tasks/old/retry")
+        assert resp.status_code == 400
+        assert "只有失败" in resp.json()["detail"]

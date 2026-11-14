@@ -1,14 +1,16 @@
 # security-audit: exempt data_scope — 认证/身份域（本人资料与管理员用户列表/统计），非组织数据枚举
+import hashlib
+import json
 import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.data_permission import DataScope, get_data_scope
+from app.core.data_permission import DataScope, apply_scope_filter, get_data_scope
 from app.core.database import get_db
 from app.core.exceptions import AuthenticationException, NotFoundException
 from app.core.permission_utils import is_superuser, require_admin
@@ -17,6 +19,7 @@ from app.core.security import get_current_user, get_password_hash
 from app.core.cache import cache_result
 from app.core.config import settings
 from app.models.machine_code import MachineCode
+from app.models.organization import Organization
 from app.models.user import User
 from app.services.user_service import VALID_ROLES
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, normalize_role
@@ -30,6 +33,41 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["用户管理"])
 
+
+# 角色/范围/权限选项的单一事实源：/roles/options、/data-scopes/options、
+# /permissions/options 与聚合的 /form-options 必须返回同一份数据，避免前端
+# 各自硬编码后与后端策略漂移（“能选但提交 400/403”）。
+ROLE_OPTIONS = [
+    {"value": "super_admin", "label": "超级管理员", "description": "系统最高权限，可管理所有功能"},
+    {"value": "admin", "label": "系统管理员", "description": "可管理用户、组织、系统配置"},
+    {"value": "user", "label": "普通用户", "description": "日常数据录入和操作"},
+    {"value": "viewer", "label": "访客", "description": "只能查看数据，无法修改"},
+]
+DATA_SCOPE_OPTIONS = [
+    {"value": "all", "label": "全部数据", "description": "可访问系统内所有数据"},
+    {"value": "org_children", "label": "本组织及下级", "description": "可访问本组织及其下级组织的所有数据"},
+    {"value": "org", "label": "仅本组织", "description": "仅能访问本组织的数据"},
+    {"value": "self", "label": "仅自己", "description": "仅能访问自己创建的数据"},
+]
+PERMISSION_OPTIONS = [
+    {"code": "system:manage", "name": "系统管理", "category": "系统"},
+    {"code": "user:manage", "name": "用户管理", "category": "系统"},
+    {"code": "org:manage", "name": "组织管理", "category": "系统"},
+    {"code": "role:manage", "name": "角色管理", "category": "系统"},
+    {"code": "village:manage", "name": "村庄管理", "category": "数据"},
+    {"code": "project:manage", "name": "项目管理", "category": "数据"},
+    {"code": "fund:manage", "name": "资金管理", "category": "数据"},
+    {"code": "report:manage", "name": "报表管理", "category": "数据"},
+    {"code": "data:view", "name": "数据查看", "category": "操作"},
+    {"code": "data:create", "name": "数据创建", "category": "操作"},
+    {"code": "data:edit", "name": "数据编辑", "category": "操作"},
+    {"code": "data:delete", "name": "数据删除", "category": "操作"},
+    {"code": "data:export", "name": "数据导出", "category": "操作"},
+    {"code": "data:import", "name": "数据导入", "category": "操作"},
+    {"code": "approve:view", "name": "查看审批", "category": "审批"},
+    {"code": "approve:submit", "name": "提交审批", "category": "审批"},
+    {"code": "approve:process", "name": "处理审批", "category": "审批"},
+]
 
 # ==================== Schemas ====================
 
@@ -552,6 +590,61 @@ async def get_staff_list(
 # ==================== 用户详情（动态路径必须在静态路径之后） ====================
 
 
+@router.get("/form-options", summary="获取用户表单可选项（聚合 + ETag）")
+async def get_user_form_options(
+    request: Request,
+    response: Response,
+    scope: Optional[str] = Query(None, description="表单场景，如 create/edit"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回当前调用者**允许选择**的角色、数据范围、权限项与组织树。
+
+    ETag 使组织/角色选项在未变化时走 304，避免每次打开用户弹窗重复传整棵树。
+    角色按调用者收敛：部门级 admin 不返回无法创建的 super_admin。
+    """
+    require_admin(current_user)
+
+    roles = [r for r in ROLE_OPTIONS if is_superuser(current_user) or r["value"] != "super_admin"]
+    org_query = db.query(Organization).filter(Organization.is_active == True)  # noqa: E712
+    org_query = apply_scope_filter(
+        org_query, current_user, Organization, org_id_field="id", db=db
+    )
+    organizations = org_query.order_by(Organization.sort_order, Organization.id).all()
+    node_map = {
+        org.id: {
+            "id": org.id,
+            "name": org.name,
+            "code": org.code or "",
+            "parent_id": org.parent_id,
+            "children": [],
+        }
+        for org in organizations
+    }
+    roots = []
+    for org in organizations:
+        node = node_map[org.id]
+        if org.parent_id and org.parent_id in node_map:
+            node_map[org.parent_id]["children"].append(node)
+        else:
+            roots.append(node)
+
+    payload = {
+        "scope": scope or "create",
+        "roles": roles,
+        "data_scopes": DATA_SCOPE_OPTIONS,
+        "permissions": PERMISSION_OPTIONS,
+        "organization_tree": roots,
+    }
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    etag = '"' + hashlib.sha256(canonical.encode("utf-8")).hexdigest() + '"'
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "private, no-cache"
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    return success_response(data=payload)
+
+
 @router.get("/{user_id}")
 async def get_user(user_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """获取用户详情 - 包含完整的权限和组织信息"""
@@ -932,14 +1025,7 @@ async def get_role_options(
     """获取可用的角色列表，用于创建/编辑用户时选择角色"""
     require_admin(current_user)
 
-    return success_response(data={
-        "roles": [
-            {"value": "super_admin", "label": "超级管理员", "description": "系统最高权限，可管理所有功能"},
-            {"value": "admin", "label": "系统管理员", "description": "可管理用户、组织、系统配置"},
-            {"value": "user", "label": "普通用户", "description": "日常数据录入和操作"},
-            {"value": "viewer", "label": "访客", "description": "只能查看数据，无法修改"},
-        ]
-    })
+    return success_response(data={"roles": ROLE_OPTIONS})
 
 
 @router.get(
@@ -954,14 +1040,7 @@ async def get_data_scope_options(
     """获取可用的数据范围选项"""
     require_admin(current_user)
 
-    return success_response(data={
-        "data_scopes": [
-            {"value": "all", "label": "全部数据", "description": "可访问系统内所有数据"},
-            {"value": "org_children", "label": "本组织及下级", "description": "可访问本组织及其下级组织的所有数据"},
-            {"value": "org", "label": "仅本组织", "description": "仅能访问本组织的数据"},
-            {"value": "self", "label": "仅自己", "description": "仅能访问自己创建的数据"},
-        ]
-    })
+    return success_response(data={"data_scopes": DATA_SCOPE_OPTIONS})
 
 
 @router.get(
@@ -976,31 +1055,7 @@ async def get_permission_options(
     """获取可用的权限列表，用于给用户分配具体权限"""
     require_admin(current_user)
 
-    return success_response(data={
-        "permissions": [
-            # 系统管理权限
-            {"code": "system:manage", "name": "系统管理", "category": "系统"},
-            {"code": "user:manage", "name": "用户管理", "category": "系统"},
-            {"code": "org:manage", "name": "组织管理", "category": "系统"},
-            {"code": "role:manage", "name": "角色管理", "category": "系统"},
-            # 数据管理权限
-            {"code": "village:manage", "name": "村庄管理", "category": "数据"},
-            {"code": "project:manage", "name": "项目管理", "category": "数据"},
-            {"code": "fund:manage", "name": "资金管理", "category": "数据"},
-            {"code": "report:manage", "name": "报表管理", "category": "数据"},
-            # 操作权限
-            {"code": "data:view", "name": "数据查看", "category": "操作"},
-            {"code": "data:create", "name": "数据创建", "category": "操作"},
-            {"code": "data:edit", "name": "数据编辑", "category": "操作"},
-            {"code": "data:delete", "name": "数据删除", "category": "操作"},
-            {"code": "data:export", "name": "数据导出", "category": "操作"},
-            {"code": "data:import", "name": "数据导入", "category": "操作"},
-            # 审批权限
-            {"code": "approve:view", "name": "查看审批", "category": "审批"},
-            {"code": "approve:submit", "name": "提交审批", "category": "审批"},
-            {"code": "approve:process", "name": "处理审批", "category": "审批"},
-        ]
-    })
+    return success_response(data={"permissions": PERMISSION_OPTIONS})
 
 
 @router.post("/{user_id}/admin-reset-password", summary="管理员重置用户密码")

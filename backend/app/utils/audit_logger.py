@@ -237,6 +237,20 @@ class AuditLogger:
                 status="success",
                 level=audit_data.get("level", "info"),
             )
+            # 可选哈希链：只在开启时多一次“查上一行”的读；默认关零开销。
+            from app.core.config import settings as _settings
+
+            if getattr(_settings, "AUDIT_CHAIN_ENABLED", False):
+                from app.core.audit_chain import compute_payload_hash
+
+                previous = (
+                    db.query(AuditLogModel.payload_hash)
+                    .order_by(AuditLogModel.id.desc())
+                    .first()
+                )
+                log_entry.prev_hash = previous[0] if previous else None
+                log_entry.payload_hash = compute_payload_hash(log_entry)
+
             db.add(log_entry)
 
             # 登录相关事件同时写入 login_attempts 表

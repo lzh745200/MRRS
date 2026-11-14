@@ -231,6 +231,72 @@ function _writeSecrets(secrets, encrypt) {
   } catch (e) { console.error('[Secrets] 写入失败:', e.message); }
 }
 
+// ─── 认证凭据安全存储（Electron safeStorage）───
+// 仅存 refresh token / 持久 token / user 的 JSON 值；access token 仍只放渲染进程
+// 内存/sessionStorage。文件内每个值单独加密，避免整包 JSON 明文落盘。
+function _authVaultFile() {
+  return path.join(app.getPath('userData'), 'auth-secure.json');
+}
+
+let _authVaultCache = null;
+
+function _readAuthVault() {
+  if (_authVaultCache) return _authVaultCache;
+  if (!safeStorage.isEncryptionAvailable()) {
+    _authVaultCache = {};
+    return _authVaultCache;
+  }
+  try {
+    const raw = fs.readFileSync(_authVaultFile(), 'utf-8');
+    const stored = JSON.parse(raw);
+    const out = {};
+    for (const [key, encoded] of Object.entries(stored || {})) {
+      try {
+        out[key] = safeStorage.decryptString(Buffer.from(String(encoded), 'base64'));
+      } catch (_) {
+        // 单条损坏只丢弃该条，避免整份会话被一个坏值拖死。
+      }
+    }
+    _authVaultCache = out;
+  } catch (_) {
+    _authVaultCache = {};
+  }
+  return _authVaultCache;
+}
+
+function _writeAuthVault() {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  try {
+    const stored = {};
+    for (const [key, value] of Object.entries(_authVaultCache || {})) {
+      stored[key] = safeStorage.encryptString(String(value)).toString('base64');
+    }
+    fs.writeFileSync(_authVaultFile(), JSON.stringify(stored), { mode: 0o600 });
+    try { fs.chmodSync(_authVaultFile(), 0o600); } catch (_) { /* Windows 无 POSIX 权限 */ }
+    return true;
+  } catch (e) {
+    console.warn('[AuthVault] 写入失败:', e.message);
+    return false;
+  }
+}
+
+function _authVaultGet(key) {
+  return _readAuthVault()[String(key)] ?? null;
+}
+
+function _authVaultSet(key, value) {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  _readAuthVault();
+  _authVaultCache[String(key)] = String(value);
+  return _writeAuthVault();
+}
+
+function _authVaultRemove(key) {
+  _readAuthVault();
+  delete _authVaultCache[String(key)];
+  return _writeAuthVault();
+}
+
 function getDatabasePath() {
   let dbDir;
   if (process.platform === 'linux') {
@@ -1069,6 +1135,17 @@ function performAutoBackup(trigger = 'manual') {
 
 // ─── IPC 处理器 ───
 function setupIpcHandlers() {
+  // 认证凭据同步 IPC：AuthStorage 现有 API 是同步的，改用 invoke 会迫使
+  // store/guards/request 全面异步化，风险远大于收益；这里只做小对象读写。
+  ipcMain.on('auth-secure-get-sync', (event, key) => {
+    event.returnValue = _authVaultGet(key);
+  });
+  ipcMain.on('auth-secure-set-sync', (event, key, value) => {
+    event.returnValue = _authVaultSet(key, value);
+  });
+  ipcMain.on('auth-secure-remove-sync', (event, key) => {
+    event.returnValue = _authVaultRemove(key);
+  });
   ipcMain.handle('get-app-version', () => appVersion);
   ipcMain.handle('get-platform', () => process.platform);
   ipcMain.handle('get-user-data-path', () => getUserDataPath());

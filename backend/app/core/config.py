@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.42"
+    PROJECT_VERSION: str = "1.18.43"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -208,6 +208,14 @@ class Settings(BaseSettings):
     # 观察期收集差异后再评估是否进入 enforce（本轮不做）。
     ORG_DATA_SCOPE_MODE: str = "off"
 
+    # 授权策略门面：off-沿用 legacy（默认）/ shadow-只记录差异 / enforce-按新策略。
+    # 先 shadow 观察，不改变任何 403 行为；见 app/core/authorize.py。
+    AUTHORIZE_MODE: str = "off"
+
+    # 审计链：默认关；开启后 audit_logs 写入 prev_hash/payload_hash。
+    # 只做“可检测篡改”，不能阻止本机高权限用户删库；物理删除仍需改逻辑封存。
+    AUDIT_CHAIN_ENABLED: bool = False
+
     # R33 授权包签名（Ed25519，32 字节 hex）。
     # 上级配置 GRANT_SIGNING_KEY（签发），下级配置 GRANT_PUBKEY（验签）；
     # 下级只配公钥，即使被提取也无法伪造签名。
@@ -225,6 +233,13 @@ class Settings(BaseSettings):
     # 需要防"U 盘载体被替换"的部署：生成方配 PACKAGE_SIGNING_KEY，导入方配 PACKAGE_PUBKEY。
     PACKAGE_SIGNING_KEY: str = ""
     PACKAGE_PUBKEY: str = ""
+
+    # 跨机 .rrs 数据包来源签名（独立于四类“人带包”的 PACKAGE_* 语义）：
+    # 生成方配 SYNC_PACKAGE_SIGNING_KEY，导入方配 SYNC_PACKAGE_PUBKEY。
+    # 过渡期默认允许未签名包（只 warn），下一版本再收紧。
+    SYNC_PACKAGE_SIGNING_KEY: str = ""
+    SYNC_PACKAGE_PUBKEY: str = ""
+    SYNC_PACKAGE_ALLOW_UNSIGNED: bool = True
 
     # W27 P1：经费「不能自批」。
     # 默认 False = 禁止创建人审批自己创建的经费记录（财务内控 / 审计要求）。

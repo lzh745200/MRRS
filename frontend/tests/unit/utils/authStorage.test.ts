@@ -21,6 +21,7 @@ describe('utils/authStorage', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    delete (window as any).electronAPI
   })
 
   describe('setToken / getToken', () => {
@@ -256,6 +257,36 @@ describe('utils/authStorage', () => {
       AuthStorage.clearPersisted()
       expect(AuthStorage.hasPersistedAuth()).toBe(false)
       expect(localStorage.getItem('auth_persist_refresh')).toBeNull()
+    })
+
+    it('Electron secureAuth 存在时持久凭据走安全桥，不落 localStorage', () => {
+      const vault = new Map<string, string>()
+      ;(window as any).electronAPI = {
+        secureAuth: {
+          getItem: (key: string) => vault.get(key) ?? null,
+          setItem: (key: string, value: string) => {
+            vault.set(key, value)
+            return true
+          },
+          removeItem: (key: string) => {
+            vault.delete(key)
+          },
+        },
+      }
+      AuthStorage.persistForAutoLogin({
+        token: 'secure-t',
+        user: USER,
+        refreshToken: 'secure-r',
+      })
+      expect(localStorage.getItem('auth_persist_token')).toBeNull()
+      expect(vault.get('auth_persist_token')).toBe('secure-t')
+      expect(vault.get('auth_persist_refresh')).toBe('secure-r')
+      expect(AuthStorage.getToken()).toBe('secure-t')
+      expect(AuthStorage.getRefreshToken()).toBe('secure-r')
+      expect(AuthStorage.hasPersistedAuth()).toBe(true)
+      AuthStorage.clearPersisted()
+      expect(vault.has('auth_persist_token')).toBe(false)
+      expect(AuthStorage.hasPersistedAuth()).toBe(false)
     })
 
     it('clearSession 仅清会话，保留记住登录持久凭据（锁屏场景）', () => {

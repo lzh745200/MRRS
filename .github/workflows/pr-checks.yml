@@ -28,7 +28,10 @@ jobs:
   # 全部作业加 timeout-minutes（R28 低危清理）：GitHub 默认 360 分钟，作业一旦卡死
   # （网络挂起 / xdist worker 僵死 / 浏览器下载无响应）会白占并发额度并延迟 PR 反馈。
   # 预算按实测耗时给约 2 倍余量，只拦"卡死"，不误伤正常慢跑。
-  backend-test:
+  backend-test-single:
+    # 回退开关：仓库变量 BACKEND_TEST_SHARDS=0 时走旧的单作业 12 段串行路径。
+    # PR 事件不消费 workflow_dispatch inputs，因此用 vars（PR 可用）而不是 inputs。
+    if: vars.BACKEND_TEST_SHARDS == '0'
     runs-on: ubuntu-24.04
     timeout-minutes: 90   # 实测双遍全量（覆盖 + 分支棘轮）约 40-50 分钟
     steps:
@@ -193,6 +196,163 @@ jobs:
           directory: backend
           flags: backend
           fail_ci_if_error: false
+        continue-on-error: true
+
+  # 4 分片矩阵（2026-11-14）：按实测耗时装箱，最重一片约 6.6 min；
+  # 每片 3 段、独立 runner/DB/.coverage，最终由同名 backend-test 聚合门禁。
+  # 覆盖率不在分片内判定：分片只写 coverage 数据并上传，聚合 job combine 后
+  # 统一读 backend/.coveragerc fail_under=100，并跑分支棘轮。
+  backend-test-shard:
+    if: vars.BACKEND_TEST_SHARDS != '0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 段耗时来自 run 43582560001；4 片最重 6.6 min，先 4 后 6。
+          - shard: 1
+            segments: "10,2,9"
+          - shard: 2
+            segments: "4,5,7"
+          - shard: 3
+            segments: "8,1,3"
+          - shard: 4
+            segments: "12,6,11"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: { python-version: '3.11' }
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: "Backend shard ${{ matrix.shard }} (segments ${{ matrix.segments }})"
+        env: { PYTHONFAULTHANDLER: "1" }
+        run: |
+          cd backend
+          python ../scripts/run_backend_tests_segmented.py \
+            --segments "${{ matrix.segments }}" \
+            --cov-file ".coverage.shard${{ matrix.shard }}" \
+            --fresh --keep-logs
+      # 失败也上传：聚合 job 先检查 needs 结果，不会把残缺 coverage 当通过。
+      - name: Upload shard coverage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-coverage-shard-${{ matrix.shard }}
+          path: backend/.coverage.shard${{ matrix.shard }}
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload shard logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pytest-logs-shard-${{ matrix.shard }}
+          path: logs/pytest-segments/*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # 聚合 job 必须叫 backend-test：保留对外 check 名；矩阵 job 只是实现细节。
+  backend-test:
+    if: always()
+    needs: [backend-test-single, backend-test-shard]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Fail when any test job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::后端测试分片或单作业失败，聚合门禁不通过"
+          exit 1
+
+      - name: Fail when both paths were skipped
+        if: needs.backend-test-single.result == 'skipped' && needs.backend-test-shard.result == 'skipped'
+        run: |
+          echo "::error::backend-test 两条路径都被跳过；检查 BACKEND_TEST_SHARDS 变量"
+          exit 1
+
+      # 单作业回退路径已在自己内部完成 100%/分支棘轮/Codecov，这里只记录。
+      - name: Single-job fallback already gated
+        if: needs.backend-test-single.result == 'success'
+        run: echo "backend-test-single 已完成测试与覆盖率门禁"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.backend-test-shard.result == 'success'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: needs.backend-test-shard.result == 'success'
+        with: { python-version: '3.11' }
+      - name: Install coverage (aggregate only)
+        if: needs.backend-test-shard.result == 'success'
+        run: pip install "coverage==7.13.4"
+
+      - name: Download shard coverage
+        if: needs.backend-test-shard.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: backend-coverage-shard-*
+          path: backend
+          merge-multiple: true
+
+      - name: Combine coverage + 100% gate + branch ratchet
+        if: needs.backend-test-shard.result == 'success'
+        run: |
+          cd backend
+          python -m coverage combine --rcfile=.coveragerc
+          python -m coverage report --rcfile=.coveragerc
+          python -m coverage json --rcfile=.coveragerc -o coverage-branch.json
+          python ../scripts/check_branch_coverage.py \
+            --json coverage-branch.json \
+            --baseline scripts/gate_baselines/branch_coverage_baseline.json
+          python ../scripts/coverage_gaps.py \
+            --coveragepy coverage-branch.json \
+            --out coverage-gaps-backend.md \
+            --title "后端覆盖率缺口"
+
+      - name: Upload coverage gaps
+        if: needs.backend-test-shard.result == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-gaps-backend
+          path: backend/coverage-gaps-backend.md
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload branch coverage json on failure
+        if: failure() && needs.backend-test-shard.result == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: branch-coverage
+          path: backend/coverage-branch.json
+          if-no-files-found: ignore
+
+      # 只在聚合 job 上传一次，避免 Codecov flags 被 shard 切碎。
+      - name: Codecov (matrix aggregate)
+        if: needs.backend-test-shard.result == 'success'
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+        with:
+          directory: backend
+          flags: backend
+          fail_ci_if_error: false
+        continue-on-error: true
+
+      - name: Download shard logs for flaky ledger
+        if: needs.backend-test-shard.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: pytest-logs-shard-*
+          path: ${{ runner.temp }}/shard-logs
+          merge-multiple: true
+
+      - name: Flaky test ledger (matrix)
+        if: needs.backend-test-shard.result == 'success'
+        run: |
+          shopt -s nullglob
+          LOGS=("$RUNNER_TEMP"/shard-logs/*.log)
+          if [ ${#LOGS[@]} -eq 0 ]; then
+            echo "no shard logs found — skipping flaky ledger"
+            exit 0
+          fi
+          ARGS=()
+          for f in "${LOGS[@]}"; do ARGS+=(--log "$f"); done
+          python scripts/ci_flake_report.py "${ARGS[@]}" --out flaky-report.txt --warn-reruns 3
         continue-on-error: true
 
   frontend-check:
@@ -674,6 +834,11 @@ jobs:
       # 任何人再写无理由豁免，此处直接红（配套单测 test_repo_bare_pragmas_stay_zero）。
       # 注意：说明注释必须放在命令起始行之前，不能插进反斜杠续行中间
       # （否则续行拼接后参数行会被当成独立命令执行 → exit 127）。
+      # PR 矩阵分片完整性：4 个 shard 必须恰好覆盖 1..12 各一次。
+      # 矩阵最容易的回归是漏一段仍全绿；本检查与 nightly parity 互补。
+      - name: PR shard parity
+        run: python scripts/check_pr_shard_parity.py
+
       - name: Coverage-exemption reason ratchet (F2)
         run: |
           git fetch --no-tags --deepen=50 origin main || true

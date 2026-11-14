@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import struct
+from pathlib import Path
 from typing import Any, Dict
 
 from cryptography.hazmat.primitives import hashes
@@ -61,10 +62,25 @@ def _derive_key(password: str, salt: bytes) -> bytes:
     return kdf.derive(password.encode("utf-8"))
 
 
+def _file_sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _signature_payload(path: str) -> Dict[str, str]:
+    """对最终文件字节摘要签名，避免包格式改动破坏旧客户端。"""
+    return {"package_sha256": _file_sha256(path)}
+
+
 def create_encrypted_package(
     data: Dict[str, Any],
     output_path: str,
     password: str,
+    *,
+    signing_key: str = "",
 ) -> None:
     """创建加密数据包.
 
@@ -99,10 +115,47 @@ def create_encrypted_package(
         f.write(encrypted_data)
         f.write(checksum)                        # 32 字节
 
+    # 可选来源签名：独立 .rrs.sig，不改动 .rrs 格式，旧客户端可忽略。
+    # 未配置私钥时不生成签名，导入侧按 SYNC_PACKAGE_PUBKEY 决定 warn/fail。
+    if signing_key:
+        from app.core.grant_signing import sign_payload
+
+        signature = sign_payload(_signature_payload(output_path), signing_key)
+        Path(f"{output_path}.sig").write_text(signature, encoding="ascii")
+
+
+def _verify_source_signature(
+    input_path: str,
+    *,
+    public_key: str = "",
+    allow_unsigned: bool = True,
+) -> None:
+    sig_path = Path(f"{input_path}.sig")
+    if not public_key:
+        if not sig_path.exists():
+            logger.warning("数据包未签名（未配置 SYNC_PACKAGE_PUBKEY），仅做 AES-GCM/SHA256 校验")
+        return
+    if not sig_path.exists():
+        if allow_unsigned:
+            logger.warning("数据包未签名，但当前允许未签名导入（过渡期）")
+            return
+        raise ValueError("数据包缺少来源签名，已拒绝导入")
+    from app.core.grant_signing import verify_payload
+
+    if not verify_payload(
+        _signature_payload(input_path),
+        sig_path.read_text(encoding="ascii").strip(),
+        public_key,
+    ):
+        raise ValueError("数据包来源签名验证失败：包已被替换或签名不匹配")
+
 
 def extract_encrypted_package(
     input_path: str,
     password: str,
+    *,
+    public_key: str = "",
+    allow_unsigned: bool = True,
 ) -> Dict[str, Any]:
     """解析并解密数据包，自动验证完整性.
 
@@ -165,6 +218,8 @@ def extract_encrypted_package(
     computed_checksum = hashlib.sha256(metadata_json + data_json).digest()
     if computed_checksum != stored_checksum:
         raise ValueError("完整性校验失败: 数据可能被篡改")
+
+    _verify_source_signature(input_path, public_key=public_key, allow_unsigned=allow_unsigned)
 
     data = json.loads(data_json.decode("utf-8"))
     return data

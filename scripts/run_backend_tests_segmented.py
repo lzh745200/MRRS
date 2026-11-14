@@ -277,6 +277,11 @@ def release_run_lock(lock_path: Path = LOCK_FILE) -> None:
 def main():
     parser = argparse.ArgumentParser(description="按 CI 12 段运行后端测试")
     parser.add_argument("--segment", type=int, help="只跑指定段（1-12）")
+    parser.add_argument(
+        "--segments",
+        default="",
+        help="跑多个指定段，逗号分隔（如 1,2,10）；与 --segment 互斥",
+    )
     parser.add_argument("--list", action="store_true", help="列出分段")
     parser.add_argument("--keep-logs", action="store_true", help="保留每段日志到 logs/pytest-segments/")
     parser.add_argument("--fresh", action="store_true", help="运行前清理 .coverage（默认清理）")
@@ -434,7 +439,9 @@ def main():
         # 历史 bug：早期把 `<base>` 本身当 COVERAGE_FILE 传给每段 → 12 段全追加进同一个
         # 文件、分片不存在 → combine 永远 "No data to combine"（而单文件累积"恰好"
         # 还能算出正确百分比，于是问题被长期忽略，只在单段运行时暴露成 28%）。
-        _seg_cov_file = f"{cov_file_arg}.seg{i}" if seg_rcs else None
+        # --cov-unique：每段独立分片，最后 combine；
+        # 普通 --cov-file：所有选中段追加到同一个文件，供外部矩阵 job 上传。
+        _seg_cov_file = f"{cov_file_arg}.seg{i}" if seg_rcs else (cov_file_arg or None)
         code = run_segment(
             i, name, patterns, is_final, args.keep_logs, _seg_cov_file, _seg_rc
         )

@@ -26,6 +26,16 @@
       </template>
     </PageHeader>
 
+    <!-- 诚实标识：当前后端任务接口是演示状态机，真实异步导出走 /async-export/tasks。 -->
+    <el-alert
+      type="warning"
+      show-icon
+      :closable="false"
+      title="演示任务"
+      description="本页任务为状态机演示，不会执行真实导入/导出；真实导出任务请在报表导出页查看。"
+      class="simulated-alert"
+    />
+
     <!-- ── 任务统计行 ── -->
     <el-row :gutter="16" class="stats-row">
       <el-col :span="4">
@@ -749,5 +759,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+.simulated-alert {
+  margin-bottom: 16px;
 }
 </style>

@@ -303,6 +303,35 @@ function toOrgTreeValue(value: unknown): string | undefined {
   return /^[0-9]/.test(raw) ? `_${raw}` : raw
 }
 
+async function loadFormOptions() {
+  // 角色/范围/权限项由后端统一返回，避免前端硬编码与后端策略漂移。
+  // 失败时保留本地兜底选项，不阻断页面；组织树仍由 loadOrgTree 单独刷新。
+  try {
+    const res: any = await get('/users/form-options')
+    const payload = res?.data ?? res
+    if (Array.isArray(payload?.roles) && payload.roles.length) {
+      roleOptions.value = payload.roles.map((r: any) => ({ value: r.value, label: r.label }))
+    }
+    if (Array.isArray(payload?.data_scopes) && payload.data_scopes.length) {
+      dataScopeOptions.value = payload.data_scopes.map((s: any) => ({
+        value: s.value,
+        label: s.label,
+      }))
+    }
+    if (Array.isArray(payload?.permissions) && payload.permissions.length) {
+      const groups = new Map<string, { code: string; name: string }[]>()
+      for (const perm of payload.permissions) {
+        const category = String(perm.category || '其他')
+        if (!groups.has(category)) groups.set(category, [])
+        groups.get(category)!.push({ code: perm.code, name: perm.name })
+      }
+      permissionGroups.value = Array.from(groups, ([category, items]) => ({ category, items }))
+    }
+  } catch {
+    // 兜底选项已初始化；不弹错，避免页面首次加载被非关键接口打断。
+  }
+}
+
 async function loadOrgTree(reportError = false) {
   try {
     const res: any = await get('/organizations/tree')
@@ -326,7 +355,7 @@ const resetPwdForm = reactive({
 })
 
 // Permission groups for UI grouping - 与后端 /users/permissions/options 保持一致
-const permissionGroups = [
+const DEFAULT_PERMISSION_GROUPS = [
   {
     category: '系统',
     items: [
@@ -365,6 +394,7 @@ const permissionGroups = [
     ],
   },
 ]
+const permissionGroups = ref(DEFAULT_PERMISSION_GROUPS)
 
 // 角色选项：精简为 4 个实用角色（users.role 体系）
 // 兼容映射：approval_leader/manager→管理员级，operator→普通用户
@@ -388,12 +418,13 @@ const roleOptions = ref<{ value: string; label: string }[]>([...ALL_ROLE_OPTIONS
 // RBAC 角色是细粒度权限包的补充，与 users.role 是两套体系，
 // 混用会导致 users.role 存入 RBAC 角色名而使权限判断失效。
 
-const dataScopeOptions = [
+const DEFAULT_DATA_SCOPE_OPTIONS = [
   { value: 'all', label: '全部数据' },
   { value: 'org_children', label: '本组织及下级' },
   { value: 'org', label: '仅本组织' },
   { value: 'self', label: '仅自己' },
 ]
+const dataScopeOptions = ref(DEFAULT_DATA_SCOPE_OPTIONS)
 
 // 与后端 PasswordPolicy 同源的密码校验器（>=12 位 + 大小写 + 数字 + 白名单特殊字符）
 const validatePassword = passwordValidator()
@@ -845,6 +876,7 @@ onMounted(() => {
     orgFilterId.value = q
   }
   loadData()
+  loadFormOptions()
   loadOrgTree()
   loadPendingCount()
   loadPackNameMap()

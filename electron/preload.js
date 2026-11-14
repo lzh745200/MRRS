@@ -35,6 +35,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('app-route', listener);
   },
 
+  // ── 认证凭据安全存储（仅 Electron；浏览器无此对象）──
+  // 只暴露 key/value 级读写，不暴露文件路径或 safeStorage 本身。
+  secureAuth: {
+    getItem: (key) => ipcRenderer.sendSync('auth-secure-get-sync', key),
+    setItem: (key, value) => ipcRenderer.sendSync('auth-secure-set-sync', key, value),
+    removeItem: (key) => ipcRenderer.sendSync('auth-secure-remove-sync', key),
+  },
+
   // ── 修复引导页（A3/C2：后端不可用时的自助恢复，仅 recovery.html 消费）──
   /** 获取引导页信息（触发原因 + 日志路径） */
   getRecoveryInfo: () => ipcRenderer.invoke('recovery-get-info'),

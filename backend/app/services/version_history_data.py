@@ -4199,4 +4199,32 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.43",
+        "date": "2026-11-14",
+        "description": "系统管理优化批次（CI/表单/凭据/可观测/审计）",
+        "features": [
+            (
+                "CI 后端 4 分片矩阵：按实测耗时装箱（最重 6.6 min），保留同名 backend-test 聚合 job；覆盖率合并在聚合 job 统一执行 coverage combine +"
+                " 100% + 分支棘轮 + Codecov，分片失败聚合 job 必失败。新增 scripts/check_pr_shard_parity.py 防漏段；BACKEND_TEST_SHA"
+                "RDS=0 可回退单作业。"
+            ),
+            "表单选项服务端下发：新增 GET /users/form-options，聚合角色/数据范围/权限项/组织树并支持 ETag；用户管理前端改为消费服务端选项，保留本地兜底。",
+            (
+                "Electron 凭据安全托管：新增主进程 safeStorage 认证仓（auth-secure.json）与 preload 同步 IPC；AuthStorage 的持久 token/"
+                "user/refresh 在 Electron 下走安全仓，浏览器开发模式保留 session/local 兼容路径。"
+            ),
+            "任务诚实标识与重试：系统任务页明确标注“演示任务”；新增 POST /async-export/tasks/{task_id}/retry，失败/过期导出可复制参数重试。",
+            (
+                "授权策略门面：新增 app/core/authorize.py（off/shadow/enforce），require_admin/require_superuser 先走门面；默认 of"
+                "f，shadow 只记录差异。"
+            ),
+            "性能观测：慢 SQL 增加轮转 JSONL（默认 logs/slow-sql.jsonl）；新增路由 p50/p95/p99 与 5xx 计数，并入 /system/metrics。",
+            (
+                "审计链与数据包签名：audit_logs 增加可选 prev_hash/payload_hash 与校验脚本；.rrs 增加可选 detached Ed25519 签名（SYNC_PACK"
+                "AGE_SIGNING_KEY/SYNC_PACKAGE_PUBKEY，过渡期允许未签名）。"
+            ),
+            "文档漂移修正：CLAUDE.md 的通用组件清单改为当前 10 个组件，删除会过期的 PR 时长硬编码；文档端点数/用例数同步。",
+        ],
+    },
 ]

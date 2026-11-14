@@ -294,6 +294,35 @@ def download_export_file(
     )
 
 
+@router.post("/tasks/{task_id}/retry", response_model=ExportTaskResponse)
+async def retry_export_task(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """重试失败/取消/过期的导出任务（仅任务所有者）。"""
+    service = AsyncExportService(db)
+    try:
+        task = await service.retry_export_task(task_id, authenticated_user_id(current_user))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ExportTaskResponse(
+        id=task.id,
+        task_id=task.task_id,
+        export_type=task.export_type,
+        status=task.status,
+        record_count=task.record_count or 0,
+        file_name=task.file_name,
+        file_size=task.file_size,
+        error_message=task.error_message,
+        created_at=task.created_at,
+        started_at=task.started_at,
+        completed_at=task.completed_at,
+        expires_at=task.expires_at,
+        is_downloadable=task.is_downloadable,
+    )
+
+
 @router.get("/tasks", response_model=ExportTaskListResponse)
 def get_export_tasks(
     page: int = Query(1, ge=1, description="页码"),

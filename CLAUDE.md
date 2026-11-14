@@ -13,7 +13,7 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 个子包；850 个端点）
+│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 个子包；852 个端点）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
@@ -77,7 +77,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,793 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,826 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -156,8 +156,9 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   PR Checks **全部 cancelled**（并发组被后续推送打断），那段时间"推送成功"但**零完整验证**；
   `pr-checks.yml` 已改为 `cancel-in-progress` **只对 PR 生效**，main 改为排队。
   两个构建工作流的"发布前置门禁"（`scripts/check_release_gate.py`）会轮询该 commit 的
-  PR Checks 结论，等待上限 **90 分钟**（2026-10-25 由 30 上调：本仓 PR Checks 实测
-  17.4~30.2 分钟，原值 30 与最慢一次压线，正常"推 main 立刻打 tag"会超时变红）。
+  PR Checks 结论，等待上限 **90 分钟**（2026-10-25 由 30 上调：历史上整条 PR Checks
+  实测接近 30 分钟，原值 30 与最慢一次压线，正常"推 main 立刻打 tag"会超时变红。
+  **具体分钟数会随作业变化，以 `gh run list` 实测为准，不要在文档里写死**）。
   该约束由 `electron/tests/ci-wiring.test.js` 守卫（等待预算 <60 分钟、或 main 恢复取消、
   或缺少 check_main_ci.py 接线，都会让测试失败）。
 - **更新日志必须及时** (2026-10-25): `CHANGELOG.md` 是唯一账本 —— **每次改动在同一个提交里**
@@ -251,8 +252,12 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     正文行高 1.6、数字 `tabular-nums`、侧栏 `--sidebar-bg` 深绿渐变 + 当前板块金色竖条（金色仅三用，面积 ≤5%）。
   - **全局模板样式/类**：`styles/components/ui-v2.scss`（表格浅主色表头+金色底线/去斑马纹/密度/焦点环）、
     `card.scss`（`.app-card`/`.app-stat-card`/`.stat-trend`/`.num-cell`）、`states.scss`（`.app-empty/.app-loading/.app-error`）、
-    `dialog.scss`（三档宽度）、`theme-elevated.scss`（精美增强层）；通用组件 `components/common/` 6 个
-    （AppPageHeader/AppStatCard/AppEmpty/AppLoading/AppError/AppTableToolbar + `index.ts`）。
+    `dialog.scss`（三档宽度）、`theme-elevated.scss`（精美增强层）；通用组件 `components/common/`
+    **10 个**（BaseChart/BulkPasteDialog/ChangeHistoryDialog/ChartErrorState/ErrorBoundary/
+    GuizhouRegionSelector/MoneyText/PageHeader/StatsCard/VirtualList）——早期文档写的
+    `AppPageHeader`/`AppStatCard`/`AppEmpty`/`AppLoading`/`AppError`/`AppTableToolbar` 六个组件
+    已在 2026-10 删除（`6c2bc2ed`），**不要按旧名引用**；空态用 `EmptyState`、错误边界用
+    `ErrorBoundary`、请求错误统一 `errorHandler`。
   - **导航体验**：侧栏当前板块金色竖条、收起态 hover/键盘聚焦浮层 `.section-flyout`、面包屑「板块 › 页面」、
     Ctrl+K 命令面板/菜单搜索。
   - **页面**：工作台 KPI 统计卡 + 待办清单 + 图表层级；大屏三层结构（标题时间条/KPI 大数字/2–3 列图表）+

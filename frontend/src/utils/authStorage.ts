@@ -46,6 +46,54 @@ const STORAGE_KEYS = {
 } as const
 
 // 旧版 localStorage 键名（用于向后兼容读取和清理）
+/**
+ * Electron 主进程 safeStorage 桥（preload 暴露）；浏览器无此对象。
+ *
+ * 只有三个持久键走这里；sessionStorage 的当前会话仍由浏览器管理。
+ * 主进程不可加密（Linux 无 keyring）时 setItem 返回 false，此时**不回退 localStorage**，
+ * 保证“记住登录”只在有 OS 级加密的 Electron 环境生效。
+ */
+interface SecureAuthBridge {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => boolean
+  removeItem: (key: string) => void
+}
+
+function secureAuthBridge(): SecureAuthBridge | null {
+  if (typeof window === 'undefined') return null
+  const api = (
+    window as Window & {
+      electronAPI?: { secureAuth?: SecureAuthBridge }
+    }
+  ).electronAPI
+  const bridge = api?.secureAuth
+  return bridge && typeof bridge.getItem === 'function' ? bridge : null
+}
+
+function readPersisted(key: string): string | null {
+  const bridge = secureAuthBridge()
+  if (bridge) {
+    const value = bridge.getItem(key)
+    if (value) return value
+  }
+  // 兼容旧版本已写入 localStorage 的持久凭据；登录成功后会迁入安全存储。
+  return safeGetItem(key, 'local')
+}
+
+function writePersisted(key: string, value: string): void {
+  const bridge = secureAuthBridge()
+  if (bridge) {
+    bridge.setItem(key, value)
+    return
+  }
+  safeSetItem(key, value, 'local')
+}
+
+function removePersisted(key: string): void {
+  secureAuthBridge()?.removeItem(key)
+  safeRemoveItem(key, 'local')
+}
+
 const LEGACY_KEYS = {
   TOKEN: ['auth_token', 'access_token', 'token'],
   USER: ['auth_user', 'user'],
@@ -104,9 +152,9 @@ export class AuthStorage {
     }
     if (source === 'persist') {
       return {
-        token: safeGetItem(STORAGE_KEYS.PERSIST_TOKEN, 'local'),
-        user: AuthStorage._parseUser(safeGetItem(STORAGE_KEYS.PERSIST_USER, 'local')),
-        refresh: safeGetItem(STORAGE_KEYS.PERSIST_REFRESH, 'local'),
+        token: readPersisted(STORAGE_KEYS.PERSIST_TOKEN),
+        user: AuthStorage._parseUser(readPersisted(STORAGE_KEYS.PERSIST_USER)),
+        refresh: readPersisted(STORAGE_KEYS.PERSIST_REFRESH),
       }
     }
     return {
@@ -240,23 +288,23 @@ export class AuthStorage {
    * 退出登录（logout → AuthStorage.clear）会彻底清除，不留残余凭据。
    */
   static persistForAutoLogin(data: AuthData): void {
-    safeSetItem(STORAGE_KEYS.PERSIST_TOKEN, data.token, 'local')
-    safeSetItem(STORAGE_KEYS.PERSIST_USER, JSON.stringify(data.user), 'local')
+    writePersisted(STORAGE_KEYS.PERSIST_TOKEN, data.token)
+    writePersisted(STORAGE_KEYS.PERSIST_USER, JSON.stringify(data.user))
     if (data.refreshToken) {
-      safeSetItem(STORAGE_KEYS.PERSIST_REFRESH, data.refreshToken, 'local')
+      writePersisted(STORAGE_KEYS.PERSIST_REFRESH, data.refreshToken)
     }
   }
 
   /** 清除记住登录的持久数据 */
   static clearPersisted(): void {
-    safeRemoveItem(STORAGE_KEYS.PERSIST_TOKEN, 'local')
-    safeRemoveItem(STORAGE_KEYS.PERSIST_USER, 'local')
-    safeRemoveItem(STORAGE_KEYS.PERSIST_REFRESH, 'local')
+    removePersisted(STORAGE_KEYS.PERSIST_TOKEN)
+    removePersisted(STORAGE_KEYS.PERSIST_USER)
+    removePersisted(STORAGE_KEYS.PERSIST_REFRESH)
   }
 
   /** 是否已开启记住登录（存在持久令牌） */
   static hasPersistedAuth(): boolean {
-    return !!safeGetItem(STORAGE_KEYS.PERSIST_TOKEN, 'local')
+    return !!readPersisted(STORAGE_KEYS.PERSIST_TOKEN)
   }
 
   /**

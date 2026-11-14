@@ -86,6 +86,12 @@ class AuditLog(Base):
 
     metadata_ = Column("metadata", JSON, nullable=True)
 
+    # 可选审计链（AUDIT_CHAIN_ENABLED=true 时写入）：
+    # payload_hash = 本行关键字段规范化 JSON 的 SHA-256；
+    # prev_hash = 上一行 payload_hash。默认 NULL，不改变既有写入行为。
+    prev_hash = Column(String(64), nullable=True, comment="链上前一条 payload_hash")
+    payload_hash = Column(String(64), nullable=True, index=True, comment="本条内容哈希")
+
     session_id = Column(String(100), nullable=True, index=True)
     trace_id = Column(String(100), nullable=True)
 

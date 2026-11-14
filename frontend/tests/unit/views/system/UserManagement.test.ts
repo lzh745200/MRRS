@@ -319,6 +319,51 @@ describe('挂载与初始化', () => {
     ])
   })
 
+  it('loadFormOptions：角色/范围/权限项由后端覆盖本地兜底', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/users/form-options') {
+        return Promise.resolve({
+          data: {
+            roles: [{ value: 'admin', label: '系统管理员' }],
+            data_scopes: [{ value: 'org', label: '仅本组织' }],
+            permissions: [
+              { code: 'data:view', name: '数据查看', category: '操作' },
+              { code: 'data:edit', name: '数据编辑', category: '操作' },
+            ],
+          },
+        })
+      }
+      return defaultGetImpl(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.roleOptions).toEqual([{ value: 'admin', label: '系统管理员' }])
+    expect(vm.dataScopeOptions).toEqual([{ value: 'org', label: '仅本组织' }])
+    expect(vm.permissionGroups).toEqual([
+      {
+        category: '操作',
+        items: [
+          { code: 'data:view', name: '数据查看' },
+          { code: 'data:edit', name: '数据编辑' },
+        ],
+      },
+    ])
+  })
+
+  it('loadFormOptions：接口异常 → 保留本地兜底选项', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/users/form-options') return Promise.reject(new Error('net'))
+      return defaultGetImpl(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.roleOptions).toHaveLength(4)
+    expect(vm.dataScopeOptions).toHaveLength(4)
+    expect(vm.permissionGroups.length).toBeGreaterThan(0)
+  })
+
   it('loadOrgTree：返回非数组 → 置空', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/organizations/tree') return Promise.resolve({ data: { not: 'array' } })

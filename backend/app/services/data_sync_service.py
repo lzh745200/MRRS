@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from sqlalchemy import insert, text, update
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.error_handler import app_logger, BusinessLogicError
 from app.core.transaction import safe_commit
@@ -974,6 +975,7 @@ class DataSyncService:
                     data=package_data,
                     output_path=str(package_path),
                     password=password,
+                    signing_key=getattr(settings, "SYNC_PACKAGE_SIGNING_KEY", ""),
                 )
 
                 # 计算文件哈希（分块读取：既避免整包进内存，也避免阻塞事件循环）
@@ -1057,7 +1059,11 @@ class DataSyncService:
                 # 解密与读包同属同步重活（PBKDF2 600k 次 + 整包读入/解密），
                 # 跑在事件循环上会让导入期间全站请求排队，必须移入线程池。
                 package_data = await run_in_thread(
-                    extract_encrypted_package, str(package_file), password
+                    extract_encrypted_package,
+                    str(package_file),
+                    password,
+                    public_key=getattr(settings, "SYNC_PACKAGE_PUBKEY", ""),
+                    allow_unsigned=getattr(settings, "SYNC_PACKAGE_ALLOW_UNSIGNED", True),
                 )
             except ValueError as e:
                 raise BusinessLogicError(str(e))
