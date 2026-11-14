@@ -351,6 +351,26 @@ describe('挂载与初始化', () => {
     ])
   })
 
+  it('loadFormOptions：兼容无 data 包装的响应，并为缺省分类补“其他”', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/users/form-options') {
+        return Promise.resolve({
+          roles: [{ value: 'viewer', label: '访客' }],
+          data_scopes: [{ value: 'self', label: '仅自己' }],
+          permissions: [{ code: 'data:view', name: '数据查看' }],
+        })
+      }
+      return defaultGetImpl(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.roleOptions).toEqual([{ value: 'viewer', label: '访客' }])
+    expect(vm.permissionGroups).toEqual([
+      { category: '其他', items: [{ code: 'data:view', name: '数据查看' }] },
+    ])
+  })
+
   it('loadFormOptions：接口异常 → 保留本地兜底选项', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/users/form-options') return Promise.reject(new Error('net'))

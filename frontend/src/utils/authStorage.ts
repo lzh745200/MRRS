@@ -60,7 +60,6 @@ interface SecureAuthBridge {
 }
 
 function secureAuthBridge(): SecureAuthBridge | null {
-  if (typeof window === 'undefined') return null
   const api = (
     window as Window & {
       electronAPI?: { secureAuth?: SecureAuthBridge }

@@ -324,6 +324,7 @@ def test_append_slow_sql_jsonl_swallows_io_error(tmp_path, monkeypatch):
     monkeypatch.setenv("SLOW_SQL_LOG_ENABLED", "1")
     # 目标是目录 → open('a') 抛 OSError，必须被吞掉且不留异常
     srm._append_slow_sql_jsonl({"sql": "select 1"})
+    assert target.is_dir()
 
 
 def test_append_slow_sql_jsonl_rotation_failure_is_ignored(tmp_path, monkeypatch):
