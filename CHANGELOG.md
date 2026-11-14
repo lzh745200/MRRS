@@ -12,7 +12,7 @@
 - 新增 `backend/tests/unit/test_permission_package_first_run.py`（13 例）：空库、种子账号、环境变量种子名放行；已登录、已改密、非超管、第二账号、非种子用户名、已初始化、状态异常、非 loopback 全部 403。
 - `test_permission_package_first_run.py + test_permission_package_sec1.py` = 27 passed（4.79s）。
 - 打包态 dev E2E：新库启动后按登录页路径（loopback + CSRF）匿名导入权限包，越过 403 门禁、返回 400（包格式校验），证明放行生效。
-- `check_type_debt` 的 `broad_except` 基线 820→821：`_is_pristine_first_run` 读取初始化状态时必须捕获任意异常并按“已使用机器”处理（fail-closed），属有意兜底，代码内已注明理由；mypy 72 持平。
+- `check_type_debt` 的 `broad_except` 基线 820→821：`_is_pristine_first_run` 读取初始化状态时必须捕获任意异常并按“已使用机器”处理（fail-closed），异常分支写 `logger.warning` 留痕并带 `# noqa: BLE001` 理由注释；mypy 72 持平。
 - 后端 12 段全量 15,793 passed、覆盖率 100.00%（48,531 stmts / 0 miss；12,312 branches / 0 partial）；前端 348 文件 / 7,530 用例、覆盖率 100%；Electron 23 例。
 
 ## [1.18.41] - 2026-11-08 — 数据包乡村工作与预览失败语义修复

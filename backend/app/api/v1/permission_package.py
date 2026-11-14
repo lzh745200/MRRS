@@ -172,8 +172,9 @@ def _is_pristine_first_run(db: Session) -> bool:
     try:
         if SystemConfigService(db).is_initialized():
             return False
-    except Exception:
-        # 初始化状态不可判定时 fail-closed：宁可按已使用机器处理
+    except Exception as exc:  # noqa: BLE001 - 初始化状态不可判定时必须 fail-closed
+        # 宁可把机器当作「已使用」，也不能因为读不到状态就放行匿名导入
+        logger.warning("读取系统初始化状态失败，按已初始化处理（禁止匿名导入）：%s", exc)
         return False
 
     seed_username = (
