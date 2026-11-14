@@ -4179,4 +4179,24 @@ VERSION_HISTORY_DATA = [
             "数据包预览失败不再伪造“每种类型 0 条”并进入下一步；现在提示后端/网络错误、停留在当前步骤，避免用户误以为数据为空而生成空包。",
         ],
     },
+    {
+        "version": "1.18.42",
+        "date": "2026-11-14",
+        "description": "首装权限包导入修复（出厂种子账号等价空库）",
+        "features": [
+            (
+                "登录页离线首装导入权限包：全新安装启动时，启动种子会创建出厂管理员 admin（未登录、仍待首次改密），而原 _assert_package_import_principal 只要 use"
+                "rs 表非空即返回 403「系统已存在账号」，导致“空库 + 本机 loopback”这一合法导入路径实际不可用。"
+            ),
+            (
+                "新增 _is_pristine_first_run：在“尚未初始化”且“users 仅有一个出厂种子账号（用户名等于工厂默认/DEFAULT_ADMIN_USERNAME、superuse"
+                "r、must_change_password、从未登录）”时，视为等价空库放行登录页匿名导入。"
+            ),
+            "其余情况一律保持 403：已登录、已改密、非种子用户名、非超管、存在第二个账号、系统已初始化、状态读取异常。",
+            (
+                "该判定 fail-closed：SystemConfigService 读取异常、账号数≠1、任一条件不满足均返回 False；/import 与 /confirm/{file_name}"
+                " 共用同一入口。"
+            ),
+        ],
+    },
 ]

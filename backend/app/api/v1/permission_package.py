@@ -153,6 +153,44 @@ async def _optional_current_user(
         return None
 
 
+def _is_pristine_first_run(db: Session) -> bool:
+    """空库首装等价判定：仅「出厂种子管理员、从未登录、未初始化」。
+
+    SEC-1 的原始语义是「空库 + 本机」允许离线首装导入；但启动种子
+    （``app.startup.seed._seed_default_admin``）会在空库立即创建 admin，
+    若只认「无任何用户」，登录页的离线首装导入将永远 403
+    （2026-11-14 实测：全新库 users 只有 admin，import 返回 403）。
+
+    这里把「只有出厂 admin 且从未使用」在白名单意义上等价视为空库；
+    一旦管理员登录过（``last_login`` 非空）、改过密码
+    （``must_change_password=False``）或存在第二个账号，立即回到
+    「必须登录管理员」，不放宽 SEC-1 对已使用机器的约束。
+    """
+    from app.core.constants import FACTORY_ADMIN_USERNAME
+    from app.services.system_config_service import SystemConfigService
+
+    try:
+        if SystemConfigService(db).is_initialized():
+            return False
+    except Exception:
+        # 初始化状态不可判定时 fail-closed：宁可按已使用机器处理
+        return False
+
+    seed_username = (
+        os.getenv("DEFAULT_ADMIN_USERNAME", "").strip() or FACTORY_ADMIN_USERNAME
+    )
+    users = db.query(User).limit(2).all()
+    if len(users) != 1:
+        return False
+    seed_admin = users[0]
+    return bool(
+        (getattr(seed_admin, "username", "") or "").strip() == seed_username
+        and getattr(seed_admin, "is_superuser", False)
+        and getattr(seed_admin, "must_change_password", False)
+        and getattr(seed_admin, "last_login", None) is None
+    )
+
+
 def _assert_package_import_principal(
     request: Optional[Request],
     current_user: Optional[User],
@@ -164,6 +202,8 @@ def _assert_package_import_principal(
     1) 已登录**管理员** —— 预览放行；确认时仅超管可授予 super_admin / data_scope=all，
        部门级 admin 导入由服务层把超管级取值收敛（见 ``confirm_import(allow_privileged=...)``）；
     2) **空库 + 本机来源** —— 离线首装一次性引导（库内无任何账号，提权无意义）。
+       启动种子会立即创建出厂 admin，故「仅出厂 admin 且从未登录/未初始化」也按
+       空库等价处理（见 ``_is_pristine_first_run``）；登录过或改过密后立即失效。
 
     历史缺陷（Critical）：旧实现把「本机来源」当成免认证通道 ——
     ``if not current_user or not is_admin(current_user): 仅校验 loopback``。
@@ -177,7 +217,7 @@ def _assert_package_import_principal(
         return is_superuser(current_user)
     if not _client_is_loopback(request):
         raise HTTPException(status_code=403, detail="仅允许本机导入权限包")
-    if db.query(User.id).first() is not None:
+    if db.query(User.id).first() is not None and not _is_pristine_first_run(db):
         raise HTTPException(
             status_code=403,
             detail="系统已存在账号，请先登录管理员账号后再导入权限包",

@@ -1,14 +1,25 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.41
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.42
 
-![Version](https://img.shields.io/badge/version-1.18.41-blue)
+![Version](https://img.shields.io/badge/version-1.18.42-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C294-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C323-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.39）
+## 本版亮点（v1.18.42）
+
+- **首装权限包导入修复**：全新安装启动时种子会创建出厂 `admin`（未登录、待首次改密），原逻辑只要 `users`
+  非空就让登录页导入返回 403「系统已存在账号」。现新增 `_is_pristine_first_run`：系统未初始化且仅存在一个
+  “未使用的出厂种子账号”时视为等价空库，允许本机 loopback 匿名导入权限包；已登录、已改密、第二账号、
+  非种子用户名、已初始化等情况仍返回 403。
+- **判定 fail-closed**：系统配置读取异常、账号数≠1、任一条件不满足均按“已有账号”处理；
+  `/import` 与 `/confirm/{file_name}` 共用同一入口，不存在旁路。
+- 🧪 验证：新增 13 例首装门禁测试（含非 loopback、状态异常、第二账号等 403 分支）；后端定向 27 passed；
+  打包态 E2E 按登录页路径（loopback + CSRF）导入，越过 403、返回 400（包格式校验），放行生效。
+
+## 历史亮点（v1.18.39）
 
 - **深度审计收口**：对 API / services / core / 前端构建链逐模块只读审计（`bandit -ll` 0 条 medium/high、
   854 条路由中 58 条未鉴权全在白名单），发现并修复 **1 个 P0、7 个 P1 与一批 P2**，发布说明逐项列出。

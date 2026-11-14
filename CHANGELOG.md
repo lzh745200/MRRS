@@ -1,3 +1,20 @@
+## [1.18.42] - 2026-11-14 — 首装权限包导入修复（出厂种子账号等价空库）
+
+### 修复
+
+- 登录页离线首装导入权限包：全新安装启动时，启动种子会创建出厂管理员 `admin`（未登录、仍待首次改密），而原 `_assert_package_import_principal` 只要 `users` 表非空即返回 403「系统已存在账号」，导致“空库 + 本机 loopback”这一合法导入路径实际不可用。
+- 新增 `_is_pristine_first_run`：在“尚未初始化”且“`users` 仅有一个出厂种子账号（用户名等于工厂默认/`DEFAULT_ADMIN_USERNAME`、superuser、`must_change_password`、从未登录）”时，视为等价空库放行登录页匿名导入。
+- 其余情况一律保持 403：已登录、已改密、非种子用户名、非超管、存在第二个账号、系统已初始化、状态读取异常。
+- 该判定 fail-closed：`SystemConfigService` 读取异常、账号数≠1、任一条件不满足均返回 False；`/import` 与 `/confirm/{file_name}` 共用同一入口。
+
+### 验证
+
+- 新增 `backend/tests/unit/test_permission_package_first_run.py`（13 例）：空库、种子账号、环境变量种子名放行；已登录、已改密、非超管、第二账号、非种子用户名、已初始化、状态异常、非 loopback 全部 403。
+- `test_permission_package_first_run.py + test_permission_package_sec1.py` = 27 passed（4.79s）。
+- 打包态 dev E2E：新库启动后按登录页路径（loopback + CSRF）匿名导入权限包，越过 403 门禁、返回 400（包格式校验），证明放行生效。
+- `check_type_debt` 的 `broad_except` 基线 820→821：`_is_pristine_first_run` 读取初始化状态时必须捕获任意异常并按“已使用机器”处理（fail-closed），属有意兜底，代码内已注明理由；mypy 72 持平。
+- 后端 12 段全量 15,793 passed、覆盖率 100.00%（48,531 stmts / 0 miss；12,312 branches / 0 partial）；前端 348 文件 / 7,530 用例、覆盖率 100%；Electron 23 例。
+
 ## [1.18.41] - 2026-11-08 — 数据包乡村工作与预览失败语义修复
 
 ### 数据正确性
