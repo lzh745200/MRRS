@@ -389,6 +389,7 @@ class TestLogin:
                     assert data["data"]["access_token"] == "at1"
                     assert data["refresh_token"] == "rt1"
                     assert data["must_change_password"] is False
+                    assert data["is_first_login"] is True
                     assert data["data"]["user"]["allowed_menus"] == ["dashboard"]
                     assert data["data"]["user"]["allowed_menus_list"] == ["dashboard"]
 

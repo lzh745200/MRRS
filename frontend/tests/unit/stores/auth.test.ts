@@ -17,7 +17,8 @@ vi.mock('@/api/request', () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
   _setCachedToken: (...args: any[]) => mockSetCachedToken(...args),
   prefetchCsrfToken: () => mockPrefetchCsrf(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/api/queries/user', () => ({
   getCurrentUser: (...args: any[]) => mockGetCurrentUser(...args),
@@ -88,6 +89,8 @@ import { useAuthStore } from '@/stores/auth'
 describe('useAuthStore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    sessionStorage.clear()
     mockAuthStorageGetToken.mockReturnValue('')
     mockAuthStorageGetUser.mockReturnValue(null)
     mockPrefetchCsrf.mockResolvedValue(undefined)
@@ -256,6 +259,37 @@ describe('useAuthStore', () => {
       expect(mockUseMenuStore).toHaveBeenCalled()
     })
 
+    it('首登成功挂起首用指引；已完成用户不重复挂起', async () => {
+      mockApiRequest.mockResolvedValueOnce({ ...successPayload, is_first_login: true })
+      const store = useAuthStore()
+      await store.login('alice', 'pwd')
+      expect(sessionStorage.getItem('mrrs.first-use-guide.pending')).toBe('1')
+
+      sessionStorage.clear()
+      localStorage.setItem('mrrs.first-use-guide.v1.1', 'done')
+      mockApiRequest.mockResolvedValueOnce({ ...successPayload, is_first_login: true })
+      await store.login('alice', 'pwd')
+      expect(sessionStorage.getItem('mrrs.first-use-guide.pending')).toBeNull()
+    })
+
+    it('首登存储异常不阻断登录', async () => {
+      mockApiRequest.mockResolvedValueOnce({ ...successPayload, is_first_login: true })
+      const getItem = vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+        throw new Error('storage disabled')
+      })
+      const store = useAuthStore()
+      const result = await store.login('alice', 'pwd')
+      expect(result.status).toBe('success')
+      getItem.mockRestore()
+    })
+
+    it('非首登不挂起首用指引', async () => {
+      mockApiRequest.mockResolvedValueOnce({ ...successPayload, is_first_login: false })
+      const store = useAuthStore()
+      await store.login('alice', 'pwd')
+      expect(sessionStorage.getItem('mrrs.first-use-guide.pending')).toBeNull()
+    })
+
     it('登录需要 2FA 时返回 two_factor_required + tempToken', async () => {
       mockApiRequest.mockResolvedValueOnce({
         code: 200,
@@ -405,7 +439,9 @@ describe('useAuthStore', () => {
     })
 
     it('异常时取 response.data.message', async () => {
-      mockVerifyLoginTwoFactor.mockRejectedValueOnce({ response: { data: { message: 'bad code' } } })
+      mockVerifyLoginTwoFactor.mockRejectedValueOnce({
+        response: { data: { message: 'bad code' } },
+      })
       const store = useAuthStore()
       expect(await store.verifyTwoFactorLogin('tmp', '000000')).toBe(false)
       expect(store.error).toBe('bad code')
@@ -424,6 +460,17 @@ describe('useAuthStore', () => {
       expect(await store.verifyTwoFactorLogin('tmp', '000000')).toBe(false)
       expect(store.error).toBe('2FA验证失败')
     })
+  })
+
+  it('logout 清理 sessionStorage 异常也不阻断退出', async () => {
+    mockApiRequest.mockResolvedValueOnce({ code: 200 })
+    const removeItem = vi.spyOn(window.sessionStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('storage disabled')
+    })
+    const store = useAuthStore()
+    await store.logout()
+    expect(store.token).toBe('')
+    removeItem.mockRestore()
   })
 
   it('logout 清空 token, user, error', async () => {
@@ -492,7 +539,6 @@ describe('useAuthStore', () => {
     expect(store.getAuthData()).toBeNull()
   })
 })
-
 
 describe('login — refresh_token 缺省分支', () => {
   it('响应无 refresh_token 时 refreshToken 置空字符串', async () => {

@@ -34,7 +34,12 @@ interface LoginPayload {
   must_change_password?: boolean
   two_factor_required?: boolean
   temp_token?: string
+  is_first_login?: boolean
 }
+
+/** 首用指引：登录成功后挂起，组件关闭/跳过后写完成标记 */
+export const FIRST_USE_GUIDE_PENDING_KEY = 'mrrs.first-use-guide.pending'
+export const firstUseGuideDoneKey = (userId: number | string) => `mrrs.first-use-guide.v1.${userId}`
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(AuthStorage.getToken() || '')
@@ -98,12 +103,22 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   })
 
-  function persistAuth(t: string, u: UserInfo, rt?: string) {
+  function persistAuth(t: string, u: UserInfo, rt?: string, isFirstLogin = false) {
     token.value = t
     refreshToken.value = rt || ''
     user.value = u
     _setCachedToken(t)
     AuthStorage.setAuthData({ token: t, user: u, refreshToken: rt })
+    // 仅真正的首登挂起引导；已完成的用户不再重复展示。
+    if (isFirstLogin) {
+      try {
+        if (localStorage.getItem(firstUseGuideDoneKey(u.id)) !== 'done') {
+          sessionStorage.setItem(FIRST_USE_GUIDE_PENDING_KEY, String(u.id))
+        }
+      } catch {
+        /* 隐私模式/配额异常：不阻断登录 */
+      }
+    }
     // 登录成功 → 解除锁屏标记（自动登录恢复时同样生效）
     unlockSession()
     // 预取 CSRF token：避免首次 POST/PUT/DELETE 请求因懒加载失败而返回 403
@@ -145,6 +160,11 @@ export const useAuthStore = defineStore('auth', () => {
     AuthStorage.clear()
     // F5：草稿含未提交 PII，必须随会话销毁（共用电脑不得让下一个使用者恢复）
     clearAllDrafts()
+    try {
+      sessionStorage.removeItem(FIRST_USE_GUIDE_PENDING_KEY)
+    } catch {
+      /* ignore */
+    }
     return revoke
   }
 
@@ -219,7 +239,8 @@ export const useAuthStore = defineStore('auth', () => {
           persistAuth(
             res.data.access_token,
             user,
-            (res as unknown as { refresh_token?: string }).refresh_token
+            (res as unknown as { refresh_token?: string }).refresh_token,
+            res.is_first_login === true
           )
           // 登录后立即预加载菜单 — 避免侧边栏渲染时 loaded=false 导致闪烁或泄露
           // 使用 try-catch 防止菜单加载失败影响登录流程
@@ -273,7 +294,7 @@ export const useAuthStore = defineStore('auth', () => {
             (res.data.user as { must_change_password?: boolean })?.must_change_password ??
             false,
         } as UserInfo
-        persistAuth(res.data.access_token, user, res.refresh_token)
+        persistAuth(res.data.access_token, user, res.refresh_token, res.is_first_login === true)
         useMenuStore().fetchMenus()
         // 短期项 5：2FA 登录同样要加载组织模块策略（与普通登录一致）。
         // 可选调用：部分单测把 menu store 整体 mock，缺少该方法时不得阻断登录。

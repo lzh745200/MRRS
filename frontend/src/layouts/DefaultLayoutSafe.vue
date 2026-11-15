@@ -7,6 +7,7 @@
     <!-- 侧边栏 — 完全由后端菜单 v2 data 驱动（工作台固定第一）           -->
     <!-- ============================================================ -->
     <el-aside
+      data-guide="sidebar"
       :width="
         isCollapsed
           ? 'var(--layout-sidebar-collapsed-width, 68px)'
@@ -149,6 +150,7 @@
                 v-if="item.kind === 'page'"
                 v-show="isSectionExpanded(section.key)"
                 :index="item.path"
+                :data-guide="item.key === 'help' ? 'help-menu' : undefined"
               >
                 <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
                 <template #title>
@@ -166,7 +168,12 @@
                   <el-icon><component :is="resolveMenuIcon(item.icon)" /></el-icon>
                   <span class="menu-title-text">{{ item.label }}</span>
                 </template>
-                <el-menu-item v-for="child in item.children" :key="child.key" :index="child.path">
+                <el-menu-item
+                  v-for="child in item.children"
+                  :key="child.key"
+                  :index="child.path"
+                  :data-guide="child.key === 'help' ? 'help-menu' : undefined"
+                >
                   <span>{{ child.label }}</span>
                 </el-menu-item>
               </el-sub-menu>
@@ -325,6 +332,8 @@
     </el-container>
     <!-- 移动端底部导航 -->
     <MobileBottomNav />
+    <!-- 首次登录操作指引（非模态，仅提示） -->
+    <FirstUseGuide />
     <!-- 菜单搜索（Ctrl+K） -->
     <MenuSearchDialog v-model="menuSearchVisible" />
     <!-- 外观设置（W23）：W1 外观面板（主题 + 字号/密度/对比/简化） -->
@@ -360,6 +369,7 @@ import MobileBottomNav from '@/components/layout/MobileBottomNav.vue'
 import MenuSearchDialog from '@/components/nav/MenuSearchDialog.vue'
 import SyncStatusCapsule from '@/components/nav/SyncStatusCapsule.vue'
 import AppearanceSettings from '@/components/settings/AppearanceSettings.vue'
+import FirstUseGuide from '@/components/guide/FirstUseGuide.vue'
 import {
   HomeFilled,
   Expand,

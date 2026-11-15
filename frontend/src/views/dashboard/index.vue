@@ -1,6 +1,11 @@
 <template>
   <div class="dashboard-home dashboard-modern">
-    <PageHeader :title="welcomeTitle" :subtitle="formattedDate" :level="1">
+    <PageHeader
+      data-guide="dashboard-header"
+      :title="welcomeTitle"
+      :subtitle="formattedDate"
+      :level="1"
+    >
       <template #title>
         欢迎回来，<span class="welcome-name">{{ displayName }}</span>
       </template>
@@ -82,7 +87,11 @@
 
     <!-- 快捷入口 / 近期动态 -->
     <div class="bottom-row">
-      <section v-if="visible.quickActions" class="dashboard-section quick-panel app-card">
+      <section
+        v-if="visible.quickActions"
+        data-guide="dashboard-quick-actions"
+        class="dashboard-section quick-panel app-card"
+      >
         <div class="section-head">
           <h2 class="section-title">快捷入口</h2>
           <el-button

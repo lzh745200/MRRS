@@ -78,6 +78,7 @@ class LoginResponse(BaseModel):
     must_change_password: bool = Field(default=False, description="是否必须修改密码")
     refresh_token: Optional[str] = Field(None, description="刷新令牌")
     two_factor_required: bool = Field(default=False, description="是否需要双因素认证")
+    is_first_login: bool = Field(default=False, description="是否为该账号首次成功登录")
     temp_token: Optional[str] = Field(None, description="2FA临时令牌（用于验证TOTP后换取正式令牌）")
 
 

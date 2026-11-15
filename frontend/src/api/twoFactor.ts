@@ -32,6 +32,7 @@ export interface TwoFactorLoginVerifyResponse {
   refresh_token?: string
   two_factor_required?: boolean
   temp_token?: string
+  is_first_login?: boolean
 }
 
 // ==================== API 函数 ====================

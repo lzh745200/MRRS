@@ -331,7 +331,8 @@ async def login(
             temp_token=temp_tokens["access_token"],
         )
 
-    # 登录成功：重置失败计数和锁定状态
+    # 登录成功：先判定是否首登，再写 last_login（顺序不能反）
+    was_first_login = getattr(user, "last_login", None) is None
     if getattr(user, "failed_login_count", 0) or getattr(user, "locked_until", None):
         user.failed_login_count = 0
         user.locked_until = None
@@ -403,6 +404,7 @@ async def login(
         message=msg,
         must_change_password=must_change,
         refresh_token=refresh_token_str,
+        is_first_login=was_first_login,
     )
 
 
@@ -510,7 +512,8 @@ async def two_factor_verify_login(
     # 2FA 验证通过 — 吊销 temp_token，签发正式令牌
     token_manager.revoke_token(verify_request.temp_token)
 
-    # 重置失败计数
+    # 重置失败计数；先判定首登，再写 last_login
+    was_first_login = getattr(user, "last_login", None) is None
     if getattr(user, "failed_login_count", 0) or getattr(user, "locked_until", None):
         user.failed_login_count = 0
         user.locked_until = None
@@ -582,6 +585,7 @@ async def two_factor_verify_login(
         message=msg,
         must_change_password=must_change,
         refresh_token=refresh_token_str,
+        is_first_login=was_first_login,
     )
 
 
