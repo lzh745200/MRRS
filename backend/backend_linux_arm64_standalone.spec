@@ -38,9 +38,17 @@ datas = [
 # ``sys._MEIPASS/resources/map-tiles`` 解析（onedir 下 _MEIPASS = _internal/），
 # 因此目标目录必须是 'resources/map-tiles'。存在性守卫：仓库尚未生成瓦片时跳过，
 # 不改变现有构建行为（与 Windows spec 的同款片段保持完全一致）。
-_tiles_dir = os.path.join(project_root, 'resources', 'map-tiles')
-if os.path.isdir(_tiles_dir):
+_tiles_candidates = [
+    os.path.join(project_root, 'resources', 'map-tiles'),
+    # Docker standalone 构建（docker/Dockerfile.kylin-standalone）：spec 被复制到 /build，
+    # backend_dir == /build，瓦片由 Dockerfile COPY 到 /build/resources/map-tiles，
+    # 此时 project_root 会是根目录 '/'，上面的候选必然落空 —— 必须再试 backend_dir 下。
+    os.path.join(backend_dir, 'resources', 'map-tiles'),
+]
+_tiles_dir = next((p for p in _tiles_candidates if os.path.isdir(p)), None)
+if _tiles_dir:
     datas.append((_tiles_dir, os.path.join('resources', 'map-tiles')))
+    print(f'[SPEC] 收集离线地图瓦片: {_tiles_dir}')
 
 # ── 二进制文件：手动收集 libmagic 共享库（确保离线可用） ──
 binaries = []

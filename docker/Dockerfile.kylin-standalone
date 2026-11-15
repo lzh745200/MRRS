@@ -215,6 +215,13 @@ RUN test -d dist/assistance-management-backend || (echo "ERROR: PyInstaller 打�
     (test -f dist/assistance-management-backend/alembic.ini && echo "OK: alembic.ini 已打包" || echo "WARN: alembic.ini 未找到") && \
     echo "后端打包成功"
 
+# 离线地图瓦片载荷门禁（v1.18.44）：spec 的候选路径若与 Docker 布局不一致，
+# 瓦片会被静默跳过（装机后地图页空白）。这里对产物直接计数，少于 5,000 张即失败。
+RUN echo "=== 校验离线地图瓦片载荷 ===" && \
+    TILES=$(find dist/assistance-management-backend -path '*resources/map-tiles*' -name '*.png' | wc -l | tr -d ' ') && \
+    echo "离线地图瓦片数: $TILES" && \
+    test "$TILES" -ge 5000 || (echo "ERROR: 打包产物缺少离线地图瓦片（<5000 张）" && exit 1)
+
 # 冻结产物模块完整性门禁（2026-10-31）：standalone spec 曾把 difflib 放入
 # excludes，安装包可安装但后端启动即 ModuleNotFoundError。直接读 PYZ 模块表，
 # 不依赖运行 windowed 产物，构建期即可拦截。
