@@ -5,7 +5,7 @@
 ![Version](https://img.shields.io/badge/version-1.18.48-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C422-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C425-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 本版亮点（v1.18.48）
@@ -20,7 +20,7 @@
   立即吊销该用户全部旧会话。
 - 📦 **权限包导入更透明**：目标机不存在的用户名不再静默跳过，返回
   `partial/warnings/skipped_usernames` 并在登录页提示（权限/菜单可能未随包生效）。
-- 🧪 验证：后端 **15,886 passed**（覆盖率 100%）；前端 **349 files / 7,536 tests**（覆盖率 100%）；
+- 🧪 验证：后端 **15,889 passed**（覆盖率 100%）；前端 **349 files / 7,536 tests**（覆盖率 100%）；
   Electron **23 passed**；PR Checks 全绿。
 
 ## 历史亮点（v1.18.43）

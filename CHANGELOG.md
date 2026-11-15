@@ -33,7 +33,7 @@
   `test_confirm_password_guard.py`、`test_confirm_password_dependency.py`、
   `test_permission_package_missing_users.py`；`test_machine_code_api.py` 补齐恢复码分支；
   前端 `request-interceptors` 增 428 弹窗/重放/取消四例，auth 三页与管理端机器码页测试同步。
-- 后端全量 12 段 **15,886 passed**（覆盖率 100.00%）；前端 349 文件 / **7,536 tests**（覆盖率 100%）。
+- 后端全量 12 段 **15,889 passed**（覆盖率 100.00%）；前端 349 文件 / **7,536 tests**（覆盖率 100%）。
 
 ## [1.18.47] - 2026-11-15 — 权限包导入误报「系统已存在账号，请先登录管理员账号」
 
