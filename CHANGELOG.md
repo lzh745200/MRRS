@@ -1,3 +1,21 @@
+## [1.18.45] - 2026-11-15 — ARM64 Electron DEB 去掉重复的离线地图瓦片（体积 -63MB）
+
+### Changed
+
+- **ARM64 Electron DEB 瓦片去重**（`.github/workflows/build-arm64.yml`）：standalone 作业产出的后端产物
+  自带 `_internal/resources/map-tiles`（standalone 自己需要），而 Electron DEB 的 `extraResources`
+  又把同一批瓦片复制到 `<resources>/map-tiles`；主进程注入 `MAP_TILES_DIR`，后端解析优先级是
+  `env > _MEIPASS`，两处并存等于白装 63MB。现在 electron-builder 之前删掉后端内嵌副本，
+  并断言 `resources/map-tiles` 仍在（缺失即失败），避免「去重去没了」。
+  验证：`MRRS-Setup-1.18.45-arm64.deb` 应从 v1.18.44 的 412MB 回落到约 349MB；
+  装机后地图页仍正常（瓦片走 `MAP_TILES_DIR`）。
+
+### Tests
+
+- 无业务代码改动，属构建产物去重；由三条载荷门禁守卫：Windows `Verify bundled map tiles`
+  （`win-unpacked/resources/map-tiles` ≥5000 PNG）、ARM64 `Fetch offline map tiles`
+  （sha256 校验 `tiles-v1` 资产）、standalone Dockerfile 的 `离线地图瓦片数 ≥5000`。
+
 ## [1.18.44] - 2026-11-15 — 装机首启「无法验证发布者」与图标缺失：证书信任闭环 + 图标资源门禁
 
 > 现场：v1.18.43 安装后双击弹「打开文件 - 安全警告：无法验证发布者」，

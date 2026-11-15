@@ -4267,4 +4267,21 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.45",
+        "date": "2026-11-15",
+        "description": "ARM64 Electron DEB 去掉重复的离线地图瓦片（体积 -63MB）",
+        "features": [
+            (
+                "ARM64 Electron DEB 瓦片去重（.github/workflows/build-arm64.yml）：standalone 作业产出的后端产物自带 _internal/re"
+                "sources/map-tiles（standalone 自己需要），而 Electron DEB 的 extraResources又把同一批瓦片复制到 <resources>/map-t"
+                "iles；"
+            ),
+            (
+                "无业务代码改动，属构建产物去重；由三条载荷门禁守卫：Windows Verify bundled map tiles（win-unpacked/resources/map-tiles ≥5"
+                "000 PNG）、ARM64 Fetch offline map tiles（sha256 校验 tiles-v1 资产）、standalone Dockerfile 的 离线地图瓦片数 "
+                "≥5000。"
+            ),
+        ],
+    },
 ]

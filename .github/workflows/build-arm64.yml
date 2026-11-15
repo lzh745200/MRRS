@@ -164,6 +164,17 @@ jobs:
           # artifact zip 会丢失 exec 位，这里恢复（postinst 兜底再补一次）
           chmod +x backend/dist/assistance-backend/assistance-backend
 
+          # 离线地图瓦片去重（v1.18.45）：standalone spec 会把瓦片内嵌进
+          # `_internal/resources/map-tiles`（standalone 自己需要）；Electron DEB 另有
+          # extraResources 复制到 `<resources>/map-tiles`，主进程注入 MAP_TILES_DIR
+          # （后端解析优先级 env > _MEIPASS）。两处并存等于白装 63MB 重复瓦片。
+          find backend/dist/assistance-backend -type d -path '*resources/map-tiles' -prune -exec rm -rf {} + || true
+          if find backend/dist/assistance-backend -type d -path '*resources/map-tiles' | grep -q .; then
+            echo "::error::后端产物仍含内嵌瓦片（去重失败，DEB 会重复携带 63MB）"
+            exit 1
+          fi
+          test -d resources/map-tiles || { echo "::error::缺少 resources/map-tiles（本应已 fetch）"; exit 1; }
+
           # Place frontend dist
           mkdir -p frontend/dist
           cp -r downloaded/frontend/* frontend/dist/
