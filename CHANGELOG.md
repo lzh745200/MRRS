@@ -2,6 +2,17 @@
 
 ### Fixed
 
+- **全新机器登录页「导入权限包」恒 403（光盘开通第 2 步走不下去）**。`_is_pristine_first_run`
+  用 `SystemConfig.initialized` 判「机器已用过」，而启动播种 `seed._seed_default_admin`
+  每次启动都会补写该键（2026-10-30 为保护匿名 `/system/init` 加的），于是全新安装也被判已使用，
+  匿名导入一律 403「系统已存在账号，请先登录…」——但新机器上根本没有可用账号。
+  改为看 `set_initialized()` 原子写入的 `organization_id` / `system_id`（种子兜底分支只写
+  `initialized`），任一存在才算真实初始化；读取异常 fail-closed。SEC-1 语义不变：
+  登录过/改过密/有第二个账号的机器仍禁止匿名导入。
+  验证：两台独立实例端到端（A 导出 → B 匿名导入+确认 → B 管理员改密 → 开通操作员 → 操作员登录
+  → 已使用后匿名导入 403）**17/17**；修复前同一脚本在打包后端 v1.18.44 上复现 403（12/17）。
+
+
 - **已登录管理员导入权限包仍被提示「系统已存在账号，请先登录管理员账号后再导入权限包」**
   根因在 `_optional_current_user`（`api/v1/permission_package.py`）：为支持「登录前离线首装导入」，
   它把 `get_current_user` 抛出的 **401/403 一律吞成 None**。于是**携带了失效令牌**的已登录
@@ -12,6 +23,13 @@
   无凭证分支的 403 文案补注「当前请求未携带登录凭证」，与令牌失效明确区分。
   回归：`test_coverage_business_tail.py` 的「401 降级为 None」改为断言**异常透传**；
   `test_permission_package_first_run / sec1 / cov`、`test_audit_r49_coverage` 共 125 例通过。
+
+### Tests
+
+- `backend/tests/unit/test_permission_package_sec1.py` 增 9 例出厂态判定（种子 `initialized`
+  不算已使用；组织号/系统号/第二账号/已登录/已改密/非种子用户名/配置异常 全部拒绝；出厂态放行）
+  → 该文件 23 passed。
+
 
 ## [1.18.46] - 2026-11-15 — 授权包导入默认不再强制签名（保留按需强校验）
 

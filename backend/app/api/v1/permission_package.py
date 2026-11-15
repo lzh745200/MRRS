@@ -158,7 +158,7 @@ async def _optional_current_user(
 
 
 def _is_pristine_first_run(db: Session) -> bool:
-    """空库首装等价判定：仅「出厂种子管理员、从未登录、未初始化」。
+    """出厂首装等价判定：仅「出厂种子管理员、从未登录、未真正初始化」。
 
     SEC-1 的原始语义是「空库 + 本机」允许离线首装导入；但启动种子
     （``app.startup.seed._seed_default_admin``）会在空库立即创建 admin，
@@ -169,12 +169,26 @@ def _is_pristine_first_run(db: Session) -> bool:
     一旦管理员登录过（``last_login`` 非空）、改过密码
     （``must_change_password=False``）或存在第二个账号，立即回到
     「必须登录管理员」，不放宽 SEC-1 对已使用机器的约束。
+
+    **不能用 ``initialized`` 布尔标记判定「已使用」**（2026-11-15 修复）：
+    ``seed._seed_default_admin`` 为了保护匿名 ``/system/init/initialize``
+    入口，每次启动播种都会补写 ``initialized=true`` —— 拿它当「机器已用过」，
+    全新安装的登录页「导入权限包」会恒 403（打包后端实测：
+    ``POST /permission-packages/import`` → 403「系统已存在账号，请先登录…」），
+    而光盘开通流程第 2 步正是登录前导入权限包。
+    真正的「有人初始化过」信号是 ``set_initialized()`` 同时写入的
+    ``organization_id`` / ``system_id``（种子的兜底分支只写 ``initialized``）。
     """
     from app.core.constants import FACTORY_ADMIN_USERNAME
     from app.services.system_config_service import SystemConfigService
 
     try:
-        if SystemConfigService(db).is_initialized():
+        cfg = SystemConfigService(db)
+        # set_initialized() 原子写三键；种子兜底只写 initialized。
+        # 有组织号/系统号 = 走过真实初始化（管理员建过组织），按「已使用」处理。
+        if (cfg.get("organization_id") or "").strip():
+            return False
+        if (cfg.get("system_id") or "").strip():
             return False
     except Exception as exc:  # noqa: BLE001 - 初始化状态不可判定时必须 fail-closed
         # 宁可把机器当作「已使用」，也不能因为读不到状态就放行匿名导入

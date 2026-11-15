@@ -4288,4 +4288,46 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.46",
+        "date": "2026-11-15",
+        "description": "授权包导入默认不再强制签名（保留按需强校验）",
+        "features": [
+            (
+                "GRANT_ALLOW_UNSIGNED 默认改为 True（core/config.py）：未签名授权包默认可直接导入，不再要求先改环境变量。需要「无签名一律拒收」的部署把该值显式设为 "
+                "false 即可。"
+            ),
+            (
+                "apply_package 的 allow_unsigned 参数默认改为 True，并把「包带签名但本机未配置 GRANT_PUBKEY」从报错改为跳过验签 + WARNING 留痕：此"
+                "前这种组合会抛「本机未配置验签公钥，无法校验授权包来源」，是现场最常见的卡点。"
+            ),
+            "验签逻辑本身完整保留：配置了 GRANT_PUBKEY 就回到严格模式（签名不符即拒收，fail-closed）；上级配置 GRANT_SIGNING_KEY 后导出的包会被自动验签。",
+            "前端 GrantImport.vue 提示与两份用户手册同步改口径：签名改为「上级配了就自动验签」。",
+            (
+                "test_grant_package_r33.py：原「默认拒收未签名」改为「默认放行」；新增 test_unsigned_rejected_in_strict_mode（显式 allow"
+                "_unsigned=False 仍拒收）；「签名但无公钥」改为断言导入成功且日志含 GRANT_PUBKEY 提示。"
+            ),
+            "pytest tests/unit/test_grant_package_r33.py tests/unit/test_org_grants_api_r33.py → 60 passed。",
+        ],
+    },
+    {
+        "version": "1.18.47",
+        "date": "2026-11-15",
+        "description": "权限包导入误报「系统已存在账号，请先登录管理员账号」",
+        "features": [
+            (
+                "全新机器登录页「导入权限包」恒 403（光盘开通第 2 步走不下去）。_is_pristine_first_run用 SystemConfig.initialized 判「机器已用过」，而"
+                "启动播种 seed._seed_default_admin每次启动都会补写该键（2026-10-30 为保护匿名 /system/init 加的），于是全新安装也被判已使用，匿名导入一律 "
+                "403「系统已存在账号…"
+            ),
+            (
+                "已登录管理员导入权限包仍被提示「系统已存在账号，请先登录管理员账号后再导入权限包」根因在 _optional_current_user（api/v1/permission_package."
+                "py）：为支持「登录前离线首装导入」，它把 get_current_user 抛出的 401/403 一律吞成 None。"
+            ),
+            (
+                "backend/tests/unit/test_permission_package_sec1.py 增 9 例出厂态判定（种子 initialized不算已使用；组织号/系统号/第二账号"
+                "/已登录/已改密/非种子用户名/配置异常 全部拒绝；出厂态放行）→ 该文件 23 passed。"
+            ),
+        ],
+    },
 ]

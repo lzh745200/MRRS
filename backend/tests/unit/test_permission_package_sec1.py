@@ -207,3 +207,102 @@ def test_import_user_legacy_writes_clamped_role_for_non_privileged():
     assert user.role == "admin"
     assert user.data_scope == "org"
     assert stats["privileged_values_downgraded"] == 1
+
+# ---------------- 出厂首装判定（_is_pristine_first_run） ----------------
+#
+# 2026-11-15 回归（打包后端实测）：``seed._seed_default_admin`` 每次启动都会补写
+# ``initialized=true``（保护匿名 /system/init），旧实现把它当「机器已用过」，
+# 于是全新机器登录页「导入权限包」恒 403，光盘开通流程第 2 步直接失效。
+# 下面把「种子标记 != 已使用」「真实初始化/已使用必须 fail-closed」钉死。
+
+
+def _user(**kw):
+    base = dict(
+        id=1,
+        username="admin",
+        role="super_admin",
+        is_superuser=True,
+        must_change_password=True,
+        last_login=None,
+    )
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def _pristine_db(users):
+    db = MagicMock()
+    db.query.return_value.limit.return_value.all.return_value = users
+    return db
+
+
+def _cfg(**values):
+    svc = MagicMock()
+    svc.get.side_effect = lambda key, default=None: values.get(key, default)
+    return svc
+
+
+def test_pristine_accepts_seeded_admin_with_initialized_flag_only():
+    """种子的 initialized=true（无组织号/系统号）不算「已使用」。"""
+    db = _pristine_db([_user()])
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg(initialized="true")):
+        assert mod._is_pristine_first_run(db) is True
+
+
+def test_pristine_rejects_real_initialization_with_organization_id():
+    db = _pristine_db([_user()])
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg(initialized="true", organization_id="3")):
+        assert mod._is_pristine_first_run(db) is False
+
+
+def test_pristine_rejects_real_initialization_with_system_id():
+    db = _pristine_db([_user()])
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg(system_id="SYS-ABC")):
+        assert mod._is_pristine_first_run(db) is False
+
+
+def test_pristine_rejects_second_account():
+    db = _pristine_db([_user(), _user(id=2, username="op", is_superuser=False)])
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg()):
+        assert mod._is_pristine_first_run(db) is False
+
+
+def test_pristine_rejects_after_login():
+    db = _pristine_db([_user(last_login="2026-11-15T10:00:00")])
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg()):
+        assert mod._is_pristine_first_run(db) is False
+
+
+def test_pristine_rejects_after_password_change():
+    db = _pristine_db([_user(must_change_password=False)])
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg()):
+        assert mod._is_pristine_first_run(db) is False
+
+
+def test_pristine_rejects_non_seed_username():
+    db = _pristine_db([_user(username="someone")])
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg()):
+        assert mod._is_pristine_first_run(db) is False
+
+
+def test_pristine_fail_closed_when_config_unreadable():
+    db = _pristine_db([_user()])
+    svc = MagicMock()
+    svc.get.side_effect = RuntimeError("db down")
+    with patch("app.services.system_config_service.SystemConfigService", return_value=svc):
+        assert mod._is_pristine_first_run(db) is False
+
+
+def test_anonymous_import_allowed_on_fresh_seeded_machine():
+    """端到端语义：出厂态（只有 admin）匿名本机导入放行。"""
+    db = _pristine_db([_user()])
+    db.query.return_value.first.return_value = 1
+    with patch("app.services.system_config_service.SystemConfigService",
+               return_value=_cfg(initialized="true")):
+        assert mod._assert_package_import_principal(_request(), None, db) is True
