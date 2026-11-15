@@ -76,6 +76,7 @@ def _gate(name: str, script: str, *, backend: bool = False, args: Optional[List[
 GATES: List[Gate] = [
     _gate("changelog", "scripts/check_changelog.py", why="当前版本必须已记录"),
     _gate("doc_numbers", "scripts/check_doc_numbers.py", args=["--full"], why="文档数字与实测一致"),
+    _gate("pr_shard_parity", "scripts/check_pr_shard_parity.py", why="PR 矩阵分片覆盖 1..12 无漏段"),
     _gate("office_formats", "scripts/check_office_formats.py", why="WPS 导入/导出格式"),
     _gate("menu_alignment", "scripts/check_menu_alignment.py", why="菜单单一源"),
     _gate("console_tab", "scripts/check_console_tab_mapping.py", why="console tab 与组件一致"),

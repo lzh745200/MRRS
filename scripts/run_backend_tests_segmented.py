@@ -414,11 +414,24 @@ def main():
             stale.unlink(missing_ok=True)
 
     selected = SEGMENTS
+    if args.segment and args.segments.strip():
+        print("--segment 与 --segments 不能同时使用", file=sys.stderr)
+        return 2
     if args.segment:
         if not 1 <= args.segment <= len(SEGMENTS):
             print(f"--segment 取值 1-{len(SEGMENTS)}", file=sys.stderr)
             return 2
         selected = [SEGMENTS[args.segment - 1]]
+    elif args.segments.strip():
+        try:
+            numbers = [int(part.strip()) for part in args.segments.split(",") if part.strip()]
+        except ValueError:
+            print("--segments 必须是逗号分隔的数字，如 1,2,10", file=sys.stderr)
+            return 2
+        if len(set(numbers)) != len(numbers) or any(not 1 <= n <= len(SEGMENTS) for n in numbers):
+            print("--segments 必须是 1-12 内不重复的段号", file=sys.stderr)
+            return 2
+        selected = [SEGMENTS[n - 1] for n in numbers]
 
     print("=" * 70)
     print("后端测试（CI 12 段等价；单进程跑全量会在 88% 处进程崩溃）")
