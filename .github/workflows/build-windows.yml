@@ -297,7 +297,7 @@ jobs:
           }
           New-Item -ItemType Directory -Force resources/map-tiles | Out-Null
           Expand-Archive -Path .tiles/map-tiles-v1.zip -DestinationPath resources/map-tiles -Force
-          python scripts/tiles/verify_tiles.py --require-min 1
+          python scripts/tiles/verify_tiles.py --require-min 5000 --sample 20
 
       # 7b. 瓦片包预置校验（F 区，2026-10-21）：默认 --require-min 0 —— 允许本次
       #     构建不带预置瓦片（仓库只有占位 README），但仍校验 MANIFEST 合法性

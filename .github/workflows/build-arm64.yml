@@ -147,7 +147,7 @@ jobs:
           gh release download tiles-v1 --repo "$GITHUB_REPOSITORY" --pattern map-tiles-v1.zip --dir .tiles --clobber
           echo "${TILES_ASSET_SHA256}  .tiles/map-tiles-v1.zip" | sha256sum -c -
           unzip -o -q .tiles/map-tiles-v1.zip -d resources/map-tiles
-          python3 scripts/tiles/verify_tiles.py --require-min 1
+          python3 scripts/tiles/verify_tiles.py --require-min 5000 --sample 20
 
       - name: Prepare resources for electron-builder
         run: |
@@ -554,7 +554,7 @@ jobs:
           gh release download tiles-v1 --repo "$GITHUB_REPOSITORY" --pattern map-tiles-v1.zip --dir .tiles --clobber
           echo "${TILES_ASSET_SHA256}  .tiles/map-tiles-v1.zip" | sha256sum -c -
           unzip -o -q .tiles/map-tiles-v1.zip -d resources/map-tiles
-          python3 scripts/tiles/verify_tiles.py --require-min 1
+          python3 scripts/tiles/verify_tiles.py --require-min 5000 --sample 20
 
       - name: Resolve base image registry (multi-source probe)
         run: |
