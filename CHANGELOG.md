@@ -1,4 +1,4 @@
-## [1.18.43] - 2026-11-14 — 系统管理优化批次（CI/表单/凭据/可观测/审计）
+## [1.18.43] - 2026-11-15 — 系统管理优化批次（CI/表单/凭据/可观测/审计）
 
 ### 工程与交付
 
@@ -9,12 +9,13 @@
 - **授权策略门面**：新增 `app/core/authorize.py`（off/shadow/enforce），`require_admin`/`require_superuser` 先走门面；默认 off，shadow 只记录差异。
 - **性能观测**：慢 SQL 增加轮转 JSONL（默认 `logs/slow-sql.jsonl`）；新增路由 p50/p95/p99 与 5xx 计数，并入 `/system/metrics`。
 - **审计链与数据包签名**：`audit_logs` 增加可选 `prev_hash/payload_hash` 与校验脚本；`.rrs` 增加可选 detached Ed25519 签名（`SYNC_PACKAGE_SIGNING_KEY`/`SYNC_PACKAGE_PUBKEY`，过渡期允许未签名）。
-- **文档漂移修正**：CLAUDE.md 的通用组件清单改为当前 10 个组件，删除会过期的 PR 时长硬编码；文档端点数/用例数同步。
+- **文档与 PPT 同步**：README/CLAUDE/AGENTS/CONTEXT、API/架构/安全/部署/项目结构文档统一到 v1.18.43；三套 PPT 更新版本、测试数与 v1.18.43 收口卡片；新增 `RELEASE_NOTES-v1.18.43.md`。文档端点数 852、Alembic 单 head `audit_chain_001`。
 
 ### 验证
 
 - 后端定向：表单选项/ETag、审计链、包签名、慢监控、授权门面、导出重试全部通过；迁移自证、单 head、类型/异常债、文档数字门禁通过。
 - 前端：用户管理、AuthStorage、TaskManager 定向用例通过；`vue-tsc`、生产构建、Electron 23 例通过。
+- 全量：PR Checks 14/14 作业 success；后端 15,828 passed / 覆盖率 100%；前端 348 文件 / 7,523 passed；双架构 Release 构建成功。
 
 ## [1.18.42] - 2026-11-14 — 首装权限包导入修复（出厂种子账号等价空库）
 

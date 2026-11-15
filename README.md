@@ -5,10 +5,20 @@
 ![Version](https://img.shields.io/badge/version-1.18.43-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C323-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C351-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.42）
+## 本版亮点（v1.18.43）
+
+- **CI 4 分片矩阵**：后端按实测耗时拆 4 片并行，同名 `backend-test` 聚合 job 统一合并覆盖率并执行 100% + 分支棘轮；`BACKEND_TEST_SHARDS=0` 可回退单作业，新增 PR 分片完整性门禁。
+- **表单选项服务端下发**：`GET /users/form-options` 聚合角色、数据范围、权限项、组织树并支持 ETag/304，用户管理前端改为消费服务端选项，消除“能选但提交 403”。
+- **Electron 凭据托管**：主进程新增 `safeStorage` 认证仓与 preload 同步 IPC；持久 token/user/refresh 在 Electron 下不再落 localStorage。
+- **任务可靠性**：系统任务页明确标注“演示任务”；新增失败/过期导出任务 retry 接口；中断导出在启动时置 failed，避免重放。
+- **授权与观测**：新增 `authorize(actor, action, resource, scope)` 的 `off/shadow/enforce` 门面；慢 SQL 增加轮转 JSONL，路由增加 p50/p95/p99 与 5xx 计数。
+- **审计与数据包签名**：`audit_logs` 增加可选 `prev_hash/payload_hash` 与校验脚本；`.rrs` 增加可选 detached Ed25519 签名（默认允许未签名并 warn）。
+- 🧪 验证：后端 **15,828 passed**（覆盖率 100%）；前端 **348 files / 7,523 tests**；Electron **23 passed**；PR Checks 14 作业全绿；v1.18.43 双架构 Release 构建成功。
+
+## 历史亮点（v1.18.42）
 
 - **首装权限包导入修复**：全新安装启动时种子会创建出厂 `admin`（未登录、待首次改密），原逻辑只要 `users`
   非空就让登录页导入返回 403「系统已存在账号」。现新增 `_is_pristine_first_run`：系统未初始化且仅存在一个
@@ -284,8 +294,8 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **14,870 用例**, 0 skipped（CI 12 段独立进程为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **7,374 passed**（347 个 `.test.ts`），0 失败 |
+| 后端测试 | **15,828 用例**, 0 skipped（CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **7,523 passed**（348 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -305,13 +315,11 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-11-02（v1.18.34 发布前）— 后端 **15,543** 用例（12 段 12/12 PASS，
-> 行/分支覆盖率 100%）、前端 **348 个 `.test.ts` / 7,495 用例**；统一门禁 **35/35 PASS**。
-> （CI 后端测试为 **12 段独立进程**分段执行，各段写独立分片 `.coverage.gate.<stamp>.segN`，
-> 全部段跑完后 `coverage combine` 合并、统一 report，由 `.coveragerc` fail_under=100 单一来源判定；
-> 前端 12 组 glob 阈值 100%；覆盖率结论以本次 tag 的 `PR Checks` 运行记录为准。）
-> flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；Alembic 单 head（63 版本，r43）；
-> 三层对齐、菜单对齐、同步覆盖率、零断言棘轮等门禁全绿。
+> **上次全量验证**: 2026-11-15（v1.18.43 发布）— 后端 **15,828** 用例（4 分片矩阵
+> 4/4 PASS + 聚合门禁）、前端 **348 个 `.test.ts` / 7,523 用例**；PR Checks **14/14 作业 success**。
+> 覆盖率 **100.00%**（48,727 语句 / 12,360 分支；`coverage combine` 后在聚合 job 统一判定）。
+> flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；Alembic 单 head（68 版本，audit_chain_001）；
+> 三层对齐、菜单对齐、同步覆盖率、零断言棘轮、迁移自证等门禁全绿。
 
 ## 快速开始
 
@@ -383,23 +391,23 @@ cd frontend && npm install && npm run dev
 - **UI**: Element Plus + ECharts + Leaflet；**UI v2.0 设计系统**（`tokens.scss`：主色阶/卡片边框/两级阴影/三档圆角/字号 calc 缩放/行高 1.6/tabular-nums）
 - **主题与显示偏好**: 主题 3 套（军绿默认 / 深色大屏 `dark-bigscreen` / 户外高对比 `outdoor`）；显示偏好 4 档（字号 compact/standard/large、密度 comfortable/compact、高对比、简化模式；localStorage `ui:prefs` + `<html data-*>`），外观设置面板统一入口
 - **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`，6 板块 / 104 key / 84 带 path 入口 / 16 legacy）数据驱动侧栏/移动端/权限面板；Ctrl+K 命令面板 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）；侧栏当前板块金色竖条 + 收起态浮层 + 面包屑「板块 › 页面」；v1.15.15 起「一户一档」入口并入帮扶村「年度数据管理」页（`households` key 转 legacy，路由 `meta.menuKey` 跟随 `villages`）
-- **组件体系**: 全局类 `.app-card/.app-stat-card/.app-empty/.app-loading/.app-error/.app-table-toolbar` + `components/common/` 通用组件 6 个
+- **组件体系**: 全局类 `.app-card/.app-stat-card/.app-empty/.app-loading/.app-error/.app-table-toolbar` + `components/common/` 通用组件 10 个（BaseChart/BulkPasteDialog/ChangeHistoryDialog/ChartErrorState/ErrorBoundary/GuizhouRegionSelector/MoneyText/PageHeader/StatsCard/VirtualList）
 - **状态**: Pinia
 - **测试**: Vitest + Playwright；视觉回归基线（10 个关键页面 DOM 结构快照）+ Token 契约测试
 - **代码质量**: ESLint + Prettier + lint-staged
 
 ### 桌面
-- **壳**: Electron 33 + electron-builder
+- **壳**: Electron 45 + electron-builder
 - **安装**: NSIS (Windows) / dpkg-deb (Linux ARM64)
 
 ## 测试体系
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 14,870（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 15,828（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 7,020（339 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 7,523（348 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
 | 视觉回归 | Playwright | 10 个关键页面（DOM 结构快照，非像素） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |
@@ -517,11 +525,11 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（**自包含**，约 270 MB） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建；体积与 SHA256 以 Release 资产的 `SHA256SUMS-windows-x64.txt` 为准） |
-| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（约 267 MB）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 98 MB） | 同上（`build-arm64.yml` 产出；校验见对应的 `SHA256SUMS-*.txt`） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（**自包含**，约 304 MB） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建；体积与 SHA256 以 Release 资产的 `SHA256SUMS-windows-x64.txt` 为准） |
+| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（约 282 MB）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 100 MB） | 同上（`build-arm64.yml` 产出；校验见对应的 `SHA256SUMS-*.txt`） |
 
-> **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 33 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
-> **运行环境**：Windows 10/11 x64（Electron 33 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
+> **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 45 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
+> **运行环境**：Windows 10/11 x64（Electron 45 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
 > 本机 Windows 构建产物位于 `dist/electron/MRRS-Setup-<版本>-x64.exe`；发布校验和随 GitHub Release 一起提供。
 >
 > **装完起不来先看**：[打包态启动排障与离线包验证](docs/04-部署文档/06-打包态启动排障与离线包验证.md)。

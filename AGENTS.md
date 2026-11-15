@@ -14,7 +14,7 @@ FastAPI + Vue 3 + Electron + SQLite. Windows primary, Linux ARM64 (Kylin V10) se
 ```bash
 cd backend
 .venv\Scripts\python start.py                           # Start server (http://localhost:8000)
-python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~15060 cases, 1 skipped)
+python -m pytest tests/ -v --tb=short -q --timeout=60   # Run all tests (~15,828 cases, 1 skipped)
 python -m pytest tests/unit/test_xxx.py -v              # Run single test file
 # 必须带 --max-complexity=16：CI 的 lint 任务用这个组合，缺了它 C901 复杂度回归
 # 只在 CI 变红、本地静默放过（2026-09-04 已因此漏过 2 处）
@@ -28,7 +28,7 @@ python -m bandit -r app/ -ll                            # Security scan
 ```bash
 cd frontend
 npm run dev                                             # Dev server (http://localhost:5173)
-npm run test -- --run                                   # Run all tests (~7023 cases, 329 test files)
+npm run test -- --run                                   # Run all tests (~7,523 cases, 348 test files)
 npx vitest run tests/unit/views/xxx/xxx.test.ts        # Run single test file (tests live under tests/unit/)
 npm run lint                                            # ESLint --fix (改文件, 本地用, --max-warnings=0)
 npm run lint:check                                      # ESLint 纯检查 (CI gate, 不带 --fix)
@@ -244,7 +244,7 @@ build-* 只在 tag `v*` 触发、nightly 只在定时触发，main 实际处于�
 
 | Job | 门禁 |
 |-----|------|
-| `backend-test` | pytest 全量 + 覆盖率（阈值由 `backend/.coveragerc` `fail_under` 单一承载） |
+| `backend-test` | pytest 全量（4 分片矩阵 + 聚合 job）+ 覆盖率（阈值由 `backend/.coveragerc` `fail_under` 单一承载） |
 | `frontend-check` | `vue-tsc --noEmit`、`npm run lint:check`、`vitest run --coverage`、**`npm run test:electron`**（Electron 外壳单测：分片写入 / 路径越界防护 / 线程池） |
 | `lint` | flake8（`--max-line-length=120 --count --max-complexity=16`）、mypy（非阻断）、bandit `-ll` |
 | `security` | pip-audit（非阻断）、`npm audit --audit-level=high`（阻断）、SBOM 许可证清单 |

@@ -77,7 +77,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,828 用例（1 skipped；CI 12 段独立进程）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,828 用例（1 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -216,10 +216,15 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     `backend/tests/unit/test_stack_alignment_gate_r35.py`（含负向用例：注入坏路径必须被抓到并非 0 退出）。
   - **新增/修改端点或前端 api 函数后必须跑这个门禁**，否则 CI 的 `Stack alignment check` 会拦。
 
-- **端点计数口径** (2026-11-02): `check_doc_numbers.py` 统计的是 **`/api` 前缀**端点（**850**）；
+- **端点计数口径** (2026-11-15): `check_doc_numbers.py` 统计的是 **`/api` 前缀**端点（**852**）；
   另有 4 条非 `/api` 路由（`/health`、`/favicon.ico`、`/version.json`、SPA catch-all），
-  全部 FastAPI 路由合计 **854**（由 `check_route_auth.py` 统计）。两个数字不是矛盾，是口径不同 ——
+  全部 FastAPI 路由合计 **856**（由 `check_route_auth.py` 统计）。两个数字不是矛盾，是口径不同 ——
   讨论端点数量时请写明口径，避免像 v1.18.18 那样"校正 849 → 845"被误读为删了接口。
+- **v1.18.43 新增接口**：`GET /users/form-options`（角色/数据范围/权限项/组织树聚合 + ETag）、
+  `POST /async-export/tasks/{task_id}/retry`（失败/过期导出复制参数重试）；既有接口契约未破坏。
+- **v1.18.43 新增配置**：`AUTHORIZE_MODE=off|shadow|enforce`、`AUDIT_CHAIN_ENABLED=false|true`、
+  `SYNC_PACKAGE_SIGNING_KEY` / `SYNC_PACKAGE_PUBKEY` / `SYNC_PACKAGE_ALLOW_UNSIGNED`。
+  前两者默认关闭，签名默认允许未签名并 warn，升级零行为变化。
 - **W22 功能迭代** (2026-10-18, v1.14.0):
   - **一户一档**：新表 `households` / `household_members` / `household_risk_records`；API `/households/*`；
     预警规则（连续未走访 >90 天且非一般户→medium；大病/住房不安全/突发困难→high，服务层实时计算不落库）；
@@ -387,6 +392,10 @@ npx lint-staged   # 仅对 git 暂存的 *.vue/*.ts/*.tsx 文件执行 eslint --
 ### PR Checks（`.github/workflows/pr-checks.yml`）
 
 每次 PR 触发：后端测试、前端测试、flake8 检查、覆盖率报告上传到 Codecov。
+后端测试为 **4 分片矩阵**（matrix include，按实测耗时装箱）+ 同名 `backend-test` 聚合 job：
+分片只上传 `.coverage.shardN`，聚合侧 `coverage combine` 后统一跑 100% 与分支棘轮；
+`BACKEND_TEST_SHARDS=0` 回退旧的单作业 12 段串行路径；分片并集由
+`scripts/check_pr_shard_parity.py` 校验为 1..12 各一次。
 
 ### Nightly Full Test（`.github/workflows/nightly-full.yml`）
 

@@ -4201,7 +4201,7 @@ VERSION_HISTORY_DATA = [
     },
     {
         "version": "1.18.43",
-        "date": "2026-11-14",
+        "date": "2026-11-15",
         "description": "系统管理优化批次（CI/表单/凭据/可观测/审计）",
         "features": [
             (
@@ -4224,7 +4224,10 @@ VERSION_HISTORY_DATA = [
                 "审计链与数据包签名：audit_logs 增加可选 prev_hash/payload_hash 与校验脚本；.rrs 增加可选 detached Ed25519 签名（SYNC_PACK"
                 "AGE_SIGNING_KEY/SYNC_PACKAGE_PUBKEY，过渡期允许未签名）。"
             ),
-            "文档漂移修正：CLAUDE.md 的通用组件清单改为当前 10 个组件，删除会过期的 PR 时长硬编码；文档端点数/用例数同步。",
+            (
+                "文档与 PPT 同步：README/CLAUDE/AGENTS/CONTEXT、API/架构/安全/部署/项目结构文档统一到 v1.18.43；三套 PPT 更新版本、测试数与 v1.18"
+                ".43 收口卡片；新增 RELEASE_NOTES-v1.18.43.md。文档端点数 852、Alembic 单 head audit_chain_001。"
+            ),
         ],
     },
 ]

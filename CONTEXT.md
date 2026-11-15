@@ -36,6 +36,16 @@
   纯权限兼容 key（legacy，无导航出口，旧深链仍可直达）。新增页面/入口先改 `menus.py`，再跑
   菜单对齐门禁 A~E。
 
+## v1.18.43 新增边界（默认兼容）
+
+- **授权门面**：`AUTHORIZE_MODE=off`（默认）/ `shadow`（只记差异）/ `enforce`；不得假设已全量切换。
+- **审计链**：`AUDIT_CHAIN_ENABLED=false`（默认）。开启后 `audit_logs` 才有 `prev_hash/payload_hash`；
+  物理删除会断链，开启前必须先把删除改为逻辑封存。
+- **数据包签名**：`.rrs` 用独立 `SYNC_PACKAGE_PUBKEY`，与四类“人带包”的 `PACKAGE_PUBKEY` 语义不同；
+  `SYNC_PACKAGE_ALLOW_UNSIGNED=true` 为过渡期默认。
+- **任务队列**：`LocalTaskQueue` 仍是进程内调度；导出任务持久化靠 `ExportTask`，重启置 failed + 手动 retry，
+  不自动续跑。
+
 ## 指标字典（W18 P2-1，2026-10-17）
 
 > 同一指标**只能有一个口径**。新增/修改指标必须在此登记，并复用对应实现
