@@ -6,7 +6,7 @@ import axios, {
   type Canceler,
   type InternalAxiosRequestConfig,
 } from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { AuthStorage } from '@/utils/authStorage'
 import { safeArray } from '@/composables/useSafeData'
@@ -38,6 +38,7 @@ export type RequestConfig = AxiosRequestConfig & {
  */
 type InternalRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
+  _confirmRetry?: boolean
   silent?: boolean
   skipDedup?: boolean
 }
@@ -395,6 +396,33 @@ request.interceptors.response.use(
     // ── HTTP 状态码分类处理 ──
     if (error.response) {
       const { status } = error.response
+      // 高风险操作二次确认：后端 428 + REAUTH_REQUIRED → 统一弹密码框，
+      // 成功后带 X-Confirm-Password 重放一次；不把密码放进 URL/日志。
+      if (
+        status === 428 &&
+        originalRequest &&
+        !(originalRequest as InternalRequestConfig)._confirmRetry
+      ) {
+        try {
+          const { value } = await ElMessageBox.prompt(
+            '该操作会影响账号/权限或覆盖数据，请输入当前登录密码确认：',
+            '安全确认',
+            {
+              inputType: 'password',
+              inputPlaceholder: '当前登录密码',
+              inputValidator: (v: string) => (v ? true : '密码不能为空'),
+              closeOnClickModal: false,
+            }
+          )
+          const cfg = originalRequest as InternalRequestConfig
+          cfg._confirmRetry = true
+          cfg.headers = cfg.headers || {}
+          ;(cfg.headers as Record<string, string>)['X-Confirm-Password'] = value
+          return request.request(cfg)
+        } catch {
+          return Promise.reject(error)
+        }
+      }
       if (status === 401) {
         // W3-T5：已带 _retry 标记的请求再次 401 → refresh 已试过仍失败，
         // 直接登出，严禁再进入刷新流程（防止无限刷新循环）

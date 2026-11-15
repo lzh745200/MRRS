@@ -204,6 +204,9 @@
               <span class="step-no" aria-hidden="true">2</span>
               <div class="step-body">
                 <p class="step-title">导入管理员导出的权限包（.zip）</p>
+                <p class="step-note">
+                  仅全新安装、尚未初始化账号时可在登录前导入；本机已有账号时，请让管理员登录后导入。
+                </p>
                 <button type="button" class="step-btn" @click="openPermissionImport">
                   导入权限包
                 </button>
@@ -213,8 +216,13 @@
               <span class="step-no" aria-hidden="true">3</span>
               <div class="step-body">
                 <p class="step-title">账号由管理员开通</p>
-                <p class="step-note">账号由管理员在「系统管理 → 用户与角色」中创建。</p>
+                <p class="step-note">
+                  本系统不提供自助注册，账号只能由管理员在「系统管理 → 用户与角色」中创建。
+                </p>
                 <p class="step-note">把第 1 步的机器码报给管理员，用于设备绑定与换机重置。</p>
+                <p class="step-note">
+                  权限包只包含角色、菜单与权限配置，不包含账号密码；账号创建后请管理员确认权限包/角色已分配。
+                </p>
               </div>
             </li>
           </ol>
@@ -313,7 +321,7 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
 const publicConfig = ref<PublicConfig>({ ...DEFAULT_PUBLIC_CONFIG })
 
 /** 机器码只用于设备绑定/换机重置；账号由管理员开通。 */
-const machineCodeStepNote = '用于设备绑定与换机重置；账号由管理员在后台开通。'
+const machineCodeStepNote = '用于设备绑定与换机重置；获取后请把机器码报给管理员。'
 
 const username = ref('')
 const password = ref('')
@@ -573,7 +581,11 @@ async function handlePermissionImport() {
       )
       const confirmBody: any = confirmRes || {}
       if (confirmBody.success === true || confirmBody.code === 200) {
-        ElMessage.success('权限包已导入,请重新登录查看权限')
+        if (Array.isArray(confirmBody.warnings) && confirmBody.warnings.length > 0) {
+          ElMessage.warning(confirmBody.warnings.join('；'))
+        } else {
+          ElMessage.success('权限包已导入,请重新登录查看权限')
+        }
         permissionImportVisible.value = false
         permissionFileList.value = []
         permissionFile.value = null
@@ -588,7 +600,14 @@ async function handlePermissionImport() {
     }
   } catch (err: any) {
     logger.error('[Login] 导入权限包失败', err)
-    ElMessage.error(err?.response?.data?.detail || err?.message || '导入权限包失败,请检查文件')
+    const detail = err?.response?.data?.detail || err?.message || ''
+    if (/系统已存在账号|已存在账号/.test(String(detail))) {
+      ElMessage.error(
+        '本机已有账号，权限包需由管理员登录后导入；请让管理员在「系统管理 → 用户与角色」中先为您创建账号。'
+      )
+    } else {
+      ElMessage.error(detail || '导入权限包失败,请检查文件')
+    }
   } finally {
     permissionImporting.value = false
   }

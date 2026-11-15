@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Query
+from fastapi import Depends, Header, HTTPException, Query, Request
 
 from app.core.database import get_db  # noqa: F401 — 统一从 database.py re-export
-from app.core.security import get_current_user  # noqa: F401 — 真实 JWT 认证实现
+from app.core.security import get_current_user, verify_password
 from app.core.permission_utils import is_admin, is_superuser  # noqa: F401 — re-export
 from app.core.constants import ADMIN_ROLES  # noqa: F401 — 单一来源：app.core.constants
 
@@ -145,3 +145,41 @@ def build_viewable_because(current_user, record) -> str | None:
     if is_admin(current_user):
         return "admin"
     return None
+
+
+def verify_confirm_password_value(
+    request: Request,
+    confirm_password: str,
+    current_user,
+) -> None:
+    """高风险操作二次确认（当前用户密码，走请求头避免落入访问日志）。
+
+    测试环境默认跳过，生产默认开启；显式设置 ``CONFIRM_PASSWORD_ENFORCED``
+    可覆盖。缺失密码返回 428，交由前端统一弹出确认框后重放请求。
+    """
+    from app.core.config import settings
+
+    if not getattr(settings, "CONFIRM_PASSWORD_ENFORCED", True):
+        return
+    # 仓库测试统一使用 ENVIRONMENT=testing（见 tests/conftest.py）；同时兼容 test。
+    if getattr(settings, "ENVIRONMENT", "") in ("test", "testing"):
+        return
+    if not confirm_password:
+        raise HTTPException(status_code=428, detail="REAUTH_REQUIRED")
+    path = getattr(getattr(request, "url", None), "path", "")
+    key = f"confirm_pwd:{getattr(current_user, 'id', 'anon')}:{path}"
+    from app.services.resource_limiter import check_rate_limit as _check_limit
+
+    if not _check_limit(key=key, limit=5, window=60):
+        raise HTTPException(status_code=429, detail="确认过于频繁，请稍后再试")
+    if not verify_password(confirm_password, getattr(current_user, "hashed_password", "") or ""):
+        raise HTTPException(status_code=400, detail="二次确认失败：密码不正确")
+
+
+def require_confirm_password(
+    request: Request,
+    confirm_password: str = Header("", alias="X-Confirm-Password"),
+    current_user=Depends(get_current_user),
+) -> None:
+    """FastAPI 依赖：高风险端点必须携带当前用户密码。"""
+    verify_confirm_password_value(request, confirm_password, current_user)

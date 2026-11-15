@@ -18,6 +18,7 @@ from app.core.response import ok_list
 from app.core.security import get_current_user, get_password_hash
 from app.core.cache import cache_result
 from app.core.config import settings
+from app.api.v1.deps import require_confirm_password
 from app.models.machine_code import MachineCode
 from app.models.organization import Organization
 from app.models.user import User
@@ -816,7 +817,7 @@ async def create_user(
         + ("，请通知用户登录" if user.is_active else "，用户当前处于待审核状态，需激活后才能登录"))
 
 
-@router.put("/{user_id}")
+@router.put("/{user_id}", dependencies=[Depends(require_confirm_password)])
 async def update_user(
     user_id: int,
     data: UserUpdateBody,
@@ -903,7 +904,7 @@ async def update_user(
     return {"code": 200, "message": "更新成功", "updated_fields": list(update_fields.keys())}
 
 
-@router.delete("/{user_id}")
+@router.delete("/{user_id}", dependencies=[Depends(require_confirm_password)])
 async def delete_user(user_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     require_admin(current_user)
 
@@ -934,7 +935,7 @@ async def delete_user(user_id: int, current_user=Depends(get_current_user), db: 
     return {"code": 200, "message": "删除成功"}
 
 
-@router.put("/{user_id}/permissions", summary="分配/修改用户权限")
+@router.put("/{user_id}/permissions", summary="分配/修改用户权限", dependencies=[Depends(require_confirm_password)])
 async def update_user_permissions(
     user_id: int,
     data: UserPermissionsUpdate,
@@ -1064,7 +1065,7 @@ async def get_permission_options(
     return success_response(data={"permissions": PERMISSION_OPTIONS})
 
 
-@router.post("/{user_id}/admin-reset-password", summary="管理员重置用户密码")
+@router.post("/{user_id}/admin-reset-password", summary="管理员重置用户密码", dependencies=[Depends(require_confirm_password)])
 async def admin_reset_password(
     user_id: int,
     data: AdminResetPasswordBody,

@@ -240,7 +240,7 @@ const navGroups: NavGroup[] = [
   {
     title: '用户权限',
     items: [
-      { label: '用户管理', path: '/system/users', icon: User },
+      { label: '用户与角色', path: '/system/users', icon: User },
       { label: '菜单管理', path: '/system/menus', icon: Menu },
       { label: '权限包管理', path: '/system/permission-packs', icon: Stamp },
     ],

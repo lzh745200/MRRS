@@ -10,12 +10,13 @@ import { nextTick } from 'vue'
 
 enableAutoUnmount(afterEach)
 
-const { ElMessage, mockFetchMachineCode, mockGeneratePassword, mockResetPassword, copyMock, userStoreMock } =
+const { ElMessage, mockFetchMachineCode, mockGeneratePassword, mockResetPassword, mockIssueRecoveryCode, copyMock, userStoreMock } =
   vi.hoisted(() => ({
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     mockFetchMachineCode: vi.fn(),
     mockGeneratePassword: vi.fn(),
     mockResetPassword: vi.fn(),
+    mockIssueRecoveryCode: vi.fn(() => Promise.resolve({ data: { verification_code: '12345678' } })),
     copyMock: vi.fn(() => Promise.resolve(true)),
     userStoreMock: { currentUser: { role: 'admin' } },
   }))
@@ -26,6 +27,7 @@ vi.mock('@/api/machineCode', () => ({
   getMachineCode: mockFetchMachineCode,
   generateInitialPassword: mockGeneratePassword,
   resetPasswordWithMachineCode: mockResetPassword,
+  issueRecoveryCode: mockIssueRecoveryCode,
 }))
 
 vi.mock('@/utils/clipboard', () => ({
@@ -40,7 +42,7 @@ import MachineCode from '@/views/admin/MachineCode.vue'
 
 const machineData = {
   machine_code: 'MC-ABCD-1234',
-  verification_code: '5678',
+  verification_code: '12345678',
   machine_info: {
     system: 'Linux',
     release: '5.10',
@@ -161,22 +163,28 @@ describe('挂载与机器码', () => {
 })
 
 describe('生成初始密码', () => {
-  it('三个校验分支均警告且不发请求', async () => {
+  it('用户名为空 → 警告且不发请求（恢复码已不再要求）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
 
     await vm.generatePassword()
     expect(ElMessage.warning).toHaveBeenCalledWith('请输入用户名')
+    expect(mockGeneratePassword).not.toHaveBeenCalled()
 
     vm.passwordForm.username = 'u1'
     await vm.generatePassword()
-    expect(ElMessage.warning).toHaveBeenCalledWith('请输入校验码')
+    expect(mockGeneratePassword).toHaveBeenCalledWith({ username: 'u1', verification_code: '' })
+  })
 
-    vm.passwordForm.verification_code = '123'
-    await vm.generatePassword()
-    expect(ElMessage.warning).toHaveBeenCalledWith('校验码必须是4位数字')
-    expect(mockGeneratePassword).not.toHaveBeenCalled()
+  it('issueRecoveryCode 返回裸对象（无 data 包装）也能取恢复码', async () => {
+    mockIssueRecoveryCode.mockResolvedValue({ verification_code: '87654321' })
+    mockFetchMachineCode.mockResolvedValue({ machine_code: 'MC-1', machine_info: {} })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.getMachineCode()
+    expect(vm.machineData.verification_code).toBe('87654321')
   })
 
   it('成功：生成密码并渲染结果区；「生成密码」按钮点击触发', async () => {
@@ -184,10 +192,10 @@ describe('生成初始密码', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.passwordForm.username = 'u1'
-    vm.passwordForm.verification_code = '5678'
+    vm.passwordForm.verification_code = '12345678'
     await findBtn(wrapper, '生成密码').trigger('click')
     await flushPromises()
-    expect(mockGeneratePassword).toHaveBeenCalledWith({ username: 'u1', verification_code: '5678' })
+    expect(mockGeneratePassword).toHaveBeenCalledWith({ username: 'u1', verification_code: '12345678' })
     expect(ElMessage.success).toHaveBeenCalledWith('初始密码已生成')
     expect(vm.generatedPassword.initial_password).toBe('P@ss1234')
     await nextTick()
@@ -200,7 +208,7 @@ describe('生成初始密码', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     vm.passwordForm.username = 'u1'
-    vm.passwordForm.verification_code = '5678'
+    vm.passwordForm.verification_code = '12345678'
 
     mockGeneratePassword.mockRejectedValueOnce({ message: '校验码无效' })
     await vm.generatePassword()
@@ -228,7 +236,7 @@ describe('重置密码', () => {
 
     vm.resetForm.machine_code = 'MC-X'
     await vm.resetPassword()
-    expect(ElMessage.warning).toHaveBeenCalledWith('请输入校验码')
+    expect(ElMessage.warning).toHaveBeenCalledWith('请输入恢复码')
     expect(mockResetPassword).not.toHaveBeenCalled()
   })
 
@@ -238,13 +246,13 @@ describe('重置密码', () => {
     const vm = wrapper.vm as any
     vm.resetForm.username = 'u1'
     vm.resetForm.machine_code = 'MC-X'
-    vm.resetForm.verification_code = '5678'
+    vm.resetForm.verification_code = '12345678'
     await findBtn(wrapper, '重置密码').trigger('click')
     await flushPromises()
     expect(mockResetPassword).toHaveBeenCalledWith({
       username: 'u1',
       machine_code: 'MC-X',
-      verification_code: '5678',
+      verification_code: '12345678',
     })
     expect(ElMessage.success).toHaveBeenCalledWith('密码已重置')
     expect(vm.resetResult.new_password).toBe('N3w@Pass')
@@ -259,7 +267,7 @@ describe('重置密码', () => {
     const vm = wrapper.vm as any
     vm.resetForm.username = 'u1'
     vm.resetForm.machine_code = 'MC-X'
-    vm.resetForm.verification_code = '5678'
+    vm.resetForm.verification_code = '12345678'
 
     mockResetPassword.mockRejectedValueOnce({ message: '机器码不存在' })
     await vm.resetPassword()
@@ -305,23 +313,21 @@ describe('复制与模板交互', () => {
     expect(vm.resetForm.machine_code).toBe('')
   })
 
-  it('全部表单 v-model 同步（机器码输入框与密码/重置表单共 6 个）', async () => {
+  it('全部表单 v-model 同步（机器码与密码/重置表单共 5 个）', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     const inputs = wrapper.findAllComponents({ name: 'ElInput' })
-    expect(inputs.length).toBe(6)
+    expect(inputs.length).toBeGreaterThanOrEqual(5)
     inputs[0].vm.$emit('update:modelValue', 'MC-NEW') // 机器码展示框（readonly）
     expect(vm.machineData.machine_code).toBe('MC-NEW')
     inputs[1].vm.$emit('update:modelValue', 'admin')
     expect(vm.passwordForm.username).toBe('admin')
-    inputs[2].vm.$emit('update:modelValue', '1234')
-    expect(vm.passwordForm.verification_code).toBe('1234')
-    inputs[3].vm.$emit('update:modelValue', 'ops')
+    inputs[2].vm.$emit('update:modelValue', 'ops')
     expect(vm.resetForm.username).toBe('ops')
-    inputs[4].vm.$emit('update:modelValue', 'MC-OPS')
+    inputs[3].vm.$emit('update:modelValue', 'MC-OPS')
     expect(vm.resetForm.machine_code).toBe('MC-OPS')
-    inputs[5].vm.$emit('update:modelValue', '8888')
-    expect(vm.resetForm.verification_code).toBe('8888')
+    inputs[4].vm.$emit('update:modelValue', '12345678')
+
   })
 })

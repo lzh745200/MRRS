@@ -54,6 +54,7 @@ _MODULE_MAP = {
     "PackageVersion": ".package_version", "DataReport": ".data_report",
     "ExportTask": ".export_task", "ImportHistory": ".import_history",
     "ImportExportHistory": ".import_export_history", "MachineCode": ".machine_code",
+    "MachineRecoveryCode": ".machine_recovery_code",
     "AuditLog": ".audit", "AuditChange": ".audit_change",
     "SecurityEvent": ".audit", "LoginAttempt": ".audit",
     "APIAccessLog": ".audit", "DataExportLog": ".audit",

@@ -61,6 +61,15 @@ def client_admin(mock_db, admin_user_mock):
 
 
 @pytest.fixture(autouse=True)
+def _allow_recovery_gate(monkeypatch):
+    """端点业务分支测试用；恢复码真实消费逻辑由 test_recovery_code_service.py 覆盖。"""
+    monkeypatch.setattr(
+        "app.api.v1.machine_code.RecoveryCodeService.check",
+        lambda *args, **kwargs: True,
+    )
+
+
+@pytest.fixture(autouse=True)
 def _isolate_rate_store():
     """隔离内存限流存储，避免用例间污染。"""
     core_security._rate_limit_store.clear()
@@ -147,15 +156,16 @@ class TestGetMachineCodeVerificationCodeHidden:
         assert body["machine_code"] == "MACHINE001"
         assert "verification_code" not in body
 
-    def test_verification_code_present_for_loopback(self, client_admin):
+    def test_get_machine_code_never_returns_verification_code(self, client_admin):
+        """GET 不产生副作用；恢复码只能由 POST /recovery-code 签发。"""
         svc = MagicMock()
         svc.get_machine_code.return_value = "MACHINE001"
-        svc.generate_verification_code.return_value = "VERIFY001"
         svc.get_machine_info.return_value = {"os": "windows"}
         with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
             with patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
                 resp = client_admin.get("/api/v1/machine-code/get-machine-code")
-        assert resp.json()["data"]["verification_code"] == "VERIFY001"
+        assert resp.status_code == 200
+        assert "verification_code" not in resp.json()["data"]
 
 
 def _make_service(machine_code="MC001", verify_ok=True):
@@ -377,6 +387,7 @@ class TestFactoryAdminRecovery:
         mock_db.query.return_value.first.return_value = self._admin_user()
 
         with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code.RecoveryCodeService.check", return_value=False), \
              patch("app.api.v1.machine_code.MachineCodeService",
                    return_value=_make_service(verify_ok=False)), \
              patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
@@ -397,3 +408,38 @@ class TestFactoryAdminRecovery:
             resp = self._post(client_admin)
 
         assert resp.status_code == 429
+
+
+class TestRecoveryCodeIssuance:
+    """P1：恢复码必须由专用 POST 签发，GET 不再产生副作用。"""
+
+    def test_loopback_can_issue_8_digit_code(self, client_admin, mock_db):
+        svc = MagicMock()
+        svc.get_machine_code.return_value = "MACHINE001"
+        with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)), \
+             patch("app.api.v1.machine_code._client_is_loopback", return_value=True), \
+             patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
+            resp = client_admin.post(
+                "/api/v1/machine-code/recovery-code",
+                json={"purpose": "password_reset"},
+            )
+        assert resp.status_code == 200
+        code = resp.json()["data"]["verification_code"]
+        assert len(code) == 8 and code.isdigit()
+        assert resp.json()["data"]["ttl_seconds"] == 600
+
+    def test_remote_cannot_issue(self, client_admin):
+        with patch("app.api.v1.machine_code._client_is_loopback", return_value=False):
+            resp = client_admin.post(
+                "/api/v1/machine-code/recovery-code",
+                json={"purpose": "password_reset"},
+            )
+        assert resp.status_code == 403
+
+    def test_invalid_purpose_rejected(self, client_admin):
+        with patch("app.api.v1.machine_code._client_is_loopback", return_value=True):
+            resp = client_admin.post(
+                "/api/v1/machine-code/recovery-code",
+                json={"purpose": "delete_all"},
+            )
+        assert resp.status_code == 400

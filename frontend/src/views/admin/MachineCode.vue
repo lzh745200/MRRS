@@ -26,7 +26,7 @@
           </el-input>
         </el-descriptions-item>
 
-        <el-descriptions-item label="校验码">
+        <el-descriptions-item label="恢复码">
           <el-tag type="success" size="large" style="font-size: 24px">
             {{ machineData.verification_code }}
           </el-tag>
@@ -55,9 +55,9 @@
           <strong>使用说明：</strong>
         </template>
         <div>
-          1. 将上方的<strong>校验码（{{ machineData.verification_code }}）</strong
+          1. 将上方的<strong>恢复码（{{ machineData.verification_code }}）</strong
           >提供给系统管理员<br />
-          2. 管理员使用校验码为您生成初始登录密码<br />
+          2. 管理员使用恢复码为您生成初始登录密码<br />
           3. 使用初始密码登录后，请立即修改密码
         </div>
       </el-alert>
@@ -69,14 +69,6 @@
       <el-form :model="passwordForm" label-width="120px">
         <el-form-item label="用户名">
           <el-input v-model="passwordForm.username" placeholder="请输入用户名" />
-        </el-form-item>
-
-        <el-form-item label="校验码">
-          <el-input
-            v-model="passwordForm.verification_code"
-            placeholder="请输入4位数字校验码"
-            maxlength="4"
-          />
         </el-form-item>
 
         <el-form-item>
@@ -127,11 +119,11 @@
           </el-button>
         </el-form-item>
 
-        <el-form-item label="校验码">
+        <el-form-item label="恢复码">
           <el-input
             v-model="resetForm.verification_code"
-            placeholder="请输入4位数字校验码"
-            maxlength="4"
+            placeholder="请输入4位数字恢复码"
+            maxlength="8"
           />
         </el-form-item>
 
@@ -171,6 +163,7 @@ import { useUserStore } from '@/stores/user'
 import { isAdminUser } from '@/utils/roleAccess'
 import {
   getMachineCode as fetchMachineCode,
+  issueRecoveryCode,
   generateInitialPassword,
   resetPasswordWithMachineCode,
 } from '@/api/machineCode'
@@ -204,7 +197,10 @@ const getMachineCode = async () => {
   loading.value = true
   try {
     const response = await fetchMachineCode()
-    machineData.value = response
+    const payload: any = response?.data ?? response
+    const codeRes = await issueRecoveryCode('password_reset')
+    const codeData: any = codeRes?.data ?? codeRes
+    machineData.value = { ...payload, verification_code: codeData?.verification_code }
     ElMessage.success('机器码获取成功')
   } catch (error: any) {
     ElMessage.error(getErrorMessage(error, '获取机器码失败'))
@@ -218,15 +214,6 @@ const generatePassword = async () => {
     ElMessage.warning('请输入用户名')
     return
   }
-  if (!passwordForm.value.verification_code) {
-    ElMessage.warning('请输入校验码')
-    return
-  }
-  if (passwordForm.value.verification_code.length !== 4) {
-    ElMessage.warning('校验码必须是4位数字')
-    return
-  }
-
   generating.value = true
   generatedPassword.value = null
 
@@ -251,7 +238,7 @@ const resetPassword = async () => {
     return
   }
   if (!resetForm.value.verification_code) {
-    ElMessage.warning('请输入校验码')
+    ElMessage.warning('请输入恢复码')
     return
   }
 

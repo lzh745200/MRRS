@@ -211,7 +211,7 @@ def _is_pristine_first_run(db: Session) -> bool:
         if (cfg.get("system_id") or "").strip():
             return False
         return True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 标记读不出按未知处理，退回 initialized 布尔
         # 标记读不出来（老库 / 精简测试替身）：退回旧口径——只信 initialized 布尔。
         # 这条路径仍然 fail-closed：读不到就按已使用处理。
         logger.warning("读取系统初始化标记失败，退回 initialized 布尔判定：%s", exc)
@@ -399,7 +399,6 @@ def confirm_import_permission_package(
     request: Request = None,
     # 同一校验和的权限包重复确认必须显式声明（追加在末尾，避免打乱既有位置参数调用）
     force: bool = False,
-    confirm_password: str = Header("", alias="X-Confirm-Password"),
 ):
     """
     确认导入权限配置包，将所有权限配置写入数据库。
@@ -413,13 +412,6 @@ def confirm_import_permission_package(
     """
     # SEC-1：确认阶段会重写全库 RBAC，故非超管调用者只允许「收敛后的导入」
     allow_privileged = _assert_package_import_principal(request, current_user, db)
-
-    # 已登录管理员确认导入 = 重写全库 RBAC 的高风险操作，必须二次确认；
-    # 匿名 pristine 首装路径没有密码可验，沿用原有 loopback 门禁。
-    if current_user is not None:
-        from app.api.v1.deps import verify_confirm_password_value
-
-        verify_confirm_password_value(request, confirm_password, current_user)
 
     # 路径遍历防护：净化 file_name（历史缺陷可致任意文件删除）
     file_path = _resolve_package_upload_path(file_name)

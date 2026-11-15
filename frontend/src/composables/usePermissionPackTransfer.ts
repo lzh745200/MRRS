@@ -182,7 +182,12 @@ export function usePermissionPackTransfer(hooks: PermissionPackTransferHooks) {
             overwrite_existing: mode === 'overwrite',
             mode,
           })
-          ElMessage.success(cRes.data?.message || cRes.message || '导入完成')
+          const cData: any = cRes?.data ?? cRes
+          if (Array.isArray(cData?.warnings) && cData.warnings.length > 0) {
+            ElMessage.warning(cData.warnings.join('；'))
+          } else {
+            ElMessage.success(cData?.message || '导入完成')
+          }
           hooks.resetPage() // 重置到第1页，确保导入后的数据可见
           hooks.reload()
         } else {

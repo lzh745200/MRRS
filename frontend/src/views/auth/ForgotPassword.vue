@@ -45,14 +45,14 @@
               </div>
             </el-form-item>
 
-            <el-form-item label="校验码">
+            <el-form-item label="恢复码">
               <el-input
                 v-model="resetForm.verification_code"
-                placeholder="请输入4位数字校验码"
+                placeholder="请输入4位数字恢复码"
                 maxlength="4"
                 clearable
               />
-              <div class="form-hint">校验码可在"获取机器码"页面查看</div>
+              <div class="form-hint">恢复码可在"获取机器码"页面查看</div>
             </el-form-item>
 
             <el-form-item label="账号类型">
@@ -124,6 +124,7 @@ import { CircleCheckFilled, Key } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { get, post } from '@/api/request'
+import { issueRecoveryCode } from '@/api/machineCode'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const { pushSafe } = useRouterSafe()
@@ -146,7 +147,7 @@ const canSubmit = computed(() => {
     !!resetForm.value.username &&
     !!resetForm.value.machine_code &&
     !!resetForm.value.verification_code &&
-    resetForm.value.verification_code.length === 4
+    resetForm.value.verification_code.length === 8
   )
 })
 
@@ -158,8 +159,17 @@ const useCurrentMachineCode = async () => {
     const payload = response?.data ?? response
     if (payload?.machine_code) {
       resetForm.value.machine_code = payload.machine_code
-      resetForm.value.verification_code = payload.verification_code ?? ''
-      ElMessage.success('已自动填入当前机器码和校验码')
+      try {
+        const codeRes = await issueRecoveryCode(
+          accountMode.value === 'admin' ? 'admin_recovery' : 'password_reset'
+        )
+        const codeData: any = codeRes?.data ?? codeRes
+        resetForm.value.verification_code = codeData?.verification_code ?? ''
+        ElMessage.success('已自动填入当前机器码和恢复码')
+      } catch {
+        resetForm.value.verification_code = ''
+        ElMessage.warning('已填入机器码，但恢复码获取失败，请重试或手动打开机器码页')
+      }
     } else {
       ElMessage.error(getErrorMessage(response, '获取机器码失败，请重试'))
     }

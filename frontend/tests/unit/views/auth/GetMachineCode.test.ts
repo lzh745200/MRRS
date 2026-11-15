@@ -8,13 +8,18 @@ import { nextTick } from 'vue'
 
 enableAutoUnmount(afterEach)
 
-const { ElMessage, mockPushSafe, mockGet, logError, copyMock } = vi.hoisted(() => ({
-  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-  mockPushSafe: vi.fn(() => Promise.resolve()),
-  mockGet: vi.fn(),
-  logError: vi.fn(),
-  copyMock: vi.fn(() => Promise.resolve(true)),
-}))
+const { ElMessage, mockPushSafe, mockGet, logError, copyMock, mockIssueRecoveryCode } = vi.hoisted(
+  () => ({
+    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+    mockPushSafe: vi.fn(() => Promise.resolve()),
+    mockGet: vi.fn(),
+    logError: vi.fn(),
+    copyMock: vi.fn(() => Promise.resolve(true)),
+    mockIssueRecoveryCode: vi.fn(() =>
+      Promise.resolve({ data: { verification_code: '12345678' } })
+    ),
+  })
+)
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
@@ -35,11 +40,14 @@ vi.mock('@/api/request', () => ({
   put: vi.fn(),
   del: vi.fn(),
   apiRequest: vi.fn(),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), log: vi.fn() },
 }))
+
+vi.mock('@/api/machineCode', () => ({ issueRecoveryCode: mockIssueRecoveryCode }))
 
 vi.mock('@/utils/clipboard', () => ({
   copyToClipboard: copyMock,
@@ -55,7 +63,7 @@ import GetMachineCode from '@/views/auth/GetMachineCode.vue'
 
 const machineData = {
   machine_code: 'MC-ABCD-1234',
-  verification_code: '5678',
+  verification_code: '12345678',
   machine_info: {
     system: 'Linux',
     release: '5.10',
@@ -95,6 +103,7 @@ async function mountComp() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockIssueRecoveryCode.mockResolvedValue({ data: { verification_code: '12345678' } })
   mockGet.mockResolvedValue({ data: { data: machineData } })
 })
 
@@ -113,7 +122,7 @@ describe('GetMachineCode.vue', () => {
     expect(vm.machineData?.machine_code).toBe('MC-ABCD-1234')
     expect(ElMessage.success).toHaveBeenCalledWith('机器码获取成功')
     expect(vm.loading).toBe(false)
-    expect(w.text()).toContain('5678')
+    expect(w.text()).toContain('12345678')
   })
 
   it('获取机器码：响应无 machine_code → 报错', async () => {
@@ -165,6 +174,32 @@ describe('GetMachineCode.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('机器码接口错误')
   })
 
+  it('获取机器码：恢复码签发失败 → 保留机器码并警告', async () => {
+    mockIssueRecoveryCode.mockRejectedValue(new Error('offline'))
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.getMachineCode()
+    expect(vm.machineData.machine_code).toBe('MC-ABCD-1234')
+    expect(vm.machineData.verification_code).toBeUndefined()
+    expect(ElMessage.warning).toHaveBeenCalledWith('机器码已获取，但恢复码签发失败，请稍后重试')
+  })
+
+  it('恢复码响应为 undefined → 机器码仍展示，恢复码为空', async () => {
+    mockIssueRecoveryCode.mockResolvedValue(undefined)
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.getMachineCode()
+    expect(vm.machineData.verification_code).toBeUndefined()
+  })
+
+  it('一键复制全部信息：恢复码缺失 → 空串', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.machineData = { machine_code: 'MC-1', machine_info: {} }
+    vm.copyAllInfo()
+    expect(copyMock).toHaveBeenCalledWith('机器码：MC-1\n恢复码：', '全部信息')
+  })
+
   it('获取机器码：请求异常 → 默认文案', async () => {
     mockGet.mockRejectedValue({})
     const w = await mountComp()
@@ -178,10 +213,7 @@ describe('GetMachineCode.vue', () => {
     const vm = w.vm as any
     vm.machineData = machineData
     vm.copyAllInfo()
-    expect(copyMock).toHaveBeenCalledWith(
-      '机器码：MC-ABCD-1234\n校验码：5678',
-      '全部信息'
-    )
+    expect(copyMock).toHaveBeenCalledWith('机器码：MC-ABCD-1234\n恢复码：12345678', '全部信息')
   })
 
   it('一键复制全部信息：无数据 → 直接返回', async () => {
@@ -193,15 +225,13 @@ describe('GetMachineCode.vue', () => {
 
   it('返回登录按钮 → pushSafe', async () => {
     const w = await mountComp()
-    const btn = w
-      .findAll('button')
-      .find((b) => b.text().includes('返回登录'))
+    const btn = w.findAll('button').find((b) => b.text().includes('返回登录'))
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
     expect(mockPushSafe).toHaveBeenCalledWith('/login')
   })
 
-  it('复制按钮（校验码/机器码）→ 调用剪贴板', async () => {
+  it('复制按钮（恢复码/机器码）→ 调用剪贴板', async () => {
     const w = await mountComp()
     const vm = w.vm as any
     vm.machineData = machineData
@@ -209,16 +239,14 @@ describe('GetMachineCode.vue', () => {
     const copyBtns = w.findAll('button').filter((b) => b.text().trim() === '复制')
     expect(copyBtns.length).toBeGreaterThanOrEqual(2)
     await copyBtns[0].trigger('click')
-    expect(copyMock).toHaveBeenCalledWith('5678', '校验码')
+    expect(copyMock).toHaveBeenCalledWith('12345678', '恢复码')
     await copyBtns[1].trigger('click')
     expect(copyMock).toHaveBeenCalledWith('MC-ABCD-1234', '机器码')
   })
 
   it('忘记密码按钮 → pushSafe', async () => {
     const w = await mountComp()
-    const btn = w
-      .findAll('button')
-      .find((b) => b.text().includes('忘记密码'))
+    const btn = w.findAll('button').find((b) => b.text().includes('忘记密码'))
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
     expect(mockPushSafe).toHaveBeenCalledWith('/forgot-password')

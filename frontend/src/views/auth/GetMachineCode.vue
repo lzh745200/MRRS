@@ -15,7 +15,7 @@
             <el-icon class="icon"><Key /></el-icon>
           </div>
           <h2>获取机器码</h2>
-          <p>用于密码重置和系统认证</p>
+          <p>用于设备绑定、换机重置与密码重置</p>
         </div>
 
         <div class="card-body">
@@ -37,18 +37,18 @@
               <template #title>
                 <strong>机器码获取成功</strong>
               </template>
-              <div>请将以下信息提供给系统管理员，或用于密码重置</div>
+              <div>请将以下信息提供给系统管理员，用于设备绑定、换机重置或密码重置</div>
             </el-alert>
 
-            <!-- 校验码 - 突出显示 -->
-            <div class="verification-code-section">
-              <h3>校验码</h3>
+            <!-- 恢复码 - 突出显示 -->
+            <div v-if="machineData.verification_code" class="verification-code-section">
+              <h3>恢复码</h3>
               <div class="verification-code-display">
                 <span class="code-text">{{ machineData.verification_code }}</span>
                 <el-button
                   type="primary"
                   style="margin-left: 15px"
-                  @click="copyToClipboard(machineData.verification_code, '校验码')"
+                  @click="copyToClipboard(machineData.verification_code, '恢复码')"
                 >
                   复制
                 </el-button>
@@ -76,9 +76,9 @@
             <div class="copy-all-section">
               <el-button type="success" size="large" style="width: 100%" @click="copyAllInfo">
                 <el-icon><CopyDocument /></el-icon>
-                一键复制全部信息（机器码+校验码）
+                一键复制全部信息（机器码+恢复码）
               </el-button>
-              <p class="hint">点击后将机器码和校验码一起复制，方便发送给管理员</p>
+              <p class="hint">点击后将机器码和恢复码一起复制，方便发送给管理员</p>
             </div>
 
             <!-- 机器信息 -->
@@ -109,8 +109,8 @@
               <div class="usage-guide">
                 <p><strong>方式一：生成初始密码</strong></p>
                 <ol>
-                  <li>将上方的<strong>校验码</strong>提供给系统管理员</li>
-                  <li>管理员使用校验码为您生成初始登录密码</li>
+                  <li>将上方的<strong>恢复码</strong>提供给系统管理员</li>
+                  <li>管理员使用恢复码为您生成初始登录密码</li>
                   <li>使用初始密码登录后，请立即修改密码</li>
                 </ol>
 
@@ -120,7 +120,7 @@
                 <ol>
                   <li>点击下方"忘记密码"按钮</li>
                   <li>输入您的用户名</li>
-                  <li>使用当前机器码和校验码重置密码</li>
+                  <li>使用当前机器码和恢复码重置密码</li>
                   <li>使用新密码登录后，请立即修改密码</li>
                 </ol>
               </div>
@@ -156,6 +156,7 @@ import { ElMessage } from 'element-plus'
 import { logger } from '@/utils/logger'
 import { CopyDocument, ArrowLeft, Key } from '@element-plus/icons-vue'
 import { get } from '@/api/request'
+import { issueRecoveryCode } from '@/api/machineCode'
 import { copyToClipboard } from '@/utils/clipboard'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
@@ -171,7 +172,9 @@ interface MachineInfo {
 
 interface MachineData {
   machine_code: string
-  verification_code: string
+  verification_code?: string
+  verification_code_expires_at?: string
+  verification_code_ttl_seconds?: number
   machine_info: MachineInfo
 }
 
@@ -186,7 +189,19 @@ const getMachineCode = async () => {
     const resData = response?.data ?? response
     const payload = resData?.data ?? resData
     if (payload?.machine_code) {
-      machineData.value = payload as MachineData
+      let codeData: any = {}
+      try {
+        const codeRes = await issueRecoveryCode('password_reset')
+        codeData = codeRes?.data ?? codeRes ?? {}
+      } catch {
+        ElMessage.warning('机器码已获取，但恢复码签发失败，请稍后重试')
+      }
+      machineData.value = {
+        ...payload,
+        verification_code: codeData?.verification_code,
+        verification_code_expires_at: codeData?.expires_at,
+        verification_code_ttl_seconds: codeData?.ttl_seconds,
+      } as MachineData
       ElMessage.success('机器码获取成功')
     } else {
       ElMessage.error(getErrorMessage(resData, '获取机器码失败，请重试'))
@@ -206,7 +221,7 @@ const getMachineCode = async () => {
 
 const copyAllInfo = () => {
   if (!machineData.value) return
-  const info = `机器码：${machineData.value.machine_code}\n校验码：${machineData.value.verification_code}`
+  const info = `机器码：${machineData.value.machine_code}\n恢复码：${machineData.value.verification_code ?? ''}`
   copyToClipboard(info, '全部信息')
 }
 </script>

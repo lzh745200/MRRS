@@ -599,7 +599,7 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
         "tabs": [
             {
                 "key": "users-orgs",
-                "label": "用户与组织",
+                "label": "用户与角色",
                 "path": "/system/users",
                 "icon": "User",
                 "order": 10,

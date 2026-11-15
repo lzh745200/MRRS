@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
 from app.core.database import get_db
+from app.api.v1.deps import require_confirm_password
 from app.core.async_utils import run_in_thread
 from app.core.response import ok_list, success_response
 from app.utils.upload_helper import read_zip_member
@@ -844,7 +845,7 @@ async def verify_backup(
         raise HTTPException(status_code=500, detail="验证备份失败，请稍后重试或联系管理员")
 
 
-@router.post("/restore", summary="从备份恢复系统")
+@router.post("/restore", summary="从备份恢复系统", dependencies=[Depends(require_confirm_password)])
 async def restore_backup(
     body: RestoreBackupRequest,
     db: Session = Depends(get_db),
@@ -923,7 +924,7 @@ async def restore_backup(
         raise HTTPException(status_code=500, detail="恢复备份失败，请稍后重试或联系管理员")
 
 
-@router.post("/upload-restore", summary="上传备份文件并恢复系统")
+@router.post("/upload-restore", summary="上传备份文件并恢复系统", dependencies=[Depends(require_confirm_password)])
 async def upload_and_restore(  # noqa: C901 - 恢复流程多分支校验,拆分风险高
     file: UploadFile = File(...),
     password: Optional[str] = Form(None),

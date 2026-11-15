@@ -272,7 +272,7 @@ const recentLogins = ref<any[]>([])
 const auditLogs = ref<any[]>([])
 
 const quickActions = [
-  { icon: UserFilled, label: '用户管理', path: '/system/users' },
+  { icon: UserFilled, label: '用户与角色', path: '/system/users' },
   { icon: Key, label: '角色权限', path: '/system/roles' },
   { icon: Files, label: '数据备份', path: '/system/backup' },
   { icon: Document, label: '操作审计', path: '/system/audit' },

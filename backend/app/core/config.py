@@ -159,6 +159,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30天，单机版延长
     BCRYPT_ROUNDS: int = 12  # OWASP 建议 12 轮以上
     PASSWORD_EXPIRE_DAYS: int = 90  # 密码有效期（天）
+    CONFIRM_PASSWORD_ENFORCED: bool = True  # 高风险操作二次确认（测试环境跳过，生产默认开启）
     # 自助注册开关：off（默认；单机 + 上下级 + 介质传输场景推荐）/ controlled（允许凭通行码注册）
     SELF_REGISTER_MODE: str = "off"
     MAX_FAILED_LOGIN_ATTEMPTS: int = 5  # 最大登录失败次数

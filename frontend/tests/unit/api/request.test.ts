@@ -10,6 +10,7 @@ const {
   authState,
   mockAuthStorage,
   mockElMessage,
+  mockElMessageBox,
   offlineState,
   mockGetMockResponse,
   mockCancelSource,
@@ -24,6 +25,7 @@ const {
   const authState = { token: 'test-jwt-token', refreshToken: '' }
   const offlineState = { offline: false }
   const mockElMessage = { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }
+  const mockElMessageBox = { prompt: vi.fn() }
   const mockGetMockResponse = vi.fn()
   const mockCancel = vi.fn()
   const mockAuthStorage = {
@@ -70,6 +72,7 @@ const {
     authState,
     mockAuthStorage,
     mockElMessage,
+    mockElMessageBox,
     offlineState,
     mockGetMockResponse,
     mockCancelSource: vi.fn(() => ({ token: 'mock-cancel-token', cancel: mockCancel })),
@@ -99,7 +102,7 @@ vi.mock('axios', () => {
 
 vi.mock('@/utils/authStorage', () => ({ AuthStorage: mockAuthStorage }))
 
-vi.mock('element-plus', () => ({ ElMessage: mockElMessage }))
+vi.mock('element-plus', () => ({ ElMessage: mockElMessage, ElMessageBox: mockElMessageBox }))
 
 vi.mock('@/utils/offlineMock', () => ({
   isOfflineMode: () => offlineState.offline,
@@ -627,6 +630,37 @@ describe('api/request — response 错误拦截器', () => {
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(errSpy).toHaveBeenCalled()
     errSpy.mockRestore()
+  })
+})
+
+describe('api/request — 428 二次确认', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authState.token = 'test-jwt-token'
+    _setCachedToken(null)
+  })
+
+  it('用户取消 → 不重放，保留原错误', async () => {
+    mockElMessageBox.prompt.mockRejectedValue('cancel')
+    const error = {
+      response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } },
+      config: makeConfig({ url: '/users/1' }),
+    }
+    await expect(handlers.responseR(error)).rejects.toBe(error)
+    expect(mockInst.request).not.toHaveBeenCalled()
+  })
+
+  it('输入密码 → 带 X-Confirm-Password 重放一次', async () => {
+    mockElMessageBox.prompt.mockResolvedValue({ value: 'Secret#123' })
+    mockInst.request.mockResolvedValue({ data: { code: 200 } })
+    const config = makeConfig({ url: '/users/1' })
+    const result = await handlers.responseR({
+      response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } },
+      config,
+    })
+    expect(result).toEqual({ data: { code: 200 } })
+    expect(mockInst.request).toHaveBeenCalledTimes(1)
+    expect(mockInst.request.mock.calls[0][0].headers['X-Confirm-Password']).toBe('Secret#123')
   })
 })
 

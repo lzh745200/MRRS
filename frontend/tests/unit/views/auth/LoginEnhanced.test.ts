@@ -619,6 +619,19 @@ describe('LoginEnhanced.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('服务端拒绝')
   })
 
+  it('权限包导入：本机已存在账号 → 提示先由管理员登录创建账号', async () => {
+    mockPost.mockRejectedValue({
+      response: { data: { detail: '系统已存在账号；请在系统管理中登录管理员账号后再导入权限包' } },
+    })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = { name: 'pkg.zip' }
+    await vm.handlePermissionImport()
+    expect(ElMessage.error).toHaveBeenCalledWith(
+      '本机已有账号，权限包需由管理员登录后导入；请让管理员在「系统管理 → 用户与角色」中先为您创建账号。'
+    )
+  })
+
   it('权限包导入：预览响应为 undefined → 默认失败分支', async () => {
     mockPost.mockResolvedValueOnce(undefined)
     const w = await mountComp()
@@ -787,7 +800,7 @@ describe('LoginEnhanced.vue', () => {
       vm.firstUseOpen = true
       await nextTick()
       expect(w.text()).toContain('账号由管理员开通')
-      expect(w.text()).toContain('账号由管理员在「系统管理 → 用户与角色」中创建')
+      expect(w.text()).toContain('账号只能由管理员在「系统管理 → 用户与角色」中创建')
       expect(w.findAll('button').some((b) => b.text().includes('注册'))).toBe(false)
       expect(mockGet).toHaveBeenCalledWith('/auth/public-config')
     })
@@ -1040,7 +1053,11 @@ describe('LoginEnhanced.vue', () => {
       expect(vm.firstUseOpen).toBe(true)
       await nextTick()
       expect(w.find('.first-use-toggle').attributes('aria-expanded')).toBe('true')
-      expect(w.findAll('.first-use-steps li').length).toBe(3)
+      const items = w.findAll('.first-use-steps li')
+      expect(items.length).toBe(3)
+      expect(items[0].text()).toContain('获取本机机器码')
+      expect(items[1].text()).toContain('导入管理员导出的权限包')
+      expect(items[2].text()).toContain('账号由管理员开通')
       await toggle.trigger('click')
       expect(vm.firstUseOpen).toBe(false)
     })
@@ -1049,6 +1066,8 @@ describe('LoginEnhanced.vue', () => {
       const w = await mountComp()
       ;(w.vm as any).firstUseOpen = true
       await nextTick()
+      expect(w.text()).toContain('本系统不提供自助注册')
+      expect(w.text()).toContain('本机已有账号时，请让管理员登录后导入')
       const btns = w.findAll('.step-btn')
       const machineBtn = btns.find((b) => b.text().includes('打开机器码页'))!
       await machineBtn.trigger('click')
@@ -1056,6 +1075,8 @@ describe('LoginEnhanced.vue', () => {
       const importBtn = btns.find((b) => b.text().includes('导入权限包'))!
       await importBtn.trigger('click')
       expect((w.vm as any).permissionImportVisible).toBe(true)
+      // 普通用户没有“去创建账号/自助注册”入口，只有上述两个可操作按钮
+      expect(btns.length).toBe(2)
     })
 
     it('提示条清空后不渲染', async () => {

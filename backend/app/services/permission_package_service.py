@@ -56,6 +56,8 @@ class PermissionPackageService:
         # 缓存不会过期。
         self._user_name_cache: Dict[str, Optional[User]] = {}
         self._role_name_cache: Dict[str, Optional[RbacRole]] = {}
+        # 目标机不存在的用户名（P1：导入完成后统一告警，不能再静默跳过）
+        self._missing_usernames: set[str] = set()
 
     # ================================================================
     # 导出
@@ -541,6 +543,7 @@ class PermissionPackageService:
                 "message": "仅超级管理员可执行完全替换导入，请改用「合并模式」",
             }
 
+        self._missing_usernames.clear()
         parsed = self._parse_import_zip(file_path)
         if not parsed:
             return {"success": False, "errors": ["解析 ZIP 失败"], "message": "解析失败"}
@@ -614,7 +617,15 @@ class PermissionPackageService:
 
             self.db.commit()
             self._log_import_result(stats)
-            return self._build_import_response(stats, errors)
+            skipped = sorted(self._missing_usernames)
+            warnings: list[str] = []
+            if skipped:
+                warnings.append(
+                    f"以下 {len(skipped)} 个用户在目标系统中不存在，个人权限/菜单已跳过: "
+                    + ", ".join(skipped[:20])
+                    + ("..." if len(skipped) > 20 else "")
+                )
+            return self._build_import_response(stats, errors, warnings=warnings)
         except Exception:
             self.db.rollback()
             # 安全：异常原文经 API 层 result.get("message") 直达 HTTPException detail，
@@ -821,6 +832,10 @@ class PermissionPackageService:
         stats["roles_created"] += 1
         return role_data["id"], new_role.id
 
+    def _note_missing_username(self, username: Any) -> None:
+        if isinstance(username, str) and username:
+            self._missing_usernames.add(username)
+
     def _import_user_roles(self, user_roles_data, role_id_map, stats, errors,
                            existing_bindings=None):
         """导入用户-角色关联（优先 username 匹配用户、role_name 兜底匹配角色）。
@@ -834,6 +849,7 @@ class PermissionPackageService:
                     ur_data.get("username"), ur_data.get("user_id")
                 )
                 if not user:
+                    self._note_missing_username(ur_data.get("username"))
                     stats["user_roles_skipped"] = stats.get("user_roles_skipped", 0) + 1
                     continue
 
@@ -910,6 +926,7 @@ class PermissionPackageService:
                     up_data.get("username"), up_data.get("user_id")
                 )
                 if not user:
+                    self._note_missing_username(up_data.get("username"))
                     stats["user_permissions_skipped"] = stats.get("user_permissions_skipped", 0) + 1
                     continue
                 perm = up_data.get("permission", "")
@@ -941,6 +958,7 @@ class PermissionPackageService:
                 # M27：走记忆化解析器，消除逐条菜单记录的用户名查询
                 user = self._resolve_user_by_username_or_id(username, None)
                 if not user:
+                    self._note_missing_username(username)
                     continue
                 incoming = menu_data.get("allowed_menus", [])
                 if merge_mode and user.allowed_menus:
@@ -1031,6 +1049,7 @@ class PermissionPackageService:
                 # M27：走记忆化解析器，消除逐条遗留记录的查询
                 user = self._resolve_user_by_username_or_id(username, None)
                 if not user:
+                    self._note_missing_username(username)
                     continue
                 role, data_scope = self._sanitize_legacy_privilege(
                     legacy_data, allow_privileged, stats
@@ -1110,9 +1129,15 @@ class PermissionPackageService:
             stats["user_menus_updated"], stats["user_legacy_updated"],
         )
 
-    def _build_import_response(self, stats, errors):
+    def _build_import_response(self, stats, errors, warnings=None):
+        warnings = warnings or []
+        skipped = sorted(self._missing_usernames)
         return {
             "success": True,
+            "partial": bool(warnings or errors),
+            "warnings": warnings,
+            "skipped_usernames": skipped[:20],
+            "skipped_user_count": len(skipped),
             "roles_created": stats["roles_created"],
             "roles_updated": stats["roles_updated"],
             "organizations_created": stats["organizations_created"],

@@ -284,6 +284,16 @@ class TestAdminRevoke:
 #  POST /machine-code/verify-machine-code (public)
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _allow_recovery_gate(monkeypatch):
+    """端点测试聚焦业务分支；恢复码本身的签发/消费由
+    test_recovery_code_service.py 用真实 DB 覆盖。"""
+    monkeypatch.setattr(
+        "app.api.v1.machine_code.RecoveryCodeService.check",
+        lambda *args, **kwargs: True,
+    )
+
+
 class TestVerifyMachineCode:
     def test_valid(self, client_admin):
         svc = MagicMock()
@@ -296,9 +306,7 @@ class TestVerifyMachineCode:
         assert resp.json()["data"]["is_valid"] is True
 
     def test_invalid(self, client_admin):
-        svc = MagicMock()
-        svc.verify_machine_code.return_value = False
-        with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
+        with patch("app.api.v1.machine_code.RecoveryCodeService.check", return_value=False):
             resp = client_admin.post("/api/v1/machine-code/verify-machine-code", json={
                 "machine_code": "BAD", "verification_code": "XXX"
             })
@@ -333,10 +341,7 @@ class TestGenerateInitialPassword:
         user.hashed_password = "oldhash"
         q.first.return_value = user
 
-        svc = MagicMock()
-        svc.generate_initial_password.return_value = "NewPwd123!"
-
-        with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
+        with patch("app.api.v1.machine_code.generate_password", return_value="NewPwd123!"):
             resp = client_admin.post("/api/v1/machine-code/generate-initial-password", json={
                 "username": "testuser", "verification_code": "VC001"
             })
@@ -349,9 +354,7 @@ class TestGenerateInitialPassword:
         user = MagicMock()
         q.first.return_value = user
 
-        svc = MagicMock()
-        svc.generate_initial_password.side_effect = RuntimeError("Gen error")
-        with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
+        with patch("app.api.v1.machine_code.generate_password", side_effect=RuntimeError("Gen error")):
             resp = client_admin.post("/api/v1/machine-code/generate-initial-password", json={
                 "username": "testuser", "verification_code": "VC001"
             })
@@ -363,9 +366,10 @@ class TestGenerateInitialPassword:
         user = MagicMock()
         q.first.return_value = user
 
-        svc = MagicMock()
-        svc.generate_initial_password.side_effect = HTTPException(400, "custom")
-        with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
+        with patch(
+            "app.api.v1.machine_code.generate_password",
+            side_effect=HTTPException(400, "custom"),
+        ):
             resp = client_admin.post("/api/v1/machine-code/generate-initial-password", json={
                 "username": "testuser", "verification_code": "VC001"
             })
@@ -406,19 +410,24 @@ class TestResetPasswordWithMachineCode:
         assert resp.status_code == 400
         assert "机器码不匹配" in resp.json()["detail"]
 
-    def test_verification_code_invalid(self, client_admin):
+    def test_verification_code_invalid(self, client_admin, mock_db):
+        user = MagicMock()
+        user.username = "testuser"
+        user.role = "user"
+        user.is_superuser = False
+        mock_db.query.return_value.first.return_value = user
         with patch("app.api.v1.machine_code.check_rate_limit", AsyncMock(return_value=True)):
             with patch("app.api.v1.machine_code.get_client_ip", return_value="127.0.0.1"):
                 svc = MagicMock()
                 svc.get_machine_code.return_value = "MC001"
-                svc.verify_machine_code.return_value = False
-                with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
-                    resp = client_admin.post(
-                        "/api/v1/machine-code/reset-password-with-machine-code",
-                        json={"username": "testuser", "machine_code": "MC001", "verification_code": "BAD"},
-                    )
+                with patch("app.api.v1.machine_code.RecoveryCodeService.check", return_value=False):
+                    with patch("app.api.v1.machine_code.MachineCodeService", return_value=svc):
+                        resp = client_admin.post(
+                            "/api/v1/machine-code/reset-password-with-machine-code",
+                            json={"username": "testuser", "machine_code": "MC001", "verification_code": "BAD"},
+                        )
         assert resp.status_code == 400
-        assert "校验码不正确" in resp.json()["detail"]
+        assert "恢复码不正确" in resp.json()["detail"]
 
     def test_user_not_found(self, client_admin, mock_db):
         q = mock_db.query.return_value

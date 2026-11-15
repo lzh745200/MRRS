@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any, Optional, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -21,9 +21,14 @@ from app.core.constants import ADMIN_ROLES, DEFAULT_PAGE_SIZE, FACTORY_ADMIN_PAS
 from app.core.data_permission import _get_scope_org_ids, assert_org_reachable
 from app.core.database import get_db
 from app.core.response import ok_list
-from app.core.security import check_rate_limit, get_client_ip, get_current_user, get_password_hash
+from app.core.security import check_rate_limit, generate_password, get_client_ip, get_current_user, get_password_hash
 from app.models.user import User
 from app.services.machine_code_service import MachineCodeService
+from app.services.recovery_code_service import (
+    PURPOSE_ADMIN_RECOVERY,
+    PURPOSE_PASSWORD_RESET,
+    RecoveryCodeService,
+)
 from app.services.machine_code_permission_service import MachineCodePermissionService
 from app.services.rbac_service import Permission, rbac_service
 from app.services.work_log_service import write_work_log
@@ -99,10 +104,10 @@ class MachineCodeListResponse(BaseModel):
 
 
 class GeneratePasswordRequest(BaseModel):
-    """生成密码请求"""
+    """生成密码请求（verification_code 仅兼容旧客户端，不再参与计算）。"""
 
     username: str
-    verification_code: str
+    verification_code: str = ""
 
 
 class MachineCodeResetRequest(BaseModel):
@@ -173,13 +178,45 @@ def _client_is_loopback(request: Request) -> bool:
     return host in _LOOPBACK_HOSTS
 
 
+@router.post("/recovery-code")
+async def issue_recovery_code(
+    request: Request,
+    purpose: str = Body(PURPOSE_PASSWORD_RESET, embed=True),
+    db: Session = Depends(get_db),
+):
+    """签发一次性恢复码（仅本机；10 分钟有效）。"""
+    if not _client_is_loopback(request):
+        raise HTTPException(status_code=403, detail="恢复码仅允许在本机获取")
+    if purpose not in (PURPOSE_PASSWORD_RESET, PURPOSE_ADMIN_RECOVERY):
+        raise HTTPException(status_code=400, detail="不支持的恢复码用途")
+    client_ip = get_client_ip(request)
+    if not await check_rate_limit(
+        key=f"recovery_code:{client_ip}", request=request, limit=10, window=60
+    ):
+        raise HTTPException(status_code=429, detail="获取过于频繁，请稍后再试")
+    code, expires_at = RecoveryCodeService.issue(
+        db,
+        MachineCodeService().get_machine_code(),
+        purpose=purpose,
+    )
+    return {
+        "code": 200,
+        "success": True,
+        "data": {
+            "verification_code": code,
+            "expires_at": expires_at.isoformat(),
+            "ttl_seconds": 600,
+        },
+        "message": "恢复码已生成",
+    }
+
+
 @router.get("/get-machine-code")
 async def get_machine_code(request: Request):
-    """获取当前机器的机器码和校验码
+    """获取当前机器的机器码与机器信息（公开）。
 
-    公开接口，用于用户获取机器码以提交给管理员。
-    安全基线（W1-T1）：校验码仅对本机（loopback）请求返回，
-    防止远程探测方自助取得密码重置凭证。
+    恢复码不再随 GET 返回：它由 ``POST /machine-code/recovery-code``
+    在本机单独签发，避免 GET 产生副作用/被预取反复作废旧码。
     """
     try:
         service = MachineCodeService()
@@ -195,10 +232,8 @@ async def get_machine_code(request: Request):
             "machine_info": machine_info,
         }
 
-        # 校验码仅限本机请求获取
-        if _client_is_loopback(request):
-            data["verification_code"] = service.generate_verification_code(machine_code)
-
+        # 机器码本身公开；恢复码通过 POST /recovery-code 单独签发，
+        # 不在 GET 中产生副作用（避免预取/轮询反复作废旧码）。
         return {
             "code": 200,
             "success": True,
@@ -360,15 +395,17 @@ async def admin_revoke_machine_code(
 
 
 @router.post("/verify-machine-code")
-async def verify_machine_code(request: Request, data: VerifyMachineCodeRequest):
-    """验证机器码和校验码是否匹配
+async def verify_machine_code(
+    request: Request,
+    data: VerifyMachineCodeRequest,
+    db: Session = Depends(get_db),
+):
+    """验证机器码与一次性恢复码是否匹配（兼容端点）。
 
-    公开接口，用于验证机器码的有效性。
+    公开接口；只校验不消费，新前端改用 ``POST /recovery-code`` 签发。
 
-    安全基线（SEC-5，2026-10-31）：校验码是确定性派生（md5 前 8 位 % 9000 + 1000，
-    仅 4 位数字），本端点原先无认证、无限流，构成校验码 oracle（最坏 9000 次命中，
-    可配合 reset-password-with-machine-code 重置口令）。此处按客户端 IP 限流，
-    使穷举在时间上不可行；接口语义与响应结构保持不变。
+    安全基线：恢复码为服务端随机 8 位、短 TTL、一次性；本端点只校验不消费，
+    按客户端 IP 限流。新前端改用 ``POST /recovery-code`` 签发，本端点保留兼容。
     """
     client_ip = get_client_ip(request)
     if not await check_rate_limit(
@@ -376,8 +413,13 @@ async def verify_machine_code(request: Request, data: VerifyMachineCodeRequest):
     ):
         raise HTTPException(status_code=429, detail="验证过于频繁，请稍后再试")
 
-    service = MachineCodeService()
-    is_valid = service.verify_machine_code(data.machine_code, data.verification_code)
+    is_valid = RecoveryCodeService.check(
+        db,
+        data.machine_code,
+        data.verification_code,
+        PURPOSE_PASSWORD_RESET,
+        consume=False,
+    )
 
     return {
         "code": 200,
@@ -402,19 +444,18 @@ async def generate_initial_password(
         raise HTTPException(status_code=403, detail="只有超级管理员可以生成初始密码")
 
     try:
-        service = MachineCodeService()
-
         # 检查用户是否存在
         user = db.query(User).filter(User.username == request.username).first()
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
 
-        # 生成初始密码
-        initial_password = service.generate_initial_password(request.username, request.verification_code)
+        # 生成随机初始密码（不再使用用户名+校验码的可预测规则）
+        initial_password = generate_password(length=16, exclude_ambiguous=True)
 
-        # 更新用户密码
+        # 更新用户密码，并立即吊销该用户全部旧会话
         user.hashed_password = get_password_hash(initial_password)
         user.must_change_password = True  # 要求首次登录修改密码
+        user.revoke_all_tokens()
         safe_commit(db)
 
         try:
@@ -428,7 +469,6 @@ async def generate_initial_password(
             "data": {
                 "username": request.username,
                 "initial_password": initial_password,
-                "verification_code": request.verification_code,
             },
             "message": "初始密码已生成，用户首次登录后需要修改密码",
         }
@@ -477,10 +517,6 @@ async def reset_password_with_machine_code(
         if current_machine_code != machine_code:
             raise HTTPException(status_code=400, detail="机器码不匹配")
 
-        # 验证校验码
-        if not service.verify_machine_code(machine_code, verification_code):
-            raise HTTPException(status_code=400, detail="校验码不正确")
-
         # 检查用户是否存在
         user = db.query(User).filter(User.username == username).first()
         if not user:
@@ -499,13 +535,20 @@ async def reset_password_with_machine_code(
                 ),
             )
 
+        # 验证一次性恢复码（消费成功后不可重放）
+        if not RecoveryCodeService.check(
+            db, machine_code, verification_code, PURPOSE_PASSWORD_RESET, consume=True
+        ):
+            raise HTTPException(status_code=400, detail="恢复码不正确、已过期或已使用")
+
         # 生成密码学安全的随机密码（不返回明文，仅通过安全渠道告知用户）
         from app.core.security import generate_password as gen_pwd
         new_password = gen_pwd(length=16, exclude_ambiguous=True)
 
-        # 更新用户密码
+        # 更新用户密码，并立即吊销该用户全部旧会话
         user.hashed_password = get_password_hash(new_password)
         user.must_change_password = True
+        user.revoke_all_tokens()
 
         # 清除锁定状态
         from app.services.lockout_service import get_lockout_service
@@ -581,10 +624,6 @@ async def recover_admin_factory_password(
         if service.get_machine_code() != machine_code:
             raise HTTPException(status_code=400, detail="机器码不匹配")
 
-        # 验证校验码
-        if not service.verify_machine_code(machine_code, verification_code):
-            raise HTTPException(status_code=400, detail="校验码不正确")
-
         user = db.query(User).filter(User.username == username).first()
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
@@ -618,10 +657,17 @@ async def recover_admin_factory_password(
                 detail="该管理员账号已激活过，无法出厂恢复；请直接使用已有密码登录",
             )
 
+        # 验证一次性恢复码（消费成功后不可重放）
+        if not RecoveryCodeService.check(
+            db, machine_code, verification_code, PURPOSE_ADMIN_RECOVERY, consume=True
+        ):
+            raise HTTPException(status_code=400, detail="恢复码不正确、已过期或已使用")
+
         # 重置为文档化出厂密码（单一来源 constants.FACTORY_ADMIN_PASSWORD），
         # 首登强制改密——彻底杜绝"无人知晓的随机密码"再次出现
         user.hashed_password = get_password_hash(FACTORY_ADMIN_PASSWORD)
         user.must_change_password = True
+        user.revoke_all_tokens()
 
         from app.services.lockout_service import get_lockout_service
 

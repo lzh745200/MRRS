@@ -8,14 +8,18 @@ import { nextTick } from 'vue'
 
 enableAutoUnmount(afterEach)
 
-const { mockPushSafe, ElMessage, logError, mockGet, mockPost, clipWrite } = vi.hoisted(() => ({
-  mockPushSafe: vi.fn(() => Promise.resolve()),
-  ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
-  logError: vi.fn(),
-  mockGet: vi.fn(),
-  mockPost: vi.fn(),
-  clipWrite: vi.fn(() => Promise.resolve()),
-}))
+const { mockPushSafe, ElMessage, logError, mockGet, mockPost, clipWrite, mockIssueRecoveryCode } =
+  vi.hoisted(() => ({
+    mockPushSafe: vi.fn(() => Promise.resolve()),
+    ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+    logError: vi.fn(),
+    mockGet: vi.fn(),
+    mockPost: vi.fn(),
+    mockIssueRecoveryCode: vi.fn(() =>
+      Promise.resolve({ data: { verification_code: '12345678' } })
+    ),
+    clipWrite: vi.fn(() => Promise.resolve()),
+  }))
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
@@ -42,6 +46,8 @@ vi.mock('@/api/request', () => ({
 vi.mock('@/utils/logger', () => ({
   logger: { error: logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn(), log: vi.fn() },
 }))
+
+vi.mock('@/api/machineCode', () => ({ issueRecoveryCode: mockIssueRecoveryCode }))
 
 vi.mock('element-plus', () => ({
   ElMessage,
@@ -101,8 +107,9 @@ async function mountComp() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockGet.mockResolvedValue({ data: { machine_code: 'MC-1234', verification_code: '5678' } })
+  mockGet.mockResolvedValue({ data: { machine_code: 'MC-1234', verification_code: '12345678' } })
   mockPost.mockResolvedValue({ code: 200, data: { new_password: 'New#Pass1' } })
+  mockIssueRecoveryCode.mockResolvedValue({ data: { verification_code: '12345678' } })
   Object.defineProperty(window.navigator, 'clipboard', {
     value: { writeText: clipWrite },
     configurable: true,
@@ -121,8 +128,8 @@ describe('ForgotPassword.vue', () => {
     await inputs[1].setValue('MC-TEST-1')
     expect((w.vm as any).resetForm.machine_code).toBe('MC-TEST-1')
     if (inputs.length > 2) {
-      await inputs[2].setValue('1234')
-      expect((w.vm as any).resetForm.verification_code).toBe('1234')
+      await inputs[2].setValue('12345678')
+      expect((w.vm as any).resetForm.verification_code).toBe('12345678')
     }
   })
 
@@ -134,9 +141,9 @@ describe('ForgotPassword.vue', () => {
     expect(vm.canSubmit).toBe(false)
     vm.resetForm.machine_code = 'mc'
     expect(vm.canSubmit).toBe(false)
-    vm.resetForm.verification_code = '123'
+    vm.resetForm.verification_code = '1234567'
     expect(vm.canSubmit).toBe(false)
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     expect(vm.canSubmit).toBe(true)
     vm.resetForm.username = ''
     expect(vm.canSubmit).toBe(false)
@@ -148,9 +155,39 @@ describe('ForgotPassword.vue', () => {
     await vm.useCurrentMachineCode()
     expect(mockGet).toHaveBeenCalledWith('/machine-code/get-machine-code')
     expect(vm.resetForm.machine_code).toBe('MC-1234')
-    expect(vm.resetForm.verification_code).toBe('5678')
-    expect(ElMessage.success).toHaveBeenCalledWith('已自动填入当前机器码和校验码')
+    expect(vm.resetForm.verification_code).toBe('12345678')
+    expect(ElMessage.success).toHaveBeenCalledWith('已自动填入当前机器码和恢复码')
     expect(vm.loadingMachineCode).toBe(false)
+  })
+
+  it('使用当前机器码：恢复码接口失败 → 保留机器码并警告', async () => {
+    mockGet.mockResolvedValue({ data: { machine_code: 'MC-1' } })
+    mockIssueRecoveryCode.mockRejectedValue(new Error('offline'))
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.useCurrentMachineCode()
+    expect(vm.resetForm.machine_code).toBe('MC-1')
+    expect(vm.resetForm.verification_code).toBe('')
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      '已填入机器码，但恢复码获取失败，请重试或手动打开机器码页'
+    )
+  })
+
+  it('管理员模式 → 申请 admin_recovery 用途恢复码', async () => {
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.accountMode = 'admin'
+    await vm.useCurrentMachineCode()
+    expect(mockIssueRecoveryCode).toHaveBeenCalledWith('admin_recovery')
+  })
+
+  it('恢复码响应为 undefined → 填空字符串', async () => {
+    mockGet.mockResolvedValue({ data: { machine_code: 'MC-1' } })
+    mockIssueRecoveryCode.mockResolvedValue(undefined)
+    const w = await mountComp()
+    const vm = w.vm as any
+    await vm.useCurrentMachineCode()
+    expect(vm.resetForm.verification_code).toBe('')
   })
 
   it('使用当前机器码：payload 无 machine_code → 报错', async () => {
@@ -169,8 +206,9 @@ describe('ForgotPassword.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('获取机器码失败，请重试')
   })
 
-  it('使用当前机器码：无校验码 → 校验码为空', async () => {
+  it('使用当前机器码：无恢复码 → 恢复码为空', async () => {
     mockGet.mockResolvedValue({ data: { machine_code: 'MC-1' } })
+    mockIssueRecoveryCode.mockResolvedValue({ data: {} })
     const w = await mountComp()
     const vm = w.vm as any
     await vm.useCurrentMachineCode()
@@ -224,7 +262,7 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(mockPost).toHaveBeenCalledWith(
       '/machine-code/reset-password-with-machine-code',
@@ -241,7 +279,7 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(vm.currentStep).toBe(1)
     expect(vm.newPassword).toBe('(请查看系统临时文件)')
@@ -254,7 +292,7 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(ElMessage.success).toHaveBeenCalledWith('密码重置成功')
   })
@@ -265,7 +303,7 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(ElMessage.error).toHaveBeenCalledWith('重置密码失败，请检查填写信息')
   })
@@ -276,20 +314,20 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(ElMessage.error).toHaveBeenCalledWith('机器码不匹配')
   })
 
   it('重置密码：业务失败无 message → detail 兜底', async () => {
-    mockPost.mockResolvedValue({ code: 400, detail: '校验码错误' })
+    mockPost.mockResolvedValue({ code: 400, detail: '恢复码错误' })
     const w = await mountComp()
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
-    expect(ElMessage.error).toHaveBeenCalledWith('校验码错误')
+    expect(ElMessage.error).toHaveBeenCalledWith('恢复码错误')
   })
 
   it('重置密码：请求异常 → 日志 + 错误提示', async () => {
@@ -298,7 +336,7 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(logError).toHaveBeenCalled()
     expect(ElMessage.error).toHaveBeenCalledWith('网络错误')
@@ -310,7 +348,7 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'u'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(ElMessage.error).toHaveBeenCalledWith('重置密码失败，请检查网络连接')
   })
@@ -366,7 +404,7 @@ describe('ForgotPassword.vue', () => {
     vm.accountMode = 'admin'
     vm.resetForm.username = 'admin'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(mockPost).toHaveBeenCalledWith(
       '/machine-code/recover-admin-factory-password',
@@ -378,15 +416,15 @@ describe('ForgotPassword.vue', () => {
   })
 
   it('管理员出厂恢复：请求失败 → 不附加切换提示', async () => {
-    mockPost.mockRejectedValue({ response: { data: { detail: '校验码不正确' } } })
+    mockPost.mockRejectedValue({ response: { data: { detail: '恢复码不正确' } } })
     const w = await mountComp()
     const vm = w.vm as any
     vm.accountMode = 'admin'
     vm.resetForm.username = 'admin'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
-    expect(ElMessage.error).toHaveBeenCalledWith('校验码不正确')
+    expect(ElMessage.error).toHaveBeenCalledWith('恢复码不正确')
   })
 
   it('普通通道被管理员拒绝 → 错误提示附带切换出厂恢复的引导', async () => {
@@ -397,7 +435,7 @@ describe('ForgotPassword.vue', () => {
     const vm = w.vm as any
     vm.resetForm.username = 'admin'
     vm.resetForm.machine_code = 'mc'
-    vm.resetForm.verification_code = '1234'
+    vm.resetForm.verification_code = '12345678'
     await vm.handleResetPassword()
     expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('恢复出厂密码'))
   })

@@ -6,7 +6,9 @@ import { apiRequest } from '@/api/request'
 
 export interface MachineCodeInfo {
   machine_code: string
-  verification_code: string
+  verification_code?: string
+  verification_code_expires_at?: string
+  verification_code_ttl_seconds?: number
   machine_info: {
     system: string
     release: string
@@ -43,6 +45,19 @@ export function getMachineCode() {
   return apiRequest<{ data: MachineCodeInfo }>({
     url: '/machine-code/get-machine-code',
     method: 'get',
+  })
+}
+
+/**
+ * 签发一次性恢复码（仅本机；默认 10 分钟）
+ */
+export function issueRecoveryCode(purpose: 'password_reset' | 'admin_recovery' = 'password_reset') {
+  return apiRequest<{
+    data: { verification_code: string; expires_at: string; ttl_seconds: number }
+  }>({
+    url: '/machine-code/recovery-code',
+    method: 'post',
+    data: { purpose },
   })
 }
 

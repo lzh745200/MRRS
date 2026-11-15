@@ -816,7 +816,7 @@ const globalShortcuts: Shortcut[] = [
     ctrl: true,
     shift: true,
     handler: () => pushSafe('/system/users'),
-    description: '用户管理',
+    description: '用户与角色',
     group: '系统',
   },
   {
