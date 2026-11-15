@@ -134,6 +134,21 @@ jobs:
           name: frontend-dist
           path: ./downloaded/frontend
 
+      # v1.18.44：离线地图瓦片（62MB / 5,625 张）不进 git，改由专用 release
+      # `tiles-v1` 提供；构建期下载 + SHA256 钉死校验后解压到 resources/map-tiles，
+      # 由 electron-builder extraResources 复制进 DEB。缺失即失败，避免发布「地图空白」包。
+      - name: Fetch offline map tiles
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TILES_ASSET_SHA256: 2b66baec5f041996d79afe58c0aea95bf7ce086555ff6a8163261cee5c45edbe
+        run: |
+          set -euo pipefail
+          mkdir -p .tiles resources/map-tiles
+          gh release download tiles-v1 --repo "$GITHUB_REPOSITORY" --pattern map-tiles-v1.zip --dir .tiles --clobber
+          echo "${TILES_ASSET_SHA256}  .tiles/map-tiles-v1.zip" | sha256sum -c -
+          unzip -o -q .tiles/map-tiles-v1.zip -d resources/map-tiles
+          python3 scripts/tiles/verify_tiles.py --require-min 1
+
       - name: Prepare resources for electron-builder
         run: |
           # onedir 目录布局（ADR-0006）：extraResources from backend/dist/assistance-backend
@@ -525,6 +540,21 @@ jobs:
       # 因此这一步也在此生成，供 verify_build_info.py 门禁校验。
       - name: Generate build info (H12)
         run: python3 scripts/generate_build_info.py "${{ github.ref_name || 'dev' }}"
+
+      # v1.18.44：standalone DEB 里也要自带离线地图瓦片。
+      # 瓦片不进 git，由专用 release `tiles-v1` 提供；Dockerfile 会 COPY resources/map-tiles。
+      # 缺少该目录会让 Dockerfile 的 COPY 失败 —— 这是有意的 fail-fast。
+      - name: Fetch offline map tiles
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TILES_ASSET_SHA256: 2b66baec5f041996d79afe58c0aea95bf7ce086555ff6a8163261cee5c45edbe
+        run: |
+          set -euo pipefail
+          mkdir -p .tiles resources/map-tiles
+          gh release download tiles-v1 --repo "$GITHUB_REPOSITORY" --pattern map-tiles-v1.zip --dir .tiles --clobber
+          echo "${TILES_ASSET_SHA256}  .tiles/map-tiles-v1.zip" | sha256sum -c -
+          unzip -o -q .tiles/map-tiles-v1.zip -d resources/map-tiles
+          python3 scripts/tiles/verify_tiles.py --require-min 1
 
       - name: Resolve base image registry (multi-source probe)
         run: |

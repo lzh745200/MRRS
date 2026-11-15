@@ -276,6 +276,29 @@ jobs:
         shell: bash
         run: cd backend && python -m PyInstaller assistance-backend.spec --clean --noconfirm
 
+      # 7a. 预置离线地图瓦片（v1.18.44）：瓦片本体不进 git（62MB / 5,625 张 PNG），
+      #     改由专用 release `tiles-v1` 提供固定资产 —— 此前 CI 构建机没有瓦片，
+      #     发布的安装包装机后地图页空白（只能显示 bbox 兜底与「瓦片不可用」诊断）。
+      #     下载后 MUST 校验 SHA256（钉死到资产字节），再解压到 resources/map-tiles，
+      #     由 electron-builder 的 extraResources 复制进安装包。
+      #     校验/解压失败必须中断构建：缺瓦片的安装包属于「发布即缺陷」。
+      - name: Fetch offline map tiles
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TILES_ASSET_SHA256: 2b66baec5f041996d79afe58c0aea95bf7ce086555ff6a8163261cee5c45edbe
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force .tiles | Out-Null
+          gh release download tiles-v1 --repo $env:GITHUB_REPOSITORY --pattern map-tiles-v1.zip --dir .tiles --clobber
+          $actual = (Get-FileHash .tiles/map-tiles-v1.zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $env:TILES_ASSET_SHA256) {
+            throw "tiles zip sha256 mismatch: expected $env:TILES_ASSET_SHA256, got $actual"
+          }
+          New-Item -ItemType Directory -Force resources/map-tiles | Out-Null
+          Expand-Archive -Path .tiles/map-tiles-v1.zip -DestinationPath resources/map-tiles -Force
+          python scripts/tiles/verify_tiles.py --require-min 1
+
       # 7b. 瓦片包预置校验（F 区，2026-10-21）：默认 --require-min 0 —— 允许本次
       #     构建不带预置瓦片（仓库只有占位 README），但仍校验 MANIFEST 合法性
       #     （resources/map-tiles/MANIFEST.json 存在时必须自洽）。
@@ -589,6 +612,14 @@ jobs:
       - name: Verify installer payload present
         shell: bash
         run: python scripts/verify_installer_payload.py
+
+      # 10.16 图标资源门禁（2026-11-15）：现场反馈"安装后图标缺失"。
+      #      exe 的 .rsrc 若被 rcedit 静默漏写（权限/杀软/PE 占用），
+      #      桌面与开始菜单就会退回默认图标或白纸，肉眼难判。
+      #      这里校验 win-unpacked 主程序图标档位（≥5 档且含 256）与随包 ico。
+      - name: Verify exe icon resources
+        shell: bash
+        run: python scripts/verify_exe_icon.py
 
       # 10.45 签名状态门禁（2026-10-25）：
       #   electron-builder 已在配置了 CSC_LINK/CSC_KEY_PASSWORD 时自动签名；

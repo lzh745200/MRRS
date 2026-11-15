@@ -181,6 +181,13 @@ RUN python /tmp/ocr_smoke_arm64.py --require-headless > /tmp/ocr-smoke.log 2>&1;
 COPY backend/ .
 COPY scripts/verify_frozen_modules.py /tmp/verify_frozen_modules.py
 
+# v1.18.44：离线地图瓦片（resources/map-tiles，5,625 张 / 62MB，不进 git）。
+# 由 build-arm64.yml 的 "Fetch offline map tiles" 在 docker build 前下载并校验 SHA256；
+# backend_linux_arm64_standalone.spec 的存在性守卫会把它收进 _internal/resources/map-tiles，
+# 运行期 app/api/v1/map.py 按 sys._MEIPASS/resources/map-tiles 解析。
+# 注意：直接 `docker build` 本文件时必须先执行同一 fetch 步骤，否则该 COPY 会失败。
+COPY resources/map-tiles/ ./resources/map-tiles/
+
 # 诊断：确认关键文件存在（避免 PyInstaller 因找不到文件而失败）
 RUN echo "=== 诊断 alembic 目录 ===" && \
     ls -la alembic/ && \
@@ -261,7 +268,7 @@ RUN apt-get update -o Acquire::Check-Valid-Until=false && apt-get install -y --n
     fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-ARG VERSION=1.18.43
+ARG VERSION=1.18.44
 WORKDIR /package
 
 # 创建目录结构
