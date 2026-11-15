@@ -423,6 +423,37 @@ describe('DefaultLayoutSafe.vue（数据驱动导航）', () => {
     expect(indexes).toEqual(expect.arrayContaining(['/strange', '/no-icon']))
   })
 
+  it('帮助菜单（page 与 group 子项 key=help）标记 data-guide="help-menu"', async () => {
+    const wrapper = await mountLayout()
+    useMenuStore().setMenus({
+      sections: [
+        {
+          key: 'help-section',
+          label: '帮助',
+          order: 99,
+          items: [
+            { key: 'help', label: '帮助中心', path: '/help', icon: 'QuestionFilled', kind: 'page' },
+            {
+              key: 'more',
+              label: '更多',
+              icon: 'MoreFilled',
+              kind: 'group',
+              children: [
+                { key: 'help', label: '帮助子项', path: '/help/sub', icon: 'InfoFilled', kind: 'page' },
+              ],
+            },
+          ],
+        },
+      ],
+      flat_keys: ['help', 'more'],
+    })
+    await nextTick()
+    const guides = wrapper.findAll('[data-guide="help-menu"]')
+    expect(guides.length).toBeGreaterThanOrEqual(2)
+    expect(guides.some((g) => g.attributes('data-index') === '/help')).toBe(true)
+    expect(guides.some((g) => g.attributes('data-index') === '/help/sub')).toBe(true)
+  })
+
   it('空菜单（loaded 但 sections 为空）：仅工作台、无分区标签', async () => {
     const wrapper = await mountLayout()
     useMenuStore().setMenus({ sections: [], flat_keys: [] })

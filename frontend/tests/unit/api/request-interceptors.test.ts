@@ -24,6 +24,8 @@ const mockCancelToken = vi.hoisted(() =>
   )
 )
 
+const mockPrompt = vi.hoisted(() => vi.fn())
+
 vi.mock('axios', () => ({
   default: {
     create: vi.fn(() => mockInst),
@@ -42,6 +44,7 @@ vi.mock('@/utils/authStorage', () => ({
 
 vi.mock('element-plus', () => ({
   ElMessage: { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() },
+  ElMessageBox: { prompt: mockPrompt },
 }))
 
 vi.mock('@/utils/offlineMock', () => ({
@@ -187,6 +190,82 @@ describe('api/request — interceptors', () => {
     it('超时错误', async () => {
       const error = { code: 'ECONNABORTED', message: 'timeout', config: {} }
       await expect(handlers.responseR(error)).rejects.toBe(error)
+    })
+
+    // R63：高风险操作二次确认（428 → 密码框 → 带 X-Confirm-Password 重放）
+    it('428 时弹密码框并带 X-Confirm-Password 重放一次', async () => {
+      mockPrompt.mockResolvedValue({ value: 'pwd123' })
+      mockInst.request.mockResolvedValue({ data: { code: 200 } })
+      const config: any = { method: 'PUT', url: '/users/1', headers: {} }
+      const error = {
+        response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } },
+        config,
+      }
+
+      const result = await handlers.responseR(error)
+
+      expect(mockPrompt).toHaveBeenCalled()
+      expect(config._confirmRetry).toBe(true)
+      expect(config.headers['X-Confirm-Password']).toBe('pwd123')
+      expect(mockInst.request).toHaveBeenCalledWith(config)
+      expect(result).toEqual({ data: { code: 200 } })
+    })
+
+    it('428 且 config 无 headers 时自动创建并写入确认头', async () => {
+      mockPrompt.mockResolvedValue({ value: 'pwd-no-headers' })
+      mockInst.request.mockResolvedValue({ data: { code: 200 } })
+      const config: any = { method: 'PUT', url: '/users/9' }
+      const error = {
+        response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } },
+        config,
+      }
+
+      await handlers.responseR(error)
+
+      expect(config.headers).toEqual({ 'X-Confirm-Password': 'pwd-no-headers' })
+      expect(mockInst.request).toHaveBeenCalledWith(config)
+    })
+
+    it('用户取消密码框时拒绝原错误', async () => {
+      mockPrompt.mockRejectedValue(new Error('cancel'))
+      const config: any = { method: 'PUT', url: '/users/1', headers: {} }
+      const error = {
+        response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } },
+        config,
+      }
+
+      await expect(handlers.responseR(error)).rejects.toBe(error)
+      expect(mockInst.request).not.toHaveBeenCalled()
+    })
+
+    it('已重试过的 428 不再弹框（防无限弹窗）', async () => {
+      const config: any = {
+        method: 'PUT',
+        url: '/users/1',
+        headers: {},
+        _confirmRetry: true,
+      }
+      const error = {
+        response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } },
+        config,
+      }
+
+      await expect(handlers.responseR(error)).rejects.toBe(error)
+      expect(mockPrompt).not.toHaveBeenCalled()
+    })
+
+    it('密码校验器拒绝空输入', async () => {
+      mockPrompt.mockResolvedValue({ value: 'pwd123' })
+      mockInst.request.mockResolvedValue({ data: { code: 200 } })
+      const error = {
+        response: { status: 428, data: {} },
+        config: { method: 'PUT', url: '/users/1', headers: {} },
+      }
+      await handlers.responseR(error)
+
+      const options = mockPrompt.mock.calls[0][2]
+      expect(options.inputValidator('')).toBe('密码不能为空')
+      expect(options.inputValidator('x')).toBe(true)
     })
   })
 })

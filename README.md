@@ -1,14 +1,29 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.47
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.48
 
-![Version](https://img.shields.io/badge/version-1.18.47-blue)
+![Version](https://img.shields.io/badge/version-1.18.48-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C351-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C422-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.43）
+## 本版亮点（v1.18.48）
+
+- 🔐 **机器码一次性恢复码**：换机/忘记密码不再依赖可离线推导的 4 位校验码，改为服务端随机
+  8 位恢复码（只存哈希、10 分钟有效、错误 5 次作废、原子消费不可重放）；获取机器码接口不再
+  产生副作用，恢复码由 `POST /machine-code/recovery-code` 在本机签发。
+- 🛡 **高风险操作二次确认**：修改/删除用户、分配权限、管理员重置密码、备份恢复、权限包确认
+  导入，均需再次输入当前登录密码（`X-Confirm-Password` 请求头，不进 URL/日志）；缺失返回
+  428、密码错误 400、频繁尝试 429，前端统一弹密码框并自动重放一次。
+- 🔄 **重置即失效会话**：初始密码/重置密码改为随机 16 位，成功后 `revoke_all_tokens()`
+  立即吊销该用户全部旧会话。
+- 📦 **权限包导入更透明**：目标机不存在的用户名不再静默跳过，返回
+  `partial/warnings/skipped_usernames` 并在登录页提示（权限/菜单可能未随包生效）。
+- 🧪 验证：后端 **15,886 passed**（覆盖率 100%）；前端 **349 files / 7,536 tests**（覆盖率 100%）；
+  Electron **23 passed**；PR Checks 全绿。
+
+## 历史亮点（v1.18.43）
 
 - **CI 4 分片矩阵**：后端按实测耗时拆 4 片并行，同名 `backend-test` 聚合 job 统一合并覆盖率并执行 100% + 分支棘轮；`BACKEND_TEST_SHARDS=0` 可回退单作业，新增 PR 分片完整性门禁。
 - **表单选项服务端下发**：`GET /users/form-options` 聚合角色、数据范围、权限项、组织树并支持 ETag/304，用户管理前端改为消费服务端选项，消除“能选但提交 403”。

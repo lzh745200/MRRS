@@ -170,3 +170,13 @@ def test_import_endpoint_passes_guard_for_pristine_install():
             )
     assert exc.value.status_code == 400
     assert "zip" in str(exc.value.detail)
+
+
+def test_user_query_failure_fails_closed():
+    """账号状态不可读时按“已初始化”处理，禁止匿名导入（fail-closed）。"""
+
+    class _BrokenDB:
+        def query(self, *_args):
+            raise RuntimeError("db down")
+
+    assert mod._is_pristine_first_run(_BrokenDB()) is False

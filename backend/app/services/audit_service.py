@@ -506,16 +506,24 @@ class SecurityEventService:
         }
 
     def get_security_stats(self) -> Dict:
-        severity_counts = dict(
-            self.db.query(SecurityEvent.severity, func.count(SecurityEvent.id)).group_by(SecurityEvent.severity).all()
-        )
+        severity_counts: Dict[str, int] = {
+            str(severity): int(count)
+            for severity, count in self.db.query(
+                SecurityEvent.severity, func.count(SecurityEvent.id)
+            )
+            .group_by(SecurityEvent.severity)
+            .all()
+        }
 
-        unresolved_by_severity = dict(
-            self.db.query(SecurityEvent.severity, func.count(SecurityEvent.id))
+        unresolved_by_severity: Dict[str, int] = {
+            str(severity): int(count)
+            for severity, count in self.db.query(
+                SecurityEvent.severity, func.count(SecurityEvent.id)
+            )
             .filter(SecurityEvent.resolved == False)  # noqa: E712
             .group_by(SecurityEvent.severity)
             .all()
-        )
+        }
 
         recent_events = self.db.query(SecurityEvent).order_by(SecurityEvent.created_at.desc()).limit(10).all()
 

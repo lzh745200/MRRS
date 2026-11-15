@@ -1,3 +1,40 @@
+## [1.18.48] - 2026-11-15 — 机器码一次性恢复码与高风险操作二次确认（安全加固）
+
+### 安全
+
+- 机器码「校验码」由可离线推导的 4 位确定性数字，改为**服务端随机 8 位一次性恢复码**：
+  仅存哈希、10 分钟有效（60~1800 秒可调）、同机同用途只保留一个（新码签发即作废旧码）、
+  错误 5 次自动作废、消费为原子更新（并发只成功一次）。新增 `machine_recovery_codes`
+  表（迁移 `machine_recovery_001`）与 `RecoveryCodeService`。
+- `GET /api/v1/machine-code/get-machine-code` 不再产生任何副作用（避免预取/轮询反复作废旧码）；
+  恢复码改由 `POST /api/v1/machine-code/recovery-code` 签发，仅本机回环 + 限流 10 次/60 秒。
+  `verify-machine-code`、`reset-password-with-machine-code`、`recover-admin-factory-password`
+  改为校验/消费一次性恢复码，旧的确定性校验码不再可用。
+- 初始密码/密码重置统一改为服务端随机密码（16 位、排除易混字符）；重置成功后
+  `revoke_all_tokens()` 立即吊销该用户全部旧会话。
+- 高风险操作二次确认：用户修改/删除/权限分配/管理员重置密码、备份恢复/上传恢复、
+  权限包确认导入必须携带当前用户密码（`X-Confirm-Password`，走请求头不进 URL/日志）；
+  缺失返回 428 `REAUTH_REQUIRED`，错误返回 400，频率限制 5 次/60 秒（429）。
+  前端 axios 拦截器统一弹密码框并自动带密码重放一次；测试环境（`ENVIRONMENT=test/testing`）
+  跳过，`CONFIRM_PASSWORD_ENFORCED=false` 可显式关闭。
+- 权限包导入：目标机不存在的用户名不再静默跳过，返回 `partial` / `warnings` /
+  `skipped_usernames`，前端在登录页导入结果里明确提示（权限/菜单可能未随包生效）。
+
+### 体验
+
+- 登录页操作指引：机器码仅用于设备绑定/换机重置；账号只能由管理员在「系统管理 → 用户与角色」
+  创建；权限包不含账号密码，且仅全新未初始化机器可在登录前导入。
+- 「获取机器码」「忘记密码」页改为展示 8 位恢复码并自动签发；管理端菜单
+  「用户与组织」更名「用户与角色」。
+
+### 验证
+
+- 新增 `test_recovery_code_service.py`、`test_recovery_code_extra_r63.py`、
+  `test_confirm_password_guard.py`、`test_confirm_password_dependency.py`、
+  `test_permission_package_missing_users.py`；`test_machine_code_api.py` 补齐恢复码分支；
+  前端 `request-interceptors` 增 428 弹窗/重放/取消四例，auth 三页与管理端机器码页测试同步。
+- 后端全量 12 段 **15,886 passed**（覆盖率 100.00%）；前端 349 文件 / **7,536 tests**（覆盖率 100%）。
+
 ## [1.18.47] - 2026-11-15 — 权限包导入误报「系统已存在账号，请先登录管理员账号」
 
 ### Fixed

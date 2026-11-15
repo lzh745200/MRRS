@@ -51,7 +51,7 @@ def test_wrong_password_returns_400(production):
 
 def test_correct_password_passes(production):
     user = SimpleNamespace(id=903, hashed_password=get_password_hash("Correct#12345"))
-    verify_confirm_password_value(_request(), "Correct#12345", user)
+    assert verify_confirm_password_value(_request(), "Correct#12345", user) is None
 
 
 def test_test_environment_is_noop(monkeypatch):
@@ -59,4 +59,4 @@ def test_test_environment_is_noop(monkeypatch):
 
     monkeypatch.setattr(settings, "ENVIRONMENT", "test")
     user = SimpleNamespace(id=904, hashed_password=get_password_hash("Correct#12345"))
-    verify_confirm_password_value(_request(), "", user)
+    assert verify_confirm_password_value(_request(), "", user) is None

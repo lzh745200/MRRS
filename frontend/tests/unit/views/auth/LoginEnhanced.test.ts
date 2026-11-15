@@ -542,6 +542,21 @@ describe('LoginEnhanced.vue', () => {
     expect(vm.permissionImporting).toBe(false)
   })
 
+  it('权限包导入：确认返回 warnings 时用 warning 提示缺失账号', async () => {
+    mockPost
+      .mockResolvedValueOnce({ success: true, saved_file_name: 'pkg_saved.zip' })
+      .mockResolvedValueOnce({
+        success: true,
+        warnings: ['用户 fqs001 不存在，已跳过'],
+      })
+    const w = await mountComp()
+    const vm = w.vm as any
+    vm.permissionFile = new File(['zip-bytes'], 'pkg.zip', { type: 'application/zip' })
+    await vm.handlePermissionImport()
+    expect(ElMessage.warning).toHaveBeenCalledWith('用户 fqs001 不存在，已跳过')
+    expect(vm.permissionImportVisible).toBe(false)
+  })
+
   it('权限包导入：后端未返回文件名时回退本地文件名执行确认（T08 回归）', async () => {
     mockPost
       .mockResolvedValueOnce({ success: true, message: '预览通过' }) // 无 saved_file_name/file_name

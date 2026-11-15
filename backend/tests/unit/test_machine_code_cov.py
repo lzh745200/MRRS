@@ -61,20 +61,26 @@ class TestResetPasswordNoTempFile:
         svc.get_machine_code.return_value = "MC001"
         svc.verify_machine_code.return_value = True
 
-        with patch.object(mc, "check_rate_limit", AsyncMock(return_value=True)):
-            with patch.object(mc, "get_client_ip", return_value="127.0.0.1"):
-                with patch.object(mc, "MachineCodeService", return_value=svc):
-                    with patch("app.core.security.generate_password", return_value="NewPwd123!x"):
-                        with patch.object(os, "name", "posix"):
-                            with patch("tempfile.mkstemp") as mock_mkstemp:
-                                with patch.object(os, "chmod") as mock_chmod:
-                                    result = await reset_password_with_machine_code(
-                                        SimpleNamespace(client=SimpleNamespace(host="127.0.0.1")),
-                                        data=mc.MachineCodeResetRequest(
-                                            username="testuser", machine_code="MC001", verification_code="VC001"
-                                        ),
-                                        db=mock_db,
-                                    )
+        with patch.object(mc, "RecoveryCodeService") as mock_recovery:
+            mock_recovery.check.return_value = True
+            with patch.object(mc, "check_rate_limit", AsyncMock(return_value=True)):
+                with patch.object(mc, "get_client_ip", return_value="127.0.0.1"):
+                    with patch.object(mc, "MachineCodeService", return_value=svc):
+                        with patch("app.core.security.generate_password", return_value="NewPwd123!x"):
+                            with patch.object(os, "name", "posix"):
+                                with patch("tempfile.mkstemp") as mock_mkstemp:
+                                    with patch.object(os, "chmod") as mock_chmod:
+                                        result = await reset_password_with_machine_code(
+                                            SimpleNamespace(client=SimpleNamespace(host="127.0.0.1")),
+                                            data=mc.MachineCodeResetRequest(
+                                                username="testuser",
+                                                machine_code="MC001",
+                                                verification_code="VC001",
+                                            ),
+                                            db=mock_db,
+                                        )
+        mock_recovery.check.assert_called_once()
+        assert mock_recovery.check.call_args.args[1] == "MC001"
         assert result["code"] == 200
         assert result["data"]["username"] == "testuser"
         assert result["data"]["new_password"] == "NewPwd123!x"

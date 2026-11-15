@@ -13,7 +13,7 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 个子包；852 个端点）
+│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 个子包；853 个端点）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
@@ -77,11 +77,11 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,844 用例（1 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,886 用例（1 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
-cd frontend && npm test -- --run                                       # 前端 348 文件（用例数以输出为准）
+cd frontend && npm test -- --run                                       # 前端 349 文件（用例数以输出为准）
 # 文档数字漂移门禁（端点数 / 路由模块数 / 前端测试文件数 / 后端用例数）：
 #   python scripts/check_doc_numbers.py [--full] [--update]
 cd backend && .venv/Scripts/python.exe -m flake8 app/ --max-line-length=120 --max-complexity=16
@@ -216,9 +216,9 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
     `backend/tests/unit/test_stack_alignment_gate_r35.py`（含负向用例：注入坏路径必须被抓到并非 0 退出）。
   - **新增/修改端点或前端 api 函数后必须跑这个门禁**，否则 CI 的 `Stack alignment check` 会拦。
 
-- **端点计数口径** (2026-11-15): `check_doc_numbers.py` 统计的是 **`/api` 前缀**端点（**852**）；
+- **端点计数口径** (2026-11-15): `check_doc_numbers.py` 统计的是 **`/api` 前缀**端点（**853**）；
   另有 4 条非 `/api` 路由（`/health`、`/favicon.ico`、`/version.json`、SPA catch-all），
-  全部 FastAPI 路由合计 **856**（由 `check_route_auth.py` 统计）。两个数字不是矛盾，是口径不同 ——
+  全部 FastAPI 路由合计 **857**（由 `check_route_auth.py` 统计）。两个数字不是矛盾，是口径不同 ——
   讨论端点数量时请写明口径，避免像 v1.18.18 那样"校正 849 → 845"被误读为删了接口。
 - **v1.18.43 新增接口**：`GET /users/form-options`（角色/数据范围/权限项/组织树聚合 + ETag）、
   `POST /async-export/tasks/{task_id}/retry`（失败/过期导出复制参数重试）；既有接口契约未破坏。

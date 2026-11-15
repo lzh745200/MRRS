@@ -1526,6 +1526,31 @@ describe('权限包导入导出', () => {
     spy.mockRestore()
   })
 
+  it('导入确认返回 warnings 时用 warning 提示（不吞掉缺失账号）', async () => {
+    const { inputs, spy } = captureInputs()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    mockPost.mockImplementation((url: string) => {
+      if (url === '/permission-packages/import') {
+        return Promise.resolve({ data: { success: true } })
+      }
+      if (url.startsWith('/permission-packages/confirm/')) {
+        return Promise.resolve({
+          data: { success: true, warnings: ['用户 u9 不存在，已跳过', '用户 u8 不存在，已跳过'] },
+        })
+      }
+      return Promise.resolve({ data: {} })
+    })
+    vm.handleImportPermissionPackage()
+    const file = new File(['zip'], 'p2.zip')
+    Object.defineProperty(inputs[0], 'files', { value: [file], configurable: true })
+    inputs[0].dispatchEvent(new Event('change'))
+    await flushPromises()
+    expect(ElMessage.warning).toHaveBeenCalledWith('用户 u9 不存在，已跳过；用户 u8 不存在，已跳过')
+    spy.mockRestore()
+  })
+
   it('导入：preview 缺省 + confirm 响应兜底文案', async () => {
     const { inputs, spy } = captureInputs()
     const wrapper = mountComp()

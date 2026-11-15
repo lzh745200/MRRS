@@ -15,6 +15,7 @@ import {
   generateInitialPassword,
   resetPasswordWithMachineCode,
   getMachineInfo,
+  issueRecoveryCode,
   getOrganizationVerificationCode,
   createOrganizationPassCode,
   listOrganizationPassCodes,
@@ -150,6 +151,24 @@ describe('api/machineCode', () => {
       url: '/machine-code/organization/export',
       method: 'get',
       responseType: 'blob',
+    })
+  })
+
+  it('issueRecoveryCode 默认 purpose=password_reset', () => {
+    issueRecoveryCode()
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      url: '/machine-code/recovery-code',
+      method: 'post',
+      data: { purpose: 'password_reset' },
+    })
+  })
+
+  it('issueRecoveryCode 透传显式 purpose', () => {
+    issueRecoveryCode('admin_recovery')
+    expect(mockApiRequest).toHaveBeenCalledWith({
+      url: '/machine-code/recovery-code',
+      method: 'post',
+      data: { purpose: 'admin_recovery' },
     })
   })
 })
