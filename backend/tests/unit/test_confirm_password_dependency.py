@@ -94,3 +94,26 @@ class TestRequireConfirmPasswordDependency:
                 request=request_obj, confirm_password="", current_user=user
             )
         assert exc.value.status_code == 428
+
+
+def test_permission_package_confirm_requires_password(monkeypatch, request_obj, user):
+    """回归：权限包确认也必须在进入文件处理前触发二次确认。"""
+    from app.api.v1.permission_package import confirm_import_permission_package
+    from app.schemas.permission_package import PermissionPackageConfirmRequest
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production", raising=False)
+    with patch(
+        "app.api.v1.permission_package._assert_package_import_principal",
+        return_value=False,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            confirm_import_permission_package(
+                file_name="x.zip",
+                body=PermissionPackageConfirmRequest(),
+                current_user=user,
+                db=SimpleNamespace(),
+                request=request_obj,
+                force=False,
+                confirm_password="",
+            )
+    assert exc.value.status_code == 428
