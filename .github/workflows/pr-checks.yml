@@ -239,7 +239,9 @@ jobs:
         with:
           name: backend-coverage-shard-${{ matrix.shard }}
           path: backend/.coverage.shard${{ matrix.shard }}
-          if-no-files-found: warn
+          # upload-artifact v4 默认排除隐藏文件；.coverage.shardN 必须以显式开关纳入。
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 7
       - name: Upload shard logs
         if: always()

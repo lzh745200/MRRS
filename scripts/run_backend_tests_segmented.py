@@ -99,6 +99,29 @@ def resolve_targets(patterns, backend_dir: Path):
     return resolved
 
 
+def _select_segment_numbers(segment, segments, total):
+    """解析单段/多段参数；返回段号列表，未指定时返回 None（全量）。
+
+    参数校验抽离自 main：CI 脚本也要过 C901≤40，新增矩阵选择不能把
+    主流程复杂度顶过上限。
+    """
+    if segment is not None and segments.strip():
+        raise ValueError("--segment 与 --segments 不能同时使用")
+    if segment is not None:
+        if not 1 <= segment <= total:
+            raise ValueError(f"--segment 取值 1-{total}")
+        return [segment]
+    if not segments.strip():
+        return None
+    try:
+        numbers = [int(part.strip()) for part in segments.split(",") if part.strip()]
+    except ValueError as exc:
+        raise ValueError("--segments 必须是逗号分隔的数字，如 1,2,10") from exc
+    if len(set(numbers)) != len(numbers) or any(not 1 <= n <= total for n in numbers):
+        raise ValueError("--segments 必须是 1-12 内不重复的段号")
+    return numbers
+
+
 def run_segment(index, name, patterns, is_final, keep_logs, cov_file=None, cov_config=None):
     targets = resolve_targets(patterns, BACKEND_DIR)
     if not targets:
@@ -413,25 +436,12 @@ def main():
         for stale in BACKEND_DIR.glob(".coverage.*"):
             stale.unlink(missing_ok=True)
 
-    selected = SEGMENTS
-    if args.segment and args.segments.strip():
-        print("--segment 与 --segments 不能同时使用", file=sys.stderr)
+    try:
+        selected_numbers = _select_segment_numbers(args.segment, args.segments, len(SEGMENTS))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
-    if args.segment:
-        if not 1 <= args.segment <= len(SEGMENTS):
-            print(f"--segment 取值 1-{len(SEGMENTS)}", file=sys.stderr)
-            return 2
-        selected = [SEGMENTS[args.segment - 1]]
-    elif args.segments.strip():
-        try:
-            numbers = [int(part.strip()) for part in args.segments.split(",") if part.strip()]
-        except ValueError:
-            print("--segments 必须是逗号分隔的数字，如 1,2,10", file=sys.stderr)
-            return 2
-        if len(set(numbers)) != len(numbers) or any(not 1 <= n <= len(SEGMENTS) for n in numbers):
-            print("--segments 必须是 1-12 内不重复的段号", file=sys.stderr)
-            return 2
-        selected = [SEGMENTS[n - 1] for n in numbers]
+    selected = SEGMENTS if selected_numbers is None else [SEGMENTS[n - 1] for n in selected_numbers]
 
     print("=" * 70)
     print("后端测试（CI 12 段等价；单进程跑全量会在 88% 处进程崩溃）")
