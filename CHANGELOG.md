@@ -1,3 +1,51 @@
+## [1.18.44] - 2026-11-15 — 装机首启「无法验证发布者」与图标缺失：证书信任闭环 + 图标资源门禁
+
+> 现场：v1.18.43 安装后双击弹「打开文件 - 安全警告：无法验证发布者」，
+> 且桌面/开始菜单图标显示异常。排查结论：**构建产物没问题，缺的是装机侧的两环**——
+> 证书信任没有落到目标机、图标缓存与快捷方式图标源没有收口。
+
+### Fixed
+
+- **首启「无法验证发布者」**（根因：自签名根证书未进目标机信任存储）
+  实测安装后的 `帮扶管理系统.exe` 已签名（`CN=MRRS Internal Code Signing, O=MRRS, C=CN`），
+  但 `Get-AuthenticodeSignature` 返回 **UnknownError**，原始信息为
+  「已处理证书链，但是在**不受信任提供程序信任的根证书**中终止」。
+  CI 侧（v1.18.36 起）用 `-AllowUntrustedRoot` 只校验"签名者指纹匹配、未被篡改"，
+  因此**流水线一直绿、装机才红**；再叠加文件带 MOTW（下载/网盘/共享盘中转），
+  Windows 就弹「打开文件 - 安全警告」。
+  处置：① 把公钥证书 `MRRS-Internal-CodeSigning.cer` 随安装包分发到
+  `resources\cert\`；② `customInstall` 交互式询问后 `certutil -addstore -f`
+  导入 **Root + TrustedPublisher**（静默安装 `/S` 不弹窗，留给组策略）；
+  ③ 安装后对安装目录批量解除「下载标记」（Zone.Identifier），即使暂未导入证书也不再弹窗。
+- **图标缺失/白纸**（根因：两处快捷方式图标源不一致 + 安装后未刷新图标缓存）
+  实测 exe 的 `.rsrc` 内 7 档图标（16→256）齐全、随包 `app-circle.ico` 也在位，
+  说明不是构建丢图标。真正的问题是：桌面快捷方式由本钩子创建（图标取 `app-circle.ico`），
+  开始菜单快捷方式由 electron-builder 创建（图标取 exe 内嵌），两者来源不一致；
+  且安装后没有重建图标缓存，资源管理器常把新快捷方式渲染成白纸。
+  处置：① 桌面与开始菜单统一由钩子创建、图标统一取 `resources\app-circle.ico`
+  （缺失才回退 exe，并写安装日志）；② 安装/卸载后执行 `ie4uinit.exe -show` +
+  `SHChangeNotify(SHCNE_ASSOCCHANGED)` 重建缓存；③ 新增构建期图标门禁，防止
+  rcedit 静默失败后无人发现。
+
+### Added
+
+- `scripts/verify_exe_icon.py`：解析 PE `.rsrc`，校验图标档位 ≥5 且含 256×256，
+  同时校验随包 `app-circle.ico` 完整；已串入 `npm run build:win` 与 CI
+  （`Verify exe icon resources`，在载荷门禁之后）。
+- `scripts/windows/post-install.ps1`：安装后助手（解除 MOTW + 刷新图标缓存），
+  幂等、异常一律不阻断安装。
+- `scripts/windows/fix-trust-and-icon.ps1`：**已装机现场修复脚本**（管理员运行一次）：
+  导入证书 → 解除下载标记 → 重建快捷方式 → 刷新图标缓存 → 回显签名状态。
+- 验签门禁 `verify_installer_signature.ps1` 在自签名放行分支新增**显式 WARN**
+  与 CI Step Summary 提示：目标机需预置 `.cer`，避免"CI 绿、现场红"再次发生。
+
+### Tests
+
+- `tests/unit/test_verify_exe_icon.py`（12 例）：7 档通过、缺 256 失败、档位过少失败、
+  无 `.rsrc` / 非 PE / 随包 ico 缺失或不全失败。
+- 真实产物核对：`dist/electron/win-unpacked` 主程序图标档位 `[16,24,32,48,64,128,256]`、
+  随包 ico 同档位（164,991 B），门禁 exit 0。
+
 ## [1.18.43] - 2026-11-15 — 系统管理优化批次（CI/表单/凭据/可观测/审计）
 
 ### 工程与交付

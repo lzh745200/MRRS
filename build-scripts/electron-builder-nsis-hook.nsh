@@ -106,19 +106,56 @@
   !insertmacro InstallVCRedist "x64" "vc_redist.x64.exe"
   !insertmacro InstallVCRedist "x86" "vc_redist.x86.exe"
 
-  ; ─── 创建桌面快捷方式（圆形图标）───
-  ; electron-builder 默认创建开始菜单快捷方式，但桌面快捷方式可能因
-  ; oneClick=false + 用户取消而未创建。此处强制创建桌面快捷方式。
-  IfFileExists "$INSTDIR\帮扶管理系统.exe" 0 skip_desktop_shortcut
-    ; 尝试使用独立 ICO 文件，回退到 EXE 内嵌图标
-    IfFileExists "$INSTDIR\resources\app-circle.ico" 0 use_exe_icon
-      CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$INSTDIR\resources\app-circle.ico" 0
-      Goto shortcut_created
-    use_exe_icon:
-      CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$INSTDIR\帮扶管理系统.exe" 0
-    shortcut_created:
-    DetailPrint "已创建桌面快捷方式（圆形图标）"
-  skip_desktop_shortcut:
+  ; ─── 内网自签名证书信任（v1.18.44，2026-11-15）───
+  ; 现场症状：安装后打开程序弹「打开文件 - 安全警告：无法验证发布者」。
+  ; 根因：自签名证书的根不在目标机受信任存储 —— CI 只校验"签名者指纹匹配"，
+  ; 构建机不需要信任根；目标机没做这一步就显示"未知发布者"。
+  ; 处置：随包分发公钥 .cer（仅公钥，无私钥），交互式询问后导入
+  ; Root + TrustedPublisher；静默安装（/S）不弹窗、不改信任存储，
+  ; 由组策略统一分发（见 docs/04-部署文档/01-Windows部署/代码签名.md 第六节）。
+  IfFileExists "$INSTDIR\resources\cert\MRRS-Internal-CodeSigning.cer" 0 cert_done
+    IfSilent cert_done
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 \
+      "是否把本系统的代码签名证书导入本机信任存储？$\r$\n$\r$\n导入后系统会把本程序识别为「MRRS 内网签名」，不再提示「未知发布者」。$\r$\n$\r$\n只导入公钥证书（不含私钥），可随时在 certlm.msc 中删除。" \
+      IDYES cert_trust IDNO cert_done
+    cert_trust:
+      nsExec::ExecToLog 'certutil -addstore -f Root "$INSTDIR\resources\cert\MRRS-Internal-CodeSigning.cer"'
+      Pop $0
+      DetailPrint "导入受信任的根证书：exit=$0"
+      nsExec::ExecToLog 'certutil -addstore -f TrustedPublisher "$INSTDIR\resources\cert\MRRS-Internal-CodeSigning.cer"'
+      Pop $0
+      DetailPrint "导入受信任的发布者：exit=$0"
+  cert_done:
+
+  ; ─── 创建快捷方式（桌面 + 开始菜单，图标源统一）───
+  ; v1.18.44：过去开始菜单快捷方式由 electron-builder 创建、图标取 exe 内嵌，
+  ; 桌面由本钩子创建、图标取 app-circle.ico —— 两处来源不一致，现场出现
+  ; "桌面有图标、开始菜单白纸"。现两处都用同一个 ico；缺失时回退 exe，
+  ; 并把实际使用的图标路径写进安装日志，便于现场判断。
+  IfFileExists "$INSTDIR\帮扶管理系统.exe" 0 skip_shortcuts
+    StrCpy $2 "$INSTDIR\帮扶管理系统.exe"
+    IfFileExists "$INSTDIR\resources\app-circle.ico" 0 shortcut_icon_ready
+      StrCpy $2 "$INSTDIR\resources\app-circle.ico"
+    shortcut_icon_ready:
+    CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$2" 0
+    CreateShortCut "$SMPROGRAMS\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$2" 0
+    DetailPrint "已创建快捷方式（桌面 + 开始菜单），图标=$2"
+    Goto shortcuts_done
+  skip_shortcuts:
+    DetailPrint "未找到主程序，跳过快捷方式创建"
+  shortcuts_done:
+
+  ; ─── 解除「下载标记」+ 刷新图标缓存（v1.18.44）───
+  ; ① MOTW（Zone.Identifier）：安装包/安装目录经下载、网盘、共享盘或 U 盘中转后，
+  ;    exe 会带该标记，双击先弹「打开文件 - 安全警告」，与签名有效性无关；
+  ; ② 图标缓存：安装后立刻看新快捷方式常是白纸，需 ie4uinit 重建缓存。
+  IfFileExists "$INSTDIR\resources\cert\post-install.ps1" 0 post_install_skip
+    nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\cert\post-install.ps1" -InstallDir "$INSTDIR"'
+    Pop $0
+    DetailPrint "post-install.ps1 exit=$0（非 0 不影响安装）"
+  post_install_skip:
+  nsExec::Exec 'ie4uinit.exe -show'
+  Pop $0
 !macroend
 
 ; ----------------------------------------------------------------------------
@@ -134,6 +171,10 @@
     Delete "$DESKTOP\帮扶管理系统.lnk"
     DetailPrint "已删除桌面快捷方式"
   skip_del_desktop:
+  ; 开始菜单快捷方式同样删除并刷新图标缓存（v1.18.44）
+  Delete "$SMPROGRAMS\帮扶管理系统.lnk"
+  nsExec::Exec 'ie4uinit.exe -show'
+  Pop $0
 
   ; 询问用户是否删除用户数据目录（含 SQLite 数据库、上传文件、密钥、日志等）
   ; W19 实测修正（2026-10-17）：

@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.18.43",
+  "version": "1.18.44",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -16,10 +16,11 @@
     "build": "npm run check:electron && npm run build:backend && electron-builder",
     "build:backend": "cd backend && node ../scripts/run-python.js -m PyInstaller assistance-backend.spec --clean --noconfirm",
     "verify:installer": "node scripts/run-python.js scripts/verify_installer_payload.py --quarantine",
+    "verify:icon": "node scripts/run-python.js scripts/verify_exe_icon.py",
     "build:linux": "electron-builder --linux",
     "build:deb": "electron-builder --linux deb",
     "build:arm64": "electron-builder --linux deb --arm64",
-    "build:win": "npm run check:electron && npm run build:backend && electron-builder --win --x64 && npm run verify:installer",
+    "build:win": "npm run check:electron && npm run build:backend && electron-builder --win --x64 && npm run verify:icon && npm run verify:installer",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win --mac --linux",
     "tiles:verify": "python scripts/tiles/verify_tiles.py",
@@ -97,6 +98,14 @@
       {
         "from": "resources/icons/app-circle.ico",
         "to": "app-circle.ico"
+      },
+      {
+        "from": "docs/04-部署文档/01-Windows部署/MRRS-Internal-CodeSigning.cer",
+        "to": "cert/MRRS-Internal-CodeSigning.cer"
+      },
+      {
+        "from": "scripts/windows/post-install.ps1",
+        "to": "cert/post-install.ps1"
       }
     ],
     "win": {

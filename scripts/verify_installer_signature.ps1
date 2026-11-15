@@ -83,6 +83,17 @@ foreach ($file in $targets) {
     if ($AllowUntrustedRoot -and ($status -eq 'UnknownError' -or $status -eq 'NotTrusted') -and
         ($ExpectedThumbprint -eq '' -or $thumb -eq $ExpectedThumbprint)) {
         Write-Host ("[OK-SELF] {0}`n       自签名已签名（根未受信任，签名者={1}）" -f $rel, $thumb) -ForegroundColor Green
+        # 2026-11-15：这一行必须显式告警。CI 只在构建机校"签名者指纹匹配"，
+        # 目标机没有预置根证书时，双击仍会弹「无法验证发布者 / 未知发布者」——
+        # 现场事故就是"流水线全绿、装机报错"。安装包自 v1.18.44 起内置公钥 .cer
+        # 并在安装时询问导入；组策略/手工导入见 docs/04-部署文档/01-Windows部署/代码签名.md 第六节。
+        Write-Host ("[WARN] 根证书未受信任：目标机需预置 MRRS-Internal-CodeSigning.cer，" +
+                    "否则首次运行显示「未知发布者」（安装包已内置并在安装时询问导入）") -ForegroundColor Yellow
+        if ($env:GITHUB_STEP_SUMMARY) {
+            Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value (
+                "- [sign] 自签名构建：目标机需信任 `MRRS-Internal-CodeSigning.cer`" +
+                "（安装包已内置，安装时询问导入；或用组策略下发）")
+        }
         continue
     }
     Write-Host ("[FAIL] {0}`n       签名状态：{1} {2}" -f $rel, $status, $sig.StatusMessage) -ForegroundColor Red
