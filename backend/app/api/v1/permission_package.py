@@ -150,7 +150,11 @@ async def _optional_current_user(
             request=request,
         )
     except HTTPException:
-        return None
+        # v1.18.47：**带了凭证但校验失败**（过期/被吊销/token_version 变更/需改密/禁用）
+        # 必须如实上报 401/403。旧实现一律 return None，于是已登录的管理员在令牌失效后
+        # 会被下面的导入闸门误报成「系统已存在账号，请先登录管理员账号后再导入权限包」，
+        # 现场完全无法判断该重新登录还是该改密。None 只代表"压根没带凭证"。
+        raise
 
 
 def _is_pristine_first_run(db: Session) -> bool:
@@ -221,7 +225,7 @@ def _assert_package_import_principal(
     if db.query(User.id).first() is not None and not _is_pristine_first_run(db):
         raise HTTPException(
             status_code=403,
-            detail="系统已存在账号，请先登录管理员账号后再导入权限包",
+            detail="系统已存在账号；请在系统管理中登录管理员账号后再导入权限包（当前请求未携带登录凭证）",
         )
     return True
 

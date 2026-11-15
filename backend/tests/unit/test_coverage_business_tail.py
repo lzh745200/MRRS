@@ -541,7 +541,10 @@ class TestPermissionPackageTail:
 
     实现已从"手写 decode_token + 查库"改为**复用 get_current_user 的完整校验链**
     （黑名单 / token_version / is_active / 首登改密 / 2FA 中间态），因此这里断言的是
-    「委托关系」与「401→None 的降级」，而不是旧的 decode 细节。
+    「委托关系」与「无凭证才降级」两条语义，而不是旧的 decode 细节。
+
+    v1.18.47 修正：**带了凭证但校验失败必须原样抛出 401/403**。旧实现一律 None，
+    会让已登录管理员在令牌过期后被导入闸门误报「系统已存在账号，请先登录管理员」。
     """
 
     @staticmethod
@@ -575,14 +578,17 @@ class TestPermissionPackageTail:
         with patch("app.api.v1.permission_package.get_current_user", fake_gcu):
             assert self._call("Bearer sometoken") is user
 
-    def test_optional_current_user_401_becomes_none(self):
-        """get_current_user 判定失效（401/403）时降级为 None，而不是 500。"""
+    def test_optional_current_user_invalid_token_propagates(self):
+        """携带凭证但校验失败时抛出原 401/403，而不是吞成 None（v1.18.47）。"""
 
         async def raise_401(credentials=None, db=None, request=None):
-            raise HTTPException(status_code=401, detail="bad")
+            raise HTTPException(status_code=401, detail="令牌已失效，请重新登录")
 
         with patch("app.api.v1.permission_package.get_current_user", raise_401):
-            assert self._call("Bearer sometoken") is None
+            with pytest.raises(HTTPException) as exc:
+                self._call("Bearer sometoken")
+        assert exc.value.status_code == 401
+        assert "令牌已失效" in exc.value.detail
 
     def test_download_traversal_bad_name(self):
         from app.api.v1.permission_package import download_permission_package

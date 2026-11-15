@@ -1,5 +1,5 @@
 {
-  "version": "1.18.46",
+  "version": "1.18.47",
   "build": "20261115",
   "release_date": "2026-11-15",
   "description": "ARM64 Electron DEB 去掉重复的离线地图瓦片（体积 -63MB）",
