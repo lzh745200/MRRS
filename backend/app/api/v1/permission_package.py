@@ -182,32 +182,44 @@ def _is_pristine_first_run(db: Session) -> bool:
     from app.core.constants import FACTORY_ADMIN_USERNAME
     from app.services.system_config_service import SystemConfigService
 
+    # 先判「账号是否还是出厂形态」：登录过 / 改过密 / 有第二个账号，直接算已使用。
+    seed_username = (
+        os.getenv("DEFAULT_ADMIN_USERNAME", "").strip() or FACTORY_ADMIN_USERNAME
+    )
     try:
-        cfg = SystemConfigService(db)
+        users = db.query(User).limit(2).all()
+    except Exception as exc:  # noqa: BLE001 - 账号状态不可判定时必须 fail-closed
+        logger.warning("读取账号状态失败，按已初始化处理（禁止匿名导入）：%s", exc)
+        return False
+    if len(users) != 1:
+        return False
+    seed_admin = users[0]
+    if not (
+        (getattr(seed_admin, "username", "") or "").strip() == seed_username
+        and getattr(seed_admin, "is_superuser", False)
+        and getattr(seed_admin, "must_change_password", False)
+        and getattr(seed_admin, "last_login", None) is None
+    ):
+        return False
+
+    cfg = SystemConfigService(db)
+    try:
         # set_initialized() 原子写三键；种子兜底只写 initialized。
         # 有组织号/系统号 = 走过真实初始化（管理员建过组织），按「已使用」处理。
         if (cfg.get("organization_id") or "").strip():
             return False
         if (cfg.get("system_id") or "").strip():
             return False
-    except Exception as exc:  # noqa: BLE001 - 初始化状态不可判定时必须 fail-closed
-        # 宁可把机器当作「已使用」，也不能因为读不到状态就放行匿名导入
-        logger.warning("读取系统初始化状态失败，按已初始化处理（禁止匿名导入）：%s", exc)
-        return False
-
-    seed_username = (
-        os.getenv("DEFAULT_ADMIN_USERNAME", "").strip() or FACTORY_ADMIN_USERNAME
-    )
-    users = db.query(User).limit(2).all()
-    if len(users) != 1:
-        return False
-    seed_admin = users[0]
-    return bool(
-        (getattr(seed_admin, "username", "") or "").strip() == seed_username
-        and getattr(seed_admin, "is_superuser", False)
-        and getattr(seed_admin, "must_change_password", False)
-        and getattr(seed_admin, "last_login", None) is None
-    )
+        return True
+    except Exception as exc:  # noqa: BLE001
+        # 标记读不出来（老库 / 精简测试替身）：退回旧口径——只信 initialized 布尔。
+        # 这条路径仍然 fail-closed：读不到就按已使用处理。
+        logger.warning("读取系统初始化标记失败，退回 initialized 布尔判定：%s", exc)
+        try:
+            return not cfg.is_initialized()
+        except Exception as exc2:  # noqa: BLE001 - 最终 fail-closed
+            logger.warning("读取系统初始化状态失败，按已初始化处理（禁止匿名导入）：%s", exc2)
+            return False
 
 
 def _assert_package_import_principal(
@@ -387,6 +399,7 @@ def confirm_import_permission_package(
     request: Request = None,
     # 同一校验和的权限包重复确认必须显式声明（追加在末尾，避免打乱既有位置参数调用）
     force: bool = False,
+    confirm_password: str = Header("", alias="X-Confirm-Password"),
 ):
     """
     确认导入权限配置包，将所有权限配置写入数据库。
@@ -400,6 +413,13 @@ def confirm_import_permission_package(
     """
     # SEC-1：确认阶段会重写全库 RBAC，故非超管调用者只允许「收敛后的导入」
     allow_privileged = _assert_package_import_principal(request, current_user, db)
+
+    # 已登录管理员确认导入 = 重写全库 RBAC 的高风险操作，必须二次确认；
+    # 匿名 pristine 首装路径没有密码可验，沿用原有 loopback 门禁。
+    if current_user is not None:
+        from app.api.v1.deps import verify_confirm_password_value
+
+        verify_confirm_password_value(request, confirm_password, current_user)
 
     # 路径遍历防护：净化 file_name（历史缺陷可致任意文件删除）
     file_path = _resolve_package_upload_path(file_name)
