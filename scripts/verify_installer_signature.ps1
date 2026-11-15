@@ -91,7 +91,7 @@ foreach ($file in $targets) {
                     "否则首次运行显示「未知发布者」（安装包已内置并在安装时询问导入）") -ForegroundColor Yellow
         if ($env:GITHUB_STEP_SUMMARY) {
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value (
-                "- [sign] 自签名构建：目标机需信任 `MRRS-Internal-CodeSigning.cer`" +
+                "- [sign] 自签名构建：目标机需信任 MRRS-Internal-CodeSigning.cer" +
                 "（安装包已内置，安装时询问导入；或用组策略下发）")
         }
         continue

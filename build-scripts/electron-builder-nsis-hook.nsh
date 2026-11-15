@@ -149,10 +149,17 @@
   ; ① MOTW（Zone.Identifier）：安装包/安装目录经下载、网盘、共享盘或 U 盘中转后，
   ;    exe 会带该标记，双击先弹「打开文件 - 安全警告」，与签名有效性无关；
   ; ② 图标缓存：安装后立刻看新快捷方式常是白纸，需 ie4uinit 重建缓存。
+  ; 兜底（不依赖 PowerShell 执行策略）：直接删除关键可执行文件的
+  ; Zone.Identifier 备用数据流。企业组策略若强制 AllSigned，-ExecutionPolicy
+  ; Bypass 会被 GPO 覆盖，脚本无法运行——此时这三行仍能去掉"下载标记"。
+  Delete "$INSTDIR\帮扶管理系统.exe:Zone.Identifier"
+  Delete "$INSTDIR\Uninstall 帮扶管理系统.exe:Zone.Identifier"
+  Delete "$INSTDIR\resources\backend\assistance-backend\assistance-backend.exe:Zone.Identifier"
+
   IfFileExists "$INSTDIR\resources\cert\post-install.ps1" 0 post_install_skip
     nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\cert\post-install.ps1" -InstallDir "$INSTDIR"'
     Pop $0
-    DetailPrint "post-install.ps1 exit=$0（非 0 不影响安装）"
+    DetailPrint "post-install.ps1 exit=$0（非 0 不影响安装，见上面的 ADS 兜底）"
   post_install_skip:
   nsExec::Exec 'ie4uinit.exe -show'
   Pop $0
