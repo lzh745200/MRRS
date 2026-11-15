@@ -952,3 +952,17 @@ class TestChangePassword:
                         response = client.put(f"{self.prefix}/5/password", json={"old_password": "any", "new_password": "NewStr0ng!Pass"})
                         assert response.status_code == 200
         _clear_overrides(client, get_db, get_current_user)
+
+
+def test_build_org_option_tree_nests_children():
+    from types import SimpleNamespace
+
+    from app.api.v1.auth.users import _build_org_option_tree
+
+    root = SimpleNamespace(id=1, name="省", code="520000", parent_id=None)
+    child = SimpleNamespace(id=2, name="县", code=None, parent_id=1)
+    orphan = SimpleNamespace(id=3, name="独立", code="X", parent_id=99)
+    tree = _build_org_option_tree([root, child, orphan])
+    assert [n["id"] for n in tree] == [1, 3]
+    assert tree[0]["children"][0]["id"] == 2
+    assert tree[0]["children"][0]["code"] == ""

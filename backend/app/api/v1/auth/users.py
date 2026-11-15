@@ -590,6 +590,28 @@ async def get_staff_list(
 # ==================== 用户详情（动态路径必须在静态路径之后） ====================
 
 
+def _build_org_option_tree(organizations) -> list:
+    """把组织 ORM 列表组装成 children 嵌套的选项树（纯函数，便于测试）。"""
+    node_map = {
+        org.id: {
+            "id": org.id,
+            "name": org.name,
+            "code": org.code or "",
+            "parent_id": org.parent_id,
+            "children": [],
+        }
+        for org in organizations
+    }
+    roots = []
+    for org in organizations:
+        node = node_map[org.id]
+        if org.parent_id and org.parent_id in node_map:
+            node_map[org.parent_id]["children"].append(node)
+        else:
+            roots.append(node)
+    return roots
+
+
 @router.get("/form-options", summary="获取用户表单可选项（聚合 + ETag）")
 async def get_user_form_options(
     request: Request,
@@ -611,23 +633,7 @@ async def get_user_form_options(
         org_query, current_user, Organization, org_id_field="id", db=db
     )
     organizations = org_query.order_by(Organization.sort_order, Organization.id).all()
-    node_map = {
-        org.id: {
-            "id": org.id,
-            "name": org.name,
-            "code": org.code or "",
-            "parent_id": org.parent_id,
-            "children": [],
-        }
-        for org in organizations
-    }
-    roots = []
-    for org in organizations:
-        node = node_map[org.id]
-        if org.parent_id and org.parent_id in node_map:
-            node_map[org.parent_id]["children"].append(node)
-        else:
-            roots.append(node)
+    roots = _build_org_option_tree(organizations)
 
     payload = {
         "scope": scope or "create",
