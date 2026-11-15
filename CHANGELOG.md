@@ -1,3 +1,31 @@
+## [1.18.46] - 2026-11-15 — 授权包导入默认不再强制签名（保留按需强校验）
+
+> 现场反馈：导入单位授权包时被「授权包未签名」拦下，需要配 `.env`/环境变量才能导入。
+> 实情是同一条链上有三处会互相打架：包没签名、本机没配验签公钥、强制开关默认 False。
+> 本次把默认行为改为「能用优先」，需要强校验的部署仍可一键开启。
+
+### Changed
+
+- **`GRANT_ALLOW_UNSIGNED` 默认改为 `True`**（`core/config.py`）：未签名授权包默认可直接导入，
+  不再要求先改环境变量。需要「无签名一律拒收」的部署把该值显式设为 `false` 即可。
+- **`apply_package` 的 `allow_unsigned` 参数默认改为 `True`**，
+  并把「包带签名但本机未配置 `GRANT_PUBKEY`」从**报错**改为**跳过验签 + WARNING 留痕**：
+  此前这种组合会抛「本机未配置验签公钥，无法校验授权包来源」，是现场最常见的卡点。
+- 验签逻辑本身完整保留：**配置了 `GRANT_PUBKEY` 就回到严格模式**（签名不符即拒收，
+  fail-closed）；上级配置 `GRANT_SIGNING_KEY` 后导出的包会被自动验签。
+- 前端 `GrantImport.vue` 提示与两份用户手册同步改口径：签名改为「上级配了就自动验签」。
+
+### Tests
+
+- `test_grant_package_r33.py`：原「默认拒收未签名」改为「默认放行」；
+  新增 `test_unsigned_rejected_in_strict_mode`（显式 `allow_unsigned=False` 仍拒收）；
+  「签名但无公钥」改为断言导入成功且日志含 `GRANT_PUBKEY` 提示。
+- `pytest tests/unit/test_grant_package_r33.py tests/unit/test_org_grants_api_r33.py` → 60 passed。
+
+> 安全提示：默认放行意味着拿到授权包 JSON 的人可为该单位提权（仍受「目标单位一致 /
+> 版本必须更大 / 不可降级」三道闸限制）。军队或多人可接触介质的场景，请配置
+> `GRANT_PUBKEY` + `GRANT_ALLOW_UNSIGNED=false` 回到 fail-closed。
+
 ## [1.18.45] - 2026-11-15 — ARM64 Electron DEB 去掉重复的离线地图瓦片（体积 -63MB）
 
 ### Changed

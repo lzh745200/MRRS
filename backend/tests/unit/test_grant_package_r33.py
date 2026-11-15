@@ -269,12 +269,12 @@ class TestApplyPackage:
             apply_package(db, pkg, public_key=public_hex)
         assert "不存在" in str(exc.value)
 
-    def test_unsigned_rejected_by_default(self, db):
+    def test_unsigned_accepted_by_default(self, db):
+        """v1.18.45 起默认放行未签名授权包（现场大多没有密钥基建）。"""
         _org(db)
         pkg = build_package(org_code="C001", grants={"projects": "edit"}, version=1)
-        with pytest.raises(GrantPackageError) as exc:
-            apply_package(db, pkg)
-        assert "未签名" in str(exc.value)
+        result = apply_package(db, pkg)
+        assert result["signed"] is False
 
     def test_unsigned_allowed_when_explicit(self, db):
         _org(db)
@@ -282,12 +282,22 @@ class TestApplyPackage:
         result = apply_package(db, pkg, allow_unsigned=True)
         assert result["signed"] is False
 
-    def test_signed_but_no_public_key(self, db, keys):
+    def test_unsigned_rejected_in_strict_mode(self, db):
+        """显式关闭 allow_unsigned（= 部署级强制验签）时仍拒收未签名包。"""
+        _org(db)
+        pkg = build_package(org_code="C001", grants={"projects": "edit"}, version=1)
+        with pytest.raises(GrantPackageError) as exc:
+            apply_package(db, pkg, allow_unsigned=False)
+        assert "未签名" in str(exc.value)
+
+    def test_signed_but_no_public_key(self, db, keys, caplog):
+        """未配置公钥时跳过验签并留痕，而不是拒收（配了公钥才回到严格校验）。"""
         _org(db)
         pkg, _ = self._pkg(keys)
-        with pytest.raises(GrantPackageError) as exc:
-            apply_package(db, pkg)
-        assert "公钥" in str(exc.value)
+        with caplog.at_level("WARNING", logger="app.services.grant_package_service"):
+            result = apply_package(db, pkg)
+        assert result["signed"] is True
+        assert "GRANT_PUBKEY" in caplog.text
 
     def test_bad_signature_rejected(self, db, keys):
         _org(db)

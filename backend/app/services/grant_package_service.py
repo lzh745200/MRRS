@@ -39,6 +39,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Union
 
@@ -52,6 +53,8 @@ from app.core.grant_signing import (
 from app.core.transaction import safe_commit
 from app.models.org_grant import VALID_GRANT_LEVELS, OrgGrant
 from app.models.organization import Organization
+
+logger = logging.getLogger(__name__)
 
 PACKAGE_FORMAT = "r33-grant-package"
 PACKAGE_FORMAT_VERSION = 1
@@ -159,20 +162,25 @@ def apply_package(
     raw: Union[bytes, str, Dict[str, Any]],
     *,
     public_key: str = "",
-    allow_unsigned: bool = False,
+    allow_unsigned: bool = True,
     expected_org_code: Optional[str] = None,
 ) -> Dict[str, Any]:
     """校验并应用授权包；成功后**替换**该单位的授权矩阵并递增版本号。"""
     package = parse_package(raw)
     signature = package.get(SIGNATURE_FIELD) or ""
 
-    if signature:
-        if not public_key:
-            raise GrantPackageError("本机未配置验签公钥，无法校验授权包来源")
+    if signature and public_key:
+        # 配置了验签公钥才强制验签：验签失败一律拒绝（fail-closed）。
         if not verify_payload(package, signature, public_key):
             raise GrantPackageError("授权包签名校验失败（可能被篡改或来自非授权上级）")
+    elif signature:
+        # 未配置公钥：不强制验签（v1.18.45 起默认放行），仅留痕。
+        # 需要强验签的部署：配置 GRANT_PUBKEY 后即回到上面的严格分支。
+        logger.warning(
+            "授权包带签名但本机未配置 GRANT_PUBKEY，已跳过来源校验；如需强制验签请配置验签公钥"
+        )
     elif not allow_unsigned:
-        raise GrantPackageError("授权包未签名；如确需导入请显式开启 allow_unsigned")
+        raise GrantPackageError("授权包未签名；本机已开启强制验签（GRANT_ALLOW_UNSIGNED=false）")
 
     org_code = package["org_code"]
     if expected_org_code and org_code != expected_org_code:
