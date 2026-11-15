@@ -4230,4 +4230,41 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.44",
+        "date": "2026-11-15",
+        "description": "装机首启「无法验证发布者」与图标缺失：证书信任闭环 + 图标资源门禁",
+        "features": [
+            (
+                "首启「无法验证发布者」（根因：自签名根证书未进目标机信任存储）实测安装后的 帮扶管理系统.exe 已签名（CN=MRRS Internal Code Signing, O=MRRS, C="
+                "CN），但 Get-AuthenticodeSignature 返回 UnknownError，原始信息为「已处理证书链，但是在不受信任提供程序信任的根证书中终止」。"
+            ),
+            (
+                "图标缺失/白纸（根因：两处快捷方式图标源不一致 + 安装后未刷新图标缓存）实测 exe 的 .rsrc 内 7 档图标（16→256）齐全、随包 app-circle.ico 也在位，说明"
+                "不是构建丢图标。真正的问题是：桌面快捷方式由本钩子创建（图标取 app-circle.ico），开始菜单快捷方式由 electron-builder 创建（图标取 exe 内嵌），两者来源"
+                "不一致；"
+            ),
+            (
+                "scripts/verify_exe_icon.py：解析 PE .rsrc，校验图标档位 ≥5 且含 256×256，同时校验随包 app-circle.ico 完整；已串入 npm r"
+                "un build:win 与 CI（Verify exe icon resources，在载荷门禁之后）。"
+            ),
+            "scripts/windows/post-install.ps1：安装后助手（解除 MOTW + 刷新图标缓存），幂等、异常一律不阻断安装。",
+            (
+                "scripts/windows/fix-trust-and-icon.ps1：已装机现场修复脚本（管理员运行一次）：导入证书 → 解除下载标记 → 重建快捷方式 → 刷新图标缓存 → 回显"
+                "签名状态。"
+            ),
+            (
+                "验签门禁 verify_installer_signature.ps1 在自签名放行分支新增显式 WARN与 CI Step Summary 提示：目标机需预置 .cer，避免\"CI 绿"
+                "、现场红\"再次发生。"
+            ),
+            (
+                "tests/unit/test_verify_exe_icon.py（12 例）：7 档通过、缺 256 失败、档位过少失败、无 .rsrc / 非 PE / 随包 ico 缺失或不全失败"
+                "。"
+            ),
+            (
+                "真实产物核对：dist/electron/win-unpacked 主程序图标档位 [16,24,32,48,64,128,256]、随包 ico 同档位（164,991 B），门禁 ex"
+                "it 0。"
+            ),
+        ],
+    },
 ]
