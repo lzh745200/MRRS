@@ -107,11 +107,18 @@ def build_body(tag: str, repo_root: pathlib.Path) -> tuple[str, pathlib.Path | N
     """返回 (正文, 命中的发布说明路径或 None)。
 
     优先级：`RELEASE_NOTES-<tag>.md` → `CHANGELOG.md` 对应版本段 → 兜底模板。
-    后两种都会追加 SHA256 校验说明，保证 Release 正文至少包含「改了什么 + 怎么验」。
+    三种来源都会追加 SHA256 校验说明，保证 Release 正文至少包含「改了什么 + 怎么验」。
+
+    v1.18.45 实测教训：notes 分支原先**不追加** footer，`RELEASE_NOTES-v1.18.45.md`
+    也没写校验步骤，于是发布页只有「改了什么」没有「怎么验」（下载后无法就地核对
+    哈希，只能去翻三份 sums 文件）。现统一补齐；notes 自己已含 `sha256sum` 时不重复。
     """
     notes = find_notes(tag, repo_root)
     if notes is not None:
-        return notes.read_text(encoding="utf-8"), notes
+        text = notes.read_text(encoding="utf-8")
+        if "sha256sum" not in text:
+            text = f"{text.rstrip()}\n{CHECKSUM_FOOTER}"
+        return text, notes
 
     section = extract_changelog_section(tag, repo_root)
     if section is not None:

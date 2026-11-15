@@ -4282,6 +4282,10 @@ VERSION_HISTORY_DATA = [
                 "000 PNG）、ARM64 Fetch offline map tiles（sha256 校验 tiles-v1 资产）、standalone Dockerfile 的 离线地图瓦片数 "
                 "≥5000。"
             ),
+            (
+                "发布页缺「怎么验」：scripts/prepare_release_body.py 只在 CHANGELOG 兜底分支追加CHECKSUM_FOOTER，而写了自己 RELEASE_NOT"
+                "ES-<tag>.md 的版本（v1.18.45 实测正文 824 字符）反而没有 sha256sum -c 步骤，用户下载后无处核对哈希。"
+            ),
         ],
     },
 ]

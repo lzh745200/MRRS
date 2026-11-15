@@ -16,6 +16,14 @@
   （`win-unpacked/resources/map-tiles` ≥5000 PNG）、ARM64 `Fetch offline map tiles`
   （sha256 校验 `tiles-v1` 资产）、standalone Dockerfile 的 `离线地图瓦片数 ≥5000`。
 
+### Fixed
+
+- **发布页缺「怎么验」**：`scripts/prepare_release_body.py` 只在 CHANGELOG 兜底分支追加
+  `CHECKSUM_FOOTER`，而写了自己 `RELEASE_NOTES-<tag>.md` 的版本（v1.18.45 实测正文 824 字符）
+  反而没有 `sha256sum -c` 步骤，用户下载后无处核对哈希。现在 notes 分支同样追加
+  （notes 已含 `sha256sum` 时不重复）；已发布的 v1.18.45 正文用 `gh release edit` 补齐到
+  1,171 字符，无需重建安装包。
+
 ## [1.18.44] - 2026-11-15 — 装机首启「无法验证发布者」与图标缺失：证书信任闭环 + 图标资源门禁
 
 > 现场：v1.18.43 安装后双击弹「打开文件 - 安全警告：无法验证发布者」，
