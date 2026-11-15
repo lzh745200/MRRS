@@ -467,6 +467,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 10.0b 离线地图瓦片是否真的进了安装载荷（v1.18.44）：
+      #       Fetch 步骤证明「构建机有瓦片」，这一步证明「打包真的带上了」——
+      #       extraResources 的 from 路径若拼错/被 filter 全排除，包会静默变瘦。
+      #       直接对 electron-builder 解包产物计数，口径与安装后一致。
+      - name: Verify bundled map tiles
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tiles = 'dist/electron/win-unpacked/resources/map-tiles'
+          if (-not (Test-Path $tiles)) {
+            throw "安装载荷缺少离线地图瓦片目录: $tiles（收包后地图页将空白）"
+          }
+          $png = (Get-ChildItem $tiles -Recurse -Filter *.png -File | Measure-Object).Count
+          $bytes = (Get-ChildItem $tiles -Recurse -File | Measure-Object -Property Length -Sum).Sum
+          Write-Host ("bundled map tiles: {0} PNG, {1:N0} B" -f $png, $bytes)
+          if ($png -lt 5000) {
+            throw "安装载荷内瓦片仅 $png 张（期望 ≥5000）——检查 resources/map-tiles 与 extraResources 配置"
+          }
+          $manifest = Join-Path $tiles 'MANIFEST.json'
+          if (-not (Test-Path $manifest)) {
+            throw "安装载荷缺少瓦片清单: $manifest"
+          }
+
       # 10.1 产物存在性守卫（v1.18.16）：electron-builder 只要正常产出 NSIS 安装包，
       #      就必然同时写出 latest.yml 与 .exe.blockmap。缺了说明配置或版本行为变了，
       #      必须在构建期就红，而不是等用户发现 Release 少文件。
