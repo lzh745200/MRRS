@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.core.constants import ADMIN_ROLES, DEFAULT_PAGE_SIZE, FACTORY_ADMIN_PASSWORD, MAX_PAGE_SIZE
 from app.core.data_permission import _get_scope_org_ids, assert_org_reachable
 from app.core.database import get_db
-from app.core.response import ok_list
+from app.core.response import ok_list, success_response
 from app.core.security import check_rate_limit, generate_password, get_client_ip, get_current_user, get_password_hash
 from app.models.user import User
 from app.services.machine_code_service import MachineCodeService
@@ -1229,16 +1229,14 @@ async def get_user_effective_permissions(
     try:
         permissions, restricted = await rbac_service.get_user_permissions_with_restrictions(str(user_id), db)
 
-        return {
-            "code": 200,
-            "success": True,
-            "data": {
+        return success_response(
+            data={
                 "user_id": user_id,
                 "effective_permissions": list(permissions),
                 "restricted_permissions": list(restricted),
             },
-            "message": "查询成功",
-        }
+            message="查询成功",
+        )
     except Exception:  # pragma: no cover - 未知异常兜底：仅记录日志、不改变响应语义，正常路径不可达
         logger.error("获取用户实际权限失败", exc_info=True)
         raise HTTPException(status_code=500, detail="获取用户实际权限失败")
