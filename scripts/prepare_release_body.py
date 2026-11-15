@@ -54,11 +54,69 @@ def find_notes(tag: str, repo_root: pathlib.Path) -> pathlib.Path | None:
     return None
 
 
+def _version_from_tag(tag: str) -> str:
+    return tag[1:] if tag.startswith("v") else tag
+
+
+def extract_changelog_section(tag: str, repo_root: pathlib.Path) -> str | None:
+    """从 CHANGELOG.md 里取该版本的段落，作为发布说明的兜底。
+
+    v1.18.31 / v1.18.43 都出现过「打 tag 时 RELEASE_NOTES 还没进仓库」——
+    正文于是退化成「本版未提供 …」，用户点开 Release 看不到任何变更说明。
+    CHANGELOG 是**每次改动同提交**维护的账本（`scripts/check_changelog.py` 强制），
+    因此它比 RELEASE_NOTES 更可靠，可作兜底。
+    """
+    changelog = repo_root / "CHANGELOG.md"
+    if not changelog.is_file():
+        return None
+
+    version = _version_from_tag(tag)
+    header = f"## [{version}]"
+    lines = changelog.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith(header)), None)
+    if start is None:
+        return None
+
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].startswith("## ["):
+            end = i
+            break
+
+    section = "\n".join(lines[start:end]).strip()
+    return section or None
+
+
+CHECKSUM_FOOTER = """
+## 产物完整性校验（SHA256）
+
+下载安装包与对应的 `SHA256SUMS-*.txt` 到同一目录后执行：
+
+```bash
+sha256sum -c SHA256SUMS-*.txt
+```
+
+所有行必须为 `OK`；出现 `FAILED` 表示文件损坏或被篡改，请勿安装。
+
+> 每个 Release 另附 `SHA256SUMS-windows-x64.txt`、`SHA256SUMS-electron-deb-arm64.txt`、
+> `SHA256SUMS-standalone-deb-arm64.txt` 三份校验和，内容与 GitHub API 的 asset digest 一致。
+"""
+
+
 def build_body(tag: str, repo_root: pathlib.Path) -> tuple[str, pathlib.Path | None]:
-    """返回 (正文, 命中的发布说明路径或 None)。"""
+    """返回 (正文, 命中的发布说明路径或 None)。
+
+    优先级：`RELEASE_NOTES-<tag>.md` → `CHANGELOG.md` 对应版本段 → 兜底模板。
+    后两种都会追加 SHA256 校验说明，保证 Release 正文至少包含「改了什么 + 怎么验」。
+    """
     notes = find_notes(tag, repo_root)
     if notes is not None:
         return notes.read_text(encoding="utf-8"), notes
+
+    section = extract_changelog_section(tag, repo_root)
+    if section is not None:
+        return f"{section}\n{CHECKSUM_FOOTER}", None
+
     return FALLBACK_TEMPLATE.format(tag=tag), None
 
 
