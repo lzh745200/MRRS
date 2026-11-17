@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy.orm import Session
 from app.core.transaction import safe_commit
@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 # 校验用完整角色集合（含兼容的历史角色值）
 VALID_ROLES = list(ALL_ROLES)
+
+# 数据范围四值（与 app/api/v1/auth/users.py 的 VALID_SCOPES 同口径）。
+# 账号开通包导入时必须重新校验，不信任包内声明（见 deliverables/账号开通包实施方案.md §十六-5/6）。
+VALID_DATA_SCOPES = ("all", "org", "org_children", "self")
+
+_BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2y$")
 
 
 class UserService:
@@ -113,6 +119,74 @@ class UserService:
         "avatar",
         "remarks",
     })
+
+    def create_user_with_password_hash(
+        self,
+        username: str,
+        password_hash: str,
+        *,
+        role: str = "user",
+        organization_id: Optional[int] = None,
+        data_scope: str = "org",
+        full_name: Optional[str] = None,
+        email: Optional[str] = None,
+        phone: Optional[str] = None,
+        must_change_password: bool = True,
+        commit: bool = True,
+    ):
+        """用**已哈希**的初始口令建号（账号开通包专用，2026-11-17）。
+
+        账号开通包只携带「包专用初始密码」的 bcrypt 哈希，明文由源机管理员另渠道
+        交付给用户（见 deliverables/账号开通包实施方案.md §三/§十六-1）。因此导入
+        链路不能走 ``create_user``——它只接受明文再哈希，会让调用方要么在内存里
+        持有明文，要么绕不过去。
+
+        安全约束：
+        - 只接受 bcrypt 哈希（``$2a$/$2b$/$2y$``），看起来像明文一律拒绝，
+          防止调用方误把明文传进来落库；
+        - ``role`` / ``data_scope`` 在本地重新归一与校验，不信任包内声明；
+        - ``must_change_password`` 默认 True，由导入端强制，包内同名字段不生效；
+        - ``commit=False`` 时只 flush，供导入链路把整包放进同一事务。
+        """
+        from app.core.constants import normalize_role
+        from app.models.user import User
+
+        if self.db is None:
+            return None
+
+        if not isinstance(password_hash, str) or not password_hash.startswith(_BCRYPT_PREFIXES):
+            raise ValueError("password_hash 必须是 bcrypt 哈希，禁止直接传入明文口令")
+
+        normalized_role = normalize_role(role)
+        if normalized_role not in VALID_ROLES:
+            raise ValueError(f"无效的角色: {role}")
+        if data_scope not in VALID_DATA_SCOPES:
+            raise ValueError(f"无效的数据范围: {data_scope}")
+        if not username or not str(username).strip():
+            raise ValueError("用户名不能为空")
+
+        if self.db.query(User).filter(User.username == username).first() is not None:
+            raise ValueError(f"用户名已存在: {username}")
+
+        user = User(
+            username=username,
+            email=email,
+            hashed_password=password_hash,
+            full_name=full_name,
+            phone=phone,
+            role=normalized_role,
+            organization_id=organization_id,
+            data_scope=data_scope,
+            is_active=True,
+            must_change_password=bool(must_change_password),
+        )
+        self.db.add(user)
+        if commit:
+            safe_commit(self.db)
+            self.db.refresh(user)
+        else:
+            self.db.flush()
+        return user
 
     def update_user(self, user_id: int, data: dict):
         """更新用户（仅白名单字段；角色/凭据/启用状态必须走专用端点）"""

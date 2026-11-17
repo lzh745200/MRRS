@@ -1,3 +1,18 @@
+## [1.18.49] - 2026-11-18 — 账号开通包 P1-a 地基（格式/签名/加密/迁移）
+
+### 新增
+
+- **账号开通包核心格式**（`app/core/account_package.py`）：外层公开头 + Fernet 密文 + Ed25519 签名；签名覆盖含 `cipher_sha256`/`manifest_sha256` 的包头，导入端**先验签、再校验 KDF、再解密**；KDF 账号包专用 600k（310k–1M），不改变旧权限包 100k 口径；OTP 改为 `secrets.token_bytes(16)`（128 bit）。
+- **共享首装判定**：`services/first_run_service.py` 承接“出厂种子账号未使用 = 等价空库”，权限包 `_is_pristine_first_run` 改为兼容入口，账号包后续复用同一安全边界。
+- **两张表迁移**：`account_package_001` 建 `account_package_exports` / `account_package_receipts`；回执 `package_id` **单独唯一**，机器码仅审计列；迁移自带旧库→新库自证测试。
+- **带哈希建号地基**：`UserService.create_user_with_password_hash` 只接受 bcrypt 哈希，拒绝明文；角色/数据范围本地重校验，`must_change_password` 默认 True，支持 `commit=False` 供整包单事务。
+- **配置**：`ACCOUNT_PACKAGE_ENABLED/SIGNING_KEY/PUBKEY/ALLOW_UNSIGNED/TTL_DAYS/KDF_ITERATIONS/MAX_ATTEMPTS/MIN_PASSWORD`，默认关闭。
+
+### 验证
+
+- 账号包核心 28 例通过，`account_package.py` 174 stmts / 64 branches 覆盖率 **100%**；首装服务 34 stmts / 8 branches **100%**；迁移自证、单 head、类型/异常债门禁通过。
+- 本批次只落地 P1-a 地基，不注册导出/预览接口；接口与 UI 在 P1-b/P2 接入。
+
 ## [1.18.48] - 2026-11-15 — 机器码一次性恢复码与高风险操作二次确认（安全加固）
 
 ### 安全

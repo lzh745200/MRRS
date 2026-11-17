@@ -4354,4 +4354,32 @@ VERSION_HISTORY_DATA = [
             "「获取机器码」「忘记密码」页改为展示 8 位恢复码并自动签发；管理端菜单「用户与组织」更名「用户与角色」。",
         ],
     },
+    {
+        "version": "1.18.49",
+        "date": "2026-11-18",
+        "description": "账号开通包 P1-a 地基（格式/签名/加密/迁移）",
+        "features": [
+            (
+                "账号开通包核心格式（app/core/account_package.py）：外层公开头 + Fernet 密文 + Ed25519 签名；签名覆盖含 cipher_sha256/mani"
+                "fest_sha256 的包头，导入端先验签、再校验 KDF、再解密；KDF 账号包专用 600k（310k–1M），不改变旧权限包 100k 口径；OTP 改为 secrets.toke"
+                "n_bytes(16)（128 bit）。"
+            ),
+            (
+                "共享首装判定：services/first_run_service.py 承接“出厂种子账号未使用 = 等价空库”，权限包 _is_pristine_first_run 改为兼容入口，账号"
+                "包后续复用同一安全边界。"
+            ),
+            (
+                "两张表迁移：account_package_001 建 account_package_exports / account_package_receipts；回执 package_id 单"
+                "独唯一，机器码仅审计列；迁移自带旧库→新库自证测试。"
+            ),
+            (
+                "带哈希建号地基：UserService.create_user_with_password_hash 只接受 bcrypt 哈希，拒绝明文；角色/数据范围本地重校验，must_change"
+                "_password 默认 True，支持 commit=False 供整包单事务。"
+            ),
+            (
+                "配置：ACCOUNT_PACKAGE_ENABLED/SIGNING_KEY/PUBKEY/ALLOW_UNSIGNED/TTL_DAYS/KDF_ITERATIONS/MAX_ATTEM"
+                "PTS/MIN_PASSWORD，默认关闭。"
+            ),
+        ],
+    },
 ]

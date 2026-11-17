@@ -179,47 +179,11 @@ def _is_pristine_first_run(db: Session) -> bool:
     真正的「有人初始化过」信号是 ``set_initialized()`` 同时写入的
     ``organization_id`` / ``system_id``（种子的兜底分支只写 ``initialized``）。
     """
-    from app.core.constants import FACTORY_ADMIN_USERNAME
-    from app.services.system_config_service import SystemConfigService
+    # 账号开通包与权限包共用同一判定，避免两套“空库”口径漂移。
+    # 保留本函数名作为既有调用点/回归测试的兼容入口。
+    from app.services.first_run_service import is_pristine_first_run
 
-    # 先判「账号是否还是出厂形态」：登录过 / 改过密 / 有第二个账号，直接算已使用。
-    seed_username = (
-        os.getenv("DEFAULT_ADMIN_USERNAME", "").strip() or FACTORY_ADMIN_USERNAME
-    )
-    try:
-        users = db.query(User).limit(2).all()
-    except Exception as exc:  # noqa: BLE001 - 账号状态不可判定时必须 fail-closed
-        logger.warning("读取账号状态失败，按已初始化处理（禁止匿名导入）：%s", exc)
-        return False
-    if len(users) != 1:
-        return False
-    seed_admin = users[0]
-    if not (
-        (getattr(seed_admin, "username", "") or "").strip() == seed_username
-        and getattr(seed_admin, "is_superuser", False)
-        and getattr(seed_admin, "must_change_password", False)
-        and getattr(seed_admin, "last_login", None) is None
-    ):
-        return False
-
-    cfg = SystemConfigService(db)
-    try:
-        # set_initialized() 原子写三键；种子兜底只写 initialized。
-        # 有组织号/系统号 = 走过真实初始化（管理员建过组织），按「已使用」处理。
-        if (cfg.get("organization_id") or "").strip():
-            return False
-        if (cfg.get("system_id") or "").strip():
-            return False
-        return True
-    except Exception as exc:  # noqa: BLE001 - 标记读不出按未知处理，退回 initialized 布尔
-        # 标记读不出来（老库 / 精简测试替身）：退回旧口径——只信 initialized 布尔。
-        # 这条路径仍然 fail-closed：读不到就按已使用处理。
-        logger.warning("读取系统初始化标记失败，退回 initialized 布尔判定：%s", exc)
-        try:
-            return not cfg.is_initialized()
-        except Exception as exc2:  # noqa: BLE001 - 最终 fail-closed
-            logger.warning("读取系统初始化状态失败，按已初始化处理（禁止匿名导入）：%s", exc2)
-            return False
+    return is_pristine_first_run(db)
 
 
 def _assert_package_import_principal(
