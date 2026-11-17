@@ -40,6 +40,7 @@ MODELS_DIR = Path(__file__).resolve().parents[2] / "app" / "models"
 # MutableList/MutableDict.as_mutable(JSON) 并在此处标注 "就地改"；
 # 若整体替换，把它加进本清单（等于声明"已复核，不需要 Mutable"）。
 REVIEWED_PLAIN_JSON_COLUMNS = {
+    "account_package_exports.meta",
     "api_access_logs.request_params",
     "approval_tasks.change_data",                    # 审批快照：写入即定型
     "approval_tasks.original_data",
@@ -115,9 +116,9 @@ class TestInventoryRatchet:
 
     def test_baseline_sizes_are_documented(self):
         """台账规模快照：防"大改后清单被顺手删空"式弱化。"""
-        assert len(REVIEWED_PLAIN_JSON_COLUMNS) == 24
+        assert len(REVIEWED_PLAIN_JSON_COLUMNS) == 25
         assert len(MUTABLE_JSON_COLUMNS) == 1
-        assert len(_json_columns()) == 25
+        assert len(_json_columns()) == 26
 
 
 class TestInplaceMutationSemantics:

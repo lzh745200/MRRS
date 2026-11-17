@@ -4356,7 +4356,7 @@ VERSION_HISTORY_DATA = [
     },
     {
         "version": "1.18.49",
-        "date": "2026-11-18",
+        "date": "2026-11-17",
         "description": "账号开通包 P1-a 地基（格式/签名/加密/迁移）",
         "features": [
             (
