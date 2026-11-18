@@ -1326,18 +1326,33 @@ class BackupService:
             conn.close()
 
         if not has_version and has_users:
-            # 极老备份：表已存在但没有版本号，重放历史迁移会撞表吗？
-            # 不会 —— 基线 001 在 users/supported_villages 已存在时是空操作，
-            # 其后的迁移各自带存在性守卫，整条链可完整重放。
-            # 原先直接 ``stamp head`` 会把落后几十个版本的旧库标记成最新，
-            # 跳过全部迁移 → 恢复后第一次访问新列即 ``no such column``，
-            # 且因为 stamp 已成功不会触发回滚，用户拿不到任何提示。
-            from alembic.script import ScriptDirectory
+            # 极老备份没有版本号，必须区分两种情形（2026-11-18）：
+            # ①「现代 schema 但 version 表丢失」（如手工导出仅结构）：直接 stamp head；
+            # ②「真正落后的旧 schema」：stamp head 会把落后几十个版本的库标记成
+            #    最新、跳过全部迁移 → 恢复后第一次访问新列即 no such column，
+            #    且 stamp 已成功不会触发回滚，用户拿不到任何提示。
+            # 判定依据 = 当前代码模型声明的表是否齐全（齐全视为 ①，否则按 ② 重放）。
+            actual_tables = {
+                row[0]
+                for row in sqlite3.connect(self.database_path)
+                .execute("SELECT name FROM sqlite_master WHERE type='table'")
+                .fetchall()
+            }
+            import app.models  # noqa: F401  注册全部模型
+            from app.models.base import Base
 
-            base_rev = ScriptDirectory.from_config(cfg).get_base()
-            alembic_command.stamp(cfg, base_rev)
-            alembic_command.upgrade(cfg, "head")
-            logger.info("恢复后迁移：无 alembic_version，已 stamp 基线 %s 并重放到 head", base_rev)
+            expected = set(Base.metadata.tables)
+            missing = sorted(expected - actual_tables)
+            if missing:
+                alembic_command.upgrade(cfg, "head")
+                logger.info(
+                    "恢复后迁移：无 alembic_version 且缺 %d 张当前表（如 %s），已从基线重放到 head",
+                    len(missing),
+                    ", ".join(missing[:3]),
+                )
+            else:
+                alembic_command.stamp(cfg, "head")
+                logger.info("恢复后迁移：无 alembic_version 但表已齐全，已 stamp 到 head")
         else:
             alembic_command.upgrade(cfg, "head")
             logger.info("恢复后迁移：upgrade head 完成")

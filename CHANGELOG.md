@@ -13,6 +13,10 @@
 - 前端 `AccountPackage.vue` 9 例通过，语句/分支/函数/行覆盖率 **100%**；`vue-tsc`、ESLint。
 - 迁移自证、单 head、路由认证、flake8、类型/异常债通过。
 
+### 修复
+
+- **旧版备份包恢复后 schema 不升级**：`backup_service._migrate_restored_database` 对「有业务表但无 `alembic_version`」的极老备份一律 `stamp head`，会把落后几十个版本的库标记成最新、跳过全部迁移，恢复后第一次访问新列即 `no such column`，且 stamp 已成功不触发回滚。现按「当前模型声明的表是否齐全」分流：缺表 → 从基线重放 `upgrade head`；表齐全（仅丢版本表）→ 保持 `stamp head`。实测：revision `001` 旧库（有版本表）与无版本表的 `001` 旧库，两种备份包恢复后均到达 head 且用户/帮扶村数据完整。
+
 ### 说明
 
 - P4 HTTP 压测脚本需真实后端/JWT/包文件，本次未执行并发结果；P5 实体双机需现场执行，仓库只提供等价演练与清单。

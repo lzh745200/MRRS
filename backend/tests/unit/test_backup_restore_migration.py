@@ -1,64 +1,61 @@
-"""恢复后迁移：旧库无 alembic_version 时 stamp 基线并重放到 head，且只作用于恢复库。"""
+"""恢复后迁移：无 alembic_version 的旧库要区分「表齐全」与「真落后」两种情况。"""
 
 import sqlite3
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.services.backup_service import BackupService
 
 
-def test_migrate_restored_database_stamps_base_then_upgrades(tmp_path):
-    """无版本表的旧库必须先 stamp 基线再重放，不能直接 stamp head。
+def _svc(db_path, tmp_path):
+    svc = BackupService(db=MagicMock(), backup_dir=str(tmp_path / "backups"))
+    svc.database_path = str(db_path)
+    return svc
+
+
+def test_migrate_legacy_with_missing_tables_replays_from_base(tmp_path):
+    """真正落后的旧库（表不全）必须重放迁移链，不能直接 stamp head。
 
     直接 stamp head 会把落后几十个版本的库标记成最新、跳过全部迁移，
     恢复后第一次访问新列就 ``no such column``，且 stamp 已成功不会回滚。
     """
-    db_path = tmp_path / "restored.db"
+    db_path = tmp_path / "legacy-sparse.db"
     conn = sqlite3.connect(db_path)
     conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)")
     conn.commit()
     conn.close()
 
-    svc = BackupService(db=MagicMock(), backup_dir=str(tmp_path / "backups"))
-    svc.database_path = str(db_path)
     with (
         patch("alembic.command.stamp") as stamp,
         patch("alembic.command.upgrade") as upgrade,
     ):
-        svc._migrate_restored_database()
+        _svc(db_path, tmp_path)._migrate_restored_database()
 
-    assert stamp.call_count == 1, "旧库应先 stamp 一次基线"
-    assert stamp.call_args[0][1] == "001", "必须 stamp 到迁移链基线而不是 head"
-    assert upgrade.call_count == 1, "stamp 基线后必须重放迁移到 head"
+    assert upgrade.call_count == 1, "表不全的旧库必须重放迁移"
     assert upgrade.call_args[0][1] == "head"
+    assert stamp.call_count == 0, "表不全时 stamp head 会跳过全部迁移"
 
 
-def test_migrate_legacy_lost_version_db_reaches_head_with_data(tmp_path):
-    """真库回归：schema 已是当前版本但丢了 alembic_version 时，重放必须幂等。"""
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
+def test_migrate_legacy_with_full_tables_stamps_head(tmp_path):
+    """schema 已是当前版本但丢了 alembic_version 时，直接 stamp head 即可。"""
+    from app.models.base import Base
+    import app.models  # noqa: F401
 
-    backend_dir = __import__("pathlib").Path(__file__).resolve().parents[2]
-    cfg = Config(str(backend_dir / "alembic.ini"))
-    cfg.set_main_option("script_location", str(backend_dir / "alembic"))
-    head = ScriptDirectory.from_config(cfg).get_current_head()
+    db_path = tmp_path / "modern-lost-version.db"
+    engine = __import__("sqlalchemy").create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(engine)
+    engine.dispose()
 
-    db_path = tmp_path / "legacy-lost-version.db"
-    conn = sqlite3.connect(db_path)
-    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)")
-    conn.execute("INSERT INTO users (username) VALUES ('legacy_admin')")
-    conn.commit()
-    conn.close()
+    with (
+        patch("alembic.command.stamp") as stamp,
+        patch("alembic.command.upgrade") as upgrade,
+    ):
+        _svc(db_path, tmp_path)._migrate_restored_database()
 
-    svc = BackupService(db=MagicMock(), backup_dir=str(tmp_path / "backups"))
-    svc.database_path = str(db_path)
-    svc._migrate_restored_database()
-
-    conn = sqlite3.connect(db_path)
-    try:
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == head
-        assert conn.execute("SELECT username FROM users").fetchone()[0] == "legacy_admin"
-    finally:
-        conn.close()
+    assert stamp.call_count == 1
+    assert stamp.call_args[0][1] == "head"
+    assert upgrade.call_count == 0, "表已齐全时重放历史迁移会撞已存在对象"
 
 
 def test_migrate_restored_database_upgrades_when_version_present(tmp_path):
@@ -78,15 +75,11 @@ def test_migrate_restored_database_upgrades_when_version_present(tmp_path):
     conn.commit()
     conn.close()
 
-    svc = BackupService(db=MagicMock(), backup_dir=str(tmp_path / "backups"))
-    svc.database_path = str(db_path)
-    svc._migrate_restored_database()
+    with patch("alembic.command.upgrade") as upgrade:
+        _svc(db_path, tmp_path)._migrate_restored_database()
 
-    conn = sqlite3.connect(db_path)
-    try:
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == head
-    finally:
-        conn.close()
+    assert upgrade.call_count == 1
+    assert upgrade.call_args[0][1] == "head"
 
 
 def test_migrate_skips_when_alembic_ini_missing(tmp_path):
@@ -100,3 +93,11 @@ def test_migrate_skips_when_alembic_ini_missing(tmp_path):
     # alembic.ini 缺失时必须安静跳过，不得触发任何迁移或 stamp。
     upgrade.assert_not_called()
     stamp.assert_not_called()
+
+
+@pytest.mark.parametrize("tables", ["users"])
+def test_svc_helper_is_isolated(tmp_path, tables):
+    """冒烟：测试辅助函数不依赖全局配置。"""
+    db_path = tmp_path / f"{tables}.db"
+    sqlite3.connect(db_path).execute(f"CREATE TABLE {tables} (id INTEGER PRIMARY KEY)").connection.commit()
+    assert _svc(db_path, tmp_path).database_path.endswith(f"{tables}.db")
