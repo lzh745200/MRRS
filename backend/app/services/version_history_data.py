@@ -4400,6 +4400,10 @@ VERSION_HISTORY_DATA = [
                 "P4/P5 工具：scripts/load_account_package_http.py HTTP 并发压测脚本、scripts/bench_account_package.py KDF"
                 " 基准、scripts/dual_machine_rehearsal.py 双库离线演练、双机现场清单。"
             ),
+            (
+                "旧版备份包恢复后 schema 不升级：backup_service._migrate_restored_database 对「有业务表但无 alembic_version」的极老备份一律"
+                " stamp head，会把落后几十个版本的库标记成最新、跳过全部迁移，恢复后第一次访问新列即 no such column，且 stamp 已成功不触发回滚。"
+            ),
             "P4 HTTP 压测脚本需真实后端/JWT/包文件，本次未执行并发结果；P5 实体双机需现场执行，仓库只提供等价演练与清单。",
         ],
     },

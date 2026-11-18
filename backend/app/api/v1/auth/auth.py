@@ -293,7 +293,9 @@ async def login(
 
     # P3：账号开通包的初始 OTP 有独立有效期，过期后必须由管理员重置，不能继续登录。
     credential_expires_at = getattr(user, "credential_expires_at", None)
-    if credential_expires_at is not None:
+    from datetime import datetime as _datetime
+
+    if isinstance(credential_expires_at, _datetime):
         from app.utils.time_utils import as_utc
 
         expires_at_utc = as_utc(credential_expires_at)

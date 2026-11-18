@@ -87,12 +87,12 @@ def _assert_import_principal(
             verify_confirm_password_value(request, confirm_password, current_user)
         return
     if not _client_is_loopback(request):
-        raise _http_error(
+        _raise_http_error(
             AccountPackageBusinessError("仅允许本机导入账号包", code="AP_PREREQUISITE", status=403)
         )
     # 真·空库（一个用户都没有）直接放行；仅出厂种子账号未使用时复用共享判定。
     if db.query(User.id).first() is not None and not is_pristine_first_run(db):
-        raise _http_error(
+        _raise_http_error(
             AccountPackageBusinessError(
                 "系统已初始化，请登录管理员账号后导入", code="AP_PREREQUISITE", status=403
             )
@@ -123,8 +123,7 @@ def export_account_package(
             accounts=body.accounts or None,
         )
     except (AccountPackageBusinessError, AccountPackageError) as exc:  # 统一映射稳定错误码
-        err = _fail(exc)
-        raise _http_error(err) from exc
+        _raise_http_error(_fail(exc))
     AuditLogger.log(
         action=AuditAction.ACCOUNT_PACKAGE_EXPORT,
         user_id=getattr(current_user, "id", None),
@@ -143,7 +142,7 @@ def download_account_package(
 ):
     path = AccountPackageService.package_path(package_id)
     if not path.exists():
-        raise _http_error(AccountPackageBusinessError("账号包文件不存在", code="AP_NOT_FOUND", status=404))
+        _raise_http_error(AccountPackageBusinessError("账号包文件不存在", code="AP_NOT_FOUND", status=404))
     return FileResponse(
         path,
         media_type="application/octet-stream",
@@ -186,8 +185,7 @@ def revoke_account_package(
     try:
         row = AccountPackageService(db).revoke(package_id, body.reason)
     except (AccountPackageBusinessError, AccountPackageError) as exc:
-        err = _fail(exc)
-        raise _http_error(err) from exc
+        _raise_http_error(_fail(exc))
     AuditLogger.log(
         action=AuditAction.ACCOUNT_PACKAGE_REVOKE,
         user_id=getattr(current_user, "id", None),
@@ -210,14 +208,13 @@ async def preview_account_package(
     _assert_import_principal(request, current_user, db, "", require_confirm=False)
     raw = await file.read(MAX_PACKAGE_BYTES + 1)
     if len(raw) > MAX_PACKAGE_BYTES:
-        raise _http_error(AccountPackageBusinessError("账号包超过大小上限", code="AP_FILE_TOO_LARGE", status=413))
+        _raise_http_error(AccountPackageBusinessError("账号包超过大小上限", code="AP_FILE_TOO_LARGE", status=413))
     try:
         data = AccountPackageService(db).preview(
             raw, password=password, machine_code=MachineCodeService().get_machine_code()
         )
     except (AccountPackageBusinessError, AccountPackageError) as exc:
-        err = _fail(exc)
-        raise _http_error(err) from exc
+        _raise_http_error(_fail(exc))
     return success_response(data=data)
 
 
@@ -233,7 +230,7 @@ async def confirm_account_package(
     _assert_import_principal(request, current_user, db, confirm_password, require_confirm=True)
     raw = await file.read(MAX_PACKAGE_BYTES + 1)
     if len(raw) > MAX_PACKAGE_BYTES:
-        raise _http_error(AccountPackageBusinessError("账号包超过大小上限", code="AP_FILE_TOO_LARGE", status=413))
+        _raise_http_error(AccountPackageBusinessError("账号包超过大小上限", code="AP_FILE_TOO_LARGE", status=413))
     try:
         data = AccountPackageService(db).confirm(
             raw, password=password, machine_code=MachineCodeService().get_machine_code()
@@ -247,7 +244,7 @@ async def confirm_account_package(
             resource_type="account_package",
             details={"error_code": err.code},
         )
-        raise _http_error(err) from exc
+        _raise_http_error(err)
     AuditLogger.log(
         action=AuditAction.ACCOUNT_PACKAGE_CONFIRM,
         user_id=getattr(current_user, "id", None),
@@ -259,7 +256,7 @@ async def confirm_account_package(
     return success_response(data=data)
 
 
-def _http_error(exc: AccountPackageBusinessError):
+def _raise_http_error(exc: AccountPackageBusinessError) -> None:
     from fastapi import HTTPException
 
-    return HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)})
+    raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)})
