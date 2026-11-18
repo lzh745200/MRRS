@@ -291,27 +291,10 @@ async def login(
         )
         raise InvalidCredentialsError()
 
-    # P3：账号开通包的初始 OTP 有独立有效期，过期后必须由管理员重置，不能继续登录。
-    credential_expires_at = getattr(user, "credential_expires_at", None)
-    from datetime import datetime as _datetime
+    # P3：账号开通包的初始 OTP 有独立有效期，过期后必须由管理员重置。
+    from app.core.security import enforce_credential_not_expired
 
-    if isinstance(credential_expires_at, _datetime):
-        from app.utils.time_utils import as_utc
-
-        expires_at_utc = as_utc(credential_expires_at)
-        if expires_at_utc is not None and expires_at_utc < now:
-            AuditLogger.log_login(
-                user_id=user.id,
-                username=login_request.username,
-                success=False,
-                ip_address=client_ip,
-                user_agent=request.headers.get("user-agent"),
-                failure_reason="初始凭据已过期",
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="初始凭据已过期，请联系管理员重置密码",
-            )
+    enforce_credential_not_expired(user, now, request)
 
     # 验证机器码（如果用户已绑定机器码）
     from app.services.machine_code_service import MachineCodeService

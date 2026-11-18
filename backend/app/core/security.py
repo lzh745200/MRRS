@@ -337,6 +337,33 @@ def _must_change_password_request_allowed(
     return bool(matched and user_id is not None and matched.group(1) == str(user_id))
 
 
+def enforce_credential_not_expired(user, now, request: Optional[Request] = None) -> None:
+    """P3：账号开通包初始凭据过期即拒绝登录，并写登录失败审计。"""
+    from datetime import datetime as _datetime
+
+    from app.utils.audit_logger import AuditLogger
+    from app.utils.time_utils import as_utc
+
+    expires = getattr(user, "credential_expires_at", None)
+    if not isinstance(expires, _datetime):
+        return
+    expires_utc = as_utc(expires)
+    if expires_utc is None or expires_utc >= now:
+        return
+    AuditLogger.log_login(
+        user_id=getattr(user, "id", 0),
+        username=getattr(user, "username", ""),
+        success=False,
+        ip_address=None,
+        user_agent=getattr(request, "headers", {}).get("user-agent") if request else None,
+        failure_reason="初始凭据已过期",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="初始凭据已过期，请联系管理员重置密码",
+    )
+
+
 def _enforce_must_change_password(user, request: Optional[Request]) -> None:
     """首登强制改密的服务端兜底（未通过则抛 403）。
 

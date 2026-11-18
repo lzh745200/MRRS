@@ -106,3 +106,58 @@ def test_pristine_preview_confirm(client, api_env):
         assert confirm.json()["data"]["users"][0]["username"] == "p_admin"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_export_error_paths_and_download_missing(client, api_env):
+    source = _db(); root = _org(source)
+    admin = SimpleNamespace(id=1, username="root", role="super_admin", is_superuser=True, organization_id=root.id)
+    _use_db(source, admin)
+    try:
+        # 功能关闭
+        settings.ACCOUNT_PACKAGE_ENABLED = False
+        r = client.post("/api/v1/account-packages/export", json={
+            "organization_code": "520100", "admin_username": "u", "admin_full_name": "u",
+            "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass",
+        })
+        assert r.status_code == 403 and r.json()["detail"]["code"] == "AP_DISABLED"
+        settings.ACCOUNT_PACKAGE_ENABLED = True
+        # 弱口令
+        r = client.post("/api/v1/account-packages/export", json={
+            "organization_code": "520100", "admin_username": "u", "admin_full_name": "u",
+            "target_machine_code": "MC-API-123", "package_password": "short",
+        })
+        assert r.status_code == 422
+        # 组织不存在
+        r = client.post("/api/v1/account-packages/export", json={
+            "organization_code": "520100", "admin_username": "u", "admin_full_name": "u",
+            "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass",
+        })
+        assert r.status_code == 404
+        assert client.get("/api/v1/account-packages/not-a-uuid/download").status_code == 400
+        assert client.get("/api/v1/account-packages/11111111-1111-1111-1111-111111111111/download").status_code == 404
+        assert client.post("/api/v1/account-packages/11111111-1111-1111-1111-111111111111/revoke", json={}).status_code == 404
+    finally:
+        settings.ACCOUNT_PACKAGE_ENABLED = True
+        app.dependency_overrides.clear()
+
+
+def test_admin_list_and_preview_errors(client, api_env, monkeypatch):
+    db = _db(); org = _org(db)
+    admin = SimpleNamespace(id=2, username="admin", role="admin", is_superuser=False, organization_id=org.id)
+    _use_db(db, admin)
+    try:
+        listed = client.get("/api/v1/account-packages")
+        assert listed.status_code == 200
+        assert client.get("/api/v1/account-packages/receipts").status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+    # 非回环匿名预览
+    monkeypatch.setattr("app.api.v1.account_package._client_is_loopback", lambda request: False)
+    files = {"file": ("pkg.apkg", b"bad", "application/octet-stream")}
+    assert client.post("/api/v1/account-packages/preview", files=files, data={"password": "x"}).status_code == 403
+
+    # 超过大小上限
+    monkeypatch.setattr("app.api.v1.account_package._client_is_loopback", lambda request: True)
+    monkeypatch.setattr("app.api.v1.account_package.MAX_PACKAGE_BYTES", 1)
+    assert client.post("/api/v1/account-packages/preview", files=files, data={"password": "x"}).status_code == 413

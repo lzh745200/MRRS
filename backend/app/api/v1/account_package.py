@@ -140,7 +140,10 @@ def download_account_package(
     package_id: str,
     _current_user: User = Depends(_require_superuser),
 ):
-    path = AccountPackageService.package_path(package_id)
+    try:
+        path = AccountPackageService.package_path(package_id)
+    except AccountPackageBusinessError as exc:
+        _raise_http_error(exc)
     if not path.exists():
         _raise_http_error(AccountPackageBusinessError("账号包文件不存在", code="AP_NOT_FOUND", status=404))
     return FileResponse(

@@ -1,6 +1,8 @@
 """P3 到期任务：只停用过期且未改密的账号，幂等且吊销会话。"""
 from datetime import timedelta
 
+import pytest
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -35,3 +37,37 @@ def test_expire_only_due_first_login_accounts(monkeypatch):
     assert fresh.is_active is True
     assert changed.is_active is True
     assert expire_provisioned_credentials(db) == 0
+
+
+def test_enforce_credential_not_expired_branches(monkeypatch):
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from app.core.security import enforce_credential_not_expired
+
+    now = utcnow()
+    # 非 datetime（测试替身/Mock）直接放行
+    enforce_credential_not_expired(SimpleNamespace(credential_expires_at=None), now)
+    enforce_credential_not_expired(SimpleNamespace(credential_expires_at=now + timedelta(days=1)), now)
+    with pytest.raises(HTTPException):
+        enforce_credential_not_expired(
+            SimpleNamespace(id=1, username="u", credential_expires_at=now - timedelta(days=1)),
+            now,
+            SimpleNamespace(headers={}),
+        )
+
+
+def test_scheduler_job_runs_and_logs(monkeypatch):
+    from app.services import backup_scheduler as bs
+
+    class _S:
+        def close(self):
+            pass
+
+    called = []
+    monkeypatch.setattr("app.core.database.SessionLocal", lambda: _S())
+    monkeypatch.setattr(
+        "app.services.user_service.expire_provisioned_credentials",
+        lambda db: called.append(True) or 2,
+    )
+    bs.account_credential_expiry_job()
+    assert called == [True]
