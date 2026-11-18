@@ -71,3 +71,15 @@ def test_scheduler_job_runs_and_logs(monkeypatch):
     )
     bs.account_credential_expiry_job()
     assert called == [True]
+
+
+def test_expire_none_db_and_scheduler_zero(monkeypatch):
+    from app.services import backup_scheduler as bs
+    from app.services.user_service import expire_provisioned_credentials
+
+    assert expire_provisioned_credentials(None) == 0
+    class _S:
+        def close(self): pass
+    monkeypatch.setattr("app.core.database.SessionLocal", lambda: _S())
+    monkeypatch.setattr("app.services.user_service.expire_provisioned_credentials", lambda db: 0)
+    bs.account_credential_expiry_job()

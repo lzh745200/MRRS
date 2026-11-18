@@ -6,6 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.account_package import AccountPackageError
 from app.core.config import settings
 from app.core.grant_signing import generate_keypair
 from app.models.base import Base
@@ -141,3 +142,51 @@ def test_multi_account_package_creates_all_users(env, tmp_path):
     result = AccountPackageService(target).confirm(raw, password="passw0rd-pass", machine_code="mc-3")
     assert [u["username"] for u in result["users"]] == ["gy_admin", "gy_user"]
     assert target.query(User).filter(User.username == "gy_user").first().data_scope == "self"
+
+
+def test_export_validation_branches(env):
+    service = AccountPackageService(_db())
+    issuer = SimpleNamespace(id=1, organization_id=None)
+    base = dict(
+        package_id="66666666-6666-6666-6666-666666666666",
+        organization_code="520100", organization_name="x", parent_code="",
+        admin_username="u", admin_full_name="u", target_machine_code="MC-API-123",
+        grants={}, password="passw0rd-pass", issued_by=issuer,
+    )
+    settings.ACCOUNT_PACKAGE_SIGNING_KEY = ""
+    with pytest.raises(AccountPackageBusinessError):
+        service.export_package(**base)
+    settings.ACCOUNT_PACKAGE_SIGNING_KEY = env[0]
+    with pytest.raises(AccountPackageBusinessError):
+        service.export_package(**{**base, "password": "letters-only-pass"})
+    with pytest.raises(AccountPackageBusinessError):
+        service.export_package(**{**base, "password": "123456789012"})
+    db = _db(); root = _org(db)
+    db.add(User(username="exists", hashed_password="x")); db.commit()
+    with pytest.raises(AccountPackageBusinessError):
+        AccountPackageService(db).export_package(**{**base, "accounts": [{"username": "exists"}]})
+    with pytest.raises(AccountPackageBusinessError):
+        AccountPackageService(db).export_package(**{**base, "accounts": [{"username": "u", "role": "god"}]})
+    with pytest.raises(AccountPackageBusinessError):
+        AccountPackageService(db).export_package(**{**base, "accounts": [{"username": ""}]})
+
+
+def test_confirm_conflicts_and_api_helpers(env, monkeypatch):
+    from app.api.v1 import account_package as api
+
+    assert api._fail(AccountPackageBusinessError("x", code="AP_X", status=400)).code == "AP_X"
+    assert api._fail(AccountPackageError("bad", code="ACCOUNT_PACKAGE_BAD_SIGNATURE")).status == 403
+    assert api._fail(RuntimeError("boom")).code == "AP_ROLLBACK"
+    with pytest.raises(Exception):
+        api._raise_http_error(AccountPackageBusinessError("x", code="AP_X", status=400))
+
+    # 管理员已认证分支 + 二次确认分支
+    user = SimpleNamespace(id=1, role="admin", is_superuser=False)
+    monkeypatch.setattr(api, "require_admin", lambda u: None)
+    monkeypatch.setattr("app.api.v1.deps.verify_confirm_password_value", lambda *a, **k: None)
+    api._assert_import_principal(SimpleNamespace(), user, _db(), "pw", require_confirm=True)
+    # 初始化机器匿名分支
+    db = _db(); db.add(User(username="a", hashed_password="x")); db.commit()
+    monkeypatch.setattr(api, "is_pristine_first_run", lambda d: False)
+    with pytest.raises(Exception):
+        api._assert_import_principal(SimpleNamespace(), None, db, "", require_confirm=False)
