@@ -109,8 +109,6 @@ class AccountPackageService:
                 "data_scope": "org",
             }
         ]
-        if not raw_accounts:
-            raise AccountPackageBusinessError("账号列表不能为空", code="AP_BAD_PACKAGE")
         seen = set()
         credentials = []
         items = []

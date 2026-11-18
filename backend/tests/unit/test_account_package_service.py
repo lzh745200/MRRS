@@ -162,6 +162,7 @@ def test_export_validation_branches(env):
     with pytest.raises(AccountPackageBusinessError):
         service.export_package(**{**base, "password": "123456789012"})
     db = _db(); root = _org(db)
+    _org(db, "520100", "市局", root, "2")
     db.add(User(username="exists", hashed_password="x")); db.commit()
     with pytest.raises(AccountPackageBusinessError):
         AccountPackageService(db).export_package(**{**base, "accounts": [{"username": "exists"}]})
@@ -169,6 +170,8 @@ def test_export_validation_branches(env):
         AccountPackageService(db).export_package(**{**base, "accounts": [{"username": "u", "role": "god"}]})
     with pytest.raises(AccountPackageBusinessError):
         AccountPackageService(db).export_package(**{**base, "accounts": [{"username": ""}]})
+    with pytest.raises(AccountPackageBusinessError):
+        AccountPackageService(db).export_package(**{**base, "grants": {"x": "bad"}})
 
 
 def test_confirm_conflicts_and_api_helpers(env, monkeypatch):
@@ -185,8 +188,75 @@ def test_confirm_conflicts_and_api_helpers(env, monkeypatch):
     monkeypatch.setattr(api, "require_admin", lambda u: None)
     monkeypatch.setattr("app.api.v1.deps.verify_confirm_password_value", lambda *a, **k: None)
     api._assert_import_principal(SimpleNamespace(), user, _db(), "pw", require_confirm=True)
+    api._assert_import_principal(SimpleNamespace(), user, _db(), "", require_confirm=False)
     # 初始化机器匿名分支
     db = _db(); db.add(User(username="a", hashed_password="x")); db.commit()
+    monkeypatch.setattr(api, "_client_is_loopback", lambda r: True)
     monkeypatch.setattr(api, "is_pristine_first_run", lambda d: False)
     with pytest.raises(Exception):
         api._assert_import_principal(SimpleNamespace(), None, db, "", require_confirm=False)
+
+
+def _raw_package(env, package_id, *, parent_code="520000", org_name="市局", credential_hash=None):
+    from app.core.account_package import build_manifest, seal_package
+
+    priv = env[0]
+    manifest = build_manifest(
+        package_id=package_id, organization_code="520100", organization_name=org_name,
+        parent_code=parent_code, target_machine_code="MC-API-123",
+        items=[{"username": "xuser", "full_name": "X", "credential_hash": credential_hash or "$2b$12$" + "a" * 53,
+                "role": "admin", "data_scope": "org"}],
+    )
+    return seal_package(manifest, password="passw0rd-pass", private_key_hex=priv, iterations=310_000)
+
+
+def test_package_dir_real(monkeypatch, tmp_path):
+    from pathlib import Path
+    monkeypatch.setattr(
+        "app.services.account_package_service.get_runtime_uploads_path",
+        lambda sub: Path(tmp_path) / sub,
+    )
+    assert AccountPackageService.package_dir().name == "account_packages"
+
+
+def test_more_confirm_conflicts(env):
+    pid = "77777777-7777-7777-7777-777777777777"
+    target = _db()
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(target).confirm(_raw_package(env, pid), password="passw0rd-pass", machine_code="OTHER")
+    assert exc.value.code == "AP_MACHINE_MISMATCH"
+
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(target).confirm(_raw_package(env, pid, parent_code="999999"), password="passw0rd-pass", machine_code="MC-API-123")
+    assert exc.value.code == "AP_ORG_NOT_FOUND"
+
+    parent = _org(target)
+    _org(target, "520100", "市局", parent, "2")
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(target).confirm(_raw_package(env, pid), password="passw0rd-pass", machine_code="MC-API-123")
+    assert exc.value.code == "AP_ORG_CONFLICT"
+
+    fresh = _db(); _org(fresh, "520000")
+    raw = _raw_package(env, "88888888-8888-8888-8888-888888888888", parent_code="", org_name="")
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(fresh).preview(raw, password="passw0rd-pass", machine_code="MC-API-123")
+    assert exc.value.code == "AP_ORG_NOT_FOUND"
+
+
+def test_invalid_hash_and_commit_rollback(env, monkeypatch):
+    target = _db(); _org(target, "520000")
+    raw = _raw_package(env, "99999999-9999-9999-9999-999999999999", credential_hash="plaintext")
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(target).confirm(raw, password="passw0rd-pass", machine_code="MC-API-123")
+    assert exc.value.code == "AP_USERNAME_TAKEN"
+
+    target2 = _db(); _org(target2, "520000")
+    raw2 = _raw_package(env, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    svc = AccountPackageService(target2)
+    def boom():
+        from sqlalchemy.exc import SQLAlchemyError
+        raise SQLAlchemyError("unique")
+    monkeypatch.setattr(target2, "commit", boom)
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        svc.confirm(raw2, password="passw0rd-pass", machine_code="MC-API-123")
+    assert exc.value.code == "AP_ALREADY_IMPORTED"
