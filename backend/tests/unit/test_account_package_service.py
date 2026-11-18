@@ -260,3 +260,21 @@ def test_invalid_hash_and_commit_rollback(env, monkeypatch):
     with pytest.raises(AccountPackageBusinessError) as exc:
         svc.confirm(raw2, password="passw0rd-pass", machine_code="MC-API-123")
     assert exc.value.code == "AP_ALREADY_IMPORTED"
+
+
+def test_export_without_issuer_org_and_confirm_without_parent(env):
+    source = _db(); root = _org(source)
+    _org(source, "520100", "市局", root, "2")
+    out = AccountPackageService(source).export_package(
+        package_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        organization_code="520100", organization_name="市局", parent_code="",
+        admin_username="no_org", admin_full_name="无组织签发人",
+        target_machine_code="MC-API-123", grants={}, password="passw0rd-pass",
+        issued_by=SimpleNamespace(id=1, organization_id=None),
+    )
+    raw = (__import__("pathlib").Path(AccountPackageService.package_dir()) / out["file_name"]).read_bytes()
+    target = _db()
+    result = AccountPackageService(target).confirm(raw, password="passw0rd-pass", machine_code="MC-API-123")
+    assert result["users"][0]["username"] == "no_org"
+    org = target.query(Organization).filter(Organization.code == "520100").first()
+    assert org is not None and org.level == "1"
