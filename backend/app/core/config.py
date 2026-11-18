@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.49"
+    PROJECT_VERSION: str = "1.18.50"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -255,6 +255,7 @@ class Settings(BaseSettings):
     ACCOUNT_PACKAGE_KDF_ITERATIONS: int = 600_000
     ACCOUNT_PACKAGE_MAX_ATTEMPTS: int = 5
     ACCOUNT_PACKAGE_MIN_PASSWORD: int = 12
+    ACCOUNT_PACKAGE_CREDENTIAL_VALID_DAYS: int = 30
 
     # W27 P1：经费「不能自批」。
     # 默认 False = 禁止创建人审批自己创建的经费记录（财务内控 / 审计要求）。

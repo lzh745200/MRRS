@@ -1,3 +1,22 @@
+## [1.18.50] - 2026-11-18 — 账号开通包 P1-b/P2/P3（导出/导入/多账号/有效期）
+
+### 新增
+
+- **P1-b 后端**：`/account-packages` 导出、下载、列表、回执、撤销、预览、确认；单包多账号，每账号独立 128-bit OTP；回执 `package_id` 唯一；空库回环匿名导入、已初始化管理员 + `X-Confirm-Password`。
+- **P2 前端**：系统管理新增“账号开通包”页面，支持签发、多账号、OTP 一次性展示、下载、撤销、导入预览/确认；路由与菜单已接。
+- **P3 账号有效期**：`users.credential_expires_at`、登录过期拦截、每日 04:50 过期任务（停用 + `token_version++`），迁移 `account_credential_expiry_001` 自证通过。
+- **P4/P5 工具**：`scripts/load_account_package_http.py` HTTP 并发压测脚本、`scripts/bench_account_package.py` KDF 基准、`scripts/dual_machine_rehearsal.py` 双库离线演练、双机现场清单。
+
+### 验证
+
+- 后端账号包/首装/到期定向 **57 passed**；接口集成覆盖导出→下载→列表→撤销、空库预览→确认。
+- 前端 `AccountPackage.vue` 9 例通过，语句/分支/函数/行覆盖率 **100%**；`vue-tsc`、ESLint。
+- 迁移自证、单 head、路由认证、flake8、类型/异常债通过。
+
+### 说明
+
+- P4 HTTP 压测脚本需真实后端/JWT/包文件，本次未执行并发结果；P5 实体双机需现场执行，仓库只提供等价演练与清单。
+
 ## [1.18.49] - 2026-11-17 — 账号开通包 P1-a 地基（格式/签名/加密/迁移）
 
 ### 新增

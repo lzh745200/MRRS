@@ -87,6 +87,12 @@ class AuditAction(str, Enum):
     PACKAGE_EXPORT = "package_export"
     PACKAGE_RECEIPT = "package_receipt"
 
+    # 账号开通包（P1-b）
+    ACCOUNT_PACKAGE_EXPORT = "account_package_export"
+    ACCOUNT_PACKAGE_REVOKE = "account_package_revoke"
+    ACCOUNT_PACKAGE_CONFIRM = "account_package_confirm"
+    ACCOUNT_PACKAGE_IMPORT_FAILED = "account_package_import_failed"
+
     PERMISSION_GRANT = "permission_grant"
     PERMISSION_REVOKE = "permission_revoke"
     ROLE_CHANGE = "role_change"

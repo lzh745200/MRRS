@@ -192,6 +192,7 @@ def test_rejects_manifest_hash_mismatch():
     with pytest.raises(AccountPackageError):
         open_package(_join(header, cipher), password=PASSWORD, public_key_hex=pub)
 
+
 def test_open_rejects_empty_password_and_unsigned_header():
     priv, pub = generate_keypair()
     raw = seal_package(

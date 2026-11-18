@@ -132,6 +132,7 @@ class UserService:
         email: Optional[str] = None,
         phone: Optional[str] = None,
         must_change_password: bool = True,
+        credential_expires_at=None,
         commit: bool = True,
     ):
         """用**已哈希**的初始口令建号（账号开通包专用，2026-11-17）。
@@ -179,6 +180,7 @@ class UserService:
             data_scope=data_scope,
             is_active=True,
             must_change_password=bool(must_change_password),
+            credential_expires_at=credential_expires_at,
         )
         self.db.add(user)
         if commit:
@@ -218,3 +220,43 @@ class UserService:
     async def get_user(user_id: int):
         """异步获取用户（兼容旧接口）"""
         return None
+
+
+def expire_provisioned_credentials(db: Session) -> int:
+    """P3：停用已过期且仍处于首登改密状态的账号（幂等）。
+
+    只处理 ``credential_expires_at < now`` 且 ``must_change_password=True`` 的账号，
+    避免误伤正常长期账号；禁用同时递增 token_version 让既有会话立即失效。
+    """
+    from app.utils.audit_logger import AuditLogger
+    from app.utils.time_utils import utcnow
+
+    if db is None:
+        return 0
+    from app.models.user import User
+
+    now = utcnow()
+    rows = (
+        db.query(User)
+        .filter(
+            User.credential_expires_at.isnot(None),
+            User.credential_expires_at < now,
+            User.must_change_password.is_(True),
+            User.is_active.is_(True),
+        )
+        .all()
+    )
+    for user in rows:
+        user.is_active = False
+        user.token_version = int(user.token_version or 0) + 1
+        AuditLogger.log_safely(
+            action="account_credential_expired",
+            user_id=user.id,
+            username=user.username,
+            resource_type="user",
+            resource_id=user.id,
+            details={"reason": "credential_expires_at"},
+        )
+    if rows:
+        safe_commit(db)
+    return len(rows)

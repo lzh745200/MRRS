@@ -777,6 +777,12 @@ export const routes: RouteRecordRaw[] = [
         component: () => retryImport(() => import('@/views/system/TaskManager.vue')),
         meta: { menuKey: 'tasks', title: '后台任务', roles: ['admin', 'super_admin'] },
       },
+      {
+        path: '/system/account-packages',
+        name: 'SystemAccountPackages',
+        component: () => retryImport(() => import('@/views/system/AccountPackage.vue')),
+        meta: { menuKey: 'account-packages', title: '账号开通包', roles: ['admin', 'super_admin'] },
+      },
       // ── 系统管理聚合页（v1.13.0 单一菜单源：6 个板块共用同一容器页）──
       // group ∈ org/security/ops/storage/settings/about，页内 Tab 由 query.tab 控制；
       // 具体板块与 Tab 可见性由后端 /menus/accessible v2 的 console/tabs 节点决定

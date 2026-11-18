@@ -693,6 +693,21 @@ def recycle_retention_job():
         db.close()
 
 
+def account_credential_expiry_job():
+    """P3：每日停用过期未改密的账号开通包初始凭据。"""
+    from app.core.database import SessionLocal
+    from app.services.user_service import expire_provisioned_credentials
+
+    db = SessionLocal()
+    try:
+        count = expire_provisioned_credentials(db)
+        if count:
+            logger.info("账号初始凭据过期停用: %d 个", count)
+    finally:
+        # 异常交给 _run_scheduler_job 统一记录，避免再新增一个宽泛 except。
+        db.close()
+
+
 def export_purge_job():
     """过期导出文件回收（R5：每日 04:00）。
 
@@ -1061,12 +1076,13 @@ def start_backup_scheduler():
     # W18 P1-6：数据包导出文件保留期清理（此前 data-packages 目录只增不减，
     # 长期运行撑满磁盘 → 备份/导入失败）
     _schedule_daily(data_package_cleanup_job, 4, 10, "data_package_cleanup")
+    _schedule_daily(account_credential_expiry_job, 4, 50, "account_credential_expiry")
 
     _scheduler_started = True
     logger.info(
         "调度器已启动（KPI预计算 + 异常检测 + 自动备份 + 启动补跑 + 自动打包 + 消息清理"
         " + 过期导出回收 + 恢复演练 + 提醒扫描 + 待办提醒 + 周报 + 订阅分发"
-        " + 分片清理 + 数据包清理 + 审计日志清理 + 数据库维护）"
+        " + 分片清理 + 数据包清理 + 账号凭据过期 + 审计日志清理 + 数据库维护）"
     )
 
 

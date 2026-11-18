@@ -77,6 +77,11 @@ PUBLIC_PREFIXES = (
     "/api/v1/machine-code",
     "/api/v1/permission-packages/import",
     "/api/v1/permission-packages/confirm",
+    # 账号开通包：预览/确认必须支持“登录页离线首装”，因此不能强制认证。
+    # 保护机制在函数体内的 _assert_import_principal：仅回环 + 出厂首装，
+    # 或登录管理员 + X-Confirm-Password 二次确认（confirm）；preview 只读。
+    "/api/v1/account-packages/preview",
+    "/api/v1/account-packages/confirm",
     "/api/v1/feedback",
     "/api/v1/shutdown",
     "/api/v1/system/version",

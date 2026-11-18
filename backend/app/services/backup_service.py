@@ -1326,9 +1326,18 @@ class BackupService:
             conn.close()
 
         if not has_version and has_users:
-            # 极老备份：表已存在但没有版本号，重放历史迁移会撞表；直接 stamp。
-            alembic_command.stamp(cfg, "head")
-            logger.info("恢复后迁移：无 alembic_version，已 stamp 到 head")
+            # 极老备份：表已存在但没有版本号，重放历史迁移会撞表吗？
+            # 不会 —— 基线 001 在 users/supported_villages 已存在时是空操作，
+            # 其后的迁移各自带存在性守卫，整条链可完整重放。
+            # 原先直接 ``stamp head`` 会把落后几十个版本的旧库标记成最新，
+            # 跳过全部迁移 → 恢复后第一次访问新列即 ``no such column``，
+            # 且因为 stamp 已成功不会触发回滚，用户拿不到任何提示。
+            from alembic.script import ScriptDirectory
+
+            base_rev = ScriptDirectory.from_config(cfg).get_base()
+            alembic_command.stamp(cfg, base_rev)
+            alembic_command.upgrade(cfg, "head")
+            logger.info("恢复后迁移：无 alembic_version，已 stamp 基线 %s 并重放到 head", base_rev)
         else:
             alembic_command.upgrade(cfg, "head")
             logger.info("恢复后迁移：upgrade head 完成")

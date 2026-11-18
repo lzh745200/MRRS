@@ -144,6 +144,10 @@ def build_manifest(
     items: Iterable[Dict[str, Any]],
     created_at: Optional[datetime] = None,
     valid_days: int = DEFAULT_VALID_DAYS,
+    organization_name: str = "",
+    parent_code: str = "",
+    grants: Optional[Dict[str, str]] = None,
+    credential_valid_days: int = 30,
 ) -> Dict[str, Any]:
     """组装内层清单（会被加密）。
 
@@ -164,6 +168,10 @@ def build_manifest(
         "version": FORMAT_VERSION,
         "package_id": package_id,
         "organization_code": organization_code,
+        "organization_name": organization_name,
+        "parent_code": parent_code,
+        "grants": dict(grants or {}),
+        "policy": {"credential_valid_days": max(1, int(credential_valid_days))},
         "target_machine_code": target_machine_code,
         "created_at": _iso(created),
         "expires_at": _iso(expires),

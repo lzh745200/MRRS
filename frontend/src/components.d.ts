@@ -101,6 +101,7 @@ declare module 'vue' {
     FilePreview: typeof import('./components/FilePreview.vue')['default']
     FundsOcrVoucherSuggest: typeof import('./components/funds/OcrVoucherSuggest.vue')['default']
     FundsYearlyComparisonChart: typeof import('./components/funds/YearlyComparisonChart.vue')['default']
+    GuideFirstUseGuide: typeof import('./components/guide/FirstUseGuide.vue')['default']
     ImportImportPreviewDialog: typeof import('./components/import/ImportPreviewDialog.vue')['default']
     LayoutMobileBottomNav: typeof import('./components/layout/MobileBottomNav.vue')['default']
     MapOfflineMap: typeof import('./components/map/OfflineMap.vue')['default']

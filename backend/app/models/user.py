@@ -76,6 +76,9 @@ class User(Base):
     )
     token_version = Column(Integer, default=0, comment="Token版本号，递增后旧token全部失效")
     must_change_password = Column(Boolean, default=False, comment="是否必须修改密码")
+    credential_expires_at = Column(
+        UtcDateTime(), nullable=True, comment="初始/临时凭据到期时间（NULL=不过期）"
+    )
     failed_login_count = Column(Integer, default=0, comment="连续登录失败次数")
     locked_until = Column(UtcDateTime(), nullable=True, comment="账户锁定截止时间")
     password_changed_at = Column(UtcDateTime(), nullable=True, comment="密码最后修改时间")

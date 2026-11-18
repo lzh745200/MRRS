@@ -13,7 +13,7 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 接口层（52 个路由模块文件 + 5 个子包；853 个端点）
+│   ├── api/v1/               # API 接口层（53 个路由模块文件 + 5 个子包；860 个端点）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
@@ -77,11 +77,11 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,924 用例（1 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 15,932 用例（1 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
-cd frontend && npm test -- --run                                       # 前端 349 文件（用例数以输出为准）
+cd frontend && npm test -- --run                                       # 前端 350 文件（用例数以输出为准）
 # 文档数字漂移门禁（端点数 / 路由模块数 / 前端测试文件数 / 后端用例数）：
 #   python scripts/check_doc_numbers.py [--full] [--update]
 cd backend && .venv/Scripts/python.exe -m flake8 app/ --max-line-length=120 --max-complexity=16

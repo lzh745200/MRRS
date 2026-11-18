@@ -767,6 +767,14 @@ MENU_DEFINITIONS: list[dict[str, Any]] = [
                 "roles": ["admin", "super_admin"],
             },
             {
+                "key": "account-packages",
+                "label": "账号开通包",
+                "path": "/system/account-packages",
+                "icon": "Tickets",
+                "order": 55,
+                "roles": ["admin", "super_admin"],
+            },
+            {
                 "key": "environment",
                 "label": "运行环境",
                 "path": "/system/environment",
