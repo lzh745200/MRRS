@@ -123,6 +123,7 @@ const TAB_COMPONENTS: Record<string, Component> = {
   // 会被 renderableTabs 过滤掉 → 聚合页不可见（只能手输 URL）。新增 tab 必须同步此处。
   'system-org-grant': defineAsyncComponent(() => import('@/views/system/OrgGrant.vue')),
   'system-grant-import': defineAsyncComponent(() => import('@/views/system/GrantImport.vue')),
+  'account-packages': defineAsyncComponent(() => import('@/views/system/AccountPackage.vue')),
   audit: defineAsyncComponent(() => import('@/views/system/AuditManagement.vue')),
   'zero-trust': defineAsyncComponent(() => import('@/views/system/ZeroTrust.vue')),
   secrets: defineAsyncComponent(() => import('@/views/system/SecretsManagement.vue')),

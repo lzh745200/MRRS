@@ -19,7 +19,7 @@ import pytest
 
 PKG = "app.api.v1"
 
-EXPECTED_BUSINESS_MODULE_COUNT = 50  # W27：-1 rural_tasks（模块下线）；其余同 W22/R33
+EXPECTED_BUSINESS_MODULE_COUNT = 51  # v1.18.50：+account_package；W27 起含 51 个
 
 
 def _fresh_pkg():

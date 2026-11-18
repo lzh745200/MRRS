@@ -46,7 +46,9 @@ def main() -> int:
         AccountPackageService.package_dir = classmethod(lambda cls: tmp_path)
         src = _db()
         root = Organization(code="520000", name="州局", level="1", is_active=True)
-        src.add(root); src.commit(); src.refresh(root)
+        src.add(root)
+        src.commit()
+        src.refresh(root)
         src.add(Organization(code="520100", name="市局", parent_id=root.id, level="2", is_active=True))
         src.commit()
         out = AccountPackageService(src).export_package(
@@ -58,14 +60,21 @@ def main() -> int:
         )
         package = tmp_path / out["file_name"]
         # 模拟离线介质：复制到另一目录后才在目标机读取
-        usb = tmp_path / "usb"; usb.mkdir(); target_file = usb / package.name
+        usb = tmp_path / "usb"
+        usb.mkdir()
+        target_file = usb / package.name
         target_file.write_bytes(package.read_bytes())
-        dst = _db(); dst.add(Organization(code="520000", name="州局", level="1", is_active=True)); dst.commit()
+        dst = _db()
+        dst.add(Organization(code="520000", name="州局", level="1", is_active=True))
+        dst.commit()
         result = AccountPackageService(dst).confirm(
             target_file.read_bytes(), password="offline-pass-123", machine_code="MC-A"
         )
         assert result["users"][0]["username"] == "mc_admin"
-        print(f"[dual-machine] OK package={out['package_id']} target_file={target_file.name} users={len(result['users'])}")
+        print(
+            f"[dual-machine] OK package={out['package_id']} "
+            f"target_file={target_file.name} users={len(result['users'])}"
+        )
         if a.keep:
             print(f"[dual-machine] kept at {tmp_path} (process exit will remove; use --keep only for inspection)")
     return 0

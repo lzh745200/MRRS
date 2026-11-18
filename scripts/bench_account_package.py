@@ -26,7 +26,7 @@ def main() -> int:
     a = p.parse_args()
     priv, pub = generate_keypair()
     seal_ms, open_ms, sizes = [], [], []
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory():
         for i in range(max(1, a.rounds)):
             manifest = build_manifest(
                 package_id=str(uuid.uuid4()),
