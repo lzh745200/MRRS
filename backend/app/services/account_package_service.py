@@ -39,6 +39,7 @@ class AccountPackageBusinessError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.status = status
+        self.public_message = message
 
 
 def _normalize_machine(code: Optional[str]) -> str:

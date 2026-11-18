@@ -65,6 +65,7 @@ CONTRACT_CONSOLES = {
             ("monitor", "/system/monitoring"),
             ("cache", "/system/cache"),
             ("tasks", "/system/tasks"),
+            ("account-packages", "/system/account-packages"),
             ("environment", "/system/environment"),
             ("error-reports", "/system/error-reports"),
         ],
@@ -113,6 +114,7 @@ OLD_MENU_KEYS = {
     "feedback", "backup", "cache", "monitor", "help", "health-check", "about",
     "update-logs", "system-permission-packs", "tasks", "secrets", "data-tier",
     "map-tiles", "environment", "zero-trust", "error-reports", "system-overview",
+    "account-packages",
     "admin-dashboard", "messages", "effectiveness", "effectiveness-rankings",
     "effectiveness-evaluate", "todos", "sentiment", "reminder", "checkin",
     "system-security", "pairing", "donation", "handover",
@@ -423,7 +425,7 @@ class TestAccessibleMenus:
         assert console is not None
         assert {tab["key"] for tab in console["tabs"]} == {
             "system-overview", "health-check", "monitor", "cache", "tasks",
-            "environment", "error-reports",
+            "account-packages", "environment", "error-reports",
         }
 
     def test_console_visible_when_only_tab_key_allowed(self, menus_app, client):

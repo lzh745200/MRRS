@@ -259,4 +259,4 @@ async def confirm_account_package(
 def _raise_http_error(exc: AccountPackageBusinessError) -> None:
     from fastapi import HTTPException
 
-    raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)})
+    raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": exc.public_message})
