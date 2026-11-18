@@ -4413,7 +4413,7 @@ VERSION_HISTORY_DATA = [
     },
     {
         "version": "1.18.51",
-        "date": "2026-11-19",
+        "date": "2026-11-18",
         "description": "旧版备份恢复兼容性修复",
         "features": [
             (
