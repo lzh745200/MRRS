@@ -4404,7 +4404,11 @@ VERSION_HISTORY_DATA = [
                 "旧版备份包恢复后 schema 不升级：backup_service._migrate_restored_database 对「有业务表但无 alembic_version」的极老备份一律"
                 " stamp head，会把落后几十个版本的库标记成最新、跳过全部迁移，恢复后第一次访问新列即 no such column，且 stamp 已成功不触发回滚。"
             ),
-            "P4 HTTP 压测脚本需真实后端/JWT/包文件，本次未执行并发结果；P5 实体双机需现场执行，仓库只提供等价演练与清单。",
+            (
+                "P4 已用真实 FastAPI/ASGI /account-packages/export 路由执行 8 并发导出：8/8 成功，p50 477ms、p95 668ms、p99 668ms"
+                "；非物理网卡压测。"
+            ),
+            "P5 实体双机需现场执行，仓库提供双库离线演练、双实例脚本与现场清单。",
         ],
     },
 ]
