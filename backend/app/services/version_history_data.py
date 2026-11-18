@@ -4411,4 +4411,21 @@ VERSION_HISTORY_DATA = [
             "P5 实体双机需现场执行，仓库提供双库离线演练、双实例脚本与现场清单。",
         ],
     },
+    {
+        "version": "1.18.51",
+        "date": "2026-11-19",
+        "description": "旧版备份恢复兼容性修复",
+        "features": [
+            (
+                "无版本表旧备份误 stamp head：app.models 为懒加载包，原 _migrate_restored_database 只 import app.models 时 Base.m"
+                "etadata 为空，缺表旧库被误判“表已齐全”直接 stamp head，恢复后缺 account_package_exports / credential_expires_at 等新结"
+                "构。现改为显式导入全部模型后再比对。"
+            ),
+            (
+                "部分现代化旧库重放冲突：无 alembic_version 且表较多（≥20 张）时，重放迁移会撞 user_sessions 等已存在索引。改为与启动自愈同口径：create_all 补"
+                "缺表 + migrate_missing_columns 补缺列 + stamp head；仅极小旧库仍从基线重放。"
+            ),
+            "新增回归测试：无版本部分库必须真正补出 account_package_exports 与 credential_expires_at。",
+        ],
+    },
 ]

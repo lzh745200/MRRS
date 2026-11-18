@@ -1,3 +1,17 @@
+## [1.18.51] - 2026-11-19 — 旧版备份恢复兼容性修复
+
+### 修复
+
+- **无版本表旧备份误 stamp head**：`app.models` 为懒加载包，原 `_migrate_restored_database` 只 `import app.models` 时 `Base.metadata` 为空，缺表旧库被误判“表已齐全”直接 stamp head，恢复后缺 `account_package_exports` / `credential_expires_at` 等新结构。现改为显式导入全部模型后再比对。
+- **部分现代化旧库重放冲突**：无 `alembic_version` 且表较多（≥20 张）时，重放迁移会撞 `user_sessions` 等已存在索引。改为与启动自愈同口径：`create_all` 补缺表 + `migrate_missing_columns` 补缺列 + stamp head；仅极小旧库仍从基线重放。
+- 新增回归测试：无版本部分库必须真正补出 `account_package_exports` 与 `credential_expires_at`。
+
+### 验证
+
+- 真实历史备份 `v1.18.47`（`audit_chain_001` / `machine_recovery_001`）3 份全部迁移到 `account_credential_expiry_001`：119/120→122 表、用户 1→1、`integrity_check=ok`、新表/新列齐全。
+- 完整恢复流程（快照→覆盖→上传目录→迁移）在临时运行库通过；无版本表旧备份补齐到 122 表后 stamp head。
+- 备份恢复/路径/服务回归 123 例通过。
+
 ## [1.18.50] - 2026-11-18 — 账号开通包 P1-b/P2/P3（导出/导入/多账号/有效期）
 
 ### 新增

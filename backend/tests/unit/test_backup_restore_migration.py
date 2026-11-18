@@ -101,3 +101,31 @@ def test_svc_helper_is_isolated(tmp_path, tables):
     db_path = tmp_path / f"{tables}.db"
     sqlite3.connect(db_path).execute(f"CREATE TABLE {tables} (id INTEGER PRIMARY KEY)").connection.commit()
     assert _svc(db_path, tmp_path).database_path.endswith(f"{tables}.db")
+
+
+def test_migrate_no_version_partial_modern_db_reconciles_not_replays(tmp_path):
+    """无版本号但表很多：必须按模型补表补列 + stamp，不能重放撞已有索引。"""
+    db_path = tmp_path / "partial-modern.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)")
+    for i in range(20):
+        conn.execute(f"CREATE TABLE dummy_{i} (id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+
+    with (
+        patch("alembic.command.stamp") as stamp,
+        patch("alembic.command.upgrade") as upgrade,
+    ):
+        _svc(db_path, tmp_path)._migrate_restored_database()
+
+    assert stamp.call_count == 1
+    assert stamp.call_args[0][1] == "head"
+    assert upgrade.call_count == 0
+    # 缺的当前表/列必须真的被补上，而不是只改版本号
+    chk = sqlite3.connect(db_path)
+    tables = {r[0] for r in chk.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    cols = {r[1] for r in chk.execute("PRAGMA table_info(users)")}
+    chk.close()
+    assert "account_package_exports" in tables
+    assert "credential_expires_at" in cols

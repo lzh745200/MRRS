@@ -1338,21 +1338,45 @@ class BackupService:
                 .execute("SELECT name FROM sqlite_master WHERE type='table'")
                 .fetchall()
             }
-            import app.models  # noqa: F401  注册全部模型
+            # app.models 是懒加载包：仅 ``import app.models`` 不会注册任何表，
+            # Base.metadata 为空会把“缺表的旧库”误判成“表已齐全”直接 stamp head，
+            # 造成缺新表/新列却版本号已到 head（恢复后首次访问即 no such column）。
+            # 必须显式遍历导入所有模型模块。
+            import importlib
+            import pkgutil
+
+            import app.models as _models_pkg
             from app.models.base import Base
 
+            for _mod in pkgutil.iter_modules(_models_pkg.__path__):
+                importlib.import_module(f"app.models.{_mod.name}")
             expected = set(Base.metadata.tables)
             missing = sorted(expected - actual_tables)
-            if missing:
-                alembic_command.upgrade(cfg, "head")
+            if len(actual_tables) >= 20:
+                # 多数表都在、只是丢了版本表（手工导出/极老升级包常见）。
+                # 直接 replay 会在 user_sessions 等早已存在的索引上撞 "already exists"，
+                # 与启动自愈同口径：create_all 补缺表 + ALTER 补缺列，再 stamp head。
+                from sqlalchemy import create_engine
+
+                from app.core.migration_helper import migrate_missing_columns
+
+                engine = create_engine(f"sqlite:///{self.database_path}")
+                try:
+                    Base.metadata.create_all(bind=engine)
+                    migrate_missing_columns(engine, Base)
+                finally:
+                    engine.dispose()
+                alembic_command.stamp(cfg, "head")
                 logger.info(
-                    "恢复后迁移：无 alembic_version 且缺 %d 张当前表（如 %s），已从基线重放到 head",
+                    "恢复后迁移：无 alembic_version，已按模型补齐 %d 张缺表并 stamp head",
                     len(missing),
-                    ", ".join(missing[:3]),
                 )
             else:
-                alembic_command.stamp(cfg, "head")
-                logger.info("恢复后迁移：无 alembic_version 但表已齐全，已 stamp 到 head")
+                alembic_command.upgrade(cfg, "head")
+                logger.info(
+                    "恢复后迁移：无 alembic_version 且仅 %d 张表，已从基线重放到 head",
+                    len(actual_tables),
+                )
         else:
             alembic_command.upgrade(cfg, "head")
             logger.info("恢复后迁移：upgrade head 完成")
