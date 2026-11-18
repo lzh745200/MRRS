@@ -48,7 +48,9 @@ async def run(rounds: int, concurrency: int):
     AccountPackageService.package_dir = classmethod(lambda cls: Path(tmp.name))
     db = _db()
     org = Organization(code="520100", name="市局", level="1", is_active=True)
-    db.add(org); db.commit(); db.refresh(org)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
     admin = SimpleNamespace(id=1, username="root", role="super_admin", is_superuser=True, organization_id=org.id)
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_current_user] = lambda: admin
@@ -79,7 +81,10 @@ async def run(rounds: int, concurrency: int):
     print(f"[asgi-load] total={len(results)} ok={len(ok)} fail={len(bad)} concurrency={concurrency}")
     if ok:
         pct = lambda p: ok[min(len(ok)-1, max(0, int(round(len(ok)*p/100))-1))]  # noqa: E731
-        print(f"[asgi-load] p50={pct(50):.0f}ms p95={pct(95):.0f}ms p99={pct(99):.0f}ms avg={statistics.mean(ok):.0f}ms")
+        print(
+            f"[asgi-load] p50={pct(50):.0f}ms p95={pct(95):.0f}ms "
+            f"p99={pct(99):.0f}ms avg={statistics.mean(ok):.0f}ms"
+        )
     return 0 if not bad else 1
 
 
