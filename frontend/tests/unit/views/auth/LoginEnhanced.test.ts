@@ -1092,8 +1092,11 @@ describe('LoginEnhanced.vue', () => {
       const importBtn = btns.find((b) => b.text().includes('导入权限包'))!
       await importBtn.trigger('click')
       expect((w.vm as any).permissionImportVisible).toBe(true)
-      // 普通用户没有“去创建账号/自助注册”入口，只有上述两个可操作按钮
-      expect(btns.length).toBe(2)
+      const accountBtn = btns.find((b) => b.text().includes('导入账号开通包'))!
+      await accountBtn.trigger('click')
+      expect(mockPushSafe).toHaveBeenCalledWith('/account-package-import')
+      // 普通用户没有“自助注册”入口，只有机器码/权限包/账号包三个可操作按钮
+      expect(btns.length).toBe(3)
     })
 
     it('提示条清空后不渲染', async () => {
