@@ -32,6 +32,12 @@ export const routes: RouteRecordRaw[] = [
     component: () => retryImport(() => import('@/views/auth/ChangePassword.vue')),
     meta: { title: '修改密码', noAuth: true },
   },
+  {
+    path: '/account-package-import',
+    name: 'AccountPackageImport',
+    component: () => retryImport(() => import('@/views/auth/AccountPackageImport.vue')),
+    meta: { title: '导入账号开通包', noAuth: true },
+  },
   // ── 帮扶成效大屏（汇报模式，无导航栏独立全屏页）──
   {
     path: '/bigscreen',

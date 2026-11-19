@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Header, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -50,7 +50,7 @@ class ExportAccountPackageRequest(BaseModel):
     parent_code: str = Field("", max_length=6)
     admin_username: str = Field("", max_length=20)
     admin_full_name: str = Field("", max_length=50)
-    accounts: list[dict[str, str]] = Field(default_factory=list)
+    accounts: list[dict[str, Any]] = Field(default_factory=list)
     target_machine_code: str = Field(..., min_length=8, max_length=64)
     package_password: str = Field(..., min_length=12, max_length=128)
     grants: dict[str, str] = Field(default_factory=dict)

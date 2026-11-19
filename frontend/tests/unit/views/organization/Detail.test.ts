@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const { ElMessage, mockGetDetail, mockGetMembers, mockPushSafe, routeBox, logError } = vi.hoisted(
+const { ElMessage, mockGetDetail, mockGetMembers, mockPushSafe, routeBox, logError, authBox } = vi.hoisted(
   () => ({
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     mockGetDetail: vi.fn(),
@@ -21,6 +21,7 @@ const { ElMessage, mockGetDetail, mockGetMembers, mockPushSafe, routeBox, logErr
     mockPushSafe: vi.fn(),
     routeBox: { params: {} as Record<string, any> },
     logError: vi.fn(),
+    authBox: { user: null as any },
   })
 )
 
@@ -50,6 +51,10 @@ vi.mock('@/composables/useDesensitize', () => ({
     ds: (v: any) => (v ? `脱敏:${v}` : ''),
     role: 'viewer',
   }),
+}))
+
+vi.mock('@/utils/authStorage', () => ({
+  AuthStorage: { getUser: () => authBox.user },
 }))
 
 vi.mock('@/utils/logger', () => ({
@@ -353,6 +358,16 @@ describe('辅助函数', () => {
     expect(vm.roleTagType('viewer')).toBe('info')
     expect(vm.roleTagType('x')).toBe('info')
     wrapper.unmount()
+  })
+
+  it('超级管理员可见「签发账号包」并跳转', async () => {
+    authBox.user = { role: 'super_admin', is_superuser: false }
+    const wrapper = mountComp()
+    expect((wrapper.vm as any).canIssuePackage).toBe(true)
+    ;(wrapper.vm as any).goIssuePackage()
+    expect(mockPushSafe).toHaveBeenCalledWith('/system/account-packages')
+    wrapper.unmount()
+    authBox.user = null
   })
 
   it('goToOrg / handleEdit / handleBack → pushSafe', async () => {

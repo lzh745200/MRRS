@@ -195,3 +195,57 @@ describe('AccountPackage extra', () => {
 
 
 })
+
+describe('AccountPackage offline handoff', () => {
+  it('parses comma/JSON authorization lists and downloads CSV', async () => {
+    post.mockResolvedValue({
+      package_id: 'pkg-1', file_name: 'pkg.apkg', organization_code: '520100',
+      organization_name: '市局', expires_at: '2030-01-01',
+      accounts: [{ username: 'a', one_time_password: 'InitPass123', generated_password: false }],
+    })
+    get.mockResolvedValue({ items: [] })
+    const wrapper = mountComp(); await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openExportDialog()
+    Object.assign(vm.exportForm, {
+      organization_code: '520100', organization_name: '市局', target_machine_code: 'MC-API-123',
+      package_password: 'passw0rd-pass', grantsText: '',
+      accounts: [{
+        username: 'a', full_name: 'A', role: 'user', data_scope: 'self',
+        initial_password: 'InitPass123', menusText: '["projects","funds"]',
+        permissionsText: 'project:view,fund:view',
+      }],
+    })
+    await vm.exportPackage()
+    expect(post).toHaveBeenCalledWith('/account-packages/export', expect.objectContaining({
+      accounts: [expect.objectContaining({
+        allowed_menus: ['projects', 'funds'],
+        allowed_permissions: ['project:view', 'fund:view'],
+        initial_password: 'InitPass123',
+      })],
+    }))
+    vm.downloadCredentialSheet()
+    expect(downloadBlob).toHaveBeenCalled()
+    vm.exportResult = { package_id: 'p2', target_org_code: '520100', accounts: [{ username: 'b', one_time_password: 'x', generated_password: true }] }
+    vm.downloadCredentialSheet()
+    vm.exportResult = { package_id: 'p3', accounts: [{ username: 'c', one_time_password: 'y' }] }
+    vm.downloadCredentialSheet()
+    vm.exportResult = null
+    vm.downloadCredentialSheet()
+  })
+
+  it('rejects non-array JSON authorization list', async () => {
+    get.mockResolvedValue({ items: [] })
+    const wrapper = mountComp(); await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openExportDialog()
+    Object.assign(vm.exportForm, {
+      organization_code: '520100', target_machine_code: 'MC-API-123',
+      package_password: 'passw0rd-pass', grantsText: '',
+      accounts: [{ username: 'a', full_name: 'A', role: 'user', data_scope: 'self',
+        initial_password: '', menusText: '{"bad":1}', permissionsText: '' }],
+    })
+    await vm.exportPackage()
+    expect(ElMessage.error).toHaveBeenCalled()
+  })
+})

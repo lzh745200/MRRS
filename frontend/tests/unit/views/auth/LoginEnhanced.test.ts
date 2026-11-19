@@ -466,6 +466,8 @@ describe('LoginEnhanced.vue', () => {
     expect(mockPushSafe).toHaveBeenCalledWith('/forgot-password')
     vm.goToMachineCode()
     expect(mockPushSafe).toHaveBeenCalledWith('/get-machine-code')
+    vm.goToAccountImport()
+    expect(mockPushSafe).toHaveBeenCalledWith('/account-package-import')
   })
 
   it('openPermissionImport 打开对话框', async () => {

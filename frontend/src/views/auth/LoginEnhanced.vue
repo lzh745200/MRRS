@@ -223,6 +223,13 @@
                 <p class="step-note">
                   权限包只包含角色、菜单与权限配置，不包含账号密码；账号创建后请管理员确认权限包/角色已分配。
                 </p>
+                <button type="button" class="step-btn" @click="goToAccountImport">
+                  导入账号开通包（.apkg）
+                </button>
+                <p class="step-note">
+                  仅全新机器、尚无账号时可登录前导入；已初始化机器请登录管理员后在「系统管理 →
+                  账号开通包」导入。
+                </p>
               </div>
             </li>
           </ol>
@@ -775,6 +782,10 @@ const goToForgotPassword = () => {
 
 const goToMachineCode = () => {
   pushSafe('/get-machine-code')
+}
+
+const goToAccountImport = () => {
+  pushSafe('/account-package-import')
 }
 </script>
 

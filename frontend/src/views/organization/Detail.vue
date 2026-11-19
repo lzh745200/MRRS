@@ -17,6 +17,7 @@
             <div class="card-header">
               <span class="title">组织详情</span>
               <div class="actions">
+                <el-button v-if="canIssuePackage" @click="goIssuePackage">签发账号包</el-button>
                 <el-button type="primary" @click="handleEdit">编辑</el-button>
                 <el-button @click="handleBack">返回</el-button>
               </div>
@@ -168,7 +169,7 @@
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
 import { logger } from '@/utils/logger'
 
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRouterSafe, safeRouteParam } from '@/composables/useRouterSafe'
 import { useDesensitize } from '@/composables/useDesensitize'
@@ -176,7 +177,12 @@ import { ElMessage } from 'element-plus'
 import { getOrganizationDetail, getOrganizationMembers } from '@/api/organization'
 
 import { format } from '@/utils'
+import { AuthStorage } from '@/utils/authStorage'
 const { pushSafe } = useRouterSafe()
+const currentUser = AuthStorage.getUser() as Record<string, any> | null
+const canIssuePackage = computed(
+  () => currentUser?.is_superuser === true || currentUser?.role === 'super_admin'
+)
 const { ds } = useDesensitize()
 const route = useRoute()
 const loading = ref(false)
@@ -305,6 +311,10 @@ const handleBack = () => {
 /** 成员本质为"用户 + 所属组织"，分配入口在用户管理（可编辑用户所属组织） */
 const goManageMembers = () => {
   pushSafe(`/system/users?org_id=${detail.id}`)
+}
+
+const goIssuePackage = () => {
+  pushSafe('/system/account-packages')
 }
 
 onMounted(() => {

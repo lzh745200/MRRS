@@ -278,3 +278,52 @@ def test_export_without_issuer_org_and_confirm_without_parent(env):
     assert result["users"][0]["username"] == "no_org"
     org = target.query(Organization).filter(Organization.code == "520100").first()
     assert org is not None and org.level == "1"
+
+
+def test_offline_accounts_carry_password_menus_permissions(env):
+    source = _db(); root = _org(source)
+    _org(source, "520100", "市局", root, "2")
+    out = AccountPackageService(source).export_package(
+        package_id="cccccccc-cccc-cccc-cccc-cccccccccccc",
+        organization_code="520100", organization_name="市局", parent_code="520000",
+        admin_username="", admin_full_name="", target_machine_code="MC-API-123",
+        grants={}, password="passw0rd-pass",
+        issued_by=SimpleNamespace(id=1, organization_id=root.id),
+        accounts=[{
+            "username": "restricted", "full_name": "受限用户", "role": "user",
+            "data_scope": "self", "initial_password": "CustomPass123",
+            "allowed_menus": ["projects", "funds"],
+            "allowed_permissions": ["project:view", "fund:view"],
+        }],
+    )
+    assert out["accounts"][0]["generated_password"] is False
+    raw = (__import__("pathlib").Path(AccountPackageService.package_dir()) / out["file_name"]).read_bytes()
+    target = _db(); _org(target, "520000")
+    AccountPackageService(target).confirm(raw, password="passw0rd-pass", machine_code="MC-API-123")
+    user = target.query(User).filter(User.username == "restricted").first()
+    assert user.allowed_menus_list == ["projects", "funds"]
+    assert user.allowed_permissions_list == ["project:view", "fund:view"]
+
+    with pytest.raises(AccountPackageBusinessError):
+        AccountPackageService(source).export_package(
+            package_id="dddddddd-dddd-dddd-dddd-dddddddddddd",
+            organization_code="520100", organization_name="市局", parent_code="520000",
+            admin_username="", admin_full_name="", target_machine_code="MC-API-123",
+            grants={}, password="passw0rd-pass",
+            issued_by=SimpleNamespace(id=1, organization_id=root.id),
+            accounts=[{"username": "weak", "initial_password": "short"}],
+        )
+
+
+def test_offline_initial_password_requires_letters_and_digits(env):
+    source = _db(); root = _org(source)
+    _org(source, "520100", "市局", root, "2")
+    with pytest.raises(AccountPackageBusinessError):
+        AccountPackageService(source).export_package(
+            package_id="eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+            organization_code="520100", organization_name="市局", parent_code="520000",
+            admin_username="", admin_full_name="", target_machine_code="MC-API-123",
+            grants={}, password="passw0rd-pass",
+            issued_by=SimpleNamespace(id=1, organization_id=root.id),
+            accounts=[{"username": "digits", "initial_password": "123456789012"}],
+        )

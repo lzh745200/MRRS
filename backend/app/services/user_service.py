@@ -133,6 +133,8 @@ class UserService:
         phone: Optional[str] = None,
         must_change_password: bool = True,
         credential_expires_at=None,
+        allowed_menus: Optional[list] = None,
+        allowed_permissions: Optional[list] = None,
         commit: bool = True,
     ):
         """用**已哈希**的初始口令建号（账号开通包专用，2026-11-17）。
@@ -169,6 +171,14 @@ class UserService:
         if self.db.query(User).filter(User.username == username).first() is not None:
             raise ValueError(f"用户名已存在: {username}")
 
+        import json
+
+        menus_json = None if allowed_menus is None else json.dumps(
+            [str(k) for k in allowed_menus if str(k).strip()], ensure_ascii=False
+        )
+        perms_json = json.dumps(
+            [str(p) for p in (allowed_permissions or []) if str(p).strip()], ensure_ascii=False
+        )
         user = User(
             username=username,
             email=email,
@@ -181,6 +191,8 @@ class UserService:
             is_active=True,
             must_change_password=bool(must_change_password),
             credential_expires_at=credential_expires_at,
+            allowed_menus=menus_json,
+            allowed_permissions=perms_json,
         )
         self.db.add(user)
         if commit:

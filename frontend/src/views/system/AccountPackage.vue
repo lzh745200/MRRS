@@ -130,27 +130,46 @@
             >添加账号</el-button
           >
         </div>
-        <div v-for="(account, index) in exportForm.accounts" :key="index" class="account-row">
-          <el-input v-model.trim="account.username" placeholder="用户名" maxlength="20" />
-          <el-input v-model.trim="account.full_name" placeholder="姓名" maxlength="50" />
-          <el-select v-model="account.role" aria-label="角色">
-            <el-option label="管理员" value="admin" />
-            <el-option label="普通用户" value="user" />
-            <el-option label="只读用户" value="viewer" />
-          </el-select>
-          <el-select v-model="account.data_scope" aria-label="数据范围">
-            <el-option label="本组织" value="org" />
-            <el-option label="本组织及下级" value="org_children" />
-            <el-option label="仅本人" value="self" />
-          </el-select>
-          <el-button
-            link
-            type="danger"
-            :disabled="exportForm.accounts.length === 1"
-            @click="removeAccount(index)"
-          >
-            删除
-          </el-button>
+        <div v-for="(account, index) in exportForm.accounts" :key="index" class="account-block">
+          <div class="account-row">
+            <el-input v-model.trim="account.username" placeholder="用户名" maxlength="20" />
+            <el-input v-model.trim="account.full_name" placeholder="姓名" maxlength="50" />
+            <el-select v-model="account.role" aria-label="角色">
+              <el-option label="管理员" value="admin" />
+              <el-option label="普通用户" value="user" />
+              <el-option label="只读用户" value="viewer" />
+            </el-select>
+            <el-select v-model="account.data_scope" aria-label="数据范围">
+              <el-option label="本组织" value="org" />
+              <el-option label="本组织及下级" value="org_children" />
+              <el-option label="仅本人" value="self" />
+            </el-select>
+            <el-button
+              link
+              type="danger"
+              :disabled="exportForm.accounts.length === 1"
+              @click="removeAccount(index)"
+            >
+              删除
+            </el-button>
+          </div>
+          <div class="account-row account-row--secondary">
+            <el-input
+              v-model="account.initial_password"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              placeholder="初始登录密码（留空自动生成，至少 12 位字母+数字）"
+            />
+            <el-input
+              v-model.trim="account.menusText"
+              placeholder="可见菜单 key，逗号分隔；留空=角色默认"
+            />
+            <el-input
+              v-model.trim="account.permissionsText"
+              placeholder="操作权限代码，逗号分隔；留空=角色默认"
+            />
+          </div>
         </div>
       </el-form>
       <el-alert
@@ -196,6 +215,9 @@
         </div>
       </template>
       <template #footer>
+        <el-button data-testid="download-credential-sheet" @click="downloadCredentialSheet"
+          >下载初始化清单（光盘用）</el-button
+        >
         <el-button v-if="exportResult" @click="downloadPackage(exportResult)">下载账号包</el-button>
         <el-button type="primary" data-testid="close-otp" @click="closeOtpDialog"
           >我已妥善保存</el-button
@@ -254,8 +276,17 @@
             <dd>{{ importPreview.package_id }}</dd>
             <dt>过期时间</dt>
             <dd>{{ formatDateTimeLocale(importPreview.expires_at) }}</dd>
-            <dt>首个账号</dt>
-            <dd>{{ importPreview.admin?.full_name }}（{{ importPreview.admin?.username }}）</dd>
+            <dt>开通账号</dt>
+            <dd>
+              <span
+                v-for="account in importPreview.accounts || []"
+                :key="account.username"
+                class="imported-user"
+              >
+                {{ account.full_name }}（{{ account.username }} / {{ account.role || '-' }} /
+                {{ account.data_scope || '-' }}）
+              </span>
+            </dd>
           </dl>
           <el-button
             type="danger"
@@ -295,6 +326,9 @@ interface AccountDraft {
   full_name: string
   role: string
   data_scope: string
+  initial_password: string
+  menusText: string
+  permissionsText: string
 }
 
 interface PackageRow {
@@ -315,7 +349,22 @@ interface ReceiptRow {
 
 interface ExportResult extends PackageRow {
   file_name: string
-  accounts: Array<{ username: string; one_time_password: string }>
+  organization_code?: string
+  organization_name?: string
+  accounts: Array<{
+    username: string
+    one_time_password: string
+    generated_password?: boolean
+    role?: string
+    data_scope?: string
+  }>
+}
+
+interface PreviewAccount {
+  username?: string
+  full_name?: string
+  role?: string
+  data_scope?: string
 }
 
 interface ImportPreview {
@@ -323,7 +372,8 @@ interface ImportPreview {
   organization_code: string
   organization_name: string
   expires_at: string
-  admin?: { username?: string; full_name?: string }
+  admin?: PreviewAccount
+  accounts?: PreviewAccount[]
 }
 
 interface ImportResult {
@@ -347,7 +397,15 @@ const previewing = ref(false)
 const confirming = ref(false)
 
 function newAccount(): AccountDraft {
-  return { username: '', full_name: '', role: 'admin', data_scope: 'org' }
+  return {
+    username: '',
+    full_name: '',
+    role: 'admin',
+    data_scope: 'org',
+    initial_password: '',
+    menusText: '',
+    permissionsText: '',
+  }
 }
 
 const exportForm = reactive({
@@ -425,6 +483,19 @@ function removeAccount(index: number): void {
   if (exportForm.accounts.length > 1) exportForm.accounts.splice(index, 1)
 }
 
+function parseKeyList(text?: string): string[] {
+  const raw = (text || '').trim()
+  if (!raw) return []
+  if (raw.startsWith('[')) {
+    const parsed = JSON.parse(raw) as unknown[]
+    return parsed.map((item) => String(item).trim()).filter(Boolean)
+  }
+  return raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function parseGrants(): Record<string, string> {
   const text = exportForm.grantsText.trim()
   if (!text) return {}
@@ -458,7 +529,15 @@ async function exportPackage(): Promise<void> {
       package_password: exportForm.package_password,
       grants: parseGrants(),
       valid_days: exportForm.valid_days,
-      accounts: exportForm.accounts.map((account) => ({ ...account })),
+      accounts: exportForm.accounts.map((account) => ({
+        username: account.username,
+        full_name: account.full_name,
+        role: account.role,
+        data_scope: account.data_scope,
+        initial_password: account.initial_password,
+        allowed_menus: parseKeyList(account.menusText),
+        allowed_permissions: parseKeyList(account.permissionsText),
+      })),
     })
     exportResult.value = result
     exportVisible.value = false
@@ -470,6 +549,42 @@ async function exportPackage(): Promise<void> {
   } finally {
     exporting.value = false
   }
+}
+
+function downloadCredentialSheet(): void {
+  if (!exportResult.value) return
+  const r = exportResult.value
+  const header = [
+    '包ID',
+    '目标组织编码',
+    '目标组织名称',
+    '账号',
+    '初始登录密码',
+    '密码来源',
+    '角色',
+    '数据范围',
+    '过期时间',
+    '说明',
+  ]
+  const rows = r.accounts.map((a) => [
+    r.package_id,
+    r.organization_code || r.target_org_code || '',
+    r.organization_name || '',
+    a.username,
+    a.one_time_password,
+    a.generated_password === false ? '管理员指定' : '系统生成',
+    a.role || '',
+    a.data_scope || '',
+    r.expires_at || '',
+    '首次登录必须修改密码；密码与包口令分渠道交付',
+  ])
+  const csv = [header, ...rows]
+    .map((cols) => cols.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+    .join('\r\n')
+  downloadBlob(
+    new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }),
+    `account-package-${r.package_id}-credentials.csv`
+  )
 }
 
 function closeOtpDialog(): void {
@@ -601,6 +716,7 @@ defineExpose({
   removeAccount,
   exportPackage,
   closeOtpDialog,
+  downloadCredentialSheet,
   downloadPackage,
   revokePackage,
   openImportDialog,
@@ -645,8 +761,15 @@ defineExpose({
   margin: 8px 0 12px;
   font-weight: 600;
 }
+.account-block {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--el-border-color-lighter);
+}
 .account-row {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+}
+.account-row--secondary .el-input {
+  width: 220px;
 }
 .account-row .el-input {
   width: 150px;

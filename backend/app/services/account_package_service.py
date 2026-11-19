@@ -123,14 +123,34 @@ class AccountPackageService:
             scope = str(account.get("data_scope") or "org")
             if role not in ("admin", "user", "viewer") or scope not in ("org", "org_children", "self"):
                 raise AccountPackageBusinessError("账号角色或数据范围非法", code="AP_INVALID_ROLE")
-            otp = generate_otp()
-            credentials.append({"username": username, "one_time_password": otp})
+            initial_password = str(account.get("initial_password") or "").strip()
+            if initial_password:
+                if len(initial_password) < settings.ACCOUNT_PACKAGE_MIN_PASSWORD:
+                    raise AccountPackageBusinessError("初始密码长度不足", code="AP_PASSWORD_WEAK")
+                if not any(c.isalpha() for c in initial_password) or not any(
+                    c.isdigit() for c in initial_password
+                ):
+                    raise AccountPackageBusinessError("初始密码必须同时包含字母和数字", code="AP_PASSWORD_WEAK")
+                otp = initial_password
+            else:
+                otp = generate_otp()
+            menus = [str(k) for k in (account.get("allowed_menus") or []) if str(k).strip()]
+            perms = [str(k) for k in (account.get("allowed_permissions") or []) if str(k).strip()]
+            credentials.append({
+                "username": username,
+                "one_time_password": otp,
+                "generated_password": not bool(initial_password),
+                "role": role,
+                "data_scope": scope,
+            })
             items.append({
                 "username": username,
                 "full_name": str(account.get("full_name") or username),
                 "credential_hash": get_password_hash(otp),
                 "role": role,
                 "data_scope": scope,
+                "allowed_menus": menus,
+                "allowed_permissions": perms,
             })
         manifest = build_manifest(
             package_id=package_id,
@@ -204,6 +224,7 @@ class AccountPackageService:
             "parent_code": manifest.get("parent_code"),
             "expires_at": manifest.get("expires_at"),
             "admin": _safe_name((manifest.get("items") or [{}])[0]),
+            "accounts": [_safe_name(item) for item in (manifest.get("items") or [])],
             "grants": manifest.get("grants") or {},
             "organization_exists": org is not None,
         }
@@ -261,6 +282,8 @@ class AccountPackageService:
                     data_scope=str(item.get("data_scope") or "org"),
                     full_name=item.get("full_name"),
                     credential_expires_at=credential_expires_at,
+                    allowed_menus=item.get("allowed_menus"),
+                    allowed_permissions=item.get("allowed_permissions"),
                     commit=False,
                 ))
             except ValueError as exc:
