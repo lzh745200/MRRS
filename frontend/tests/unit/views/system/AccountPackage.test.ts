@@ -2,12 +2,34 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 
+
 const { get, post, requestGet, downloadBlob, ElMessage } = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   requestGet: vi.fn(),
   downloadBlob: vi.fn(),
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}))
+
+const menuState = vi.hoisted(() => ({
+  loaded: true,
+  fetchError: false,
+  flatEntries: [
+    { key: 'projects', label: '项目管理', sectionLabel: '业务管理' },
+    { key: 'dashboard', label: '工作台' },
+  ],
+}))
+
+vi.mock('@/stores/menu', () => ({
+  useMenuStore: () => ({
+    get loaded() {
+      return menuState.loaded
+    },
+    flatEntries: menuState.flatEntries,
+    fetchMenus: vi.fn(async () => {
+      if (menuState.fetchError) throw new Error('menu fail')
+    }),
+  }),
 }))
 
 vi.mock('@/api/request', () => ({
@@ -197,7 +219,7 @@ describe('AccountPackage extra', () => {
 })
 
 describe('AccountPackage offline handoff', () => {
-  it('parses comma/JSON authorization lists and downloads CSV', async () => {
+  it('passes visual authorization lists and downloads CSV', async () => {
     post.mockResolvedValue({
       package_id: 'pkg-1', file_name: 'pkg.apkg', organization_code: '520100',
       organization_name: '市局', expires_at: '2030-01-01',
@@ -212,8 +234,8 @@ describe('AccountPackage offline handoff', () => {
       package_password: 'passw0rd-pass', grantsText: '',
       accounts: [{
         username: 'a', full_name: 'A', role: 'user', data_scope: 'self',
-        initial_password: 'InitPass123', menusText: '["projects","funds"]',
-        permissionsText: 'project:view,fund:view',
+        initial_password: 'InitPass123', allowed_menus: ['projects', 'funds'],
+        allowed_permissions: ['project:view', 'fund:view'],
       }],
     })
     await vm.exportPackage()
@@ -234,18 +256,45 @@ describe('AccountPackage offline handoff', () => {
     vm.downloadCredentialSheet()
   })
 
-  it('rejects non-array JSON authorization list', async () => {
-    get.mockResolvedValue({ items: [] })
-    const wrapper = mountComp(); await flushPromises()
-    const vm = wrapper.vm as any
-    vm.openExportDialog()
-    Object.assign(vm.exportForm, {
-      organization_code: '520100', target_machine_code: 'MC-API-123',
-      package_password: 'passw0rd-pass', grantsText: '',
-      accounts: [{ username: 'a', full_name: 'A', role: 'user', data_scope: 'self',
-        initial_password: '', menusText: '{"bad":1}', permissionsText: '' }],
+
+
+  it('菜单选项与菜单加载失败分支', async () => {
+    menuState.loaded = true
+    const w = mountComp(); await flushPromises()
+    expect((w.vm as any).menuOptions).toEqual([
+      { key: 'projects', label: '项目管理', group: '业务管理' },
+      { key: 'dashboard', label: '工作台', group: '菜单' },
+    ])
+    w.unmount()
+    menuState.loaded = false
+    menuState.fetchError = false
+    const w2 = mountComp(); await flushPromises()
+    expect((w2.vm as any).menuOptions).toEqual([
+      { key: 'projects', label: '项目管理', group: '业务管理' },
+      { key: 'dashboard', label: '工作台', group: '菜单' },
+    ])
+    w2.unmount()
+    menuState.loaded = false
+    menuState.fetchError = true
+    const w3 = mountComp(); await flushPromises()
+    w3.unmount()
+    menuState.loaded = true
+    menuState.fetchError = false
+  })
+
+  it('权限选项数组与非数组分支', async () => {
+    get.mockImplementation((url: string) => {
+      if (url === '/users/form-options') {
+        return Promise.resolve({ permissions: [{ code: 'data:view', name: '查看', category: '操作' }] })
+      }
+      return Promise.resolve({ items: [] })
     })
-    await vm.exportPackage()
-    expect(ElMessage.error).toHaveBeenCalled()
+    const w = mountComp(); await flushPromises()
+    expect((w.vm as any).permissionOptions).toHaveLength(1)
+    w.unmount()
+    get.mockResolvedValue({ items: [] })
+    const w2 = mountComp(); await flushPromises()
+    expect((w2.vm as any).permissionOptions).toEqual([])
+    w2.unmount()
   })
 })

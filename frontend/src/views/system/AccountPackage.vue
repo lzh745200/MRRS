@@ -161,14 +161,36 @@
               autocomplete="new-password"
               placeholder="初始登录密码（留空自动生成，至少 12 位字母+数字）"
             />
-            <el-input
-              v-model.trim="account.menusText"
-              placeholder="可见菜单 key，逗号分隔；留空=角色默认"
-            />
-            <el-input
-              v-model.trim="account.permissionsText"
-              placeholder="操作权限代码，逗号分隔；留空=角色默认"
-            />
+            <el-select
+              v-model="account.allowed_menus"
+              multiple
+              filterable
+              collapse-tags
+              clearable
+              placeholder="可见菜单（留空=角色默认）"
+            >
+              <el-option
+                v-for="option in menuOptions"
+                :key="option.key"
+                :label="`${option.group} / ${option.label}`"
+                :value="option.key"
+              />
+            </el-select>
+            <el-select
+              v-model="account.allowed_permissions"
+              multiple
+              filterable
+              collapse-tags
+              clearable
+              placeholder="操作权限（留空=角色默认）"
+            >
+              <el-option
+                v-for="option in permissionOptions"
+                :key="option.code"
+                :label="`${option.category} / ${option.name}`"
+                :value="option.code"
+              />
+            </el-select>
           </div>
         </div>
       </el-form>
@@ -315,11 +337,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
 import request, { downloadBlob, get, parseContentDisposition, post } from '@/api/request'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { formatDateTimeLocale } from '@/utils/datetime'
+import { useMenuStore } from '@/stores/menu'
 
 interface AccountDraft {
   username: string
@@ -327,8 +350,8 @@ interface AccountDraft {
   role: string
   data_scope: string
   initial_password: string
-  menusText: string
-  permissionsText: string
+  allowed_menus: string[]
+  allowed_permissions: string[]
 }
 
 interface PackageRow {
@@ -395,6 +418,16 @@ const importPreview = ref<ImportPreview | null>(null)
 const importResult = ref<ImportResult | null>(null)
 const previewing = ref(false)
 const confirming = ref(false)
+const menuStore = useMenuStore()
+const permissionOptions = ref<Array<{ code: string; name: string; category: string }>>([])
+
+const menuOptions = computed(() =>
+  menuStore.flatEntries.map((entry: any) => ({
+    key: entry.key,
+    label: entry.label,
+    group: entry.sectionLabel || '菜单',
+  }))
+)
 
 function newAccount(): AccountDraft {
   return {
@@ -403,8 +436,8 @@ function newAccount(): AccountDraft {
     role: 'admin',
     data_scope: 'org',
     initial_password: '',
-    menusText: '',
-    permissionsText: '',
+    allowed_menus: [],
+    allowed_permissions: [],
   }
 }
 
@@ -483,19 +516,6 @@ function removeAccount(index: number): void {
   if (exportForm.accounts.length > 1) exportForm.accounts.splice(index, 1)
 }
 
-function parseKeyList(text?: string): string[] {
-  const raw = (text || '').trim()
-  if (!raw) return []
-  if (raw.startsWith('[')) {
-    const parsed = JSON.parse(raw) as unknown[]
-    return parsed.map((item) => String(item).trim()).filter(Boolean)
-  }
-  return raw
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
 function parseGrants(): Record<string, string> {
   const text = exportForm.grantsText.trim()
   if (!text) return {}
@@ -535,8 +555,8 @@ async function exportPackage(): Promise<void> {
         role: account.role,
         data_scope: account.data_scope,
         initial_password: account.initial_password,
-        allowed_menus: parseKeyList(account.menusText),
-        allowed_permissions: parseKeyList(account.permissionsText),
+        allowed_menus: account.allowed_menus,
+        allowed_permissions: account.allowed_permissions,
       })),
     })
     exportResult.value = result
@@ -698,8 +718,27 @@ async function confirmImport(): Promise<void> {
   }
 }
 
-onMounted(() => {
+async function loadPermissionOptions(): Promise<void> {
+  try {
+    const data = await get<{
+      permissions?: Array<{ code: string; name: string; category: string }>
+    }>('/users/form-options')
+    permissionOptions.value = Array.isArray(data.permissions) ? data.permissions : []
+  } catch {
+    permissionOptions.value = []
+  }
+}
+
+onMounted(async () => {
   void refresh()
+  if (!menuStore.loaded) {
+    try {
+      await menuStore.fetchMenus()
+    } catch {
+      // 菜单加载失败不阻断签发；未加载时用户只能留空继承角色默认
+    }
+  }
+  await loadPermissionOptions()
 })
 
 defineExpose({
@@ -707,6 +746,7 @@ defineExpose({
   receipts,
   exportForm,
   exportResult,
+  menuOptions,
   importFile,
   importPassword,
   importPreview,
@@ -770,6 +810,9 @@ defineExpose({
 }
 .account-row--secondary .el-input {
   width: 220px;
+}
+.account-row--secondary .el-select {
+  width: 260px;
 }
 .account-row .el-input {
   width: 150px;
