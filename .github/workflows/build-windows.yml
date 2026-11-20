@@ -758,3 +758,24 @@ jobs:
             dist/electron/SHA256SUMS-windows-x64.txt
           generate_release_notes: false
           body_path: ${{ runner.temp }}/release-body.md
+
+      # 12.5 发布后资产一致性（2026-11-20）：上传成功 ≠ 发对了。用 GitHub API 的
+      #      size/digest 就地比对已发布资产与本地产物（不重新下载 382MB），并核对
+      #      latest.yml、预期资产清单与 Release 正文非空。任一不符即让作业红，
+      #      把 v1.18.1「正文 0 字符」/ v1.18.14-15「资产清单不一致」这类问题拦在发布作业内。
+      - name: Verify published release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          python scripts/verify_release_assets.py \
+            --tag "${{ github.ref_name }}" \
+            --asset-set windows \
+            --artifacts "dist/electron/MRRS-Setup-${VERSION}-x64.exe" \
+                        "dist/electron/MRRS-Setup-${VERSION}-x64.exe.blockmap" \
+                        "dist/electron/latest.yml" \
+                        "dist/electron/SHA256SUMS-windows-x64.txt" \
+            --latest-yml dist/electron/latest.yml \
+            --exe "dist/electron/MRRS-Setup-${VERSION}-x64.exe"
