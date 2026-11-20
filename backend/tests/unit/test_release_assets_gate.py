@@ -425,3 +425,35 @@ class TestMainEndToEnd:
             ],
         )
         assert mod.main() == 1
+
+    def test_require_assets_subset_tolerates_other_jobs_pending(self, mod, monkeypatch, tmp_path):
+        """ARM64 作业只核对自己上传的资产：另一作业的 deb 尚未发布不应误红。"""
+        exe, blockmap, yml, sums = self._argv(tmp_path)
+        release = self._release_from_local((exe, blockmap, yml, sums))
+        self._patch_gh(mod, monkeypatch, release)
+        monkeypatch.setattr(
+            mod.sys,
+            "argv",
+            [
+                "verify_release_assets.py", "--tag", "v1.18.53", "--repo", "owner/repo",
+                "--asset-set", "arm64",
+                "--artifacts", str(exe),
+                "--require-assets", "MRRS-Setup-{version}-x64.exe",
+            ],
+        )
+        assert mod.main() == 0
+
+    def test_require_assets_missing_flagged(self, mod, monkeypatch, tmp_path):
+        exe, blockmap, yml, sums = self._argv(tmp_path)
+        release = self._release_from_local((exe, blockmap, yml, sums))
+        self._patch_gh(mod, monkeypatch, release)
+        monkeypatch.setattr(
+            mod.sys,
+            "argv",
+            [
+                "verify_release_assets.py", "--tag", "v1.18.53", "--repo", "owner/repo",
+                "--artifacts", str(exe),
+                "--require-assets", "not-uploaded-{version}.deb",
+            ],
+        )
+        assert mod.main() == 1

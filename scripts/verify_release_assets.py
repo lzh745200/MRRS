@@ -419,7 +419,12 @@ def main() -> int:
     )
     problems.extend(_check_body(release, version))
     if exe_path is not None:
-        problems.extend(_check_latest_yml(ROOT / args.latest_yml, exe_path, version))
+        yml_path = pathlib.Path(args.latest_yml) if args.latest_yml else None
+        if yml_path is None or not yml_path.is_file():
+            # 未显式指定时，从本作业产物里找 latest.yml（ARM64 作业没有该文件则跳过）。
+            yml_path = next((p for p in artifacts if p.name == "latest.yml" and p.is_file()), None)
+        if yml_path is not None:
+            problems.extend(_check_latest_yml(yml_path, exe_path, version))
 
     published = {asset.get("name", "") for asset in release.get("assets", [])}
     print("已发布资产：")
