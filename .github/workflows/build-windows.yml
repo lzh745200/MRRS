@@ -494,24 +494,29 @@ jobs:
       #      就必然同时写出 latest.yml 与 .exe.blockmap。缺了说明配置或版本行为变了，
       #      必须在构建期就红，而不是等用户发现 Release 少文件。
       - name: Verify updater metadata produced
-        shell: pwsh
+        shell: bash
         run: |
-          $ErrorActionPreference = 'Stop'
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $required = @(
-            "dist/electron/latest.yml",
-            "dist/electron/MRRS-Setup-$version-x64.exe",
-            "dist/electron/MRRS-Setup-$version-x64.exe.blockmap"
+          # 版本号统一用 node 读 package.json（单一权威源）。不用 PowerShell 的
+          # ConvertFrom-Json：package.json 含中文，Windows PowerShell 5.1 / GBK 代码页
+          # 下 Get-Content 默认编码会把中文解坏导致 JSON 解析失败（本机实测）。
+          VERSION=$(node -p "require('./package.json').version")
+          required=(
+            "dist/electron/latest.yml"
+            "dist/electron/MRRS-Setup-${VERSION}-x64.exe"
+            "dist/electron/MRRS-Setup-${VERSION}-x64.exe.blockmap"
           )
-          $missing = $required | Where-Object { -not (Test-Path $_) }
-          if ($missing) {
-            Write-Host "::error::electron-builder 缺少预期产物：$($missing -join ', ')"
-            Get-ChildItem dist/electron -ErrorAction SilentlyContinue |
-              Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
+          missing=0
+          for f in "${required[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::electron-builder 缺少预期产物：$f"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            ls -la dist/electron || true
             exit 1
-          }
-          Get-ChildItem dist/electron/latest.yml, "dist/electron/MRRS-Setup-$version-x64.exe.blockmap" |
-            ForEach-Object { Write-Host ("OK  {0}  {1:N0} B" -f $_.Name, $_.Length) }
+          fi
+          ls -la dist/electron/latest.yml "dist/electron/MRRS-Setup-${VERSION}-x64.exe.blockmap"
 
       # 10.2 安装产物自包含冒烟（v1.13.1 引入；v1.13.3 增加诊断输出与动态端口）：
       #      直接运行 electron-builder 解包后的打包后端 exe（onedir），按 Electron 运行期
@@ -719,6 +724,16 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           python scripts/verify_release_assets.py --dir dist/electron --expect-version "$VERSION"
 
+      # 10.7 随包附带两个现场修复脚本：
+      #      - MRRS-Installer-Helper.ps1：TEMP 不可写时用可写 TEMP 启动安装器；
+      #      - MRRS-Shortcut-Repair.ps1：已装机器白纸图标/未知发布者的修复脚本。
+      #      它们解决的是“安装器启动前”和“装完之后”的问题，不能塞进 NSIS 内。
+      - name: Stage Windows installer helpers
+        shell: bash
+        run: |
+          cp scripts/windows/install-mrrs-with-clean-temp.ps1 dist/electron/MRRS-Installer-Helper.ps1
+          cp scripts/windows/fix-trust-and-icon.ps1 dist/electron/MRRS-Shortcut-Repair.ps1
+
       # 11. 上传制品
       #     2026-10-27（v1.18.16）：补上 latest.yml 与 .exe.blockmap —— 它们是
       #     electron-builder 的 NSIS 产物（本系统**不消费**，升级走离线安装包），
@@ -733,6 +748,8 @@ jobs:
             dist/electron/*.blockmap
             dist/electron/latest.yml
             dist/electron/SHA256SUMS-windows-x64.txt
+            dist/electron/MRRS-Installer-Helper.ps1
+            dist/electron/MRRS-Shortcut-Repair.ps1
           retention-days: 30
 
       # 11.5 准备 Release 正文（单源：仓库里的 RELEASE_NOTES-<tag>.md）
@@ -756,6 +773,8 @@ jobs:
             dist/electron/*.blockmap
             dist/electron/latest.yml
             dist/electron/SHA256SUMS-windows-x64.txt
+            dist/electron/MRRS-Installer-Helper.ps1
+            dist/electron/MRRS-Shortcut-Repair.ps1
           generate_release_notes: false
           body_path: ${{ runner.temp }}/release-body.md
 

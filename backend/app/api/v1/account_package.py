@@ -107,6 +107,11 @@ def export_account_package(
 ):
     service = AccountPackageService(db)
     package_id = str(uuid.uuid4())
+    subject = service.attempt_subject("export", getattr(current_user, "id", None))
+    try:
+        service.check_attempt_allowed(subject)
+    except AccountPackageBusinessError as exc:
+        _raise_http_error(exc)
     try:
         result = service.export_package(
             package_id=package_id,
@@ -123,7 +128,10 @@ def export_account_package(
             accounts=body.accounts or None,
         )
     except (AccountPackageBusinessError, AccountPackageError) as exc:  # 统一映射稳定错误码
-        _raise_http_error(_fail(exc))
+        err = _fail(exc)
+        service.record_attempt_failure(subject, err.code)
+        _raise_http_error(err)
+    service.record_attempt_success(subject)
     AuditLogger.log(
         action=AuditAction.ACCOUNT_PACKAGE_EXPORT,
         user_id=getattr(current_user, "id", None),
@@ -212,12 +220,20 @@ async def preview_account_package(
     raw = await file.read(MAX_PACKAGE_BYTES + 1)
     if len(raw) > MAX_PACKAGE_BYTES:
         _raise_http_error(AccountPackageBusinessError("账号包超过大小上限", code="AP_FILE_TOO_LARGE", status=413))
+    service = AccountPackageService(db)
+    machine_code = MachineCodeService().get_machine_code()
+    subject = service.attempt_subject("import", machine_code)
     try:
-        data = AccountPackageService(db).preview(
-            raw, password=password, machine_code=MachineCodeService().get_machine_code()
-        )
+        service.check_attempt_allowed(subject)
+    except AccountPackageBusinessError as exc:
+        _raise_http_error(exc)
+    try:
+        data = service.preview(raw, password=password, machine_code=machine_code)
     except (AccountPackageBusinessError, AccountPackageError) as exc:
-        _raise_http_error(_fail(exc))
+        err = _fail(exc)
+        service.record_attempt_failure(subject, err.code)
+        _raise_http_error(err)
+    service.record_attempt_success(subject)
     return success_response(data=data)
 
 
@@ -234,12 +250,18 @@ async def confirm_account_package(
     raw = await file.read(MAX_PACKAGE_BYTES + 1)
     if len(raw) > MAX_PACKAGE_BYTES:
         _raise_http_error(AccountPackageBusinessError("账号包超过大小上限", code="AP_FILE_TOO_LARGE", status=413))
+    service = AccountPackageService(db)
+    machine_code = MachineCodeService().get_machine_code()
+    subject = service.attempt_subject("import", machine_code)
     try:
-        data = AccountPackageService(db).confirm(
-            raw, password=password, machine_code=MachineCodeService().get_machine_code()
-        )
+        service.check_attempt_allowed(subject)
+    except AccountPackageBusinessError as exc:
+        _raise_http_error(exc)
+    try:
+        data = service.confirm(raw, password=password, machine_code=machine_code)
     except (AccountPackageBusinessError, AccountPackageError) as exc:
         err = _fail(exc)
+        service.record_attempt_failure(subject, err.code)
         AuditLogger.log_safely(
             action=AuditAction.ACCOUNT_PACKAGE_IMPORT_FAILED,
             user_id=getattr(current_user, "id", None),
@@ -248,6 +270,7 @@ async def confirm_account_package(
             details={"error_code": err.code},
         )
         _raise_http_error(err)
+    service.record_attempt_success(subject)
     AuditLogger.log(
         action=AuditAction.ACCOUNT_PACKAGE_CONFIRM,
         user_id=getattr(current_user, "id", None),

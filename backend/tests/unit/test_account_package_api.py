@@ -30,6 +30,9 @@ def api_env(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_SIGNING_KEY", priv)
     monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_PUBKEY", pub)
     monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_KDF_ITERATIONS", 310_000)
+    # P4：本文件验证错误码映射，不验证限流；关闭速率闸门避免连续失败请求被 429 打断。
+    # 锁定/速率行为由 test_account_package_rate_limit.py 专门覆盖。
+    monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS", 0.0)
     monkeypatch.setattr(AccountPackageService, "package_dir", classmethod(lambda cls: tmp_path))
     monkeypatch.setattr(MachineCodeService, "get_machine_code", staticmethod(lambda: "MC-API-123"))
     monkeypatch.setattr("app.api.v1.account_package._client_is_loopback", lambda request: True)

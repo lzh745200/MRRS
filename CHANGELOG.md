@@ -1,3 +1,19 @@
+## [1.18.55] - 2026-11-20 — 安装器图标/临时目录修复与账号包限流收口
+
+### 修复
+
+- **桌面/开始菜单图标空白**：NSIS `customInstall` 先 `ExpandEnvStrings` 展开 `$INSTDIR`，再以绝对路径写入快捷方式 `IconLocation`；图标缺失回退 exe 内嵌图标，覆盖安装时先删除旧 lnk。修复 `%SystemDrive%` 未被 Explorer 展开导致的白纸图标。
+- **安装器 `Error writing temporary file`**：NSIS 在 `InitPluginsDir` 阶段使用 `%TEMP%`，脚本内无法赋值；Release 增加 `MRRS-Installer-Helper.ps1`（探测/切换到可写 TEMP 后启动安装器）与 `MRRS-Shortcut-Repair.ps1`（已装机器修复图标/信任），并在安装排障文档说明根因。
+- **账号包 P4 失败尝试限流**：`ACCOUNT_PACKAGE_MAX_ATTEMPTS` 真正生效；新增 `account_package_attempts` 台账（迁移 `account_package_attempts_001`），导出按签发人、导入按机器码计数；失败达阈值 429 `AP_ATTEMPTS_EXCEEDED`，重试过快 429 `AP_RATE_LIMITED`，成功清零；新增 `ACCOUNT_PACKAGE_LOCKOUT_MINUTES=15`、`ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS=1.0`。
+- **发布附件**：Windows Release 额外上传上述两个现场修复脚本；发布后资产校验仍只对本作业核心产物做硬性要求，避免三作业并发竞态误红。
+
+### 验证
+
+- 账号包后端 8 个测试文件 68 passed；新增迁移自证 3 例；`app/` 与新迁移 flake8 零告警。
+- 版本端点/VersionService/spec 打包回归 48 例、发布资产门禁 40 例通过。
+- 干净 tag worktree 构建 v1.18.54/v1.18.55，安装后 `/system/version` 返回正确版本元数据；旧 `account_package_attempts_001.py` 残留被 `customInit` 清理。
+- 本版安装包重新构建后再次执行安装、图标、版本接口与发布后资产校验。
+
 ## [1.18.54] - 2026-11-20 — 版本元数据与发布链路修复
 
 ### 修复
@@ -14,16 +30,18 @@
 - 干净 worktree 重新 PyInstaller 构建：`_internal/version.json` 存在且 `/api/v1/system/version` 返回正确 release_date/description。
 - 官方 v1.18.53 x64/ARM64 资产下载、SHA256/SHA512、签名、载荷、安装、启动与 v52→v53 升级均已验证；本版沿用同一构建/发布链。
 
-## [1.18.53] - 2026-11-19 — 离线账号包可视化授权
+## [1.18.53] - 2026-11-19 — 离线账号包可视化授权与失败尝试限流
 
 ### 新增
 
 - 账号包账户行的可见菜单/操作权限由手填 key 改为**可视化多选**：菜单来自当前超级管理员全量菜单树，操作权限来自 `/users/form-options`，支持搜索与清空。
 - 离线账户的 `allowed_menus` / `allowed_permissions` 与在线账户同一套字段与后端校验，留空继承角色默认，选中即写入白名单。
+- **P4 失败尝试限流**：`ACCOUNT_PACKAGE_MAX_ATTEMPTS`（原为空配置，全仓无消费方）现真正生效。新增台账表 `account_package_attempts`（迁移 `account_package_attempts_001`），按作用域计数：导出按签发人、导入按目标机机器码——口令错误时 `package_id` 还在密文里读不到，机器码是唯一稳定可得的身份。连续失败达阈值临时锁定（`AP_ATTEMPTS_EXCEEDED` 429），失败后重试过快返回 `AP_RATE_LIMITED` 429；成功即清零，速率闸门只惩罚连续失败，不打断正常操作节奏。新增配置 `ACCOUNT_PACKAGE_LOCKOUT_MINUTES=15`、`ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS=1.0`（0 关闭速率闸门，`MAX_ATTEMPTS<=0` 关闭锁定）。鉴权失败（`AP_PREREQUISITE`）不计入尝试。
 
 ### 验证
 
 - `AccountPackage.vue` 语句/分支/函数/行 100%；菜单加载成功、失败、权限数组/非数组分支均覆盖。
+- 账号包后端 8 个测试文件 **68 passed**（含新增限流台账/接口 14 例与迁移自证 3 例）；`app/` 与新迁移 flake8 零告警。
 
 ## [1.18.52] - 2026-11-19 — 账户开通与离线权限分发闭环
 

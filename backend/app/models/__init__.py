@@ -79,6 +79,7 @@ _MODULE_MAP = {
     "PermissionPack": ".permission_pack",
     "AccountPackageExport": ".account_package",
     "AccountPackageReceipt": ".account_package",
+    "AccountPackageAttempt": ".account_package",
     "FileBlob": ".file_blob",
     "UserSession": ".user_session",
     "ReminderDisposition": ".reminder_disposition",

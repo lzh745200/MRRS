@@ -146,13 +146,23 @@
   ; "桌面有图标、开始菜单白纸"。现两处都用同一个 ico；缺失时回退 exe，
   ; 并把实际使用的图标路径写进安装日志，便于现场判断。
   IfFileExists "$INSTDIR\帮扶管理系统.exe" 0 skip_shortcuts
-    StrCpy $2 "$INSTDIR\帮扶管理系统.exe"
-    IfFileExists "$INSTDIR\resources\app-circle.ico" 0 shortcut_icon_ready
-      StrCpy $2 "$INSTDIR\resources\app-circle.ico"
+    ; 2026-11-20：$INSTDIR 在部分 perMachine 安装上下文里可能带 %SystemDrive%
+    ; 形式的环境变量；CreateShortCut 会把 IconLocation 原样写入 .lnk，而
+    ; Explorer 不保证展开环境变量，现场因此显示白纸图标。这里先展开成绝对路径，
+    ; 再写快捷方式；图标缺失时回退到 exe 内嵌图标。
+    ExpandEnvStrings $0 "$INSTDIR\帮扶管理系统.exe"
+    StrCpy $2 "$INSTDIR\resources\app-circle.ico"
+    IfFileExists "$2" 0 shortcut_icon_exe
+      ExpandEnvStrings $2 "$2"
+      Goto shortcut_icon_ready
+    shortcut_icon_exe:
+      StrCpy $2 "$0"
     shortcut_icon_ready:
-    CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$2" 0
-    CreateShortCut "$SMPROGRAMS\帮扶管理系统.lnk" "$INSTDIR\帮扶管理系统.exe" "" "$2" 0
-    DetailPrint "已创建快捷方式（桌面 + 开始菜单），图标=$2"
+    Delete "$DESKTOP\帮扶管理系统.lnk"
+    Delete "$SMPROGRAMS\帮扶管理系统.lnk"
+    CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$0" "" "$2,0"
+    CreateShortCut "$SMPROGRAMS\帮扶管理系统.lnk" "$0" "" "$2,0"
+    DetailPrint "已创建快捷方式（桌面 + 开始菜单），目标=$0，图标=$2"
     Goto shortcuts_done
   skip_shortcuts:
     DetailPrint "未找到主程序，跳过快捷方式创建"

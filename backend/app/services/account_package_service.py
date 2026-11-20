@@ -24,7 +24,7 @@ from app.core.account_package import (
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.core.transaction import safe_commit
-from app.models.account_package import AccountPackageExport, AccountPackageReceipt
+from app.models.account_package import AccountPackageAttempt, AccountPackageExport, AccountPackageReceipt
 from app.models.organization import Organization
 from app.models.org_grant import VALID_GRANT_LEVELS, OrgGrant
 from app.models.user import User
@@ -68,6 +68,74 @@ class AccountPackageService:
         except (ValueError, TypeError) as exc:
             raise AccountPackageBusinessError("非法包 ID", code="AP_BAD_PACKAGE") from exc
         return cls.package_dir() / f"account-package-{package_id}.apkg"
+
+    # ---- P4：失败尝试台账（消费 ACCOUNT_PACKAGE_MAX_ATTEMPTS）----
+    # subject_key 形如 export:<签发人id> / import:<目标机机器码>。导入维度选机器码而非
+    # package_id，因为口令错误时 package_id 还在密文里读不到，机器码是唯一稳定可得的身份。
+
+    @staticmethod
+    def attempt_subject(kind: str, identity: Any) -> str:
+        return f"{kind}:{str(identity or '').strip().upper()}"
+
+    def _attempt_row(self, subject_key: str) -> Optional[AccountPackageAttempt]:
+        return self.db.query(AccountPackageAttempt).filter(
+            AccountPackageAttempt.subject_key == subject_key
+        ).first()
+
+    def check_attempt_allowed(self, subject_key: str, *, now: Optional[datetime] = None) -> None:
+        """锁定中或重试过快则抛 429；锁过期自动清零放行。"""
+        row = self._attempt_row(subject_key)
+        if row is None:
+            return
+        moment = now or utcnow()
+        if row.locked_until is not None:
+            if row.locked_until > moment:
+                raise AccountPackageBusinessError(
+                    "账号包操作失败次数过多，已临时锁定，请稍后再试",
+                    code="AP_ATTEMPTS_EXCEEDED", status=429,
+                )
+            row.locked_until = None
+            row.fail_count = 0
+            row.last_error = None
+            row.last_attempt_at = None
+            safe_commit(self.db)
+            return
+        interval = float(settings.ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS or 0)
+        if interval > 0 and row.fail_count and row.last_attempt_at is not None:
+            elapsed = (moment - row.last_attempt_at).total_seconds()
+            if elapsed < interval:
+                raise AccountPackageBusinessError(
+                    "账号包操作过于频繁，请稍后再试", code="AP_RATE_LIMITED", status=429
+                )
+
+    def record_attempt_failure(
+        self, subject_key: str, error_code: str, *, now: Optional[datetime] = None
+    ) -> None:
+        """累计一次失败；达到阈值写 locked_until。MAX_ATTEMPTS<=0 视为关闭锁定。"""
+        moment = now or utcnow()
+        row = self._attempt_row(subject_key)
+        if row is None:
+            row = AccountPackageAttempt(subject_key=subject_key, fail_count=0)
+            self.db.add(row)
+        row.fail_count = int(row.fail_count or 0) + 1
+        row.last_error = (error_code or "")[:64]
+        row.last_attempt_at = moment
+        max_attempts = int(settings.ACCOUNT_PACKAGE_MAX_ATTEMPTS or 0)
+        lockout_minutes = int(settings.ACCOUNT_PACKAGE_LOCKOUT_MINUTES or 0)
+        if max_attempts > 0 and row.fail_count >= max_attempts:
+            row.locked_until = moment + timedelta(minutes=max(lockout_minutes, 1))
+        safe_commit(self.db)
+
+    def record_attempt_success(self, subject_key: str) -> None:
+        """成功即清空窗口：速率闸门只惩罚连续失败，不影响正常操作节奏。"""
+        row = self._attempt_row(subject_key)
+        if row is None:
+            return
+        row.fail_count = 0
+        row.locked_until = None
+        row.last_error = None
+        row.last_attempt_at = None
+        safe_commit(self.db)
 
     def export_package(
         self,

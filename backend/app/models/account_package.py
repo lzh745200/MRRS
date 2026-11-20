@@ -1,7 +1,11 @@
-"""账号开通包：源机导出记录 + 目标机一次性回执。
+"""账号开通包：源机导出记录 + 目标机一次性回执 + 失败尝试台账。
 
 回执的 ``package_id`` **单独唯一**：机器码会随重装变化，不能并入唯一键，
 否则同一包换机即可重放。
+
+``AccountPackageAttempt`` 是 P4 限流台账：回执只在**成功导入后**才存在，
+失败尝试无处落账；导入时也没有用户对象可复用登录锁定列，故按
+``subject_key``（``export:<签发人id>`` / ``import:<目标机机器码>``）独立计数。
 """
 
 from sqlalchemy import JSON, Column, Integer, String, Text
@@ -45,3 +49,15 @@ class AccountPackageReceipt(BaseModel):
     state = Column(String(16), nullable=False, default="used", server_default="used")
     fail_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_error = Column(String(64), nullable=True)
+
+
+class AccountPackageAttempt(BaseModel):
+    """P4 失败尝试台账：按作用域计数，达阈值临时锁定。"""
+
+    __tablename__ = "account_package_attempts"
+
+    subject_key = Column(String(160), unique=True, nullable=False, index=True)
+    fail_count = Column(Integer, nullable=False, default=0, server_default="0")
+    locked_until = Column(UtcDateTime(), nullable=True)
+    last_error = Column(String(64), nullable=True)
+    last_attempt_at = Column(UtcDateTime(), nullable=True)

@@ -357,29 +357,43 @@ def main() -> int:
         help="latest.yml 引用的 exe 本地路径；缺省自动取 --artifacts 中的 *.exe",
     )
     args = parser.parse_args()
-
-    # —— 模式一：发布前本地目录一致性（CI 在上传/发布前拦截裸数据）——
     if args.dir:
-        version = args.expect_version[1:] if args.expect_version.startswith("v") else args.expect_version
-        if not version:
-            print("::error::--dir 模式必须同时传 --expect-version", file=sys.stderr)
-            return 2
-        directory = pathlib.Path(args.dir)
-        if not directory.is_absolute():
-            directory = ROOT / directory
-        problems = _check_local_dir(directory, version, args.asset_set)
-        print(f"本地产物目录 {directory}（期望版本 {version}）：")
-        for path in sorted(p for p in directory.iterdir() if p.is_file()):
-            print(f"  - {path.name}")
-        if problems:
-            print(f"\n核验未通过（{len(problems)} 项）：", file=sys.stderr)
-            for item in problems:
-                print(f"  ✗ {item}", file=sys.stderr)
-            return 1
-        print(f"\n核验通过：{directory} 内 {len(_expected_assets(args.asset_set, version))} 个预期产物齐全且自洽。")
-        return 0
+        return _run_dir_mode(args)
+    return _run_release_mode(args)
 
-    # —— 模式二：发布后 Release 比对（就地用 API 的 size/digest 比对，不下载大文件）——
+
+def _report(problems: list[str], ok_message: str) -> int:
+    """统一输出核验结论：有问题逐条打印到 stderr 并返回 1，否则打印通过信息返回 0。"""
+    if problems:
+        print(f"\n核验未通过（{len(problems)} 项）：", file=sys.stderr)
+        for item in problems:
+            print(f"  ✗ {item}", file=sys.stderr)
+        return 1
+    print(f"\n{ok_message}")
+    return 0
+
+
+def _run_dir_mode(args) -> int:
+    """模式一：发布前本地目录一致性（CI 在上传/发布前拦截裸数据）。"""
+    version = args.expect_version[1:] if args.expect_version.startswith("v") else args.expect_version
+    if not version:
+        print("::error::--dir 模式必须同时传 --expect-version", file=sys.stderr)
+        return 2
+    directory = pathlib.Path(args.dir)
+    if not directory.is_absolute():
+        directory = ROOT / directory
+    problems = _check_local_dir(directory, version, args.asset_set)
+    print(f"本地产物目录 {directory}（期望版本 {version}）：")
+    for path in sorted(p for p in directory.iterdir() if p.is_file()):
+        print(f"  - {path.name}")
+    return _report(
+        problems,
+        f"核验通过：{directory} 内 {len(_expected_assets(args.asset_set, version))} 个预期产物齐全且自洽。",
+    )
+
+
+def _run_release_mode(args) -> int:
+    """模式二：发布后 Release 比对（就地用 API 的 size/digest 比对，不下载大文件）。"""
     if not args.tag:
         print("::error::缺少 --tag；若要做发布前检查请传 --dir 与 --expect-version", file=sys.stderr)
         return 2
@@ -431,14 +445,10 @@ def main() -> int:
     for name in sorted(published):
         print(f"  - {name}")
 
-    if problems:
-        print(f"\n核验未通过（{len(problems)} 项）：", file=sys.stderr)
-        for item in problems:
-            print(f"  ✗ {item}", file=sys.stderr)
-        return 1
-
-    print(f"\n核验通过：{args.tag} 的 {len(published)} 个已发布资产与本地产物完全一致。")
-    return 0
+    return _report(
+        problems,
+        f"核验通过：{args.tag} 的 {len(published)} 个已发布资产与本地产物完全一致。",
+    )
 
 
 def _find_exe(artifacts: Iterable[pathlib.Path]) -> pathlib.Path | None:

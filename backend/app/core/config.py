@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.54"
+    PROJECT_VERSION: str = "1.18.55"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -256,6 +256,10 @@ class Settings(BaseSettings):
     ACCOUNT_PACKAGE_MAX_ATTEMPTS: int = 5
     ACCOUNT_PACKAGE_MIN_PASSWORD: int = 12
     ACCOUNT_PACKAGE_CREDENTIAL_VALID_DAYS: int = 30
+    # P4：失败尝试台账。MAX_ATTEMPTS<=0 关闭锁定；INTERVAL=0 关闭速率闸门。
+    # 速率闸门只惩罚**连续失败**（成功即清零），不打断正常操作节奏。
+    ACCOUNT_PACKAGE_LOCKOUT_MINUTES: int = 15
+    ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS: float = 1.0
 
     # W27 P1：经费「不能自批」。
     # 默认 False = 禁止创建人审批自己创建的经费记录（财务内控 / 审计要求）。

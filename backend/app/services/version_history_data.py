@@ -4449,10 +4449,14 @@ VERSION_HISTORY_DATA = [
     {
         "version": "1.18.53",
         "date": "2026-11-19",
-        "description": "离线账号包可视化授权",
+        "description": "离线账号包可视化授权与失败尝试限流",
         "features": [
             "账号包账户行的可见菜单/操作权限由手填 key 改为可视化多选：菜单来自当前超级管理员全量菜单树，操作权限来自 /users/form-options，支持搜索与清空。",
             "离线账户的 allowed_menus / allowed_permissions 与在线账户同一套字段与后端校验，留空继承角色默认，选中即写入白名单。",
+            (
+                "P4 失败尝试限流：ACCOUNT_PACKAGE_MAX_ATTEMPTS（原为空配置，全仓无消费方）现真正生效。新增台账表 account_package_attempts（迁移 ac"
+                "count_package_attempts_001），按作用域计数：导出按签发人、导入按目标机机器码——口令错误时 package_id 还在密文里读不到，机器码是唯一稳定可得的身份。"
+            ),
         ],
     },
     {
@@ -4474,6 +4478,27 @@ VERSION_HISTORY_DATA = [
                 "发布资产校验：新增构建后 latest.yml/blockmap/SHA256SUMS 一致性与发布后 GitHub API size/digest/正文校验，接入 Windows 发布作"
                 "业。"
             ),
+        ],
+    },
+    {
+        "version": "1.18.55",
+        "date": "2026-11-20",
+        "description": "安装器图标/临时目录修复与账号包限流收口",
+        "features": [
+            (
+                "桌面/开始菜单图标空白：NSIS customInstall 先 ExpandEnvStrings 展开 $INSTDIR，再以绝对路径写入快捷方式 IconLocation；图标缺失回退"
+                " exe 内嵌图标，覆盖安装时先删除旧 lnk。修复 %SystemDrive% 未被 Explorer 展开导致的白纸图标。"
+            ),
+            (
+                "安装器 Error writing temporary file：NSIS 在 InitPluginsDir 阶段使用 %TEMP%，脚本内无法赋值；Release 增加 MRRS-Ins"
+                "taller-Helper.ps1（探测/切换到可写 TEMP 后启动安装器）与 MRRS-Shortcut-Repair.ps1（已装机器修复图标/信任），并在安装排障文档说明根因。"
+            ),
+            (
+                "账号包 P4 失败尝试限流：ACCOUNT_PACKAGE_MAX_ATTEMPTS 真正生效；新增 account_package_attempts 台账（迁移 account_pack"
+                "age_attempts_001），导出按签发人、导入按机器码计数；失败达阈值 429 AP_ATTEMPTS_EXCEEDED，重试过快 429 AP_RATE_LIMITED，成功清零"
+                "；"
+            ),
+            "发布附件：Windows Release 额外上传上述两个现场修复脚本；发布后资产校验仍只对本作业核心产物做硬性要求，避免三作业并发竞态误红。",
         ],
     },
 ]
