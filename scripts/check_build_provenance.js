@@ -28,7 +28,9 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const ALLOW_DIRTY = process.env.ALLOW_DIRTY_BUILD === '1';
-const RELEASE_CONTEXT = Boolean(process.env.GITHUB_ACTIONS) || process.env.GITHUB_REF_TYPE === 'tag';
+const RELEASE_CONTEXT =
+  process.env.GITHUB_REF_TYPE === 'tag' ||
+  String(process.env.GITHUB_REF || '').startsWith('refs/tags/');
 
 function git(args) {
   return execFileSync('git', args, {
@@ -80,7 +82,7 @@ function main() {
     const dirty = status
       .split(/\r?\n/)
       .filter(Boolean)
-      .map((line) => line.slice(3).replace(/^"|"$/g, ''))
+      .map((line) => line.replace(/^.. /, '').replace(/^"|"$/g, ''))
       .filter((file) => !ignoredPrefixes.some((prefix) => file.startsWith(prefix)));
 
     if (dirty.length && !ALLOW_DIRTY) {
