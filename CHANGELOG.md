@@ -3,6 +3,7 @@
 ### 修复
 
 - **桌面/开始菜单图标空白**：NSIS `customInstall` 先 `ExpandEnvStrings` 展开 `$INSTDIR`，再以绝对路径写入快捷方式 `IconLocation`；图标缺失回退 exe 内嵌图标，覆盖安装时先删除旧 lnk。修复 `%SystemDrive%` 未被 Explorer 展开导致的白纸图标。
+- **安装器失败不再破坏旧安装**：移除 `customInit` 中解包前 `RMDir /r .../alembic/versions`；安装器在解包阶段失败时不再删掉旧迁移目录。旧迁移残留改由正常覆盖/卸载流程与构建来源门禁控制。
 - **安装器 `Error writing temporary file`**：NSIS 在 `InitPluginsDir` 阶段使用 `%TEMP%`，脚本内无法赋值；Release 增加 `MRRS-Installer-Helper.ps1`（探测/切换到可写 TEMP 后启动安装器）与 `MRRS-Shortcut-Repair.ps1`（已装机器修复图标/信任），并在安装排障文档说明根因。
 - **账号包 P4 失败尝试限流**：`ACCOUNT_PACKAGE_MAX_ATTEMPTS` 真正生效；新增 `account_package_attempts` 台账（迁移 `account_package_attempts_001`），导出按签发人、导入按机器码计数；失败达阈值 429 `AP_ATTEMPTS_EXCEEDED`，重试过快 429 `AP_RATE_LIMITED`，成功清零；新增 `ACCOUNT_PACKAGE_LOCKOUT_MINUTES=15`、`ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS=1.0`。
 - **发布附件**：Windows Release 额外上传上述两个现场修复脚本；发布后资产校验仍只对本作业核心产物做硬性要求，避免三作业并发竞态误红。
@@ -11,7 +12,7 @@
 
 - 账号包后端 8 个测试文件 68 passed；新增迁移自证 3 例；`app/` 与新迁移 flake8 零告警。
 - 版本端点/VersionService/spec 打包回归 48 例、发布资产门禁 40 例通过。
-- 干净 tag worktree 构建 v1.18.54/v1.18.55，安装后 `/system/version` 返回正确版本元数据；旧 `account_package_attempts_001.py` 残留被 `customInit` 清理。
+- 干净 tag worktree 构建 v1.18.54/v1.18.55，安装后 `/system/version` 返回正确版本元数据；v1.18.55 不再做解包前删除旧迁移目录的破坏性清理，安装器失败时旧安装仍可启动。
 - 本版安装包重新构建后再次执行安装、图标、版本接口与发布后资产校验。
 
 ## [1.18.54] - 2026-11-20 — 版本元数据与发布链路修复

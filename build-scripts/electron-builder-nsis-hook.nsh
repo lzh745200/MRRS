@@ -71,17 +71,12 @@
 !macroend
 
 ; ----------------------------------------------------------------------------
-; 安装初始化：清理旧版残留的 Alembic 迁移脚本
+; 安装初始化：不再在解包前删除旧 Alembic 迁移脚本
 ; ----------------------------------------------------------------------------
-; 为什么必须清：electron-builder 覆盖安装只覆盖/新增文件，不删除新版已移除的
-; 迁移脚本。若旧包曾带有后来被撤回的 revision，新版启动时 Alembic 会把它当成
-; 未知 head（或继续加载一段不该存在的迁移），升级排障极难定位。
-; 只清 `_internal/alembic/versions`，不碰数据库与用户数据；新包必然重新释放该目录。
-!macro customInit
-  StrCmp $INSTDIR "" custom_init_done
-    RMDir /r "$INSTDIR\resources\backend\assistance-backend\_internal\alembic\versions"
-  custom_init_done:
-!macroend
+; 2026-11-20 修正：原实现在 customInit 里 RMDir /r 整个 versions 目录。若安装器
+; 在 InitPluginsDir/解包阶段失败（%TEMP% 不可写、杀软拦截等），旧安装的迁移
+; 目录已被删掉，应用会直接起不来。迁移残留改为依靠 electron-builder 的正常
+; 覆盖/卸载流程与构建来源门禁（禁止脏构建带未提交迁移），安装器不再做破坏性清理。
 
 ; ----------------------------------------------------------------------------
 ; 安装钩子：终止旧进程 + VC++ 校验安装 + 创建桌面快捷方式

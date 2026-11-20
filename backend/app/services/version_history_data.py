@@ -4490,6 +4490,10 @@ VERSION_HISTORY_DATA = [
                 " exe 内嵌图标，覆盖安装时先删除旧 lnk。修复 %SystemDrive% 未被 Explorer 展开导致的白纸图标。"
             ),
             (
+                "安装器失败不再破坏旧安装：移除 customInit 中解包前 RMDir /r .../alembic/versions；安装器在解包阶段失败时不再删掉旧迁移目录。旧迁移残留改由正常覆盖"
+                "/卸载流程与构建来源门禁控制。"
+            ),
+            (
                 "安装器 Error writing temporary file：NSIS 在 InitPluginsDir 阶段使用 %TEMP%，脚本内无法赋值；Release 增加 MRRS-Ins"
                 "taller-Helper.ps1（探测/切换到可写 TEMP 后启动安装器）与 MRRS-Shortcut-Repair.ps1（已装机器修复图标/信任），并在安装排障文档说明根因。"
             ),
