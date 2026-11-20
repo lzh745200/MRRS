@@ -26,7 +26,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(process.env.PROVENANCE_ROOT || path.join(__dirname, '..'));
 const ALLOW_DIRTY = process.env.ALLOW_DIRTY_BUILD === '1';
 const RELEASE_CONTEXT =
   process.env.GITHUB_REF_TYPE === 'tag' ||
