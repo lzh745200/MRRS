@@ -7,17 +7,26 @@ name: Verify Published Release
 # softprops 的 publish 竞态，`latest.yml` 与 `.exe.blockmap` 被 skipped，Release
 # 只剩 6 个资产，而构建是绿的。这类问题此前只能靠人眼看 Release 页面发现。
 #
-# 本工作流在发布之后从 GitHub API 侧核对：资产齐全、非空、latest.yml 的
-# version/path/size 一致、三份 SHA256SUMS 与 GitHub 记录的 asset digest 逐项吻合。
-# 不下载 380MB 安装包 —— GitHub 的 digest 就是存储层字节的 sha256。
+# 校验内容：资产齐全、非空、latest.yml 的 version/path/size 一致、三份 SHA256SUMS
+# 与 GitHub 记录的 asset digest 逐项吻合。不下载 380MB 安装包 —— GitHub 的 digest
+# 就是存储层字节的 sha256。
 #
-# 触发时机说明：`release: published` 在**第一个**上传作业把 Release 从 draft 转正
-# 时触发，此时 ARM64 作业可能仍在传资产。故脚本带 `--wait` 轮询（默认 30 分钟），
-# 只在「缺资产 / 0 字节」时重试，其它问题（draft、哈希不符）立即失败。
+# ⚠️ 为什么用 `workflow_run` 而不是 `release: published`（关键）：
+#   GitHub 的规则是「由 GITHUB_TOKEN 触发的事件不会再唤起新的工作流」（防递归）。
+#   本仓 Release 由构建作业里的 softprops/action-gh-release 用 GITHUB_TOKEN 创建，
+#   因此 `release: published` **永远不会**触发本工作流 —— 写了也是死代码。
+#   改为监听两个构建工作流的完成事件：`workflow_run` 不受该抑制影响。
+#   （代价：两个构建作业各触发一次，用 concurrency 串行，第二次通常秒过。）
+#
+# 只在「构建成功且 ref 是 v* tag」时校验：构建失败本身已报警，且此时 Release 可能
+# 根本不存在；而 v1.18.15 那类事故恰恰是**构建绿、发布残**。
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows:
+      - Build Windows Installer (x64)
+      - Build Self-Contained ARM64 Debian Package
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -34,25 +43,32 @@ permissions:
   contents: read
 
 concurrency:
-  group: verify-release-${{ github.event.release.tag_name || inputs.tag }}
+  # 同一 tag 的两个构建作业各触发一次 → 串行，避免两轮同时轮询
+  group: verify-release-${{ github.event.workflow_run.head_branch || inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # tag 构建的 workflow_run.head_branch 就是 tag 名（如 v1.18.53）；
+    # 分支上的 workflow_dispatch 构建（head_branch=main）不校验。
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: '3.11' }
 
-      # tag 通过 env 传入、不在 shell 里内联展开：tag 名可含 ; $() 等字符
+      # tag 通过 env 传入、不在 shell 里内联展开：tag 名可含 ; $() 等字符。
       # 只跑一次：`--json` 报告 tee 到文件供 artifact；`pipefail` 保证脚本非 0 时
       # 步骤真的失败（否则管道退出码会被 tee 吃掉）。重复执行会让等待期翻倍。
       - name: Verify release assets (completeness + digests)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          RELEASE_TAG: ${{ github.event.workflow_run.head_branch || inputs.tag }}
           WAIT_SECONDS: ${{ inputs.wait_seconds || '1800' }}
         run: |
           set -euo pipefail
