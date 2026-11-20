@@ -524,6 +524,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 发布后资产一致性（2026-11-20）：只核对本作业上传的 deb + 清单是否真的出现在
+      # Release 且 size/digest 与本地一致。三个发布作业并发写同一 Release，故不要求
+      # 另一作业的资产此刻已就位（--require-assets 只列本作业产物）。
+      - name: Verify published release assets (Electron DEB)
+        if: startsWith(github.ref, 'refs/tags/v') && success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          python3 scripts/verify_release_assets.py \
+            --tag "${{ github.ref_name }}" \
+            --asset-set arm64 \
+            --artifacts dist/electron/*.deb dist/electron/SHA256SUMS-electron-deb-arm64.txt \
+            --require-assets "MRRS-Setup-${VERSION}-arm64.deb" "SHA256SUMS-electron-deb-arm64.txt"
+
   # ── standalone 麒麟 DEB（无 Electron：后端 + Web，文档推荐装机方式）──
   # 2026-08-29 补齐：此前 CI 只构建 Electron DEB，而安装指南推荐 standalone DEB，
   # 用户只能本地 Docker 自行构建。现统一由 CI 构建并附到 Release。
