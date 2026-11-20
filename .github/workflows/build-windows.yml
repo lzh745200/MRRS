@@ -711,6 +711,14 @@ jobs:
           [IO.File]::WriteAllText($sums, ($lines -join "`n") + "`n", (New-Object Text.UTF8Encoding($false)))
           Get-Content $sums
 
+      # 10.6 发布资产一致性（2026-11-20）：latest.yml 的 size/sha512、blockmap、
+      #      SHA256SUMS 必须与真实安装包逐项吻合；不一致直接让构建红，不把坏元数据发出去。
+      - name: Verify release asset consistency
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          python scripts/verify_release_assets.py --dir dist/electron --expect-version "$VERSION"
+
       # 11. 上传制品
       #     2026-10-27（v1.18.16）：补上 latest.yml 与 .exe.blockmap —— 它们是
       #     electron-builder 的 NSIS 产物（本系统**不消费**，升级走离线安装包），
