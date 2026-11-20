@@ -61,7 +61,10 @@ class VersionService:
                     "release_date": datetime.now().strftime("%Y-%m-%d"),
                     "description": "全面优化版本 - 性能提升、安全加固、UI体验改善",
                 }
-                self._save_version(default_version)
+                # 不在这里写盘：冻结安装在 Program Files/opt 下通常只读，
+                # 写入会在 _internal 生成“当天日期 + 泛化描述”的伪版本文件，
+                # 污染 /system/version 与后续版本历史。真实元数据由构建期
+                # version.json 随包分发（见各 PyInstaller spec 的 datas）。
                 return default_version
         except Exception as e:
             logger.error("加载版本信息失败: %s", e)

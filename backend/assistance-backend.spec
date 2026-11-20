@@ -43,6 +43,8 @@ resources_dir = os.path.join(project_root, 'resources')
 #     字节码，alembic env.py 的 `import app.models` 由冻结导入解析；
 #     alembic/ 版本脚本本身是运行时按路径扫描的文件，必须保留。
 datas = [
+    # 版本元数据：/api/v1/system/version 与应用内版本历史依赖，必须随包分发
+    (os.path.join(backend_dir, 'version.json'), '.'),
     (os.path.join(backend_dir, 'alembic'), 'alembic'),
     (os.path.join(backend_dir, 'alembic.ini'), '.'),
     (os.path.join(backend_dir, '.env.example'), '.'),

@@ -4,6 +4,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 backend_dir = os.path.dirname(os.path.abspath(SPEC))
 datas = [
+    (os.path.join(backend_dir, 'version.json'), '.'),
     (os.path.join(backend_dir, 'alembic'), 'alembic'),
     (os.path.join(backend_dir, 'app'), 'app'),
 ]

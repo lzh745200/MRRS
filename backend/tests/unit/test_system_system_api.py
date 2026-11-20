@@ -63,8 +63,14 @@ class TestGetEnvironment:
 
 class TestGetVersion:
     def test_returns_version_no_auth(self, client):
+        from app.services.version_service import VersionService
+
+        expected = VersionService().current_version
         resp = client.get(f"{BASE}/version")
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["version"]
         assert data["name"] == "帮扶管理信息系统"
+        # 发布日期/描述必须来自 backend/version.json，而不是硬编码
+        assert data["release_date"] == expected["release_date"]
+        assert data["description"] == expected["description"]

@@ -60,13 +60,42 @@ def main() -> int:
         )
         return 1
 
+    # Version metadata must be packaged as well. Without it, VersionService
+    # creates a runtime default with today's date and a generic description,
+    # so /api/v1/system/version stops matching the release.
+    version_path = os.path.join(args.backend_dir, "_internal", "version.json")
+    if not os.path.isfile(version_path):
+        print("FAIL: version metadata missing: %s" % version_path)
+        print("       PyInstaller specs must include backend/version.json in datas")
+        return 1
+    try:
+        with open(version_path, "r", encoding="utf-8") as fh:
+            version_data = json.load(fh)
+    except Exception as exc:
+        print("FAIL: cannot parse %s: %s" % (version_path, exc))
+        return 1
+    if not isinstance(version_data, dict):
+        print("FAIL: version.json is not a JSON object")
+        return 1
+    if str(version_data.get("version", "")) != str(data.get("version", "")):
+        print(
+            "FAIL: version.json version=%s != build_info version=%s"
+            % (version_data.get("version", ""), data.get("version", ""))
+        )
+        return 1
+    release_date = str(version_data.get("release_date", "")).strip()
+    if not release_date or release_date == "unknown":
+        print("FAIL: version.json has no valid release_date")
+        return 1
+
     print(
-        "OK: build info present (version=%s, git_hash=%s, build_time=%s, builder=%s)"
+        "OK: build info present (version=%s, git_hash=%s, build_time=%s, builder=%s, release_date=%s)"
         % (
             data.get("version", ""),
             data.get("git_hash", ""),
             data.get("build_time", ""),
             builder,
+            release_date,
         )
     )
     return 0

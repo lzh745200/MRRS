@@ -26,6 +26,8 @@ project_root = os.path.dirname(backend_dir)  # 项目根目录（resources/ 在�
 
 # ── 数据文件：直接收集整个目录，避免 glob 解析问题 ──
 datas = [
+    # 版本元数据（冻结态 VersionService 读取 _internal/version.json）
+    (os.path.join(backend_dir, 'version.json'), '.'),
     # 收集整个 app 目录（含 .py / .json / .html 等所有数据文件）
     (os.path.join(backend_dir, 'app'), 'app'),
     # 收集整个 alembic 目录（含 env.py / script.py.mako / versions/*.py）

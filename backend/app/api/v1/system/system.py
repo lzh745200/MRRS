@@ -19,10 +19,15 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.config import settings
 from app.core.permission_utils import require_admin, require_superuser
+from app.services.version_service import VersionService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["系统控制"])
+
+# 版本元数据来自 backend/version.json（打包进 _internal/version.json）；
+# version 字段仍以 settings.PROJECT_VERSION 为准，避免 _build_info 旧指纹影响。
+_VERSION_META = VersionService().current_version
 
 
 # ==================== Pydantic 模型 ====================
@@ -382,8 +387,8 @@ async def get_version_info():
             "version": getattr(settings, "PROJECT_VERSION", "1.1.0"),
             "name": "帮扶管理信息系统",
             "codename": "帮扶振兴",
-            "release_date": "2026-04-25",
-            "description": "面向帮扶乡村工作的综合管理平台",
+            "release_date": str(_VERSION_META.get("release_date") or "unknown"),
+            "description": str(_VERSION_META.get("description") or "面向帮扶乡村工作的综合管理平台"),
             "copyright": "2025-2026",
             "license": "内部使用",
         },

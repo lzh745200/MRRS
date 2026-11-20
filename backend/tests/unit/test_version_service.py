@@ -32,13 +32,14 @@ class TestLoadCurrentVersion:
         result = service._load_current_version()
         assert result["version"] == "2.0.0"
 
-    def test_file_not_exists_creates_default(self, service):
+    def test_file_not_exists_returns_default_without_writing(self, service):
         assert not service.version_file.exists()
         with patch("app.services.version_service.settings") as mock_set:
             mock_set.PROJECT_VERSION = "3.0.0"
             result = service._load_current_version()
         assert result["version"] == "3.0.0"
-        assert service.version_file.exists()
+        # 冻结安装目录通常只读；读取时不得生成“当天日期”的伪版本文件
+        assert not service.version_file.exists()
 
     def test_file_read_exception(self, service):
         service.version_file.write_text("invalid json", encoding="utf-8")
