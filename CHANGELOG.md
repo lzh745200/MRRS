@@ -1,3 +1,19 @@
+## [1.18.54] - 2026-11-20 — 版本元数据与发布链路修复
+
+### 修复
+
+- **版本元数据随包分发**：Windows / ARM64 Electron / ARM64 standalone 三个 PyInstaller spec 均收集 `backend/version.json`；`VersionService` 缺文件时不再向安装目录写“当天日期 + 泛化描述”的伪版本。
+- **版本接口去硬编码**：`GET /api/v1/system/version` 的 `release_date` / `description` 改读版本文件，`version` 仍以 `settings.PROJECT_VERSION` 为准；官方 v1.18.53 的 `2026-04-25` 错误日期由此修复。
+- **构建来源门禁**：新增 `check_build_provenance.js`，脏工作区、tag/版本不一致、复用已发布版本均拒绝出包；`ALLOW_DIRTY_BUILD=1` 仅本地调试。
+- **安装器残留清理**：NSIS `customInit` 安装前清理旧 `_internal/alembic/versions`，避免已移除迁移在覆盖安装后继续被 Alembic 加载。
+- **发布资产校验**：新增构建后 `latest.yml`/`blockmap`/`SHA256SUMS` 一致性与发布后 GitHub API size/digest/正文校验，接入 Windows 发布作业。
+
+### 验证
+
+- 版本端点/VersionService/spec 打包定向回归 48 例通过；发布资产门禁 38 例通过。
+- 干净 worktree 重新 PyInstaller 构建：`_internal/version.json` 存在且 `/api/v1/system/version` 返回正确 release_date/description。
+- 官方 v1.18.53 x64/ARM64 资产下载、SHA256/SHA512、签名、载荷、安装、启动与 v52→v53 升级均已验证；本版沿用同一构建/发布链。
+
 ## [1.18.53] - 2026-11-19 — 离线账号包可视化授权
 
 ### 新增

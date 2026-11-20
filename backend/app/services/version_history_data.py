@@ -4455,4 +4455,25 @@ VERSION_HISTORY_DATA = [
             "离线账户的 allowed_menus / allowed_permissions 与在线账户同一套字段与后端校验，留空继承角色默认，选中即写入白名单。",
         ],
     },
+    {
+        "version": "1.18.54",
+        "date": "2026-11-20",
+        "description": "版本元数据与发布链路修复",
+        "features": [
+            (
+                "版本元数据随包分发：Windows / ARM64 Electron / ARM64 standalone 三个 PyInstaller spec 均收集 backend/version."
+                "json；VersionService 缺文件时不再向安装目录写“当天日期 + 泛化描述”的伪版本。"
+            ),
+            (
+                "版本接口去硬编码：GET /api/v1/system/version 的 release_date / description 改读版本文件，version 仍以 settings.PR"
+                "OJECT_VERSION 为准；官方 v1.18.53 的 2026-04-25 错误日期由此修复。"
+            ),
+            "构建来源门禁：新增 check_build_provenance.js，脏工作区、tag/版本不一致、复用已发布版本均拒绝出包；ALLOW_DIRTY_BUILD=1 仅本地调试。",
+            "安装器残留清理：NSIS customInit 安装前清理旧 _internal/alembic/versions，避免已移除迁移在覆盖安装后继续被 Alembic 加载。",
+            (
+                "发布资产校验：新增构建后 latest.yml/blockmap/SHA256SUMS 一致性与发布后 GitHub API size/digest/正文校验，接入 Windows 发布作"
+                "业。"
+            ),
+        ],
+    },
 ]
