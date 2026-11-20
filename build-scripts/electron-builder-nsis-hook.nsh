@@ -78,7 +78,9 @@
 ; 未知 head（或继续加载一段不该存在的迁移），升级排障极难定位。
 ; 只清 `_internal/alembic/versions`，不碰数据库与用户数据；新包必然重新释放该目录。
 !macro customInit
-  RMDir /r "$INSTDIR\resources\backend\assistance-backend\_internal\alembic\versions"
+  StrCmp $INSTDIR "" custom_init_done
+    RMDir /r "$INSTDIR\resources\backend\assistance-backend\_internal\alembic\versions"
+  custom_init_done:
 !macroend
 
 ; ----------------------------------------------------------------------------
