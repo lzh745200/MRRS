@@ -821,3 +821,18 @@ jobs:
           body_path: ${{ runner.temp }}/release-body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 发布后资产一致性（2026-11-20）：同 Electron DEB 作业，只核对本作业产物。
+      # 本作业无 Node，版本号复用 debver 步骤的输出（GITHUB_REF_NAME 去 v 前缀）。
+      - name: Verify published release assets (standalone DEB)
+        if: startsWith(github.ref, 'refs/tags/v') && success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.debver.outputs.version }}"
+          python3 scripts/verify_release_assets.py \
+            --tag "${{ github.ref_name }}" \
+            --asset-set arm64 \
+            --artifacts dist/deb/output/*.deb dist/deb/output/SHA256SUMS-standalone-deb-arm64.txt \
+            --require-assets "assistance-management-system_${VERSION}_arm64.deb" "SHA256SUMS-standalone-deb-arm64.txt"
