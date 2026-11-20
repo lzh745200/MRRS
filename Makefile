@@ -130,6 +130,15 @@ security:
 		$(PYTHON) -m bandit -r app/ -f json -o bandit-report.json && \
 		$(PYTHON) -m pip_audit -r requirements.txt
 
+# 发布后校验（2026-11-20）：确认 GitHub Release 的资产齐全、非空、与 SHA256SUMS 一致。
+# 构建期只校验「本地产物」，上传阶段仍可能残缺（v1.18.15 就丢了 latest.yml 与
+# .exe.blockmap，构建却是绿的）。CI 里由 .github/workflows/verify-release.yml 自动跑，
+# 这里供发布后人工复核：
+#   make verify-release TAG=v1.18.53
+verify-release:
+	@test -n "$(TAG)" || { echo "用法: make verify-release TAG=v<version>"; exit 2; }
+	$(PYTHON) scripts/verify_published_release.py --tag "$(TAG)"
+
 # 清理测试产物（W4-T8：扩展根目录清理）
 clean:
 	@echo ">>> 清理测试产物..."
