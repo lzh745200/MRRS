@@ -58,9 +58,11 @@ function main() {
   if (!version) fail('package.json 缺少 version');
 
   let head = '';
+  let headFull = '';
   let gitAvailable = true;
   try {
-    head = git(['rev-parse', '--short=8', 'HEAD']);
+    headFull = git(['rev-parse', 'HEAD']);
+    head = headFull.slice(0, 8);
   } catch (_) {
     gitAvailable = false;
   }
@@ -104,6 +106,20 @@ function main() {
     const expectedTag = `v${version}`;
     if (exactTag && exactTag !== expectedTag && !ALLOW_DIRTY) {
       fail(`HEAD tag=${exactTag} 与 package.json version=${version}（期望 ${expectedTag}）不一致`);
+    }
+    // 版本复用门禁：v<version> 已存在但指向另一提交时，禁止从当前 HEAD 再打同版本包。
+    // 否则 main 在发布后新增修复、版本号未 bump 时，会生成“同版本不同代码”的本地包。
+    let releasedCommit = '';
+    try {
+      releasedCommit = git(['rev-parse', `refs/tags/${expectedTag}^{commit}`]);
+    } catch (_) {
+      // 该版本还没有 tag：正常的新版本开发
+    }
+    if (releasedCommit && headFull && releasedCommit !== headFull && !ALLOW_DIRTY) {
+      fail(
+        `版本 ${version} 已由 tag ${expectedTag} 发布在 ${releasedCommit.slice(0, 8)}，` +
+          `当前 HEAD=${head} 不允许复用同版本出包；请先 bump 版本号`
+      );
     }
     if (RELEASE_CONTEXT && !ALLOW_DIRTY) {
       const refTag = process.env.GITHUB_REF_NAME || '';
