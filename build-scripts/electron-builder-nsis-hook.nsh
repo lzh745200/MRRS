@@ -146,13 +146,10 @@
     ; Explorer 不保证展开环境变量，现场因此显示白纸图标。这里先展开成绝对路径，
     ; 再写快捷方式；图标缺失时回退到 exe 内嵌图标。
     ExpandEnvStrings $0 "$INSTDIR\帮扶管理系统.exe"
-    StrCpy $2 "$INSTDIR\resources\app-circle.ico"
-    IfFileExists "$2" 0 shortcut_icon_exe
-      ExpandEnvStrings $2 "$2"
-      Goto shortcut_icon_ready
-    shortcut_icon_exe:
-      StrCpy $2 "$0"
-    shortcut_icon_ready:
+    ; 2026-11-21：快捷方式图标直接取主程序内嵌图标（构建期 verify_exe_icon 已验证
+    ; 16~256 七档齐全）。不再依赖 resources\app-circle.ico 路径/环境变量展开，
+    ; 这是现场“桌面/开始菜单白纸”的最稳兜底。
+    StrCpy $2 "$0"
     Delete "$DESKTOP\帮扶管理系统.lnk"
     Delete "$SMPROGRAMS\帮扶管理系统.lnk"
     CreateShortCut "$DESKTOP\帮扶管理系统.lnk" "$0" "" "$2,0"

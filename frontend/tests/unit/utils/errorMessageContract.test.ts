@@ -55,6 +55,7 @@ describe('statusFallbackMessage', () => {
     [403, '权限不足，无法执行该操作'],
     [404, '请求的资源不存在或已被删除'],
     [409, '数据冲突，请刷新后重试'],
+    [428, '该操作需要重新确认身份，请重试'],
     [429, '操作过于频繁，请稍后再试'],
     [500, '服务器繁忙，请稍后重试'],
     [503, '服务器繁忙，请稍后重试'],
@@ -81,6 +82,20 @@ describe('extractServerMessage', () => {
 
   it('message 缺失时取 detail 字符串', () => {
     expect(extractServerMessage(axiosError(400, { detail: '权限不足' }))).toBe('权限不足')
+  })
+
+  it('REAUTH_REQUIRED 协议码必须转换为中文，不得直出', () => {
+    expect(extractServerMessage(axiosError(428, { detail: 'REAUTH_REQUIRED' }))).toBe(
+      '该操作需要重新确认身份，请重试'
+    )
+  })
+
+  it('detail 对象形态 {code,message} 优先取 message', () => {
+    expect(
+      extractServerMessage(
+        axiosError(429, { detail: { code: 'AP_RATE_LIMITED', message: '账号包操作过于频繁' } })
+      )
+    ).toBe('账号包操作过于频繁')
   })
 
   it('detail 是数组时拼接前两条 msg（历史 FastAPI 形态）', () => {

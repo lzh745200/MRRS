@@ -7,7 +7,13 @@
     :data-carousel-view="carouselView"
   >
     <header class="bs-layer-header bs-header">
-      <h1>帮扶管理信息系统 · 帮扶成效总览大屏</h1>
+      <div class="bs-brand">
+        <img src="/images/badges/badge.png" alt="帮扶管理系统标识" class="bs-brand-badge" />
+        <div>
+          <h1>帮扶管理信息系统 · 帮扶成效总览大屏</h1>
+          <p class="bs-brand-subtitle">乡村振兴 · 帮扶成效数据总览</p>
+        </div>
+      </div>
       <div class="bs-header-right">
         <!-- 距离字号分档：3m / 6m / 10m（默认 6m，仅影响大屏页字号） -->
         <div class="distance-switch" role="group" aria-label="大屏字号距离档">
@@ -79,7 +85,12 @@
     </section>
 
     <!-- 设置抽屉：卡片取舍与顺序 / 自动刷新频率 / 汇报脱敏（localStorage 持久化） -->
-    <el-drawer v-model="settingsVisible" title="大屏设置" size="360px">
+    <el-drawer
+      v-model="settingsVisible"
+      class="bigscreen-settings-drawer"
+      title="大屏设置"
+      size="360px"
+    >
       <div class="settings-panel">
         <div class="settings-section">
           <div class="settings-title">卡片显示与顺序</div>
@@ -266,7 +277,7 @@ import { logger } from '@/utils/logger'
 import { useRouterSafe } from '@/composables/useRouterSafe'
 import { Refresh } from '@element-plus/icons-vue'
 import BaseChart from '@/components/common/BaseChart.vue'
-import { COLOR_PALETTE, themeColor } from '@/utils/echarts-theme'
+import { COLOR_PALETTE } from '@/utils/echarts-theme'
 import {
   getBigScreenFilters,
   getBigScreenOverview,
@@ -473,14 +484,29 @@ const kpis = computed<BigScreenKpi[]>(() => {
   }))
 })
 
+/** 大屏深色图表的统一文字/网格色，避免 ECharts 默认深色文字落在深蓝底上不可读。 */
+const BIGSCREEN_CHART_TEXT = '#cfe7ff'
+const BIGSCREEN_CHART_MUTED = 'rgba(207, 231, 255, 0.58)'
+const BIGSCREEN_CHART_GRID = 'rgba(64, 169, 255, 0.14)'
+const BIGSCREEN_TOOLTIP = {
+  backgroundColor: 'rgba(3, 12, 28, 0.94)',
+  borderColor: 'rgba(64, 169, 255, 0.45)',
+  textStyle: { color: BIGSCREEN_CHART_TEXT },
+}
+const BIGSCREEN_AXIS = {
+  axisLine: { lineStyle: { color: 'rgba(64, 169, 255, 0.28)' } },
+  axisLabel: { color: BIGSCREEN_CHART_MUTED },
+  splitLine: { lineStyle: { color: BIGSCREEN_CHART_GRID } },
+}
+
 const fundTrendOption = computed(() => {
   const data = overview.value?.fund_trend ?? []
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    tooltip: { ...BIGSCREEN_TOOLTIP, trigger: 'axis' },
     grid: { left: 40, right: 16, top: 24, bottom: 28 },
-    xAxis: { type: 'category', data: data.map((d) => d.year) },
-    yAxis: { type: 'value' },
+    xAxis: { type: 'category', data: data.map((d) => d.year), ...BIGSCREEN_AXIS },
+    yAxis: { type: 'value', ...BIGSCREEN_AXIS },
     series: [
       {
         name: '计划投入',
@@ -504,10 +530,10 @@ const rankOption = computed(() => {
   const rows = overview.value?.rankings ?? []
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    tooltip: { ...BIGSCREEN_TOOLTIP, trigger: 'axis' },
     grid: { left: 90, right: 24, top: 16, bottom: 24 },
-    xAxis: { type: 'value' },
-    yAxis: { type: 'category', data: rows.map((row) => row.name) },
+    xAxis: { type: 'value', ...BIGSCREEN_AXIS },
+    yAxis: { type: 'category', data: rows.map((row) => row.name), ...BIGSCREEN_AXIS },
     series: [
       {
         type: 'bar',
@@ -522,10 +548,10 @@ const projectStatusOption = computed(() => {
   const rows = overview.value?.project_status ?? []
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item' },
+    tooltip: { ...BIGSCREEN_TOOLTIP, trigger: 'item' },
     legend: {
       bottom: 0,
-      textStyle: { color: themeColor('--color-text-secondary', '#aaa') },
+      textStyle: { color: BIGSCREEN_CHART_MUTED },
     },
     series: [
       {
@@ -545,10 +571,10 @@ const yearlyOption = computed(() => {
   const rows = overview.value?.yearly ?? []
   return {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis' },
+    tooltip: { ...BIGSCREEN_TOOLTIP, trigger: 'axis' },
     grid: { left: 40, right: 16, top: 24, bottom: 28 },
-    xAxis: { type: 'category', data: rows.map((row) => row.year) },
-    yAxis: { type: 'value' },
+    xAxis: { type: 'category', data: rows.map((row) => row.year), ...BIGSCREEN_AXIS },
+    yAxis: { type: 'value', ...BIGSCREEN_AXIS },
     series: [
       {
         type: 'bar',
@@ -926,8 +952,35 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(64, 169, 255, 0.35);
-  padding-bottom: 10px;
+  gap: 16px;
+  border: 1px solid rgba(64, 169, 255, 0.28);
+  border-radius: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(110deg, rgba(8, 28, 58, 0.92), rgba(4, 12, 28, 0.72));
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(120, 200, 255, 0.12);
+}
+.bs-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.bs-brand-badge {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 214, 102, 0.55);
+  box-shadow: 0 0 18px rgba(64, 169, 255, 0.25);
+}
+.bs-brand-subtitle {
+  margin: 3px 0 0;
+  color: #7fa9ce;
+  font-size: 11px;
+  letter-spacing: 1px;
 }
 .bs-header h1 {
   font-size: var(--bs-text-title, calc(22px * var(--bs-distance-scale, 1.25)));
@@ -982,7 +1035,7 @@ onUnmounted(() => {
 .settings-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #e6f1ff;
 }
 .settings-card-row {
   display: flex;
@@ -992,7 +1045,7 @@ onUnmounted(() => {
 .settings-card-title {
   flex: 1;
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: #9fc6ef;
 }
 .settings-desensitize {
   display: flex;
@@ -1001,7 +1054,7 @@ onUnmounted(() => {
 }
 .settings-hint {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #7fa9ce;
 }
 .settings-reset {
   align-self: flex-start;
@@ -1012,11 +1065,23 @@ onUnmounted(() => {
   gap: 12px;
 }
 .kpi-item {
-  background: rgba(64, 169, 255, 0.08);
-  border: 1px solid rgba(64, 169, 255, 0.25);
-  border-radius: 8px;
-  padding: 10px 8px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(14, 45, 82, 0.82), rgba(5, 17, 36, 0.72));
+  border: 1px solid rgba(64, 169, 255, 0.28);
+  border-radius: 9px;
+  padding: 12px 8px;
   text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgba(120, 200, 255, 0.12),
+    0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.kpi-item::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(64, 169, 255, 0.8), transparent);
 }
 .kpi-value {
   font-size: var(--bs-text-kpi, calc(34px * var(--bs-distance-scale, 1.25)));
@@ -1041,12 +1106,15 @@ onUnmounted(() => {
   }
 }
 .chart-card {
-  background: rgba(9, 24, 48, 0.65);
-  border: 1px solid rgba(64, 169, 255, 0.2);
-  border-radius: 8px;
-  padding: 8px 10px 6px;
+  background: linear-gradient(150deg, rgba(11, 34, 65, 0.82), rgba(4, 14, 30, 0.74));
+  border: 1px solid rgba(64, 169, 255, 0.22);
+  border-radius: 9px;
+  padding: 10px 12px 8px;
   display: flex;
   flex-direction: column;
+  box-shadow:
+    inset 0 1px 0 rgba(120, 200, 255, 0.08),
+    0 8px 22px rgba(0, 0, 0, 0.2);
 }
 .chart-card.wide {
   grid-column: span 2;
@@ -1082,15 +1150,38 @@ onUnmounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--el-border-color-lighter);
+  padding: 10px 12px;
+  border: 1px solid rgba(64, 169, 255, 0.24);
   border-radius: 8px;
-  background: var(--el-fill-color-blank);
+  background: rgba(7, 20, 40, 0.82);
+  box-shadow: inset 0 1px 0 rgba(120, 200, 255, 0.08);
 }
 .filter-label,
 .scope-subtitle {
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: #9fc6ef;
+}
+.bs-filters :deep(.el-radio-button__inner),
+.bs-filters :deep(.el-button) {
+  background: rgba(8, 30, 58, 0.86);
+  border-color: rgba(64, 169, 255, 0.28);
+  color: #cfe7ff;
+}
+.bs-filters :deep(.el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: linear-gradient(135deg, #1769aa, #2f9be0);
+  border-color: #45b6ff;
+  color: #fff;
+  box-shadow: -1px 0 0 0 #45b6ff;
+}
+.bs-filters :deep(.el-input__wrapper),
+.bs-filters :deep(.el-select__wrapper) {
+  background: rgba(3, 12, 28, 0.9);
+  box-shadow: 0 0 0 1px rgba(64, 169, 255, 0.25) inset;
+  color: #e6f1ff;
+}
+.bs-filters :deep(.el-input__inner),
+.bs-filters :deep(.el-select__placeholder) {
+  color: #cfe7ff;
 }
 .scope-subtitle {
   font-size: 12px;
@@ -1181,5 +1272,28 @@ onUnmounted(() => {
   font-size: 12px;
   color: #5a7ba8;
   padding: 6px 0 2px;
+}
+
+/* 大屏设置抽屉：el-drawer 默认 teleport 到 body，scoped 样式需用 :global 才能命中 */
+:global(.bigscreen-settings-drawer) {
+  background: #07162d;
+  color: #e6f1ff;
+}
+:global(.bigscreen-settings-drawer .el-drawer__header) {
+  margin-bottom: 0;
+  padding: 16px 20px;
+  color: #e6f1ff;
+  border-bottom: 1px solid rgba(64, 169, 255, 0.25);
+}
+:global(.bigscreen-settings-drawer .el-drawer__body) {
+  background: #07162d;
+}
+:global(.bigscreen-settings-drawer .el-switch__label),
+:global(.bigscreen-settings-drawer .el-radio-button__inner) {
+  color: #cfe7ff;
+}
+:global(.bigscreen-settings-drawer .el-radio-button__inner) {
+  background: rgba(8, 30, 58, 0.86);
+  border-color: rgba(64, 169, 255, 0.28);
 }
 </style>

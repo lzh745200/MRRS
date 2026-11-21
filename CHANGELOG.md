@@ -1,3 +1,20 @@
+## [1.18.56] - 2026-11-21 — 二次确认/标识/首启引导与大屏深色化
+
+### 修复
+
+- **`REAUTH_REQUIRED` 裸协议码泄漏**：高风险操作 428 二次确认在用户取消时原样 `reject` 原错误、重放仍 428 时又落入 `_buildUserMessage`，最终把后端协议码直接显示到 UI。现在取消静默为“已取消二次确认”，重放失败统一中文“二次确认未完成，请重新操作”；并合并并发 428 的密码框，避免重复弹窗。
+- **统一错误码文案**：`getErrorMessage` 将 `REAUTH_REQUIRED`、`AP_ATTEMPTS_EXCEEDED`、`AP_RATE_LIMITED`、`AP_PREREQUISITE` 及 `{detail:{code,message}}` 结构转为中文可读文案；428 增加中文状态码兜底。
+- **安装后标识**：NSIS 快捷方式图标直接取主程序内嵌图标（构建期已校验 16~256 七档），覆盖安装先删旧 lnk；Electron 窗口图标增加 `icon.png → app-circle.ico` 兜底，并固定 Windows AppUserModelID，避免任务栏/桌面白纸。
+- **首次启动引导**：登录页首次打开自动展开“机器码 → 权限包 → 管理员开通账号”三步指引，点“已了解，开始登录”后持久化隐藏；登录后首用指引不再只依赖 `is_first_login`，只要该用户从未完成过引导就挂起一次，修复种子管理员/升级机器无指引。
+- **汇报大屏非白底**：重做深色数据大屏视觉：深蓝渐变底、玻璃质感 KPI/图表面板、暗色筛选条与设置抽屉、ECharts 深色坐标/图例/tooltip，并补充大屏品牌标识。
+- **发布校验竞态**：`verify_published_release.py` 改为按缺失资产清单决定重试，不再因清单先到/包后到误判失败（补 13 例）。
+
+### 验证
+
+- 前端相关回归 404 例通过；发布校验 13 例通过。
+- 后端账号包/版本/发布门禁回归通过；`npm run check:provenance`、CHANGELOG/更新日志/文档计数通过。
+- 干净 tag 构建 v1.18.56，完成安装/启动、版本接口、首启引导、桌面标识与大屏深色验收。
+
 ## [1.18.55] - 2026-11-20 — 安装器图标/临时目录修复与账号包限流收口
 
 ### 修复
@@ -7,6 +24,7 @@
 - **安装器 `Error writing temporary file`**：NSIS 在 `InitPluginsDir` 阶段使用 `%TEMP%`，脚本内无法赋值；Release 增加 `MRRS-Installer-Helper.ps1`（探测/切换到可写 TEMP 后启动安装器）与 `MRRS-Shortcut-Repair.ps1`（已装机器修复图标/信任），并在安装排障文档说明根因。
 - **账号包 P4 失败尝试限流**：`ACCOUNT_PACKAGE_MAX_ATTEMPTS` 真正生效；新增 `account_package_attempts` 台账（迁移 `account_package_attempts_001`），导出按签发人、导入按机器码计数；失败达阈值 429 `AP_ATTEMPTS_EXCEEDED`，重试过快 429 `AP_RATE_LIMITED`，成功清零；新增 `ACCOUNT_PACKAGE_LOCKOUT_MINUTES=15`、`ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS=1.0`。
 - **发布附件**：Windows Release 额外上传上述两个现场修复脚本；发布后资产校验仍只对本作业核心产物做硬性要求，避免三作业并发竞态误红。
+- **发布后校验在资产分批上传时误判失败**：`verify_published_release.py` 原按问题文案白名单判断"是否值得重试"，当某个 `SHA256SUMS-*.txt` 先于它引用的包上传时，同一轮会同时产出「缺少资产」与「清单引用了不存在的资产」两条文案，后者被判成不可自愈 → 1800s 等待预算只用了 973s 就退出（v1.18.55 实测：Windows 作业先发布、ARM64 Electron deb 仍在传，校验作业红，24 秒后另一触发重跑即通过）。改为按 `report["missing"]`（期望资产是否齐全）决定重试，并去掉重复告警；补 13 例回归测试固定该竞态。
 - **发布文档与已发布事实对齐**：README「安装包获取」体积校正为实测值（Windows 约 365 MB、ARM64 桌面版约 338 MB / 纯 Web 版约 152 MB，并标明两者区别），补「下载通道受限时用 `gh release download` 走 API/objects」的说明；签名段由「未做代码签名（证书未采购）」更正为「已用内网自签名证书签名 + 目标机如何导入信任」，避免运维按过时描述判断 SmartScreen 提示。安装排障文档新增 §3.3「从下载到覆盖安装的验收清单」（下载校验 → 签名 → 装后关键路径 → 启动判据 → 覆盖升级不丢数据 → 卸载留数据），并写明两个发布校验脚本的分工（一个验"发布残缺"、一个验"上传走样"）。
 
 ### 验证

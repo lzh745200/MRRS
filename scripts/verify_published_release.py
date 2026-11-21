@@ -137,9 +137,15 @@ def parse_sums(text: str) -> dict[str, str]:
 
 
 def check_once(tag: str, version: str) -> tuple[list[str], dict]:
-    """跑一次校验，返回 (问题列表, 报告)。"""
+    """跑一次校验，返回 (问题列表, 报告)。
+
+    报告里的 `missing` 是「期望但尚未出现」的资产名单。调用方用它判断是否值得重试——
+    **不能**靠问题文案反推：资产正在上传时，API 的资产清单与下载到的清单文件之间
+    存在竞态（清单先到、它引用的包后到），会同时出现「缺少资产」与
+    「清单引用了不存在的资产」两种文案，见 `_should_retry`。
+    """
     problems: list[str] = []
-    report: dict = {"tag": tag, "version": version, "assets": [], "checks": []}
+    report: dict = {"tag": tag, "version": version, "assets": [], "checks": [], "missing": []}
 
     release = fetch_release(tag)
     if release.get("draft"):
@@ -152,6 +158,7 @@ def check_once(tag: str, version: str) -> tuple[list[str], dict]:
 
     expected = expected_assets(version)
     missing = [n for n in expected if n not in assets]
+    report["missing"] = missing
     if missing:
         problems.append("缺少资产: " + ", ".join(missing))
 
@@ -206,7 +213,10 @@ def check_once(tag: str, version: str) -> tuple[list[str], dict]:
         for fname, digest in entries.items():
             asset = assets.get(fname)
             if asset is None:
-                problems.append(f"{sums_name} 引用了不存在的资产: {fname}")
+                # 该包还没上传完：已在「缺少资产」里报过，这里不重复报，
+                # 否则会因文案不同被判成「不可自愈」而提前结束等待（v1.18.55 实测）。
+                if fname not in missing:
+                    problems.append(f"{sums_name} 引用了不存在的资产: {fname}")
                 continue
             api_digest = str(asset.get("digest") or "")
             if not api_digest:
@@ -220,6 +230,18 @@ def check_once(tag: str, version: str) -> tuple[list[str], dict]:
                 report["checks"].append(f"{fname} sha256 与清单一致")
 
     return problems, report
+
+
+def _should_retry(report: dict, deadline: float, now: float) -> bool:
+    """是否值得再等一轮。
+
+    判据是「期望资产还没齐」（report["missing"] 非空），**不是**问题文案里有没有
+    「缺少资产」。原因：资产分批上传时存在竞态——某个 `SHA256SUMS-*.txt` 先到、
+    它引用的包后到，于是同一轮里既报「缺少资产」又报「清单引用了不存在的资产」；
+    按文案白名单判断会把后者当成「等也不会自愈」而提前退出（v1.18.55 实测：
+    1800s 预算只用了 973s 就判失败，随后 24s 后另一个触发重跑即通过）。
+    """
+    return bool(report.get("missing")) and now < deadline
 
 
 def main() -> int:
@@ -244,11 +266,10 @@ def main() -> int:
 
         if not problems:
             break
-        # 只对「缺资产」等待，其它问题（draft/哈希不符）等也不会自愈
-        only_missing = all("缺少资产" in p or "0 字节" in p for p in problems)
-        if args.wait and only_missing and time.time() < deadline:
+        # 只在「期望资产还没齐」时等待；draft / 哈希不符 / 正文问题等不会自愈。
+        if args.wait and _should_retry(report, deadline, time.time()):
             print(f"[wait] 第 {attempt} 次：资产未齐全，30 秒后重试（剩余 {int(deadline - time.time())}s）")
-            time.sleep(30)
+            time.sleep(min(30, max(1, int(deadline - time.time()))))
             continue
         break
 

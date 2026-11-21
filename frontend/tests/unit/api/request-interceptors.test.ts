@@ -236,6 +236,8 @@ describe('api/request — interceptors', () => {
 
       await expect(handlers.responseR(error)).rejects.toBe(error)
       expect(mockInst.request).not.toHaveBeenCalled()
+      expect((error as any).userMessage).toBe('已取消二次确认')
+      expect((error as any).__silent).toBe(true)
     })
 
     it('已重试过的 428 不再弹框（防无限弹窗）', async () => {
@@ -252,6 +254,8 @@ describe('api/request — interceptors', () => {
 
       await expect(handlers.responseR(error)).rejects.toBe(error)
       expect(mockPrompt).not.toHaveBeenCalled()
+      // 重放仍 428 时必须是中文，禁止把 REAUTH_REQUIRED 原样抛出
+      expect((error as any).userMessage).toBe('二次确认未完成，请重新操作')
     })
 
     it('密码校验器拒绝空输入', async () => {

@@ -104,6 +104,7 @@ async function mountComp() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.removeItem('mrrs.login-guide.v1')
   redirectQuery = undefined
   authState.error = ''
   authState.mustChangePassword = false
@@ -1060,21 +1061,22 @@ describe('LoginEnhanced.vue', () => {
       expect(mockVerify2FA).not.toHaveBeenCalled()
     })
 
-    it('首次使用引导：默认折叠，点击可展开/收起', async () => {
+    it('首次使用引导：首次打开自动展开，关闭后持久化不再打扰', async () => {
       const w = await mountComp()
       const vm = w.vm as any
-      expect(vm.firstUseOpen).toBe(false)
-      const toggle = w.find('.first-use-toggle')
-      expect(toggle.attributes('aria-expanded')).toBe('false')
-      await toggle.trigger('click')
       expect(vm.firstUseOpen).toBe(true)
-      await nextTick()
-      expect(w.find('.first-use-toggle').attributes('aria-expanded')).toBe('true')
+      const toggle = w.find('.first-use-toggle')
+      expect(toggle.attributes('aria-expanded')).toBe('true')
       const items = w.findAll('.first-use-steps li')
       expect(items.length).toBe(3)
       expect(items[0].text()).toContain('获取本机机器码')
       expect(items[1].text()).toContain('导入管理员导出的权限包')
       expect(items[2].text()).toContain('账号由管理员开通')
+      await w.find('.first-use-done-btn').trigger('click')
+      expect(vm.firstUseOpen).toBe(false)
+      expect(localStorage.getItem('mrrs.login-guide.v1')).toBe('1')
+      await toggle.trigger('click')
+      expect(vm.firstUseOpen).toBe(true)
       await toggle.trigger('click')
       expect(vm.firstUseOpen).toBe(false)
     })

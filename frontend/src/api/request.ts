@@ -317,6 +317,33 @@ async function _buildUserMessage(error: any): Promise<string> {
   return '操作失败'
 }
 
+/**
+ * 高风险操作二次确认密码框（并发共享）：
+ * 多个接口同时返回 428 时只弹一次；取消返回 null，由调用方转成中文可读错误，
+ * 绝不把后端协议码 `REAUTH_REQUIRED` 暴露给用户。
+ */
+let _reauthPromptInFlight: Promise<string | null> | null = null
+
+function _promptReauthPassword(): Promise<string | null> {
+  if (_reauthPromptInFlight) return _reauthPromptInFlight
+  _reauthPromptInFlight = ElMessageBox.prompt(
+    '该操作会影响账号/权限或覆盖数据，请输入当前登录密码确认：',
+    '安全确认',
+    {
+      inputType: 'password',
+      inputPlaceholder: '当前登录密码',
+      inputValidator: (v: string) => (v ? true : '密码不能为空'),
+      closeOnClickModal: false,
+    }
+  )
+    .then(({ value }) => (typeof value === 'string' && value ? value : null))
+    .catch(() => null)
+    .finally(() => {
+      _reauthPromptInFlight = null
+    })
+  return _reauthPromptInFlight
+}
+
 request.interceptors.response.use(
   (response) => {
     const requestKey = _makeRequestKey(
@@ -398,30 +425,26 @@ request.interceptors.response.use(
       const { status } = error.response
       // 高风险操作二次确认：后端 428 + REAUTH_REQUIRED → 统一弹密码框，
       // 成功后带 X-Confirm-Password 重放一次；不把密码放进 URL/日志。
-      if (
-        status === 428 &&
-        originalRequest &&
-        !(originalRequest as InternalRequestConfig)._confirmRetry
-      ) {
-        try {
-          const { value } = await ElMessageBox.prompt(
-            '该操作会影响账号/权限或覆盖数据，请输入当前登录密码确认：',
-            '安全确认',
-            {
-              inputType: 'password',
-              inputPlaceholder: '当前登录密码',
-              inputValidator: (v: string) => (v ? true : '密码不能为空'),
-              closeOnClickModal: false,
-            }
-          )
-          const cfg = originalRequest as InternalRequestConfig
-          cfg._confirmRetry = true
-          cfg.headers = cfg.headers || {}
-          ;(cfg.headers as Record<string, string>)['X-Confirm-Password'] = value
-          return request.request(cfg)
-        } catch {
+      if (status === 428 && originalRequest) {
+        // 重放后仍是 428：说明确认头没有生效/被网关剥离，禁止再次弹框死循环。
+        // 必须在这里转成中文，否则会落到 _buildUserMessage → extractServerMessage，
+        // 最终把协议码 "REAUTH_REQUIRED" 原样显示给用户（现场反馈的根因）。
+        if ((originalRequest as InternalRequestConfig)._confirmRetry) {
+          error.userMessage = '二次确认未完成，请重新操作'
           return Promise.reject(error)
         }
+        const value = await _promptReauthPassword()
+        if (!value) {
+          // 用户主动取消不是业务失败：静默拒绝，页面/兜底都不弹红色协议码
+          error.userMessage = '已取消二次确认'
+          error.__silent = true
+          return Promise.reject(error)
+        }
+        const cfg = originalRequest as InternalRequestConfig
+        cfg._confirmRetry = true
+        cfg.headers = cfg.headers || {}
+        ;(cfg.headers as Record<string, string>)['X-Confirm-Password'] = value
+        return request.request(cfg)
       }
       if (status === 401) {
         // W3-T5：已带 _retry 标记的请求再次 401 → refresh 已试过仍失败，

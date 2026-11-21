@@ -648,6 +648,9 @@ describe('api/request — 428 二次确认', () => {
     }
     await expect(handlers.responseR(error)).rejects.toBe(error)
     expect(mockInst.request).not.toHaveBeenCalled()
+    // 取消二次确认必须静默，不能把后端协议码 REAUTH_REQUIRED 暴露给用户
+    expect((error as any).userMessage).toBe('已取消二次确认')
+    expect((error as any).__silent).toBe(true)
   })
 
   it('输入密码 → 带 X-Confirm-Password 重放一次', async () => {

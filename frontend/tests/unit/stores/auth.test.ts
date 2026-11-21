@@ -283,8 +283,16 @@ describe('useAuthStore', () => {
       getItem.mockRestore()
     })
 
-    it('非首登不挂起首用指引', async () => {
+    it('非首登但从未完成引导时也挂起一次（修复“首次安装无指引”）', async () => {
       mockApiRequest.mockResolvedValueOnce({ ...successPayload, is_first_login: false })
+      const store = useAuthStore()
+      await store.login('alice', 'pwd')
+      expect(sessionStorage.getItem('mrrs.first-use-guide.pending')).toBe('1')
+    })
+
+    it('已完成引导的用户即使首登标记丢失也不重复展示', async () => {
+      localStorage.setItem('mrrs.first-use-guide.v1.1', 'done')
+      mockApiRequest.mockResolvedValueOnce({ ...successPayload, is_first_login: true })
       const store = useAuthStore()
       await store.login('alice', 'pwd')
       expect(sessionStorage.getItem('mrrs.first-use-guide.pending')).toBeNull()

@@ -4504,9 +4504,39 @@ VERSION_HISTORY_DATA = [
             ),
             "发布附件：Windows Release 额外上传上述两个现场修复脚本；发布后资产校验仍只对本作业核心产物做硬性要求，避免三作业并发竞态误红。",
             (
+                "发布后校验在资产分批上传时误判失败：verify_published_release.py 原按问题文案白名单判断\"是否值得重试\"，当某个 SHA256SUMS-*.txt 先于它引用"
+                "的包上传时，同一轮会同时产出「缺少资产」与「清单引用了不存在的资产」两条文案，后者被判成不可自愈 → 1800s 等待预算只用了 973s 就退出（v1.18.55 实测：Windows "
+                "作业先发布、ARM64 Electron deb 仍在传…"
+            ),
+            (
                 "发布文档与已发布事实对齐：README「安装包获取」体积校正为实测值（Windows 约 365 MB、ARM64 桌面版约 338 MB / 纯 Web 版约 152 MB，并标明两者区"
                 "别），补「下载通道受限时用 gh release download 走 API/objects」的说明；"
             ),
+        ],
+    },
+    {
+        "version": "1.18.56",
+        "date": "2026-11-21",
+        "description": "二次确认/标识/首启引导与大屏深色化",
+        "features": [
+            (
+                "REAUTH_REQUIRED 裸协议码泄漏：高风险操作 428 二次确认在用户取消时原样 reject 原错误、重放仍 428 时又落入 _buildUserMessage，最终把后端协"
+                "议码直接显示到 UI。现在取消静默为“已取消二次确认”，重放失败统一中文“二次确认未完成，请重新操作”；并合并并发 428 的密码框，避免重复弹窗。"
+            ),
+            (
+                "统一错误码文案：getErrorMessage 将 REAUTH_REQUIRED、AP_ATTEMPTS_EXCEEDED、AP_RATE_LIMITED、AP_PREREQUISITE"
+                " 及 {detail:{code,message}} 结构转为中文可读文案；428 增加中文状态码兜底。"
+            ),
+            (
+                "安装后标识：NSIS 快捷方式图标直接取主程序内嵌图标（构建期已校验 16~256 七档），覆盖安装先删旧 lnk；Electron 窗口图标增加 icon.png → app-circl"
+                "e.ico 兜底，并固定 Windows AppUserModelID，避免任务栏/桌面白纸。"
+            ),
+            (
+                "首次启动引导：登录页首次打开自动展开“机器码 → 权限包 → 管理员开通账号”三步指引，点“已了解，开始登录”后持久化隐藏；登录后首用指引不再只依赖 is_first_login，只要该用"
+                "户从未完成过引导就挂起一次，修复种子管理员/升级机器无指引。"
+            ),
+            "汇报大屏非白底：重做深色数据大屏视觉：深蓝渐变底、玻璃质感 KPI/图表面板、暗色筛选条与设置抽屉、ECharts 深色坐标/图例/tooltip，并补充大屏品牌标识。",
+            "发布校验竞态：verify_published_release.py 改为按缺失资产清单决定重试，不再因清单先到/包后到误判失败（补 13 例）。",
         ],
     },
 ]

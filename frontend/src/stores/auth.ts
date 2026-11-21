@@ -103,21 +103,21 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   })
 
-  function persistAuth(t: string, u: UserInfo, rt?: string, isFirstLogin = false) {
+  function persistAuth(t: string, u: UserInfo, rt?: string) {
     token.value = t
     refreshToken.value = rt || ''
     user.value = u
     _setCachedToken(t)
     AuthStorage.setAuthData({ token: t, user: u, refreshToken: rt })
-    // 仅真正的首登挂起引导；已完成的用户不再重复展示。
-    if (isFirstLogin) {
-      try {
-        if (localStorage.getItem(firstUseGuideDoneKey(u.id)) !== 'done') {
-          sessionStorage.setItem(FIRST_USE_GUIDE_PENDING_KEY, String(u.id))
-        }
-      } catch {
-        /* 隐私模式/配额异常：不阻断登录 */
+    // 首次引导：只要该用户从未完成过引导就挂起（不再只看 is_first_login）。
+    // 现场升级/种子管理员可能已经被系统预置过 last_login，若只信首登标记，
+    // 用户会“第一次看到系统却没有任何指引”。完成标记仍保证只展示一次。
+    try {
+      if (localStorage.getItem(firstUseGuideDoneKey(u.id)) !== 'done') {
+        sessionStorage.setItem(FIRST_USE_GUIDE_PENDING_KEY, String(u.id))
       }
+    } catch {
+      /* 隐私模式/配额异常：不阻断登录 */
     }
     // 登录成功 → 解除锁屏标记（自动登录恢复时同样生效）
     unlockSession()
@@ -239,8 +239,7 @@ export const useAuthStore = defineStore('auth', () => {
           persistAuth(
             res.data.access_token,
             user,
-            (res as unknown as { refresh_token?: string }).refresh_token,
-            res.is_first_login === true
+            (res as unknown as { refresh_token?: string }).refresh_token
           )
           // 登录后立即预加载菜单 — 避免侧边栏渲染时 loaded=false 导致闪烁或泄露
           // 使用 try-catch 防止菜单加载失败影响登录流程
@@ -294,7 +293,7 @@ export const useAuthStore = defineStore('auth', () => {
             (res.data.user as { must_change_password?: boolean })?.must_change_password ??
             false,
         } as UserInfo
-        persistAuth(res.data.access_token, user, res.refresh_token, res.is_first_login === true)
+        persistAuth(res.data.access_token, user, res.refresh_token)
         useMenuStore().fetchMenus()
         // 短期项 5：2FA 登录同样要加载组织模块策略（与普通登录一致）。
         // 可选调用：部分单测把 menu store 整体 mock，缺少该方法时不得阻断登录。

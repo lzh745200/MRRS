@@ -233,6 +233,14 @@
               </div>
             </li>
           </ol>
+          <button
+            v-if="firstUseOpen"
+            type="button"
+            class="first-use-done-btn"
+            @click="dismissLoginGuide"
+          >
+            已了解，开始登录
+          </button>
         </section>
 
         <!-- 权限包导入对话框 -->
@@ -337,7 +345,24 @@ const rememberMe = ref(false)
 const loading = ref(false)
 const showPassword = ref(false)
 const showMachineCodeInput = ref(false)
-const firstUseOpen = ref(false)
+/** 首次打开登录页的操作指引：未看过时自动展开；关闭后按浏览器持久化只展示一次。 */
+const LOGIN_GUIDE_SEEN_KEY = 'mrrs.login-guide.v1'
+function hasSeenLoginGuide(): boolean {
+  try {
+    return localStorage.getItem(LOGIN_GUIDE_SEEN_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+const firstUseOpen = ref(!hasSeenLoginGuide())
+function dismissLoginGuide(): void {
+  firstUseOpen.value = false
+  try {
+    localStorage.setItem(LOGIN_GUIDE_SEEN_KEY, '1')
+  } catch {
+    /* 隐私模式/配额异常：不影响登录 */
+  }
+}
 const capsLockOn = ref(false)
 const systemVersion = SYSTEM_VERSION
 const copyrightOwner = COPYRIGHT_OWNER
@@ -1245,6 +1270,22 @@ const goToAccountImport = () => {
 
 .chev.is-open {
   transform: rotate(180deg);
+}
+
+.first-use-done-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-gold-a40);
+  border-radius: 7px;
+  background: var(--color-gold-a10);
+  color: var(--military-gold-light);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.first-use-done-btn:hover {
+  background: var(--color-gold-a20);
 }
 
 .first-use-steps {

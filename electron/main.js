@@ -122,10 +122,23 @@ function getTilesDir() {
 }
 
 function getIconPath() {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'icon.png');
+  // 2026-11-21：安装后窗口/托盘标识白纸的兜底链。优先 extraResources 的 icon.png，
+  // 缺失时用 app-circle.ico，最后回退仓库图标；不要让 BrowserWindow 拿到 undefined。
+  const candidates = app.isPackaged
+    ? [
+        path.join(process.resourcesPath, 'icon.png'),
+        path.join(process.resourcesPath, 'app-circle.ico'),
+      ]
+    : [path.join(__dirname, '..', 'resources', 'icons', 'app-circle-256.png')];
+  for (const candidate of candidates) {
+    try { if (fs.existsSync(candidate)) return candidate; } catch (_) {}
   }
-  return path.join(__dirname, '..', 'resources', 'icons', 'app-circle-256.png');
+  return candidates[0];
+}
+
+// Windows 任务栏分组/通知标识：固定 AppUserModelID，避免快捷方式与进程分到不同图标组。
+if (process.platform === 'win32') {
+  try { app.setAppUserModelId('com.bumofu.mrrs'); } catch (_) {}
 }
 
 // ─── 密钥持久化 ───

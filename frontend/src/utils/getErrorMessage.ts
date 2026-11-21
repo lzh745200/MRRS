@@ -52,6 +52,8 @@ export function statusFallbackMessage(status: unknown): string {
       return '数据冲突，请刷新后重试'
     case 413:
       return '提交内容过大，请减小后重试'
+    case 428:
+      return '该操作需要重新确认身份，请重试'
     case 429:
       return '操作过于频繁，请稍后再试'
     default:
@@ -85,6 +87,18 @@ function fromDetailArray(detail: unknown[]): string {
   return parts.join('；')
 }
 
+/** 后端机器码 → 用户可读文案（禁止把 REAUTH_REQUIRED 这类协议码直接展示） */
+const SERVER_CODE_MESSAGES: Record<string, string> = {
+  REAUTH_REQUIRED: '该操作需要重新确认身份，请重试',
+  AP_ATTEMPTS_EXCEEDED: '账号包尝试次数过多，已临时锁定，请稍后再试',
+  AP_RATE_LIMITED: '账号包操作过于频繁，请稍后再试',
+  AP_PREREQUISITE: '当前机器或系统状态不满足账号包操作条件',
+}
+
+function humanizeServerCode(code: unknown): string {
+  return typeof code === 'string' ? SERVER_CODE_MESSAGES[code.trim()] || '' : ''
+}
+
 /** 从响应体里提取服务端文案（message 优先，其次 detail / errors） */
 export function extractServerMessage(error: any): string {
   const data = error?.response?.data ?? error?.data
@@ -102,7 +116,17 @@ export function extractServerMessage(error: any): string {
   if (typeof message === 'string' && message.trim()) return message.trim()
 
   const detail = data.detail
-  if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  if (typeof detail === 'string' && detail.trim()) {
+    return humanizeServerCode(detail) || detail.trim()
+  }
+  // 后端业务错误有时是 {detail:{code,message}}（账号包 P4/二次确认）
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    const record = detail as { code?: unknown; message?: unknown; msg?: unknown }
+    const text = typeof record.message === 'string' ? record.message : record.msg
+    if (typeof text === 'string' && text.trim()) return text.trim()
+    const byCode = humanizeServerCode(record.code)
+    if (byCode) return byCode
+  }
   if (Array.isArray(detail)) {
     const joined = fromDetailArray(detail)
     if (joined) return joined

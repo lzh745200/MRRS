@@ -72,7 +72,8 @@ if (-not $SkipUnblock) {
 
 # ── 3. 重建快捷方式（图标统一指向 ico） ───────────────────────────────
 if (-not $SkipShortcut) {
-  $iconLoc = if (Test-Path -LiteralPath $ico) { "$ico,0" } else { "$exe,0" }
+  # 2026-11-21：优先使用主程序内嵌图标（构建期已校验 7 档），避免 ico 路径/缓存问题
+  $iconLoc = "$exe,0"
   $targets = @(
     (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "帮扶管理系统.lnk"),
     (Join-Path ([Environment]::GetFolderPath("CommonPrograms")) "帮扶管理系统.lnk")
