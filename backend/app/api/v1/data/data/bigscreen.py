@@ -534,18 +534,6 @@ def _collect_school_filters(db: Session, data_scope: OrgScopeFilter) -> list:
     ]
 
 
-def _bump_unit_count(units: dict, raw_name, field: str) -> None:
-    """把一路来源的命中累加到单位 facet（空名一律排除）。"""
-    name = (str(raw_name) if raw_name is not None else "").strip()
-    if not name:
-        return
-    item = units.setdefault(
-        name,
-        {"village_count": 0, "school_count": 0, "project_count": 0, "pairing_count": 0},
-    )
-    item[field] += 1
-
-
 def _collect_unit_filters(db: Session, data_scope: OrgScopeFilter) -> list:
     """可筛选帮扶单位 facet：四路在库内 GROUP BY，同名合并计数。
 
