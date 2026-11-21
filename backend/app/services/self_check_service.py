@@ -256,7 +256,8 @@ def _check_backup_location() -> Dict[str, Any]:
         same_volume = backups_share_volume_with_database(
             str(get_database_path()), str(get_backup_path())
         )
-    except Exception as exc:  # noqa: BLE001 - 自检项失败不得让整个体检 500
+    except (OSError, ValueError, TypeError) as exc:
+        # 路径解析/stat 失败只降级本项，不得让整个体检 500；不吞未知编程错误。
         logger.warning("备份位置自检失败（已降级为提示）：%s", exc)
         return _result(
             "备份位置",
