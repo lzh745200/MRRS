@@ -35,6 +35,14 @@
           </p>
         </div>
 
+        <!-- 首启提示条：一行高度，避免三步展开把登录按钮挤出可视区 -->
+        <div v-if="showFirstUseNotice" class="first-use-banner" role="note">
+          <span>首次安装？按 3 步完成本机开通：机器码 → 权限包 → 管理员开通账号</span>
+          <button type="button" class="first-use-banner-btn" @click="openLoginGuide">
+            查看指引
+          </button>
+        </div>
+
         <!--
           结构化提示条（W27）：原实现把所有失败压成一条红字，
           用户被锁定/限流时不知道还要等多久。现按类型分色 + 倒计时 + 可选直达动作。
@@ -354,9 +362,15 @@ function hasSeenLoginGuide(): boolean {
     return true
   }
 }
-const firstUseOpen = ref(!hasSeenLoginGuide())
+const firstUseOpen = ref(false)
+const showFirstUseNotice = ref(!hasSeenLoginGuide())
+function openLoginGuide(): void {
+  firstUseOpen.value = true
+  showFirstUseNotice.value = false
+}
 function dismissLoginGuide(): void {
   firstUseOpen.value = false
+  showFirstUseNotice.value = false
   try {
     localStorage.setItem(LOGIN_GUIDE_SEEN_KEY, '1')
   } catch {
@@ -1236,6 +1250,34 @@ const goToAccountImport = () => {
 .text-link:hover {
   color: var(--military-gold);
   text-decoration: underline;
+}
+
+/* 首启提示条：只占一行，不把提交按钮挤出登录卡可视区 */
+.first-use-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-gold-a40);
+  border-radius: 7px;
+  background: var(--color-gold-a10);
+  color: var(--color-white-80);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.first-use-banner-btn {
+  flex: none;
+  padding: 4px 8px;
+  border: 1px solid var(--color-gold-a40);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--military-gold-light);
+  cursor: pointer;
+}
+.first-use-banner-btn:hover {
+  background: var(--color-gold-a20);
 }
 
 /* 首次使用三步引导 */

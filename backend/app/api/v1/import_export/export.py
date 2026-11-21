@@ -27,7 +27,7 @@ _CSV_MEDIA_TYPE = "text/csv"
 MAX_EXPORT_ROWS = 10000
 
 
-def _truncation_headers(total: int, returned: int) -> Dict[str, str]:
+def _truncation_headers(total: int, returned: int, limit: int = MAX_EXPORT_ROWS) -> Dict[str, str]:
     """导出被上限截断时返回提示响应头（短期项 1，2026-11-01）。
 
     前端 ``request.ts`` 的响应拦截器对 blob 响应读这几个头并弹提示——
@@ -40,7 +40,7 @@ def _truncation_headers(total: int, returned: int) -> Dict[str, str]:
             "X-Export-Truncated": "true",
             "X-Export-Total": str(total),
             "X-Export-Returned": str(returned),
-            "X-Export-Limit": str(MAX_EXPORT_ROWS),
+            "X-Export-Limit": str(limit),
         }
     else:
         # 防御：单测里 query 常被整体 mock，`.count()` 会返回 MagicMock/None。

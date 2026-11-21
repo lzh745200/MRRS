@@ -1061,9 +1061,13 @@ describe('LoginEnhanced.vue', () => {
       expect(mockVerify2FA).not.toHaveBeenCalled()
     })
 
-    it('首次使用引导：首次打开自动展开，关闭后持久化不再打扰', async () => {
+    it('首启横幅不遮挡登录按钮，点击后展开三步指引并可关闭', async () => {
       const w = await mountComp()
       const vm = w.vm as any
+      expect(vm.firstUseOpen).toBe(false)
+      expect(w.find('.first-use-banner').exists()).toBe(true)
+      expect(w.find('button[type="submit"]').exists()).toBe(true)
+      await w.find('.first-use-banner-btn').trigger('click')
       expect(vm.firstUseOpen).toBe(true)
       const toggle = w.find('.first-use-toggle')
       expect(toggle.attributes('aria-expanded')).toBe('true')
@@ -1072,13 +1076,33 @@ describe('LoginEnhanced.vue', () => {
       expect(items[0].text()).toContain('获取本机机器码')
       expect(items[1].text()).toContain('导入管理员导出的权限包')
       expect(items[2].text()).toContain('账号由管理员开通')
+      await toggle.trigger('click')
+      expect(vm.firstUseOpen).toBe(false)
+      ;(w.vm as any).openLoginGuide()
+      await nextTick()
       await w.find('.first-use-done-btn').trigger('click')
       expect(vm.firstUseOpen).toBe(false)
       expect(localStorage.getItem('mrrs.login-guide.v1')).toBe('1')
-      await toggle.trigger('click')
-      expect(vm.firstUseOpen).toBe(true)
-      await toggle.trigger('click')
-      expect(vm.firstUseOpen).toBe(false)
+    })
+
+    it('登录引导存储不可读时按已读处理，不阻塞登录页', async () => {
+      const getItem = vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+        throw new Error('storage disabled')
+      })
+      const w = await mountComp()
+      expect((w.vm as any).firstUseOpen).toBe(false)
+      getItem.mockRestore()
+    })
+
+    it('登录引导 setItem 失败仍可关闭，不影响登录', async () => {
+      const w = await mountComp()
+      await w.find('.first-use-banner-btn').trigger('click')
+      const setItem = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+        throw new Error('quota exceeded')
+      })
+      await w.find('.first-use-done-btn').trigger('click')
+      expect((w.vm as any).firstUseOpen).toBe(false)
+      setItem.mockRestore()
     })
 
     it('首次使用引导：机器码与权限包两步按钮可达', async () => {

@@ -90,6 +90,17 @@ describe('extractServerMessage', () => {
     )
   })
 
+  it('detail 对象仅带已知 code 时按 code 映射中文', () => {
+    expect(extractServerMessage(axiosError(428, { detail: { code: 'REAUTH_REQUIRED' } }))).toBe(
+      '该操作需要重新确认身份，请重试'
+    )
+  })
+
+  it('detail 对象未知 code 且无 message 时返回空串（不崩）', () => {
+    expect(extractServerMessage(axiosError(400, { detail: { code: 'UNKNOWN' } }))).toBe('')
+    expect(extractServerMessage(axiosError(400, { detail: { code: 123 } }))).toBe('')
+  })
+
   it('detail 对象形态 {code,message} 优先取 message', () => {
     expect(
       extractServerMessage(

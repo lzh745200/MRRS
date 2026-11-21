@@ -258,6 +258,40 @@ describe('api/request — interceptors', () => {
       expect((error as any).userMessage).toBe('二次确认未完成，请重新操作')
     })
 
+    it('密码框返回空值按取消处理，不重放请求', async () => {
+      mockPrompt.mockResolvedValue({ value: '' })
+      const config: any = { method: 'PUT', url: '/users/1', headers: {} }
+      const error = {
+        response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } },
+        config,
+      }
+      await expect(handlers.responseR(error)).rejects.toBe(error)
+      expect(mockInst.request).not.toHaveBeenCalled()
+      expect((error as any).userMessage).toBe('已取消二次确认')
+    })
+
+    it('并发 428 只弹一次密码框，两个请求都带确认头重放', async () => {
+      let resolvePrompt!: (value: { value: string }) => void
+      mockPrompt.mockImplementation(
+        () => new Promise((resolve) => { resolvePrompt = resolve })
+      )
+      mockInst.request.mockResolvedValue({ data: { code: 200 } })
+      const config1: any = { method: 'PUT', url: '/users/1', headers: {} }
+      const config2: any = { method: 'PUT', url: '/users/2', headers: {} }
+      const error1 = { response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } }, config: config1 }
+      const error2 = { response: { status: 428, data: { detail: 'REAUTH_REQUIRED' } }, config: config2 }
+
+      const p1 = handlers.responseR(error1)
+      const p2 = handlers.responseR(error2)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(mockPrompt).toHaveBeenCalledTimes(1)
+      resolvePrompt({ value: 'shared-pwd' })
+      await Promise.all([p1, p2])
+      expect(mockInst.request).toHaveBeenCalledTimes(2)
+      expect(config1.headers['X-Confirm-Password']).toBe('shared-pwd')
+      expect(config2.headers['X-Confirm-Password']).toBe('shared-pwd')
+    })
+
     it('密码校验器拒绝空输入', async () => {
       mockPrompt.mockResolvedValue({ value: 'pwd123' })
       mockInst.request.mockResolvedValue({ data: { code: 200 } })

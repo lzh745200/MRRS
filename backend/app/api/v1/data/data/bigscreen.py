@@ -547,42 +547,59 @@ def _bump_unit_count(units: dict, raw_name, field: str) -> None:
 
 
 def _collect_unit_filters(db: Session, data_scope: OrgScopeFilter) -> list:
-    """可筛选帮扶单位 facet：村 / 学校 / 项目 / 结对四路并集，同名合并计数。"""
+    """可筛选帮扶单位 facet：四路在库内 GROUP BY，同名合并计数。
+
+    性能（2026-11-21 审计 P1）：旧实现用 ``.all()`` 把四张表**全部行**取回
+    Python 再计数，省级数据下一次性搬数万行且没有任何索引支撑。改为
+    ``GROUP BY 单位名 + COUNT(*)``：返回行数 = 不同单位数（通常几十到几百），
+    配合 ``ix_supported_villages_support_unit`` / ``ix_projects_responsible_unit``
+    （迁移 ``perf_facet_indexes_001``）走索引扫描。
+    """
     units: dict[Any, Any] = {}
 
-    village_query = db.query(SupportedVillage.support_unit).filter(
-        SupportedVillage.is_active == True  # noqa: E712
-    )
+    def _merge(rows: list, field: str) -> None:
+        for name, count in rows:
+            if not name:
+                continue
+            item = units.setdefault(
+                name,
+                {"village_count": 0, "school_count": 0, "project_count": 0, "pairing_count": 0},
+            )
+            item[field] += int(count or 0)
+
+    village_query = db.query(
+        SupportedVillage.support_unit, func.count(SupportedVillage.id)
+    ).filter(SupportedVillage.is_active == True)  # noqa: E712
     village_query = data_scope.filter_by_org_ids(
         village_query, SupportedVillage.organization_id, created_by_column=SupportedVillage.created_by
     )
-    for (name,) in village_query.all():
-        _bump_unit_count(units, name, "village_count")
+    _merge(village_query.group_by(SupportedVillage.support_unit).all(), "village_count")
 
-    school_query = db.query(School.support_unit).filter(School.is_active == True)  # noqa: E712
+    school_query = db.query(School.support_unit, func.count(School.id)).filter(
+        School.is_active == True  # noqa: E712
+    )
     school_query = data_scope.filter_by_org_ids(
         school_query, School.organization_id, created_by_column=School.created_by
     )
-    for (name,) in school_query.all():
-        _bump_unit_count(units, name, "school_count")
+    _merge(school_query.group_by(School.support_unit).all(), "school_count")
 
-    project_query = db.query(Project.responsible_unit).filter(
+    project_query = db.query(Project.responsible_unit, func.count(Project.id)).filter(
         Project.is_active == True,  # noqa: E712
         Project.status != "cancelled",
     )
     project_query = _apply_project_scope(project_query, data_scope)
-    for (name,) in project_query.all():
-        _bump_unit_count(units, name, "project_count")
+    _merge(project_query.group_by(Project.responsible_unit).all(), "project_count")
 
-    pairing_query = db.query(PairingRecord.subject_name).filter(
+    pairing_query = db.query(
+        PairingRecord.subject_name, func.count(PairingRecord.id)
+    ).filter(
         PairingRecord.subject_type == "unit",
         PairingRecord.is_active == True,  # noqa: E712
     )
     pairing_query = data_scope.filter_by_org_ids(
         pairing_query, PairingRecord.organization_id, created_by_column=PairingRecord.created_by
     )
-    for (name,) in pairing_query.all():
-        _bump_unit_count(units, name, "pairing_count")
+    _merge(pairing_query.group_by(PairingRecord.subject_name).all(), "pairing_count")
 
     items = [{"name": name, **counts} for name, counts in units.items()]
     items.sort(

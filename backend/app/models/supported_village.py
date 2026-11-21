@@ -51,7 +51,7 @@ class SupportedVillage(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     sequence_no = Column(Integer, nullable=True, comment="序号")
     department = Column(String(200), nullable=True, comment="部门单位")
-    support_unit = Column(String(200), nullable=True, comment="帮扶单位")
+    support_unit = Column(String(200), nullable=True, index=True, comment="帮扶单位（大屏 facet 分组/筛选）")
     village_name = Column(String(200), nullable=False, comment="帮扶村名称")
     province = Column(String(50), default="贵州省", comment="省份")
     city = Column(String(50), nullable=True, comment="城市")

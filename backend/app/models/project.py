@@ -104,7 +104,7 @@ class Project(Base):
 
     leader = Column(String(50), nullable=True, comment="项目负责人")
     contact = Column(String(50), nullable=True, comment="联系方式")
-    responsible_unit = Column(String(200), nullable=True, comment="负责单位")
+    responsible_unit = Column(String(200), nullable=True, index=True, comment="负责单位（大屏 facet 分组/筛选）")
     responsible_person = Column(String(50), nullable=True, comment="负责人")
     contact_phone = Column(EncryptedText(256), nullable=True, comment="联系电话(透明加密, ADR-0005)")
 

@@ -21,6 +21,9 @@ from app.utils.time_utils import to_utc_naive, utcnow
 
 logger = logging.getLogger(__name__)
 
+# 审计导出行数上限（单次导出；超出时用 X-Export-Truncated 显式告知）
+AUDIT_EXPORT_LIMIT = 5000
+
 router = APIRouter(prefix="/audit", tags=["Audit Logs"])
 
 
@@ -532,7 +535,11 @@ async def export_audit_logs(  # noqa: C901
     if end_date:
         query = query.filter(AuditLogModel.created_at <= _inclusive_end_date(end_date))
 
-    logs = query.limit(5000).all()
+    # 2026-11-21 修复（审计 P1）：先用 count() 取真实总数，再按上限取行。
+    # 旧实现直接 limit(5000) 且 total=len(items)，导出 5000 条时看起来"刚好导完"，
+    # 实际可能漏了十几万条 —— 等保取证场景属于数据完整性问题。
+    _raw_total = query.count()
+    logs = query.limit(AUDIT_EXPORT_LIMIT).all()
     items = []
     for log in logs:
         items.append(
@@ -548,9 +555,16 @@ async def export_audit_logs(  # noqa: C901
             }
         )
 
-    # JSON 格式直接返回数据
+    # 真实总数（mock 环境下 count() 可能不是 int，退回本次返回条数）
+    _total = _raw_total if isinstance(_raw_total, int) else len(items)
+    # 截断提示头（与 /export/* 同一实现，前端 request.ts 会自动弹提示）
+    from app.api.v1.import_export.export import _truncation_headers
+
+    _export_headers = _truncation_headers(_total, len(items), limit=AUDIT_EXPORT_LIMIT)
+
+    # JSON 格式直接返回数据：total 用真实总数
     if format == "json":
-        return ok_list(items=items, total=len(items))
+        return ok_list(items=items, total=_total)
 
     # Excel / CSV 格式返回文件下载
     import io
@@ -615,7 +629,10 @@ async def export_audit_logs(  # noqa: C901
             return StreamingResponse(
                 output,
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+                    **_export_headers,
+                },
             )
         except ImportError:  # pragma: no cover - 可选依赖未安装时的功能降级分支
             logger.warning("openpyxl 未安装，回退到 CSV 格式")
@@ -638,7 +655,10 @@ async def export_audit_logs(  # noqa: C901
     return StreamingResponse(
         io.BytesIO(csv_bytes),
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+            **_export_headers,
+        },
     )
 
 

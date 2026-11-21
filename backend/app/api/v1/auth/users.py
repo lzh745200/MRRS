@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile
@@ -27,7 +28,7 @@ from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, normalize_role
 from app.core.transaction import safe_commit
 from app.core.response import success_response
 from app.utils.pagination import clamp_offset_limit, coerce_page_param
-from app.utils.time_utils import to_local
+from app.utils.time_utils import as_utc, to_local, utcnow
 from app.utils.upload_helper import read_upload_with_limit
 
 logger = logging.getLogger(__name__)
@@ -1098,6 +1099,16 @@ async def admin_reset_password(
     user.hashed_password = get_password_hash(data.new_password)
     user.revoke_all_tokens()
     user.must_change_password = True
+    # 2026-11-21 修复（审计 P0）：重置即"新凭据"，必须清掉初始凭据有效期。
+    # 另外 expire_provisioned_credentials 会把"过期且仍待改密"的账号停用；
+    # 若只清有效期不恢复 is_active，用户重置后仍被登录口拦下（403/停用），
+    # 现场只能改库。这里按"确因凭据过期被停用"的条件恢复，避免误启用人工停用的账号。
+    _now = utcnow()
+    _expires_raw = getattr(user, "credential_expires_at", None)
+    _expired = isinstance(_expires_raw, datetime) and as_utc(_expires_raw) <= _now
+    user.credential_expires_at = None
+    if _expired and not user.is_active:
+        user.is_active = True
     safe_commit(db)
 
     # 批次 3（危险操作强制审计）：管理员重置他人密码 = 账号接管级操作
@@ -1188,6 +1199,10 @@ async def change_password(
     user.hashed_password = get_password_hash(data.new_password)
     user.revoke_all_tokens()
     user.must_change_password = False
+    # 2026-11-21 修复：账号开通包签发的"初始凭据"有效期只约束首次交付。
+    # 不清空会在到期后被 login 的 enforce_credential_not_expired 永久拒绝，
+    # 且用户已改过密码也无从自救（改密/重置都不清该字段的旧实现见审计 P0）。
+    user.credential_expires_at = None
     safe_commit(db)
 
     # 清理自动生成的管理员密码临时文件（admin_pwd_*.txt）
