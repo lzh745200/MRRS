@@ -157,8 +157,6 @@
 | POST | `/rbac/revoke/permission` | 批量撤销用户权限（具有事务原子性） | 管理员 |
 | POST | `/rbac/save-permissions` | 原子性保存用户权限——在单个事务内完成撤销 + 授予（具有事务原子性） | 管理员 |
 | GET | `/rbac/permissions` | 获取所有可用权限列表 | 登录 |
-| GET | `/rbac/frontend/current-user-permissions` | 获取当前用户权限（前端组件专用） | 登录 |
-| GET | `/rbac/frontend/route-permissions` | 获取路由权限配置（前端路由守卫专用） | 登录 |
 
 ### two_factor.py — 双因素认证 `/two-factor`
 
@@ -1278,27 +1276,11 @@
 | DELETE | `/todos/{todo_id}` | 删除待办事项 | 登录 |
 | PATCH | `/todos/{todo_id}/toggle` | 切换待办事项的完成状态 | 登录 |
 
-### user_permissions.py — 用户权限管理（旧版，v1.6.0后合并至/rbac） `/user-permissions`
+### user_permissions.py — 用户权限管理（旧版，v1.6.0 后合并至 /rbac）
 
-> ⚠️ **已于 2026-09-10 删除**：`api/v1/user_permissions.py` 与 `services/user_permission_service.py`
-> 及注册项均已移除（前端零调用）。下表仅存档，能力请改用 `/rbac/*`。
-
-| 方法 | 路径 | 说明 | 鉴权 |
-|------|------|------|------|
-| POST | `/user-permissions/assign-organization` | 将用户分配到组织 | 登录 |
-| DELETE | `/user-permissions/remove-organization` | 将用户从组织中移除 | 登录 |
-| GET | `/user-permissions/user-organizations/{user_id}` | 获取用户所属的所有组织 | 登录 |
-| GET | `/user-permissions/organization-users/{organization_id}` | 获取组织下的所有用户 | 登录 |
-| POST | `/user-permissions/assign-role` | 为用户分配角色 | 登录 |
-| DELETE | `/user-permissions/remove-role` | 移除用户的角色 | 登录 |
-| GET | `/user-permissions/user-roles/{user_id}` | 获取用户的所有角色 | 登录 |
-| POST | `/user-permissions/grant-permission` | 直接授予用户权限 | 登录 |
-| DELETE | `/user-permissions/revoke-permission` | 撤销用户的权限 | 登录 |
-| GET | `/user-permissions/user-permissions/{user_id}` | 获取用户的所有权限 | 登录 |
-| POST | `/user-permissions/check-permission` | 检查用户是否拥有指定权限 | 登录 |
-| GET | `/user-permissions/organization-tree` | 获取组织树 | 登录 |
-| GET | `/user-permissions/accessible-organizations` | 获取当前用户可访问的所有组织ID列表 | 登录 |
-| GET | `/user-permissions` | 获取当前用户权限信息（根路径） | 登录 |
+> ⚠️ **已于 2026-09-10 删除**：`api/v1/user_permissions.py`、`services/user_permission_service.py`
+> 及路由注册项均已移除（前端零调用）。相关能力统一走 `/rbac/*`（见本节上方）。
+> 历史接口清单不再在本文档维护，需要追溯请查阅 2026-09-10 之前的 git 历史。
 
 ### validation.py — 数据校验 `/validation`
 

@@ -60,10 +60,26 @@ function Test-WritableDir([string]$Path) {
 
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $Installer) {
-  $candidates = @()
-  $candidates += Get-ChildItem -Path (Join-Path $root 'dist\release') -Filter 'MRRS-Setup-*-x64.exe' -Recurse -ErrorAction SilentlyContinue
-  $candidates += Get-ChildItem -Path (Join-Path $root 'dist\electron') -Filter 'MRRS-Setup-*.exe' -ErrorAction SilentlyContinue
-  $picked = $candidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  # Release 用户通常把 Helper 与 Setup 放在同一个下载目录：同目录优先，
+  # 且不再按 LastWriteTime 与仓库 dist 混排（否则仓库里较新的包会抢走选择）。
+  $picked = Get-ChildItem -Path $PSScriptRoot -Filter 'MRRS-Setup-*-x64.exe' -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $picked) {
+    $picked = Get-ChildItem -Path $PSScriptRoot -Filter 'MRRS-Setup-*.exe' -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  }
+  if (-not $picked) {
+    $repoRelease = Join-Path $root 'dist\release'
+    $repoElectron = Join-Path $root 'dist\electron'
+    $repoCandidates = @()
+    if (Test-Path -LiteralPath $repoRelease) {
+      $repoCandidates = Get-ChildItem -Path $repoRelease -Filter 'MRRS-Setup-*-x64.exe' -Recurse -ErrorAction SilentlyContinue
+    }
+    if (-not $repoCandidates -and (Test-Path -LiteralPath $repoElectron)) {
+      $repoCandidates = Get-ChildItem -Path $repoElectron -Filter 'MRRS-Setup-*.exe' -ErrorAction SilentlyContinue
+    }
+    $picked = $repoCandidates | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  }
   if ($picked) { $Installer = $picked.FullName }
 }
 if (-not $NoLaunch) {

@@ -247,6 +247,34 @@ def _check_package_signing() -> Dict[str, Any]:
     }
 
 
+def _check_backup_location() -> Dict[str, Any]:
+    """提示备份与数据库同卷：盘损/断电会同时带走库和备份。"""
+    try:
+        from app.services.backup_service import backups_share_volume_with_database
+        from app.utils.paths import get_backup_path, get_database_path
+
+        same_volume = backups_share_volume_with_database(
+            str(get_database_path()), str(get_backup_path())
+        )
+    except Exception as exc:  # noqa: BLE001 - 自检项失败不得让整个体检 500
+        logger.warning("备份位置自检失败（已降级为提示）：%s", exc)
+        return _result(
+            "备份位置",
+            LEVEL_WARN,
+            "无法判断备份与数据库是否同盘，请人工确认备份目录位于独立磁盘或 U 盘",
+            1,
+        )
+    if same_volume is True:
+        return _result(
+            "备份位置",
+            LEVEL_WARN,
+            "备份目录与数据库在同一磁盘/卷（盘损或断电会同时丢失数据与备份）："
+            "请在「系统设置 → 备份管理」把备份目标改到独立磁盘、移动硬盘或网络盘",
+            1,
+        )
+    return _result("备份位置", LEVEL_OK, "备份目录与数据库不在同一磁盘/卷", 0)
+
+
 def collect_self_check(db: Session) -> Dict[str, Any]:
     """执行全部自检项，返回可直接渲染的结论。"""
     checks = [
@@ -257,6 +285,7 @@ def collect_self_check(db: Session) -> Dict[str, Any]:
         _check_pii_key(),
         _check_recent_imports(db),
         _check_package_signing(),
+        _check_backup_location(),
     ]
     errors = sum(1 for c in checks if c["level"] == LEVEL_ERROR)
     warns = sum(1 for c in checks if c["level"] == LEVEL_WARN)

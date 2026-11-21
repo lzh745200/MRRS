@@ -732,6 +732,7 @@ jobs:
         shell: bash
         run: |
           cp scripts/windows/install-mrrs-with-clean-temp.ps1 dist/electron/MRRS-Installer-Helper.ps1
+          cp scripts/windows/install-mrrs.cmd dist/electron/Install-MRRS.cmd
           cp scripts/windows/fix-trust-and-icon.ps1 dist/electron/MRRS-Shortcut-Repair.ps1
 
       # 11. 上传制品
@@ -749,6 +750,7 @@ jobs:
             dist/electron/latest.yml
             dist/electron/SHA256SUMS-windows-x64.txt
             dist/electron/MRRS-Installer-Helper.ps1
+            dist/electron/Install-MRRS.cmd
             dist/electron/MRRS-Shortcut-Repair.ps1
           retention-days: 30
 
@@ -774,6 +776,7 @@ jobs:
             dist/electron/latest.yml
             dist/electron/SHA256SUMS-windows-x64.txt
             dist/electron/MRRS-Installer-Helper.ps1
+            dist/electron/Install-MRRS.cmd
             dist/electron/MRRS-Shortcut-Repair.ps1
           generate_release_notes: false
           body_path: ${{ runner.temp }}/release-body.md

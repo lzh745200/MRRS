@@ -79,7 +79,7 @@ def create_token_pair(
         access_ttl_minutes: Access token TTL in minutes.
             Defaults to ``settings.ACCESS_TOKEN_EXPIRE_MINUTES`` or 480.
         refresh_ttl_days: Refresh token TTL in days.
-            Defaults to ``settings.REFRESH_TOKEN_EXPIRE_DAYS`` or 7.
+            Defaults to ``settings.REFRESH_TOKEN_EXPIRE_DAYS`` or 30 (long-term).
 
     Returns:
         A dict with keys ``access_token``, ``refresh_token``,
@@ -89,7 +89,7 @@ def create_token_pair(
     if access_ttl_minutes is None:
         access_ttl_minutes = getattr(settings, "ACCESS_TOKEN_EXPIRE_MINUTES", 480) if settings else 480
     if refresh_ttl_days is None:
-        refresh_ttl_days = getattr(settings, "REFRESH_TOKEN_EXPIRE_DAYS", 7) if settings else 7
+        refresh_ttl_days = getattr(settings, "REFRESH_TOKEN_EXPIRE_DAYS", 30) if settings else 30
 
     now = datetime.now(timezone.utc)
     jti_access = uuid.uuid4().hex

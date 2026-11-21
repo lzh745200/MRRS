@@ -50,6 +50,10 @@ class TestOrgCodeCheck:
 
         for name in ("PACKAGE_PUBKEY", "GRANT_PUBKEY", "ACCOUNT_PACKAGE_PUBKEY"):
             monkeypatch.setattr(settings, name, "a" * 64, raising=False)
+        # 测试机备份目录可能恰与库同卷；本用例只验证组织码，备份项固定为 OK。
+        monkeypatch.setattr(
+            svc, "_check_backup_location", lambda: svc._result("备份位置", LEVEL_OK, "ok", 0)
+        )
         db = _db_with(orgs=[
             _org(1, "贵州省", "520000", "1"),
             _org(2, "贵阳市", "520100", "2", 1),
@@ -213,14 +217,50 @@ class TestSummary:
         db = MagicMock()
         db.query.return_value.filter.return_value.all.return_value = []
         db.query.return_value.filter.return_value.count.return_value = 0
-        result = collect_self_check(db)
-        # 7 项：组织码/组织层级/待审账号/锁定账号/PII 密钥/介质导入/包签名
-        assert result["summary"]["check_count"] == 7
+        # 备份位置由独立用例测试；此处固定为 OK，避免测试机盘符影响汇总断言。
+        with patch.object(
+            svc, "_check_backup_location", return_value=svc._result("备份位置", LEVEL_OK, "ok", 0)
+        ):
+            result = collect_self_check(db)
+        # 8 项：组织码/组织层级/待审账号/锁定账号/PII 密钥/介质导入/包签名/备份位置
+        assert result["summary"]["check_count"] == 8
         assert result["summary"]["error_count"] == 0
         # 测试环境未配置包签名公钥 → 恰好 1 条 warn（这是刻意可见化的安全提示）
         assert result["summary"]["warn_count"] == 1
         assert result["generated_at"]
-        assert len(result["checks"]) == 7
+        assert len(result["checks"]) == 8
+
+
+class TestBackupLocationCheck:
+    """备份同盘自检（v1.18.58）：同卷必须明确 WARN，独立卷回到 OK。"""
+
+    def test_same_volume_warns(self):
+        with patch(
+            "app.services.backup_service.backups_share_volume_with_database",
+            return_value=True,
+        ):
+            result = svc._check_backup_location()
+        assert result["level"] == LEVEL_WARN
+        assert result["count"] == 1
+        assert "同一磁盘" in result["detail"]
+
+    def test_different_volume_ok(self):
+        with patch(
+            "app.services.backup_service.backups_share_volume_with_database",
+            return_value=False,
+        ):
+            result = svc._check_backup_location()
+        assert result["level"] == LEVEL_OK
+        assert result["count"] == 0
+
+    def test_probe_failure_warns_instead_of_raising(self):
+        with patch(
+            "app.services.backup_service.backups_share_volume_with_database",
+            side_effect=OSError("path unavailable"),
+        ):
+            result = svc._check_backup_location()
+        assert result["level"] == LEVEL_WARN
+        assert "无法判断" in result["detail"]
 
 
 class TestTimeBasisUsesUtc:

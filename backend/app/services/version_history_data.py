@@ -4578,4 +4578,20 @@ VERSION_HISTORY_DATA = [
             "麒麟 root 运行的沙箱降级写入诊断日志（P3）：--no-sandbox 不再只在控制台告警，同时写 logs/backend-crash.log 旁的安全记录，便于事后审计。",
         ],
     },
+    {
+        "version": "1.18.58",
+        "date": "2026-11-21",
+        "description": "安装 TEMP 兜底 / 长期会话 / 备份同盘自检",
+        "features": [
+            (
+                "安装器 TEMP 链路：Release 的 MRRS-Installer-Helper.ps1 现在优先在脚本同目录查找 MRRS-Setup-*.exe（下载目录双击也能用）；新增 In"
+                "stall-MRRS.cmd 双击启动器，创建可写 %LOCALAPPDATA%\\Temp\\MRRS-Setup 后启动安装器，并随 Release 发布。"
+            ),
+            (
+                "刷新令牌改为长期：统一为 30 天；config.py、security.py、token_manager.py、.env.example 不再出现 7/30 双默认值；ACCESS 仍 "
+                "8 小时。"
+            ),
+            "备份同盘自检：系统自检新增「备份位置」，备份目录与数据库同卷时明确 WARN，提示改到独立磁盘/移动硬盘/网络盘，避免盘损时数据与备份同亡。",
+        ],
+    },
 ]

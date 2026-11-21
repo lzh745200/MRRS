@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.57"
+    PROJECT_VERSION: str = "1.18.58"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -156,10 +156,10 @@ class Settings(BaseSettings):
     # 单机版 token 有效期收窄至 8 小时（安全基线要求 ≤8h）。
     # 结合 token_version 强制下线可进一步缓解会话泄露风险。
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8小时
-    # 2026-11-21：现场存在"多账号共用一台机器"，30 天刷新令牌等于长期免密，
-    # 收窄到 7 天（ACCESS 仍 8 小时）。需要更长的离线值守场景用
-    # REFRESH_TOKEN_EXPIRE_DAYS 环境变量显式调大，并在部署文档注明。
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 天（多账号共用机器的安全基线）
+    # 2026-11-21：单机/离线值守场景需要长期免登录，刷新令牌统一为 30 天。
+    # 这是**唯一默认值来源**；security.py、token_manager.py、.env.example 必须与之
+    # 保持一致（test_refresh_token_ttl.py 守护）。ACCESS 仍为 8 小时。
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30 天（长期会话）
     BCRYPT_ROUNDS: int = 12  # OWASP 建议 12 轮以上
     PASSWORD_EXPIRE_DAYS: int = 90  # 密码有效期（天）
     CONFIRM_PASSWORD_ENFORCED: bool = True  # 高风险操作二次确认（测试环境跳过，生产默认开启）

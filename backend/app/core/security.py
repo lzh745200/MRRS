@@ -104,6 +104,8 @@ except Exception as _settings_err:  # pragma: no cover - 模块导入期 config 
 # 裸 int() 会让一处笔误（如 ACCESS_TOKEN_EXPIRE_MINUTES=8h）直接以 ImportError
 # 让整个后端无法启动，且报错形态与真实原因严重脱节。
 ACCESS_TOKEN_EXPIRE_MINUTES = parse_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", 480)
+# 与 config.REFRESH_TOKEN_EXPIRE_DAYS 保持同一默认值（30 天长期会话）；
+# 本常量供 create_refresh_token 使用，禁止再出现 7/30 双默认值。
 REFRESH_TOKEN_EXPIRE_DAYS = parse_env_int("REFRESH_TOKEN_EXPIRE_DAYS", 30)
 
 # 角色常量（4 个实用角色；历史角色值统一通过 constants.py normalize_role() 归一化）

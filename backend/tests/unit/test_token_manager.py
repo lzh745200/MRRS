@@ -109,7 +109,7 @@ class TestCreateTokenPair:
     @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"encoded.{p.get('type')}")
     def test_basic(self, mock_encode, mock_algo, mock_key, mock_settings):
         mock_settings.return_value = MagicMock(
-            ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=7
+            ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=30
         )
 
         result = create_token_pair("user1")
@@ -134,7 +134,7 @@ class TestCreateTokenPair:
     @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
     def test_with_extra_claims(self, mock_encode, mock_algo, mock_key, mock_settings):
         mock_settings.return_value = MagicMock(
-            ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=7
+            ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=30
         )
 
         result = create_token_pair("user1", extra_claims={"role": "admin", "org": "unit"})
@@ -150,7 +150,7 @@ class TestCreateTokenPair:
     @patch("jwt.encode", side_effect=lambda p, s, algorithm=None: f"e.{p.get('type')}")
     def test_custom_ttl(self, mock_encode, mock_algo, mock_key, mock_settings):
         mock_settings.return_value = MagicMock(
-            ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=7
+            ACCESS_TOKEN_EXPIRE_MINUTES=30, REFRESH_TOKEN_EXPIRE_DAYS=30
         )
 
         result = create_token_pair("user1", access_ttl_minutes=15, refresh_ttl_days=1)
