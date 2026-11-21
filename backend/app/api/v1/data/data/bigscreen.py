@@ -535,14 +535,8 @@ def _collect_school_filters(db: Session, data_scope: OrgScopeFilter) -> list:
 
 
 def _collect_unit_filters(db: Session, data_scope: OrgScopeFilter) -> list:
-    """可筛选帮扶单位 facet：四路在库内 GROUP BY，同名合并计数。
-
-    性能（2026-11-21 审计 P1）：旧实现用 ``.all()`` 把四张表**全部行**取回
-    Python 再计数，省级数据下一次性搬数万行且没有任何索引支撑。改为
-    ``GROUP BY 单位名 + COUNT(*)``：返回行数 = 不同单位数（通常几十到几百），
-    配合 ``ix_supported_villages_support_unit`` / ``ix_projects_responsible_unit``
-    （迁移 ``perf_facet_indexes_001``）走索引扫描。
-    """
+    # 单位 facet：四路 GROUP BY 单位名 + COUNT(*)，只返回不同单位行；
+    # 配合 perf_facet_indexes_001 的 support_unit / responsible_unit 索引。
     units: dict[Any, Any] = {}
 
     def _merge(rows: list, field: str) -> None:
