@@ -44,7 +44,12 @@ def _db_with(orgs=None, users=None, audits=None):
 
 
 class TestOrgCodeCheck:
-    def test_all_good(self):
+    def test_all_good(self, monkeypatch):
+        # 三类包公钥都配置 → "包签名校验"项为 ok，整体才是 ok
+        from app.core.config import settings
+
+        for name in ("PACKAGE_PUBKEY", "GRANT_PUBKEY", "ACCOUNT_PACKAGE_PUBKEY"):
+            monkeypatch.setattr(settings, name, "a" * 64, raising=False)
         db = _db_with(orgs=[
             _org(1, "贵州省", "520000", "1"),
             _org(2, "贵阳市", "520100", "2", 1),
@@ -209,11 +214,13 @@ class TestSummary:
         db.query.return_value.filter.return_value.all.return_value = []
         db.query.return_value.filter.return_value.count.return_value = 0
         result = collect_self_check(db)
-        assert result["summary"]["check_count"] == 6
+        # 7 项：组织码/组织层级/待审账号/锁定账号/PII 密钥/介质导入/包签名
+        assert result["summary"]["check_count"] == 7
         assert result["summary"]["error_count"] == 0
-        assert result["summary"]["warn_count"] == 0
+        # 测试环境未配置包签名公钥 → 恰好 1 条 warn（这是刻意可见化的安全提示）
+        assert result["summary"]["warn_count"] == 1
         assert result["generated_at"]
-        assert len(result["checks"]) == 6
+        assert len(result["checks"]) == 7
 
 
 class TestTimeBasisUsesUtc:
@@ -243,3 +250,34 @@ class TestTimeBasisUsesUtc:
         criteria = db.query.return_value.filter.call_args[0]
         since = criteria[-1].right.value
         assert since == self.SENTINEL - timedelta(days=RECENT_IMPORT_DAYS)
+
+
+class TestPackageSigningCheck:
+    """包签名可见化（审计 P2）：未配公钥要明确告警，配齐后回到 ok。"""
+
+    def _db(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.all.return_value = []
+        db.query.return_value.filter.return_value.count.return_value = 0
+        return db
+
+    def test_warns_when_pubkeys_missing(self, monkeypatch):
+        from app.core.config import settings
+
+        for name in ("PACKAGE_PUBKEY", "GRANT_PUBKEY", "ACCOUNT_PACKAGE_PUBKEY"):
+            monkeypatch.setattr(settings, name, "", raising=False)
+        result = collect_self_check(self._db())
+        check = next(c for c in result["checks"] if c["name"] == "包签名校验")
+        assert check["level"] == LEVEL_WARN
+        assert check["count"] == 3
+        assert "PACKAGE_PUBKEY" in check["detail"]
+
+    def test_ok_when_all_pubkeys_configured(self, monkeypatch):
+        from app.core.config import settings
+
+        for name in ("PACKAGE_PUBKEY", "GRANT_PUBKEY", "ACCOUNT_PACKAGE_PUBKEY"):
+            monkeypatch.setattr(settings, name, "b" * 64, raising=False)
+        result = collect_self_check(self._db())
+        check = next(c for c in result["checks"] if c["name"] == "包签名校验")
+        assert check["level"] == LEVEL_OK
+        assert check["count"] == 0

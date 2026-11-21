@@ -1105,7 +1105,8 @@ async def admin_reset_password(
     # 现场只能改库。这里按"确因凭据过期被停用"的条件恢复，避免误启用人工停用的账号。
     _now = utcnow()
     _expires_raw = getattr(user, "credential_expires_at", None)
-    _expired = isinstance(_expires_raw, datetime) and as_utc(_expires_raw) <= _now
+    _expires_utc = as_utc(_expires_raw) if isinstance(_expires_raw, datetime) else None
+    _expired = _expires_utc is not None and _expires_utc <= _now
     user.credential_expires_at = None
     if _expired and not user.is_active:
         user.is_active = True

@@ -360,7 +360,7 @@ def enforce_credential_not_expired(user, now, request: Optional[Request] = None)
     )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="初始凭据已过期，请联系管理员重置密码",
+        detail="初始凭据已过期：请联系管理员重置密码（重置后即可恢复登录）",
     )
 
 

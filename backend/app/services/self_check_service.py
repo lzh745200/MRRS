@@ -211,6 +211,42 @@ def _result(name: str, level: str, detail: str, count: int) -> Dict[str, Any]:
     return {"name": name, "level": level, "detail": detail, "count": count}
 
 
+def _check_package_signing() -> Dict[str, Any]:
+    """检查四类"人带 U 盘"包的来源校验配置（只读配置，不查库）。"""
+    from app.core.config import settings
+
+    def _blank(name: str) -> bool:
+        return not str(getattr(settings, name, "") or "").strip()
+
+    missing: List[str] = []
+    if _blank("PACKAGE_PUBKEY"):
+        missing.append("PACKAGE_PUBKEY")
+    if _blank("GRANT_PUBKEY"):
+        missing.append("GRANT_PUBKEY")
+    if _blank("ACCOUNT_PACKAGE_PUBKEY"):
+        missing.append("ACCOUNT_PACKAGE_PUBKEY")
+
+    if missing:
+        return {
+            "name": "包签名校验",
+            "level": LEVEL_WARN,
+            "count": len(missing),
+            "detail": (
+                "未配置 "
+                + " / ".join(missing)
+                + "：导入包只校验 SHA-256 完整性，能查损坏、查不出"
+                "「载体被换成另一份合法包」。需要防替换的部署请配置公钥"
+                "（见 docs/04-部署文档/01-Windows部署/代码签名.md）。"
+            ),
+        }
+    return {
+        "name": "包签名校验",
+        "level": LEVEL_OK,
+        "count": 0,
+        "detail": "配置包 / 单位授权包 / 账号开通包均已启用 Ed25519 验签",
+    }
+
+
 def collect_self_check(db: Session) -> Dict[str, Any]:
     """执行全部自检项，返回可直接渲染的结论。"""
     checks = [
@@ -220,6 +256,7 @@ def collect_self_check(db: Session) -> Dict[str, Any]:
         _check_locked_users(db),
         _check_pii_key(),
         _check_recent_imports(db),
+        _check_package_signing(),
     ]
     errors = sum(1 for c in checks if c["level"] == LEVEL_ERROR)
     warns = sum(1 for c in checks if c["level"] == LEVEL_WARN)

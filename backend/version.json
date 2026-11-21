@@ -1,8 +1,8 @@
 {
-  "version": "1.18.56",
+  "version": "1.18.57",
   "build": "20261121",
   "release_date": "2026-11-21",
-  "description": "二次确认/标识/首启引导与大屏深色化",
+  "description": "审计收口：账号凭据过期死锁 / 大屏 facet 全表载入 / 审计导出静默截断",
   "features": [
     "账号初始凭据到期后改密/管理员重置可恢复；大屏单位 facet 改为 GROUP BY+索引",
     "高风险操作 428 二次确认：取消静默、重放失败中文提示，禁止 REAUTH_REQUIRED 裸协议码；",

@@ -1,3 +1,40 @@
+## [1.18.57] - 2026-11-21 — 审计收口：账号凭据过期死锁 / 大屏 facet 全表载入 / 审计导出静默截断
+
+> 触发：全面体检（静态分析 + 门禁 + 定点读码）。三条都是"测试全绿但现场会踩"的问题：
+> 前两条与数据量无关、到点必现；第三条属于等保取证的数据完整性。
+
+### Fixed
+
+- **账号开通包创建的账号 30 天后永久无法登录（P0）**
+  `users.credential_expires_at` 只在建号时写入，登录口 `enforce_credential_not_expired`
+  一到期就 403；而**自助改密与管理员重置都只清 `must_change_password`，不清该字段**，
+  提示语还让用户"联系管理员重置密码"——重置完仍然 403，现场只能改库。
+  更严重的是过期任务会把这类账号 `is_active=False`，重置后还被登录口拦一次。
+  修复：改密成功即清 `credential_expires_at`（首次凭据使命完成）；管理员重置同样清空，
+  并对"确因凭据过期被停用"的账号恢复启用（人工停用的不误启）；提示语改为可操作文案。
+  回归：`tests/unit/test_credential_expiry_recovery.py`（3 例）。
+- **汇报大屏筛选项整表搬进内存（P1）**
+  `_collect_unit_filters` 对村/校/项目/结对四张表各做一次 `.all()` 再在 Python 里计数，
+  省级数据下每次打开筛选面板都要搬数万行；且 `supported_villages.support_unit`、
+  `projects.responsible_unit` 没有索引。改为 4 条 `GROUP BY ... COUNT(*)`（返回行数
+  降为"不同单位名"数量），并补两个索引（迁移 `perf_facet_indexes_001`，幂等）。
+- **审计日志导出静默截断 5000 行且 total 失真（P1）**
+  `query.limit(5000)` 后 `total=len(items)`，导出 5000 条时看起来"刚好导完"，实际可能
+  漏掉十几万条且无任何提示。改为先 `count()` 取真实总数，文件导出带
+  `X-Export-Truncated / Total / Returned / Limit`（复用 `/export/*` 的同一实现，
+  前端 `request.ts` 会自动弹提示），JSON 导出 `total` 用真实值。
+  回归：`tests/unit/test_audit_export_truncation.py`（3 例）。
+
+### Changed
+
+- **包签名校验状态进入系统自检（P2）**：控制/配置/权限包默认"checksum 强制、签名可选"，
+  未配公钥时只防损坏、查不出载体被替换，但现场完全看不出来。新增自检项「包签名校验」，
+  未配 `PACKAGE_PUBKEY` / `GRANT_PUBKEY` / `ACCOUNT_PACKAGE_PUBKEY` 时给 warn 并列出缺失项。
+- **刷新令牌默认 30 天 → 7 天（P2，多账号共用一台机器的现场）**：ACCESS 仍 8 小时；
+  需要长期离线值守的部署用 `REFRESH_TOKEN_EXPIRE_DAYS` 显式调大。
+- **麒麟 root 运行的沙箱降级写入诊断日志（P3）**：`--no-sandbox` 不再只在控制台告警，
+  同时写 `logs/backend-crash.log` 旁的安全记录，便于事后审计。
+
 ## [1.18.56] - 2026-11-21 — 二次确认/标识/首启引导与大屏深色化
 
 ### 修复
@@ -8,6 +45,7 @@
 - **前端构建入口缺口**：`build`/`build:win` 原先只构建后端和 Electron，本地包会沿用旧的 `frontend/dist`，导致新登录引导、REAUTH 文案、大屏样式无法进入安装包；新增 `build:frontend` 并纳入所有打包入口。
 - **首次启动引导**：登录页首次打开自动展开“机器码 → 权限包 → 管理员开通账号”三步指引，点“已了解，开始登录”后持久化隐藏；登录后首用指引不再只依赖 `is_first_login`，只要该用户从未完成过引导就挂起一次，修复种子管理员/升级机器无指引。
 - **汇报大屏非白底**：重做深色数据大屏视觉：深蓝渐变底、玻璃质感 KPI/图表面板、暗色筛选条与设置抽屉、ECharts 深色坐标/图例/tooltip，并补充大屏品牌标识。
+- **自检缺包签名可见性**：系统自检新增“包签名校验”，未配置 `PACKAGE_PUBKEY` / `GRANT_PUBKEY` / `ACCOUNT_PACKAGE_PUBKEY` 时明确告警，避免导入包只校验 SHA-256 而被“合法包替换”无感知。
 - **账号初始凭据到期不可自救**：改密/管理员重置现在清空 `credential_expires_at`；因过期被停用的账号在管理员重置时恢复启用，人工停用账号不会被误启用。
 - **大屏单位 facet 性能**：帮扶单位聚合从整表 `.all()` 改为数据库 `GROUP BY + COUNT(*)`，并新增 `perf_facet_indexes_001` 两列索引，避免省级数据全表搬运。
 - **发布校验竞态**：`verify_published_release.py` 改为按缺失资产清单决定重试，不再因清单先到/包后到误判失败（补 13 例）。

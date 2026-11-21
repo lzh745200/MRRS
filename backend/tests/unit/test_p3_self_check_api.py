@@ -57,8 +57,8 @@ class TestSelfCheckEndpoint:
         body = resp.json()
         data = body.get("data", body)
         assert data["status"] in ("ok", "warn", "error")
-        assert data["summary"]["check_count"] == 6
-        assert len(data["checks"]) == 6
+        assert data["summary"]["check_count"] == 7
+        assert len(data["checks"]) == 7
 
     def test_non_admin_forbidden(self, make_client):
         client = make_client(_normal_user())

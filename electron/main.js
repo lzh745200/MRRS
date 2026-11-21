@@ -1535,6 +1535,8 @@ if (process.platform === 'win32') {
 // docs/04-部署文档/02-Linux部署/麒麟V10离线部署完整方案.md「以 root 运行的限制」。
 if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
   console.warn('[Main] root 用户，启用 --no-sandbox（OS 级沙箱关闭；webPreferences.sandbox 仍为 true，见部署文档）');
+  // 沙箱降级必须留痕：控制台日志在打包态无人看，写进诊断日志便于事后审计
+  writeDiagnosticLog('[SECURITY] 以 root 运行：Chromium OS 级沙箱已关闭（--no-sandbox）。建议改用非 root 服务账号运行。');
   app.commandLine.appendSwitch('no-sandbox');
 }
 if (process.platform === 'linux') {
