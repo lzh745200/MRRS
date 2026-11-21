@@ -4503,6 +4503,10 @@ VERSION_HISTORY_DATA = [
                 "；"
             ),
             "发布附件：Windows Release 额外上传上述两个现场修复脚本；发布后资产校验仍只对本作业核心产物做硬性要求，避免三作业并发竞态误红。",
+            (
+                "发布文档与已发布事实对齐：README「安装包获取」体积校正为实测值（Windows 约 365 MB、ARM64 桌面版约 338 MB / 纯 Web 版约 152 MB，并标明两者区"
+                "别），补「下载通道受限时用 gh release download 走 API/objects」的说明；"
+            ),
         ],
     },
 ]

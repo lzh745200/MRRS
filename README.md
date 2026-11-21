@@ -540,8 +540,17 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 
 | 平台 | 安装包 | 获取方式 |
 |------|--------|---------|
-| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（**自包含**，约 304 MB） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建；体积与 SHA256 以 Release 资产的 `SHA256SUMS-windows-x64.txt` 为准） |
-| 麒麟 V10 / 统信 UOS ARM64 | Electron 版 `MRRS-Setup-<版本>-arm64.deb`（约 282 MB）+ Web 版 `assistance-management-system_<版本>_arm64.deb`（约 100 MB） | 同上（`build-arm64.yml` 产出；校验见对应的 `SHA256SUMS-*.txt`） |
+| Windows 10/11 x64 | `MRRS-Setup-<版本>-x64.exe`（**自包含**，约 365 MB） | GitHub → Releases（推 `v*` 标签由 Actions 自动构建；体积与 SHA256 以 Release 资产的 `SHA256SUMS-windows-x64.txt` 为准） |
+| 麒麟 V10 / 统信 UOS ARM64 | **桌面版（推荐）** `MRRS-Setup-<版本>-arm64.deb`（Electron 壳 + 后端 + Web，约 338 MB）；**纯 Web 版** `assistance-management-system_<版本>_arm64.deb`（仅后端 + Web，无桌面壳，约 152 MB，需浏览器访问） | 同上（`build-arm64.yml` 产出；校验见 `SHA256SUMS-electron-deb-arm64.txt` / `SHA256SUMS-standalone-deb-arm64.txt`） |
+
+> **下载通道受限时**：Release 页的「Download」按钮走 `github.com` 主域与 `objects.githubusercontent.com`。
+> 实测受限网络/代理环境常只放行 `api.github.com` 与 `objects.githubusercontent.com`，此时浏览器下载会超时。
+> 可用 `gh` CLI 或 API 直链（两者走已放行的 API/objects 通道）：
+> ```bash
+> gh release download v<版本> --repo <owner>/<repo>
+> # 或按资产名：--pattern "MRRS-Setup-<版本>-x64.exe"
+> ```
+> 下载后务必用随包 `SHA256SUMS-*.txt` 校验再分发；涉密环境可先在内网中转一次。
 
 > **安装包自包含清单（目标机器无需预装任何环境）**：Python 3.11 运行时与全部依赖（PyInstaller onedir，`_internal/` 内自带 `python311.dll` / `VCRUNTIME140(1).dll` / `MSVCP140.dll`）+ Electron 45 + Chromium + 前端产物 + Alembic 迁移与首启自建数据库 + reportlab 内置中文字体（PDF 不依赖系统字体）+ **rapidocr-onnxruntime 离线 OCR 模型（Windows 与 ARM64 安装包均内置；模型随包约 15 MB，ARM64 侧要求目标机 glibc ≥ 2.28）** + VC++ Redistributable（安装时校验 SHA256 后静默安装，作为系统级兜底）。
 > **运行环境**：Windows 10/11 x64（Electron 45 不支持 Win7/8）；数据写入 `%APPDATA%\Assistance-Management-Information-System`（安装目录只读也可运行）；后端仅监听 `127.0.0.1`，端口被占用时自动切换。
@@ -553,11 +562,21 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 > `scripts/verify_frozen_modules.py` 构建期门禁。该文档含：环境变量清单、冻结模块自检命令、
 > 打包后端冷启动冒烟步骤、日志位置与症状速查表。
 
-> **安装包目前未做代码签名**（证书未采购；签名管线已就绪，见
-> [代码签名接入指南](docs/04-部署文档/01-Windows部署/代码签名.md)）。首次运行会遇到：
+> **安装包已做代码签名（内网自签名证书）**：CI 用 `CN=MRRS Internal Code Signing`
+> 自签名证书对安装包与全部 exe 签名，并在构建期按**证书指纹**
+> `8203900B6DA54201A49BDAF923B2F20D76CA35A1`（有效期至 2031-11-05）校验通过
+> （实测「10 个 exe，有效签名 10，未签名 0，无效 0」）。该证书**不是公共 CA 颁发**，
+> 目标机默认不信任，因此首次运行仍可能遇到：
 >
-> - **SmartScreen**：提示「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」；
-> - **Defender 扫描**：首次双击后可能静默扫描数分钟（包体约 270~320 MB），期间安装程序无响应属正常，
+> - **SmartScreen**：提示「Windows 已保护你的电脑」→ 点「更多信息」→「仍要运行」。
+>   要彻底消除提示，需把随包证书导入本机信任存储（安装器会询问是否自动导入；
+>   静默安装 `/S` 跳过该询问，需手动导入）：
+>   `certutil -addstore -f Root MRRS-Internal-CodeSigning.cer` 与
+>   `certutil -addstore -f TrustedPublisher MRRS-Internal-CodeSigning.cer`
+>   （证书随安装包位于 `resources\cert\`；公钥副本见
+>   [MRRS-Internal-CodeSigning.cer](docs/04-部署文档/01-Windows部署/MRRS-Internal-CodeSigning.cer)；
+>   域环境可用 GPO 统一下发。详见[代码签名接入指南](docs/04-部署文档/01-Windows部署/代码签名.md)）。
+> - **Defender 扫描**：首次双击后可能静默扫描数分钟（包体约 365 MB），期间安装程序无响应属正常，
 >   请勿重复双击。**2026-10-25 实测（Windows 11 + Defender 实时保护）**：未签名的
 >   `MRRS-Setup-1.18.5-x64.exe`（316.7 MB）静默安装（`/S`）在本机 **20 分钟以上仍未启动**
 >   （`Start-Process` 挂起、目标目录始终未创建、`MsMpEng` 持续占用 CPU），

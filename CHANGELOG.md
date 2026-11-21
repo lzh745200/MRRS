@@ -7,6 +7,7 @@
 - **安装器 `Error writing temporary file`**：NSIS 在 `InitPluginsDir` 阶段使用 `%TEMP%`，脚本内无法赋值；Release 增加 `MRRS-Installer-Helper.ps1`（探测/切换到可写 TEMP 后启动安装器）与 `MRRS-Shortcut-Repair.ps1`（已装机器修复图标/信任），并在安装排障文档说明根因。
 - **账号包 P4 失败尝试限流**：`ACCOUNT_PACKAGE_MAX_ATTEMPTS` 真正生效；新增 `account_package_attempts` 台账（迁移 `account_package_attempts_001`），导出按签发人、导入按机器码计数；失败达阈值 429 `AP_ATTEMPTS_EXCEEDED`，重试过快 429 `AP_RATE_LIMITED`，成功清零；新增 `ACCOUNT_PACKAGE_LOCKOUT_MINUTES=15`、`ACCOUNT_PACKAGE_ATTEMPT_INTERVAL_SECONDS=1.0`。
 - **发布附件**：Windows Release 额外上传上述两个现场修复脚本；发布后资产校验仍只对本作业核心产物做硬性要求，避免三作业并发竞态误红。
+- **发布文档与已发布事实对齐**：README「安装包获取」体积校正为实测值（Windows 约 365 MB、ARM64 桌面版约 338 MB / 纯 Web 版约 152 MB，并标明两者区别），补「下载通道受限时用 `gh release download` 走 API/objects」的说明；签名段由「未做代码签名（证书未采购）」更正为「已用内网自签名证书签名 + 目标机如何导入信任」，避免运维按过时描述判断 SmartScreen 提示。安装排障文档新增 §3.3「从下载到覆盖安装的验收清单」（下载校验 → 签名 → 装后关键路径 → 启动判据 → 覆盖升级不丢数据 → 卸载留数据），并写明两个发布校验脚本的分工（一个验"发布残缺"、一个验"上传走样"）。
 
 ### 验证
 
