@@ -85,8 +85,16 @@
   ; 2026-11-21：v55/v56 现场实测，安装器在旧进程仍运行时解包/覆盖会卡死；
   ; 原 taskkill 放在 customInstall，时机太晚。这里前移到 customInit，
   ; 不删除任何迁移目录，避免“安装失败把旧安装打残”。
-  nsExec::Exec 'taskkill /F /IM "帮扶管理系统.exe" /IM "assistance-backend.exe"'
-  Pop $0
+  ;
+  ; 2026-11-21 二次修正：不要用 nsExec::Exec 做这件事。nsExec 是 NSIS 插件，
+  ; 首次调用会把插件解到 $PLUGINSDIR；而 customInit 发生在 InitPluginsDir 之前，
+  ; 一旦 %TEMP% 异常/插件解包失败，taskkill 实际没有执行，旧进程继续占用
+  ; 主程序/app.asar，随后覆盖安装失败，现场表现为“安装器退出码 0，但目录只装了
+  ; 一半”。改用内置的 ExecWait 直接调 taskkill.exe，不依赖插件，并等待文件句柄
+  ; 释放后再让 electron-builder 解包。
+  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "帮扶管理系统.exe"' $0
+  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "assistance-backend.exe"' $0
+  Sleep 800
 !macroend
 
 ; ----------------------------------------------------------------------------
@@ -111,9 +119,11 @@
   WriteRegStr HKLM "Software\Bumofu\AssistanceManagementSystem" "UserDataPath" "$PROFILE\AppData\Roaming\Assistance-Management-Information-System"
 
   ; 安装前终止可能正在运行的旧进程（升级场景）
-  ; taskkill 在进程不存在时返回非零退出码，Pop 丢弃即可，不阻断安装
-  nsExec::Exec 'taskkill /F /IM "帮扶管理系统.exe" /IM "assistance-backend.exe"'
-  Pop $0
+  ; 这里改用内置 ExecWait，避免插件初始化失败时静默跳过；taskkill 在进程
+  ; 不存在时返回非零退出码，丢弃即可，不阻断安装。
+  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "帮扶管理系统.exe"' $0
+  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "assistance-backend.exe"' $0
+  Sleep 500
 
   ; 安装 VC++ Redistributable（Layer 2 双保险）。
   ; 供应链 SHA256 已在**构建期**由 scripts/verify_vcredist_bundle.py 钉扎校验，
@@ -196,8 +206,9 @@
 ; ----------------------------------------------------------------------------
 !macro customUnInstall
   ; 卸载前终止运行进程，避免卸载时文件占用导致卸载失败
-  nsExec::Exec 'taskkill /F /IM "帮扶管理系统.exe" /IM "assistance-backend.exe"'
-  Pop $0
+  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "帮扶管理系统.exe"' $0
+  ExecWait '"$SYSDIR\taskkill.exe" /F /T /IM "assistance-backend.exe"' $0
+  Sleep 500
 
   ; 删除桌面快捷方式
   IfFileExists "$DESKTOP\帮扶管理系统.lnk" 0 skip_del_desktop

@@ -1,3 +1,18 @@
+## [1.18.59] - 2026-11-21 — NSIS 插件依赖 / TEMP 空间预检
+
+### Fixed
+
+- **覆盖安装“退出码 0 但只装一半”**：`customInit` 原来用 `nsExec::Exec` 杀旧进程。`nsExec` 是 NSIS 插件，首次调用需要把插件解到 `$PLUGINSDIR`；而 `customInit` 发生在 `InitPluginsDir` 之前，`%TEMP%` 异常/插件解包失败时 taskkill 实际未执行，旧主程序仍占用 `app.asar`，随后覆盖安装失败。改为内置 `ExecWait` 直接调用 `$SYSDIR\taskkill.exe`，不依赖插件，`/T` 清理子进程并等待 800ms 释放文件句柄。
+- **`Error creating mmap ... nsc*.tmp` 仍可能复现**：安装辅助脚本原来只检查 TEMP “可写”，但可写且接近写满的 TEMP 仍会失败。新增 `Get-FreeSpaceMB` / `Test-TempCandidate`，按安装包大小预留 **2 倍 + 512MB**，当前 TEMP 空间不足时自动回退；显式 `-TempDir` 空间不足直接报出 free/required。
+- **`Install-MRRS.cmd` 与 Helper 口径统一**：同目录存在 `MRRS-Installer-Helper.ps1` 时优先委托给它，确保双击入口也执行空间预检；Helper 缺失时才直接启动安装器。
+
+### 验证
+
+- 安装辅助静态回归 5 例（新增空间预检、cmd 委托、NSIS 无插件 taskkill 三例）。
+- NSIS 重打成功（electron-builder `--prepackaged`，无编译/脚本错误）。
+- 实际覆盖安装：旧版运行中执行新安装包，退出码 0；安装目录 871 MB / 25 个根文件，`/health` 返回 1.18.58 后通过。
+- 后端用例口径 `16,045`；完整 PR Checks / 双平台构建按 v1.18.59 重跑。
+
 ## [1.18.58] - 2026-11-21 — 安装 TEMP 兜底 / 长期会话 / 备份同盘自检
 
 ### Fixed

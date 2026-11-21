@@ -1,24 +1,24 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.58
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.59
 
-![Version](https://img.shields.io/badge/version-1.18.58-blue)
+![Version](https://img.shields.io/badge/version-1.18.59-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C625-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C628-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.58）
+## 本版亮点（v1.18.59）
 
-- 🧰 **安装器 TEMP 兜底**：Release 附带 `Install-MRRS.cmd` 双击启动器，先在可写的
-  `%LOCALAPPDATA%\Temp\MRRS-Setup` 建目录再启动安装器，绕开 `%TEMP%` 不可写导致的
-  「NSIS Error — Error writing temporary file」；`MRRS-Installer-Helper.ps1` 也改为优先在
-  脚本同目录找安装包（下载目录里双击即可用）。
+- 🧰 **NSIS 安装可靠性**：`customInit` 改用内置 `ExecWait + taskkill /T`，不再依赖
+  在 `InitPluginsDir` 之前不可用的 `nsExec` 插件，覆盖安装会先可靠结束旧进程；Helper
+  增加“2×安装包 + 512MB”的 TEMP 空间预检，避免可写但快满的 Temp 触发
+  `Error creating mmap ... nsc*.tmp`；`Install-MRRS.cmd` 自动委托 Helper。
 - 🔑 **刷新令牌统一 30 天**：`config.py`/`security.py`/`token_manager.py`/`.env.example`
   不再出现 7 天与 30 天两套默认值；访问令牌仍 8 小时。
 - 💾 **备份同盘自检**：系统自检新增「备份位置」，备份目录与数据库同卷时明确告警，
   提示改到独立磁盘/移动硬盘/网络盘，避免盘损时数据与备份一起丢。
-- 🧪 验证：后端 **16,042 passed**（覆盖率 100%）；前端 **351 files / 7,583 tests**（覆盖率 100%）；
+- 🧪 验证：后端 **16,045 passed**（覆盖率 100%）；前端 **351 files / 7,583 tests**（覆盖率 100%）；
   PR Checks 与双平台构建全绿。
 
 ## 历史亮点（v1.18.48）

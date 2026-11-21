@@ -31,5 +31,12 @@ if not defined SETUP (
 )
 echo [MRRS] TEMP=%TEMP%
 echo [MRRS] Starting %SETUP%
+rem Prefer the PowerShell helper when present: it adds the free-space check
+rem (the actual cause of NSIS "Error creating mmap ... nsc*.tmp" is often a
+rem writable but nearly-full TEMP, not a missing one).
+if exist "%~dp0MRRS-Installer-Helper.ps1" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0MRRS-Installer-Helper.ps1" -Installer "%SETUP%" -TempDir "%MRRS_TEMP%"
+  exit /b %ERRORLEVEL%
+)
 start "" /wait "%SETUP%"
 exit /b %ERRORLEVEL%

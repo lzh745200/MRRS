@@ -58,6 +58,31 @@ function Test-WritableDir([string]$Path) {
   }
 }
 
+function Get-FreeSpaceMB([string]$Path) {
+  # NSIS extracts its payload into TEMP. A writable but almost-full TEMP still
+  # fails with "Error creating mmap to file ...\nsc*.tmp" (NSIS needs several
+  # times the installer size for its self-extracting buffers).
+  try {
+    if (-not $Path) { return -1 }
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($full)
+    if (-not $root) { return -1 }
+    $drive = New-Object -TypeName System.IO.DriveInfo -ArgumentList $root
+    return [math]::Floor($drive.AvailableFreeSpace / 1MB)
+  } catch {
+    # UNC / redirected / virtual paths may not expose DriveInfo; do not block
+    # them just because free space is unknown.
+    return -1
+  }
+}
+
+function Test-TempCandidate([string]$Path, [long]$RequiredMB) {
+  if (-not (Test-WritableDir $Path)) { return $false }
+  $free = Get-FreeSpaceMB $Path
+  if ($free -lt 0) { return $true }
+  return ($free -ge $RequiredMB)
+}
+
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $Installer) {
   # Release 用户通常把 Helper 与 Setup 放在同一个下载目录：同目录优先，
@@ -92,8 +117,19 @@ Write-Step "Current TEMP = $env:TEMP"
 Write-Step "Current TMP  = $env:TMP"
 Write-Step "Installer    = $(if ($Installer) { $Installer } else { '(diagnose only)' })"
 
+# Reserve at least 2x the installer size plus 512MB: NSIS holds the compressed
+# payload and its extracted files at the same time, and the install target may
+# be on a different drive. For a ~366-382 MB installer this is about 1.2-1.3 GB.
+$requiredMB = 2048
+if ($Installer -and (Test-Path -LiteralPath $Installer -PathType Leaf)) {
+  $installerMB = (Get-Item -LiteralPath $Installer).Length / 1MB
+  $requiredMB = [long]([math]::Ceiling($installerMB) * 2 + 512)
+}
+Write-Step "Required free space: $requiredMB MB"
+
 $currentOk = Test-WritableDir $env:TEMP
-Write-Step "Current TEMP writable: $currentOk"
+$currentFree = if ($currentOk) { Get-FreeSpaceMB $env:TEMP } else { -1 }
+Write-Step "Current TEMP writable: $currentOk (free: $(if ($currentFree -ge 0) { "$currentFree MB" } else { 'unknown' }))"
 
 $chosen = $null
 if ($TempDir) {
@@ -101,8 +137,12 @@ if ($TempDir) {
   if (-not (Test-WritableDir $TempDir)) {
     throw "Explicit -TempDir is not writable: $TempDir"
   }
+  $explicitFree = Get-FreeSpaceMB $TempDir
+  if ($explicitFree -ge 0 -and $explicitFree -lt $requiredMB) {
+    throw "Explicit -TempDir has insufficient free space: $TempDir (free=$explicitFree MB, required=$requiredMB MB)"
+  }
   $chosen = $TempDir
-} elseif ($currentOk) {
+} elseif ($currentOk -and ($currentFree -lt 0 -or $currentFree -ge $requiredMB)) {
   $chosen = $env:TEMP
 } else {
   $fallbacks = @(
@@ -111,13 +151,14 @@ if ($TempDir) {
   )
   foreach ($dir in $fallbacks) {
     try { New-Item -ItemType Directory -Path $dir -Force | Out-Null } catch { }
-    if (Test-WritableDir $dir) { $chosen = $dir; break }
+    if (Test-TempCandidate $dir $requiredMB) { $chosen = $dir; break }
   }
 }
 if (-not $chosen) {
-  throw "Neither the current TEMP nor fallback Temp directories are writable. Check disk full/read-only, ACL deny, or security software blocking extraction."
+  throw "No TEMP directory has enough free space and is writable (required=$requiredMB MB). Free disk space or pass -TempDir to another volume."
 }
-Write-Step "Using temp directory: $chosen"
+$chosenFree = Get-FreeSpaceMB $chosen
+Write-Step "Using temp directory: $chosen (free: $(if ($chosenFree -ge 0) { "$chosenFree MB" } else { 'unknown' }))"
 
 $env:TEMP = $chosen
 $env:TMP = $chosen
