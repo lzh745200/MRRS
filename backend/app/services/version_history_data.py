@@ -4594,4 +4594,24 @@ VERSION_HISTORY_DATA = [
             "备份同盘自检：系统自检新增「备份位置」，备份目录与数据库同卷时明确 WARN，提示改到独立磁盘/移动硬盘/网络盘，避免盘损时数据与备份同亡。",
         ],
     },
+    {
+        "version": "1.18.59",
+        "date": "2026-11-21",
+        "description": "NSIS 插件依赖 / TEMP 空间预检",
+        "features": [
+            (
+                "覆盖安装“退出码 0 但只装一半”：customInit 原来用 nsExec::Exec 杀旧进程。nsExec 是 NSIS 插件，首次调用需要把插件解到 $PLUGINSDIR；而 "
+                "customInit 发生在 InitPluginsDir 之前，%TEMP% 异常/插件解包失败时 taskkill 实际未执行，旧主程序仍占用 app.asar，随后覆盖安装失败。"
+            ),
+            (
+                "Error creating mmap ... nsc*.tmp 仍可能复现：安装辅助脚本原来只检查 TEMP “可写”，但可写且接近写满的 TEMP 仍会失败。新增 Get-FreeSp"
+                "aceMB / Test-TempCandidate，按安装包大小预留 2 倍 + 512MB，当前 TEMP 空间不足时自动回退；显式 -TempDir 空间不足直接报出 free/re"
+                "quired。"
+            ),
+            (
+                "Install-MRRS.cmd 与 Helper 口径统一：同目录存在 MRRS-Installer-Helper.ps1 时优先委托给它，确保双击入口也执行空间预检；Helper 缺失"
+                "时才直接启动安装器。"
+            ),
+        ],
+    },
 ]
