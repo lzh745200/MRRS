@@ -5,10 +5,23 @@
 ![Version](https://img.shields.io/badge/version-1.18.58-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C425-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C625-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.48）
+## 本版亮点（v1.18.58）
+
+- 🧰 **安装器 TEMP 兜底**：Release 附带 `Install-MRRS.cmd` 双击启动器，先在可写的
+  `%LOCALAPPDATA%\Temp\MRRS-Setup` 建目录再启动安装器，绕开 `%TEMP%` 不可写导致的
+  「NSIS Error — Error writing temporary file」；`MRRS-Installer-Helper.ps1` 也改为优先在
+  脚本同目录找安装包（下载目录里双击即可用）。
+- 🔑 **刷新令牌统一 30 天**：`config.py`/`security.py`/`token_manager.py`/`.env.example`
+  不再出现 7 天与 30 天两套默认值；访问令牌仍 8 小时。
+- 💾 **备份同盘自检**：系统自检新增「备份位置」，备份目录与数据库同卷时明确告警，
+  提示改到独立磁盘/移动硬盘/网络盘，避免盘损时数据与备份一起丢。
+- 🧪 验证：后端 **16,042 passed**（覆盖率 100%）；前端 **351 files / 7,583 tests**（覆盖率 100%）；
+  PR Checks 与双平台构建全绿。
+
+## 历史亮点（v1.18.48）
 
 - 🔐 **机器码一次性恢复码**：换机/忘记密码不再依赖可离线推导的 4 位校验码，改为服务端随机
   8 位恢复码（只存哈希、10 分钟有效、错误 5 次作废、原子消费不可重放）；获取机器码接口不再
