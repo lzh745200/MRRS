@@ -4532,6 +4532,10 @@ VERSION_HISTORY_DATA = [
                 "e.ico 兜底，并固定 Windows AppUserModelID，避免任务栏/桌面白纸。"
             ),
             (
+                "前端构建入口缺口：build/build:win 原先只构建后端和 Electron，本地包会沿用旧的 frontend/dist，导致新登录引导、REAUTH 文案、大屏样式无法进入安装"
+                "包；新增 build:frontend 并纳入所有打包入口。"
+            ),
+            (
                 "首次启动引导：登录页首次打开自动展开“机器码 → 权限包 → 管理员开通账号”三步指引，点“已了解，开始登录”后持久化隐藏；登录后首用指引不再只依赖 is_first_login，只要该用"
                 "户从未完成过引导就挂起一次，修复种子管理员/升级机器无指引。"
             ),

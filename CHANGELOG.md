@@ -5,6 +5,7 @@
 - **`REAUTH_REQUIRED` 裸协议码泄漏**：高风险操作 428 二次确认在用户取消时原样 `reject` 原错误、重放仍 428 时又落入 `_buildUserMessage`，最终把后端协议码直接显示到 UI。现在取消静默为“已取消二次确认”，重放失败统一中文“二次确认未完成，请重新操作”；并合并并发 428 的密码框，避免重复弹窗。
 - **统一错误码文案**：`getErrorMessage` 将 `REAUTH_REQUIRED`、`AP_ATTEMPTS_EXCEEDED`、`AP_RATE_LIMITED`、`AP_PREREQUISITE` 及 `{detail:{code,message}}` 结构转为中文可读文案；428 增加中文状态码兜底。
 - **安装后标识**：NSIS 快捷方式图标直接取主程序内嵌图标（构建期已校验 16~256 七档），覆盖安装先删旧 lnk；Electron 窗口图标增加 `icon.png → app-circle.ico` 兜底，并固定 Windows AppUserModelID，避免任务栏/桌面白纸。
+- **前端构建入口缺口**：`build`/`build:win` 原先只构建后端和 Electron，本地包会沿用旧的 `frontend/dist`，导致新登录引导、REAUTH 文案、大屏样式无法进入安装包；新增 `build:frontend` 并纳入所有打包入口。
 - **首次启动引导**：登录页首次打开自动展开“机器码 → 权限包 → 管理员开通账号”三步指引，点“已了解，开始登录”后持久化隐藏；登录后首用指引不再只依赖 `is_first_login`，只要该用户从未完成过引导就挂起一次，修复种子管理员/升级机器无指引。
 - **汇报大屏非白底**：重做深色数据大屏视觉：深蓝渐变底、玻璃质感 KPI/图表面板、暗色筛选条与设置抽屉、ECharts 深色坐标/图例/tooltip，并补充大屏品牌标识。
 - **发布校验竞态**：`verify_published_release.py` 改为按缺失资产清单决定重试，不再因清单先到/包后到误判失败（补 13 例）。
