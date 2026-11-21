@@ -4616,7 +4616,7 @@ VERSION_HISTORY_DATA = [
     },
     {
         "version": "1.18.60",
-        "date": "2026-11-22",
+        "date": "2026-11-21",
         "description": "全库审计收口：导出隔离 / 时区 / 审批提示 / 安装可靠性",
         "features": [
             "用户导出越权：/export/users 未过数据域，部门级 admin 可导出全库账号（含邮箱/最后登录）。补 scoped_filter，并移除学校导出的重复过滤。",

@@ -1,7 +1,7 @@
 {
   "version": "1.18.60",
-  "build": "20261122",
-  "release_date": "2026-11-22",
+  "build": "20261121",
+  "release_date": "2026-11-21",
   "description": "全库审计收口：导出隔离 / 时区 / 审批提示 / 安装可靠性",
   "features": [
     "安装 TEMP 兜底：Helper 同目录查找 + Install-MRRS.cmd；",
