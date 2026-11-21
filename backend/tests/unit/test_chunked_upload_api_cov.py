@@ -158,7 +158,7 @@ class TestMergeChunks:
         resp = c.post(f"{BASE}/merge/sess-1")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["file_path"] == "/files/1/sess-1.zip"
+        assert data["file_path"] == "/uploads/files/1/sess-1.zip"
         assert data["status"] == "merged"
 
     def test_merge_failure_400(self, client):

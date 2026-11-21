@@ -23,6 +23,7 @@ from app.core.transaction import safe_commit
 from app.core.exceptions import InvalidCredentialsError, UserAlreadyExistsError
 from app.core.exceptions import ValidationError as BizValidationError
 from app.core.security import PasswordPolicy, build_auth_claims, check_rate_limit, get_client_ip
+from app.core.security import enforce_credential_not_expired
 from app.core.security import get_current_user as _get_current_user
 from app.core.security import is_local_request
 from app.core.security import verify_password
@@ -789,6 +790,11 @@ async def refresh_token(request: Request, token: str = Body(..., embed=True), db
 
         # 检查账户锁定状态
         _check_account_lockout(user, username, db)
+
+        # P3 闭合：初始凭据过期必须同时拦截 refresh，而不能只拦登录。
+        # 否则开通包账号在 credential_expires_at 过后，仍可用旧 refresh token
+        # 持续换发 access，最长可绕过到每日停机任务执行。
+        enforce_credential_not_expired(user, datetime.now(timezone.utc), request)
 
         # W1-T5（ADR-0001）token_version 吊销校验 —— refresh 链路此前**缺失**：
         # validate_token 只验签名/jti 黑名单/type，不比对版本；而 access 链路

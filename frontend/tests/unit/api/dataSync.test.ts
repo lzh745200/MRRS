@@ -67,7 +67,9 @@ describe('api/dataSync', () => {
     const body = { task_id: 't1' }
     mockPost.mockResolvedValueOnce(body)
     const r = await exportData({ modules: ['villages'] })
-    expect(mockPost).toHaveBeenCalledWith('/data-sync/export', { modules: ['villages'] })
+    expect(mockPost).toHaveBeenCalledWith('/data-sync/export', undefined, {
+      params: { modules: ['villages'] },
+    })
     expect(r).toBe(body)
   })
 

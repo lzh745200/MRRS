@@ -52,7 +52,9 @@ export const importEncryptedData = (file: File, password: string) => {
   })
 }
 
-export const exportData = (params: any) => post('/data-sync/export', params)
+// 后端 /data-sync/export 的 since/modules/include_files 全部是 Query 参数；
+// 作为 JSON body 发送会被 FastAPI 忽略，导致选择性/增量导出静默退化成全量。
+export const exportData = (params: any) => post('/data-sync/export', undefined, { params })
 
 export const exportEncryptedData = (params: ExportEncryptedParams) =>
   post('/data-sync/export-encrypted', params)

@@ -50,9 +50,17 @@ def _truncation_headers(total: int, returned: int, limit: int = MAX_EXPORT_ROWS)
 
 
 def format_datetime(dt):
+    """导出时间统一为本地墙钟。
+
+    UtcDateTime 读回是 aware UTC；旧实现直接 strftime 导致导出件比本地早
+    一个时区差，与异步导出/报表脚注口径不一致。naive 值（历史调用/单测）
+    保持原样，避免把已是本地墙钟的输入再平移一次。
+    """
     if dt is None:
         return ""
     if isinstance(dt, datetime):
+        if dt.tzinfo is not None:
+            dt = dt.astimezone()
         return dt.strftime("%Y-%m-%d %H:%M:%S")
     return str(dt)
 
@@ -141,7 +149,8 @@ async def export_users(
 ):
     """导出用户列表（含手机号等PII, 仅管理员）"""
     require_admin(current_user, error_message="仅管理员可导出用户数据")
-    query = db.query(User)
+    # S2 导出隔离：部门级 admin 仅能导出本组织用户，不能借用户导出枚举全库账号。
+    query = scoped_filter(db.query(User), User, current_user)
 
     if keyword:
         query = query.filter(User.username.contains(keyword) | User.full_name.contains(keyword))

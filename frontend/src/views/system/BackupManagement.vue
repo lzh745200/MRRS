@@ -620,8 +620,9 @@ async function fetchBackupStats() {
     }
     // W12-T045: 磁盘空间感知
     diskSpace.value = resData?.disk_space ?? null
-  } catch {
-    // 静默处理
+  } catch (error) {
+    // 数据安全页不能把接口失败伪装成“0 次备份/未启用”。
+    ElMessage.error('备份统计加载失败，请稍后重试')
   }
 }
 

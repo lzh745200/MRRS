@@ -31,6 +31,7 @@ from app.services.entity_import_validator import EntityImportValidator
 from app.services.excel_importer_service import ExcelImporterService, ImportMode
 from app.services.excel_template_service import ExcelTemplateService
 from app.services.fill_template_service import ENTITY_LABELS as FILL_ENTITY_LABELS
+from app.services.fill_template_service import MAX_EXPORT_ROWS as FILL_MAX_EXPORT_ROWS
 from app.services.fill_template_service import FillTemplateService
 from app.utils.upload_helper import read_upload_with_limit
 
@@ -209,18 +210,23 @@ async def export_fill_template(
         except ValueError:
             raise HTTPException(status_code=400, detail="ids 必须是逗号分隔的整数")
 
+    service = FillTemplateService(db, current_user=current_user)
     try:
-        content = FillTemplateService(db, current_user=current_user).export(entity_type, parsed_ids)
+        content = service.export(entity_type, parsed_ids)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
     label = FILL_ENTITY_LABELS.get(entity_type, entity_type)
     filename = f"{label}填报_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    return Response(
-        content=content,
-        media_type=_XLSX_MEDIA_TYPE,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
-    )
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
+    if service.total_records > FILL_MAX_EXPORT_ROWS:
+        headers.update({
+            "X-Export-Truncated": "true",
+            "X-Export-Total": str(service.total_records),
+            "X-Export-Returned": str(FILL_MAX_EXPORT_ROWS),
+            "X-Export-Limit": str(FILL_MAX_EXPORT_ROWS),
+        })
+    return Response(content=content, media_type=_XLSX_MEDIA_TYPE, headers=headers)
 
 
 @router.post("/villages", response_model=ImportResultResponse)

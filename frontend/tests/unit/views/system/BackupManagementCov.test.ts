@@ -244,14 +244,14 @@ describe('挂载与数据加载', () => {
     })
   })
 
-  it('fetchBackupStats：请求失败 → 静默（不弹错误）', async () => {
+  it('fetchBackupStats：请求失败 → 明确提示，不伪装成 0 次备份', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     ElMessage.error.mockClear()
     mockGet.mockRejectedValueOnce(new Error('net'))
     await vm.fetchBackupStats()
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalledWith('备份统计加载失败，请稍后重试')
   })
 
   it('loadScheduleConfig：camelCase 字段 / 全缺省 / res.data 直返 / res 直返 / falsy 数据', async () => {

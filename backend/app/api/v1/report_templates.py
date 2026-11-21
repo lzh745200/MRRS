@@ -1519,6 +1519,7 @@ def _template_export_rows(
     if year and hasattr(model, "year"):
         query = query.filter(model.year == year)
     query = scoped_filter(query, model, current_user)
+    total = query.count()
     records = query.order_by(model.id.desc()).limit(TEMPLATE_EXPORT_LIMIT).all()
 
     # 村名派生：批量预取，避免逐行查询（N+1）
@@ -1557,7 +1558,7 @@ def _template_export_rows(
         ]
         for record in records
     ]
-    return headers, columns, data_rows
+    return headers, columns, data_rows, total
 
 
 def _template_export_xlsx(template: ReportTemplate, headers: list, data_rows: list) -> bytes:
@@ -1641,7 +1642,7 @@ async def export_template_data(
     # API-02（2026-11-01 审计）：数据查询 + 工作簿/文档生成都是同步重活
     # （单次上限 5000 行），原实现在事件循环线程里跑，导出期间整个服务卡住；
     # 现统一交给共享线程池。
-    headers, _columns, data_rows = await run_in_thread(
+    headers, _columns, data_rows, total = await run_in_thread(
         _template_export_rows, db, template, year, current_user
     )
 
@@ -1664,10 +1665,21 @@ async def export_template_data(
 
     year_label = str(year) if year else "全部"
     filename = urllib.parse.quote(f"{template.name or '报表'}_{year_label}.{format}")
+    response_headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{filename}"
+    }
+    if total > len(data_rows):
+        # 与 /export/* 同口径：截断必须显式告知，不能给用户一份“看起来完整”的文件。
+        response_headers.update({
+            "X-Export-Truncated": "true",
+            "X-Export-Total": str(total),
+            "X-Export-Returned": str(len(data_rows)),
+            "X-Export-Limit": str(TEMPLATE_EXPORT_LIMIT),
+        })
     return StreamingResponse(
         io.BytesIO(content),
         media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers=response_headers,
     )
 
 
@@ -1680,7 +1692,9 @@ async def get_template_print_data(
 ):
     """返回前端打印用 JSON（复用导出的数据组装，不落文件）。"""
     template = _get_template_or_404(db, template_id)
-    headers, columns, data_rows = _template_export_rows(db, template, year, current_user)
+    headers, columns, data_rows, _total = _template_export_rows(
+        db, template, year, current_user
+    )
     module = template.module or ""
     return success_response(
         data={

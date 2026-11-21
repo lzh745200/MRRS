@@ -150,7 +150,14 @@ import type { InitUploadResult, UploadProgress, MergeResult } from '@/api/chunke
 import PageHeader from '@/components/common/PageHeader.vue'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 
-type UploadState = 'idle' | 'initializing' | 'uploading' | 'merging' | 'done' | 'error'
+type UploadState =
+  | 'idle'
+  | 'initializing'
+  | 'uploading'
+  | 'merging'
+  | 'done'
+  | 'error'
+  | 'cancelled'
 
 const uploadState = ref<UploadState>('idle')
 const initializing = ref(false)
@@ -223,13 +230,15 @@ function resetAll() {
 
 let pollFailures = 0
 let pollInFlight = false
+// 组件卸载后禁止继续上传/轮询/合并：否则用户离开页面仍会发请求、写已卸载状态并弹 toast。
+let disposed = false
 
 function startPolling() {
   stopPolling()
   pollFailures = 0
   pollInFlight = false
   pollingTimer = setInterval(async () => {
-    if (!sessionInfo.value || pollInFlight) return
+    if (disposed || !sessionInfo.value || pollInFlight) return
     pollInFlight = true
     try {
       const progress = await chunkedUploadApi.getProgress(sessionInfo.value.session_id)
@@ -312,7 +321,7 @@ async function startUpload() {
     startPolling()
 
     for (let i = 0; i < chunks.length; i++) {
-      if (uploadState.value !== 'uploading') break
+      if (disposed || uploadState.value !== 'uploading') break
       try {
         chunkStatuses.value[i] = {
           index: i,
@@ -335,7 +344,7 @@ async function startUpload() {
       }
     }
 
-    if (uploadState.value === 'uploading') {
+    if (!disposed && uploadState.value === 'uploading') {
       // All chunks uploaded, wait for polling to detect completion and trigger merge
       stopPolling()
       // Check progress one more time
@@ -356,7 +365,7 @@ async function startUpload() {
 }
 
 async function doMerge() {
-  if (!sessionInfo.value) return
+  if (disposed || !sessionInfo.value) return
   try {
     uploadState.value = 'merging'
     const result = await chunkedUploadApi.mergeChunks(sessionInfo.value.session_id)
@@ -403,6 +412,8 @@ function splitFile(file: File, chunkSize: number): Blob[] {
 }
 
 onUnmounted(() => {
+  disposed = true
+  uploadState.value = 'cancelled'
   stopPolling()
 })
 </script>

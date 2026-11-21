@@ -686,6 +686,18 @@ describe('表格事件与操作列', () => {
     wrapper.unmount()
   })
 
+  it('非管理员删除 → 审批提示，不做乐观移除', async () => {
+    deleteMock.mockResolvedValueOnce({ pending_approval: true, approval_task_id: 12 })
+    const wrapper = mountList()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const before = vm.tableData.length
+    await vm.handleDelete({ id: 11 })
+    expect(ElMessage.warning).toHaveBeenCalledWith('删除已提交审批，审批通过后生效')
+    expect(vm.tableData.length).toBe(before)
+    wrapper.unmount()
+  })
+
   it('回收站模式操作列：恢复 / 彻底删除 内联产物', async () => {
     const wrapper = mountList()
     await flushPromises()

@@ -1,24 +1,25 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.59
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.60
 
-![Version](https://img.shields.io/badge/version-1.18.59-blue)
+![Version](https://img.shields.io/badge/version-1.18.60-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C628-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C641-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.59）
+## 本版亮点（v1.18.60）
 
-- 🧰 **NSIS 安装可靠性**：`customInit` 改用内置 `ExecWait + taskkill /T`，不再依赖
-  在 `InitPluginsDir` 之前不可用的 `nsExec` 插件，覆盖安装会先可靠结束旧进程；Helper
-  增加“2×安装包 + 512MB”的 TEMP 空间预检，避免可写但快满的 Temp 触发
-  `Error creating mmap ... nsc*.tmp`；`Install-MRRS.cmd` 自动委托 Helper。
+- 🔐 **全库审计收口**：用户导出补数据域、refresh 补凭据过期校验、消息/年度/导出时间统一
+  UTC↔本地口径；模板与填报导出超过 5000 行显式提示；ZIP 导入新增/更新/跳过不再恒为 0。
+- 🧰 **安装与交互可靠性**：NSIS `ExecWait + taskkill /T` 先停旧进程，Helper 预检 TEMP
+  空间（2×安装包 + 512MB）；非管理员编辑/删除学校/帮扶村提示“已提交审批”；分片上传
+  离开页面即停止；上传/统计失败不再静默。
 - 🔑 **刷新令牌统一 30 天**：`config.py`/`security.py`/`token_manager.py`/`.env.example`
   不再出现 7 天与 30 天两套默认值；访问令牌仍 8 小时。
 - 💾 **备份同盘自检**：系统自检新增「备份位置」，备份目录与数据库同卷时明确告警，
   提示改到独立磁盘/移动硬盘/网络盘，避免盘损时数据与备份一起丢。
-- 🧪 验证：后端 **16,045 passed**（覆盖率 100%）；前端 **351 files / 7,583 tests**（覆盖率 100%）；
+- 🧪 验证：后端 **16,054 passed**（覆盖率 100%）；前端 **351 files / 7,587 tests**（覆盖率 100%）；
   PR Checks 与双平台构建全绿。
 
 ## 历史亮点（v1.18.48）

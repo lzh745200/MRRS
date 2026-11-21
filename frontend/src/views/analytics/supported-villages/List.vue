@@ -580,7 +580,11 @@ function handleYearlyData(row: SupportedVillage) {
 // 删除
 async function handleDelete(row: SupportedVillage) {
   try {
-    await deleteSupportedVillage(row.id)
+    const result: any = await deleteSupportedVillage(row.id)
+    if (result?.pending_approval) {
+      ElMessage.warning('删除已提交审批，审批通过后生效')
+      return
+    }
     // 乐观更新：立即从表格数据中移除已删除行，避免等待列表重载
     tableData.value = tableData.value.filter((item) => item.id !== row.id)
     pagination.total = Math.max(0, pagination.total - 1)

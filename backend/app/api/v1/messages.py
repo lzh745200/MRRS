@@ -31,7 +31,7 @@ from app.services.message_template_service import MessageTemplateService
 from app.services.notification_preference_service import NotificationPreferenceService
 from app.services.work_log_service import write_work_log
 from app.core.response import success_response
-from app.utils.time_utils import to_local
+from app.utils.time_utils import to_local, to_utc_naive
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +170,10 @@ def _parse_query_date(val: Optional[str], *, end_of_day: bool = False) -> Option
         except ValueError:
             continue
         if end_of_day and fmt == "%Y-%m-%d":
-            return parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
-        return parsed
+            parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+        # 查询参数是用户看到的**本地日历**；Message.created_at 落库为 naive UTC。
+        # 直接拿本地墙钟比较会整体偏移一个时区（UTC+8 漏掉当天 00:00-08:00）。
+        return to_utc_naive(parsed)
     return None
 
 

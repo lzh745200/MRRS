@@ -519,6 +519,17 @@ describe('提交与导航', () => {
     expect(pushSafeMock).toHaveBeenCalledWith('/schools')
   })
 
+  it('非管理员编辑 → 审批提示，不显示“更新成功”', async () => {
+    routeBox.params = { id: '3' }
+    putMock.mockResolvedValueOnce({ pending_approval: true, approval_task_id: 9 })
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleSubmit()
+    expect(ElMessage.warning).toHaveBeenCalledWith('修改已提交审批，审批通过后生效')
+    expect(ElMessage.success).not.toHaveBeenCalledWith('更新成功')
+    expect(pushSafeMock).toHaveBeenCalledWith('/schools')
+  })
+
   it('编辑成功 → 提示 + 返回', async () => {
     routeBox.params = { id: '3' }
     const wrapper = mountComp()

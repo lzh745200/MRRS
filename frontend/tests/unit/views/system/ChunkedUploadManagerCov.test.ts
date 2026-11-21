@@ -282,6 +282,30 @@ describe('startUpload 上传流程', () => {
     expect(vm.uploadState).toBe('merging')
   })
 
+  it('组件卸载后：停止后续分片、终检与合并', async () => {
+    vi.useFakeTimers()
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.selectedFile = makeFile(CHUNK + 10)
+    apiInitUpload.mockResolvedValueOnce({ ...initResult, total_chunks: 2 })
+    let release: any
+    apiUploadChunk.mockImplementationOnce(
+      () => new Promise((resolve) => { release = resolve })
+    )
+    const running = vm.startUpload()
+    await flushPromises()
+    wrapper.unmount()
+    release({ success: true })
+    await running
+    expect(apiUploadChunk).toHaveBeenCalledTimes(1)
+    expect(apiGetProgress).not.toHaveBeenCalled()
+    expect(apiMergeChunks).not.toHaveBeenCalled()
+    expect(vm.uploadState).toBe('cancelled')
+    await vm.doMerge()
+    expect(apiMergeChunks).not.toHaveBeenCalled()
+  })
+
   it('终检进度未完成 → 不触发合并', async () => {
     vi.useFakeTimers()
     const wrapper = mountComp()

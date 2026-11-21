@@ -594,11 +594,15 @@ describe('合同附件', () => {
     expect(ElMessage.success).not.toHaveBeenCalled()
   })
 
-  it('handleUploadError 提示上传失败', async () => {
+  it('handleUploadError 透出服务端原因，无原因时中文兜底', async () => {
     const wrapper = mountComp()
     await flushPromises()
+    ;(wrapper.vm as any).handleUploadError({
+      response: { data: { detail: '文件超过 50MB 限制' } },
+    })
+    expect(ElMessage.error).toHaveBeenCalledWith('文件超过 50MB 限制')
     ;(wrapper.vm as any).handleUploadError()
-    expect(ElMessage.error).toHaveBeenCalledWith('上传失败')
+    expect(ElMessage.error).toHaveBeenCalledWith('上传失败，请重试')
   })
 
   it('openAttachment 认证拉取 blob 后新窗口预览', async () => {

@@ -33,7 +33,7 @@ from app.models.project import Project
 from app.models.school import School
 from app.models.supported_village import SupportedVillage, VillagePopulation
 from app.models.user import User
-from app.utils.time_utils import to_local
+from app.utils.time_utils import to_local, utcnow_naive
 
 logger = logging.getLogger(__name__)
 
@@ -651,8 +651,15 @@ def _build_yearly_trends(db: Session, data_scope: OrgScopeFilter, years: int) ->
             created_by_column=SupportedVillage.created_by,
         )
 
-    # 帮扶村（按创建年份统计）
-    village_year_col = func.strftime("%Y", SupportedVillage.created_at)
+    # 帮扶村（按创建年份统计）。created_at 是 UTC 墙钟，先平移到本地日历
+    # 再取年，否则 UTC+8 下元旦 00:00-08:00 的记录会被归到上一年。
+    local_offset = timedelta(
+        seconds=round((datetime.now() - utcnow_naive()).total_seconds())
+    )
+    local_shift = f"{int(local_offset.total_seconds())} seconds"
+    village_year_col = func.strftime(
+        "%Y", func.datetime(SupportedVillage.created_at, local_shift)
+    )
     village_rows = db.query(
         village_year_col, func.count(SupportedVillage.id)
     ).filter(SupportedVillage.is_active == True)  # noqa: E712

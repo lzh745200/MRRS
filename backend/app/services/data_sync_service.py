@@ -415,6 +415,9 @@ class DataSyncService:
                     "total_records": 0,
                     "success_records": 0,
                     "failed_records": 0,
+                    "inserted_count": 0,
+                    "updated_count": 0,
+                    "skipped_count": 0,
                     "conflicts": [],
                     "errors": [],
                 }
@@ -435,6 +438,9 @@ class DataSyncService:
                         result["total_records"] += import_result["total"]
                         result["success_records"] += import_result["success"]
                         result["failed_records"] += import_result["failed"]
+                        result["inserted_count"] += import_result.get("inserted", 0)
+                        result["updated_count"] += import_result.get("updated", 0)
+                        result["skipped_count"] += import_result.get("skipped", 0)
                         result["conflicts"].extend(import_result["conflicts"])
 
                     except Exception as e:
@@ -525,7 +531,7 @@ class DataSyncService:
         safe_table = self._validate_table_name(table_name)
         result: Dict[str, Any] = {
             "total": len(records), "success": 0, "failed": 0,
-            "skipped": 0, "conflicts": [],
+            "inserted": 0, "updated": 0, "skipped": 0, "conflicts": [],
         }
 
         for record in records:
@@ -550,6 +556,7 @@ class DataSyncService:
                                 # 更新记录
                                 await self._update_record(db, table_name, record)
                                 result["success"] += 1
+                                result["updated"] += 1
                             elif strategy == "manual":
                                 # 记录冲突
                                 conflict = DataConflict(
@@ -581,15 +588,18 @@ class DataSyncService:
                                 existing_dict = dict(existing._mapping)
                                 if self._should_update_record(existing_dict, record):
                                     await self._update_record(db, table_name, record)
+                                    result["updated"] += 1
                                 result["success"] += 1
                         else:
                             # 插入新记录
                             await self._insert_record(db, table_name, record)
                             result["success"] += 1
+                            result["inserted"] += 1
                     else:
                         # 没有ID，直接插入
                         await self._insert_record(db, table_name, record)
                         result["success"] += 1
+                        result["inserted"] += 1
 
             except Exception as e:
                 self.logger.error(f"导入记录失败: {str(e)}")

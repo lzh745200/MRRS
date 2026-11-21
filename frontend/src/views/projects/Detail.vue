@@ -342,6 +342,7 @@ import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { AuthStorage } from '@/utils/authStorage'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { chartColor } from '@/utils/chartColors'
+import { localDateKey } from '@/utils/datetime'
 import { getProjectStatusLabel, getTaskPriorityLabel } from '@/config/enums'
 import FilePreview from '@/components/FilePreview.vue'
 
@@ -731,7 +732,8 @@ async function submitMilestone() {
 
 async function completeMilestone(row: any) {
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    // 里程碑日期是本地日历语义：toISOString() 是 UTC，凌晨 0-8 点会写成前一天。
+    const today = localDateKey(new Date()) as string
     await updateMilestone(safeRouteParam(route.params.id)!, row.id, {
       status: 'completed',
       actual_date: today,

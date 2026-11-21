@@ -32,6 +32,7 @@ def _make_user(**kwargs):
     user.must_change_password = kwargs.get("must_change_password", False)
     user.password_changed_at = kwargs.get("password_changed_at", None)
     user.last_login = kwargs.get("last_login", None)
+    user.credential_expires_at = kwargs.get("credential_expires_at", None)
     # 与 token_version 同源（真实 User.token_version_safe 是它的只读属性），
     # 默认必须一致，否则 refresh 的版本比对会把合法令牌判成已吊销。
     user.token_version_safe = kwargs.get("token_version_safe", user.token_version)
@@ -640,6 +641,30 @@ class TestRefresh:
         assert response.json()["data"]["access_token"] == "new_at"
         assert response.json()["refresh_token"] == "new_rt"
         mock_tm.revoke_token.assert_called_once_with("valid_rt")
+
+    @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
+    @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")
+    @patch("app.api.v1.auth.auth.token_manager")
+    @patch("app.api.v1.auth.auth.UserService")
+    def test_refresh_rejects_expired_provisioned_credential(
+        self, mock_usr_svc, mock_tm, mock_ip, mock_rl, client
+    ):
+        """初始凭据过期必须同时拦截 refresh，不能只拦登录。"""
+        from datetime import datetime, timedelta, timezone
+
+        mock_rl.return_value = True
+        mock_tm.decode_token.return_value = {"sub": "testuser", "token_version": 0}
+        user = _make_user(
+            credential_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1)
+        )
+        inst = Mock()
+        inst.get_user_by_username.return_value = user
+        mock_usr_svc.return_value = inst
+
+        response = client.post(f"{self.prefix}/refresh", json={"token": "valid_rt"})
+
+        assert response.status_code == 403
+        assert "初始凭据已过期" in response.text
 
     @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
     @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")

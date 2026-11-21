@@ -251,6 +251,32 @@ def test_reimport_unknown_id_is_rejected(auth_client_with_db, entity_type, label
     assert db.query(model).filter(model.id == record.id).count() == 1
 
 
+def test_export_fill_truncation_headers(auth_client_with_db, monkeypatch):
+    """超过填报导出上限时必须带截断头，前端才能提示用户。"""
+    from app.services import fill_template_service
+
+    client, db = auth_client_with_db
+    _seed(db, "project")
+    from app.models.project import Project
+    from decimal import Decimal
+
+    db.add(Project(
+        name="项目乙", code="PJ002", type="infrastructure", status="in_progress",
+        budget=Decimal("100.00"), organization_id=_org_id(db),
+    ))
+    db.commit()
+    monkeypatch.setattr(fill_template_service, "MAX_EXPORT_ROWS", 1)
+    from app.api.v1.import_export import import_data
+    monkeypatch.setattr(import_data, "FILL_MAX_EXPORT_ROWS", 1)
+
+    resp = _export(client, "project")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["X-Export-Truncated"] == "true"
+    assert resp.headers["X-Export-Total"] == "2"
+    assert resp.headers["X-Export-Returned"] == "1"
+    assert resp.headers["X-Export-Limit"] == "1"
+
+
 def test_export_fill_rejects_non_numeric_ids(auth_client_with_db):
     client, _db = auth_client_with_db
     resp = client.get(f"{BASE}/export-fill", params={"entity_type": "school", "ids": "1,abc"})

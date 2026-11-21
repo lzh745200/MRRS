@@ -92,11 +92,22 @@ class TestS2ExportDataIsolation:
             Project(name="Project O2 Active", code="SEC_P2", organization_id=org2.id,
                     created_by=1, is_active=True),
         ]
-        db.add_all(funds + schools + projects)
+        users = [
+            User(username="sec_own_user", hashed_password="x", role="user",
+                 organization_id=org1.id, is_active=True),
+            User(username="sec_other_user", hashed_password="x", role="user",
+                 organization_id=org2.id, is_active=True),
+        ]
+        db.add_all(funds + schools + projects + users)
         db.commit()
-        for r in funds + schools + projects:
+        for r in funds + schools + projects + users:
             db.refresh(r)
-        return org1, {"funds": funds, "schools": schools, "projects": projects}
+        return org1, {
+            "funds": funds,
+            "schools": schools,
+            "projects": projects,
+            "users": users,
+        }
 
     def _dept_admin(self, org1_id):
         """部门级管理员：role=admin 但 is_superuser=False → OWN_DEPT 范围。"""
@@ -109,13 +120,18 @@ class TestS2ExportDataIsolation:
         ("/funds", "funds"),
         ("/schools", "schools"),
         ("/projects", "projects"),
+        ("/users", "users"),
     ])
     def test_export_scoped_to_own_dept(self, client_with_db, endpoint, key):
         from app.core.security import get_current_user
 
         client, db = client_with_db
         org1, records = self._seed(db)
-        own_active, own_deleted, other_active = records[key]
+        if key == "users":
+            own_active, other_active = records[key]
+            own_deleted = None
+        else:
+            own_active, own_deleted, other_active = records[key]
 
         client.app.dependency_overrides[get_current_user] = lambda: self._dept_admin(org1.id)
 
@@ -128,7 +144,8 @@ class TestS2ExportDataIsolation:
         # S2 红线：他组织记录必须被过滤，杜绝跨组织数据泄漏
         assert other_active.id not in ids, f"{endpoint}: 跨组织(他部门)记录泄漏！违反数据隔离红线"
         # M1：本组织软删记录不得出现在导出文件
-        assert own_deleted.id not in ids, f"{endpoint}: 软删记录泄漏！与列表页口径不一致"
+        if own_deleted is not None:
+            assert own_deleted.id not in ids, f"{endpoint}: 软删记录泄漏！与列表页口径不一致"
 
 
 # ══════════════════════════════════════════════════════════════════════

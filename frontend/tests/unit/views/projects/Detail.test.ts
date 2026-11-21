@@ -1008,7 +1008,8 @@ describe('里程碑：completeMilestone / removeMilestone', () => {
     const vm = wrapper.vm as any
     msList.mockClear()
     await vm.completeMilestone({ id: 12 })
-    const today = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     expect(msUpdate).toHaveBeenCalledWith(7, 12, { status: 'completed', actual_date: today })
     expect(ElMessage.success).toHaveBeenCalledWith('里程碑已完成，项目进度已联动更新')
     expect(msList).toHaveBeenCalled()

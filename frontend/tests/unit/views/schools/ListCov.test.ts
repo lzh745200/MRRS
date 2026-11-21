@@ -596,6 +596,14 @@ describe('查看 / 编辑 / 删除 / 新增', () => {
     expect(logError).toHaveBeenCalled()
   })
 
+  it('非管理员删除 → 审批提示且不刷新列表', async () => {
+    delMock.mockResolvedValueOnce({ pending_approval: true, approval_task_id: 10 })
+    const wrapper = mountComp()
+    await flushPromises()
+    await (wrapper.vm as any).handleDelete({ id: 9, name: '审批学校' })
+    expect(ElMessage.warning).toHaveBeenCalledWith('删除已提交审批，审批通过后生效')
+  })
+
   it('列模板：类型/状态/计数/时间/脱敏全分支渲染', async () => {
     const wrapper = mountComp()
     await flushPromises()

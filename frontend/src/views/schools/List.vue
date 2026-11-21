@@ -623,7 +623,11 @@ async function handleDelete(row: any) {
     }
   }
   try {
-    await del(`/schools/${row.id}`)
+    const result: any = await del(`/schools/${row.id}`)
+    if (result?.pending_approval) {
+      ElMessage.warning('删除已提交审批，审批通过后生效')
+      return
+    }
     // 成功静默：删除成功仅刷新列表
     currentPage.value = 1 // 重置到第1页，确保新建/编辑后的数据可见
     fetchData()

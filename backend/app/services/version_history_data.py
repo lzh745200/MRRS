@@ -4614,4 +4614,29 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.60",
+        "date": "2026-11-22",
+        "description": "全库审计收口：导出隔离 / 时区 / 审批提示 / 安装可靠性",
+        "features": [
+            "用户导出越权：/export/users 未过数据域，部门级 admin 可导出全库账号（含邮箱/最后登录）。补 scoped_filter，并移除学校导出的重复过滤。",
+            (
+                "消息日期偏移：/messages?start_date/end_date 把本地日历直接与 UTC 列比较，UTC+8 下漏当天 00:00-08:00、串入次日；统一经 to_utc_n"
+                "aive()。"
+            ),
+            "导出时间口径：/export/* 的 aware UTC 时间直接 strftime，比本地早一个时区差；aware 值改本地墙钟，naive 历史调用保持原样。",
+            (
+                "刷新令牌绕过凭据过期：开通包账号 credential_expires_at 过期后仍可用 refresh 换 access；refresh 链路补 enforce_credential_"
+                "not_expired。"
+            ),
+            "年度统计错年：帮扶村年度筛选与看板年度趋势按 UTC 年份分桶，元旦 00:00-08:00 记录归错年；按本地偏移平移年界/分桶。",
+            "导出静默截断：报表模板导出、填报导出超过 5000 行时补 X-Export-Truncated/Total/Returned/Limit，不再给“看起来完整”的文件。",
+            "ZIP 导入统计全 0：import_package 补 inserted_count/updated_count/skipped_count 聚合，前端新增/更新/跳过不再恒为 0。",
+            "分片上传泄露绝对路径：merge 返回 /uploads/files/<uid>/<sid><ext> 相对 URL，不暴露部署机账号/目录。",
+            "非管理员假成功：学校/帮扶村编辑/删除在审批门禁下返回 pending_approval，前端改为“已提交审批”，不再提示成功/乐观移除。",
+            "选择性导出丢参数：/data-sync/export 的 since/modules/include_files 改为 Query 参数，关闭加密时不再静默退化成全量导出。",
+            "里程碑完成日期偏移：toISOString() 的 UTC 日期改为 localDateKey()，凌晨完成不再记成前一天。",
+            "上传/统计静默失败：合同/影像上传透出服务端原因；备份统计、数据管理本月统计失败明确提示，不再伪装成 0。",
+        ],
+    },
 ]

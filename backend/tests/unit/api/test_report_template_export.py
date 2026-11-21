@@ -193,6 +193,24 @@ class TestTemplateExportFormats:
         all_rows = list(csv.reader(io.StringIO(all_resp.content.decode("utf-8").lstrip("\ufeff"))))
         assert len(all_rows) == 3
 
+    def test_export_truncation_headers(self, api_client, monkeypatch):
+        """超过模板导出上限时必须显式返回截断头，不能静默少行。"""
+        from app.api.v1 import report_templates
+
+        client, db, _state = api_client
+        _mk_data(db)
+        template = _mk_template(
+            db, module="fund",
+            fields=_fields(("名称", "name")),
+        )
+        monkeypatch.setattr(report_templates, "TEMPLATE_EXPORT_LIMIT", 1)
+        resp = client.post(f"/api/v1/report-templates/{template.id}/export?format=csv")
+        assert resp.status_code == 200
+        assert resp.headers["X-Export-Truncated"] == "true"
+        assert resp.headers["X-Export-Total"] == "2"
+        assert resp.headers["X-Export-Returned"] == "1"
+        assert resp.headers["X-Export-Limit"] == "1"
+
     def test_export_docx(self, api_client):
         client, db, _state = api_client
         _mk_data(db)

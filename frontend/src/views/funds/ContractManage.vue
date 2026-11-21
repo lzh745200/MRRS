@@ -199,6 +199,7 @@ import { fundLifecycleApi } from '@/api/fundLifecycle'
 import { safeRouteParam, useRouterSafe } from '@/composables/useRouterSafe'
 import { useUploadHeaders } from '@/composables/useUploadHeaders'
 import { AuthStorage } from '@/utils/authStorage'
+import { getErrorMessage } from '@/utils/getErrorMessage'
 
 const { pushSafe } = useRouterSafe()
 const route = useRoute()
@@ -414,8 +415,10 @@ async function handleUploadSuccess(response: any) {
   }
 }
 
-function handleUploadError() {
-  ElMessage.error('上传失败')
+function handleUploadError(error: any) {
+  // el-upload 的 error 参数带 response（413/403/422 的中文 detail），
+  // 不要再统一成“上传失败”丢掉可操作原因。
+  ElMessage.error(getErrorMessage(error, '上传失败，请重试'))
 }
 
 function formatSize(size: any) {

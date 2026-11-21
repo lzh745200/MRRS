@@ -4,6 +4,7 @@
 实现大文件分片上传功能的API端点。
 """
 
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -175,11 +176,14 @@ async def merge_chunks(
         raise HTTPException(status_code=400, detail=str(e)) from e
     if not file_path:
         raise HTTPException(status_code=400, detail="合并失败")
-    session = upload_service.get_session(session_id)
+    # 对外契约统一为 /uploads 相对 URL：绝对路径会泄露部署机账号/目录结构，
+    # 也无法直接被 <img>/<a> 消费。真实落盘路径只留在服务端会话与日志。
+    ext = Path(session.file_name).suffix
+    relative_path = f"/uploads/files/{session.user_id}/{session_id}{ext}"
     return MergeResponse(
         session_id=session_id,
-        file_path=file_path,
-        file_name=session.file_name if session else "",
+        file_path=relative_path,
+        file_name=session.file_name,
         status=ChunkUploadStatus.MERGED.value,
     )
 

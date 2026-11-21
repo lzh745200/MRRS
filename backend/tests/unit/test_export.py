@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pytest
@@ -49,6 +49,11 @@ def test_format_datetime_datetime():
 
 def test_format_datetime_str():
     assert format_datetime("plain") == "plain"
+
+
+def test_format_datetime_aware_utc_uses_local_wallclock():
+    aware = datetime(2024, 6, 15, 6, 30, 0, tzinfo=timezone.utc)
+    assert format_datetime(aware) == aware.astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ─── 401 Unauthorized ───

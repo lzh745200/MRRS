@@ -94,6 +94,8 @@ class FillTemplateService:
         # household 模型没有 supported_village relationship，导出前按
         # supported_village_id 批量查村名/县/乡镇，保证回导时必填字段可识别。
         self._village_map: Dict[int, Any] = {}
+        # 导出前记录可见记录总数，供 API 判断是否触发 5000 行截断提示。
+        self.total_records = 0
 
     def export(self, entity_type: str, ids: Optional[Iterable[int]] = None) -> bytes:
         if entity_type not in ENTITY_LABELS:
@@ -191,6 +193,7 @@ class FillTemplateService:
             query = scoped_filter(query, model, self.current_user)
         # 五个可导出模型均带 is_active（软删除），无需再做 hasattr 分支。
         query = query.filter(getattr(model, "is_active").is_(True))
+        self.total_records = query.count()
         return query.order_by(getattr(model, "id")).limit(MAX_EXPORT_ROWS).all()
 
     @staticmethod

@@ -7,7 +7,7 @@ import contextlib
 import io
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
@@ -26,6 +26,7 @@ from app.utils.upload_helper import read_upload_with_limit
 from app.models.user import User
 from app.models.audit import AuditAction
 from app.utils.common import dict_keys_to_camel, StringHelper
+from app.utils.time_utils import utcnow_naive
 from app.models.supported_village import (
     SupportedVillage,
     VillagePopulation,
@@ -645,7 +646,17 @@ async def list_villages(
     if county:
         query = query.filter(SupportedVillage.county == county)
     if year_start is not None:
-        query = query.filter(func.strftime("%Y", SupportedVillage.created_at) == str(year_start))
+        # created_at 是 UTC 墙钟；年度筛选是本地日历语义。先取本地与 UTC 的
+        # 固定偏移，再把本地年界平移到 UTC，避免 UTC+8 元旦 00:00-08:00 归错年。
+        local_offset = timedelta(
+            seconds=round((datetime.now() - utcnow_naive()).total_seconds())
+        )
+        year_begin = datetime(year_start, 1, 1) - local_offset
+        year_end = datetime(year_start + 1, 1, 1) - local_offset
+        query = query.filter(
+            SupportedVillage.created_at >= year_begin,
+            SupportedVillage.created_at < year_end,
+        )
     # 兼容旧 camelCase 参数名（新代码统一 snake_case）
     if tier is not None:
         query = query.filter(SupportedVillage.is_revitalization_tier == bool(tier))

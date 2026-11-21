@@ -439,10 +439,18 @@ const handleSubmit = async () => {
 
     submitLoading.value = true
     try {
+      let result: any
       if (isEdit.value) {
-        await put(`/schools/${route.params.id}`, formData)
+        result = await put(`/schools/${route.params.id}`, formData)
       } else {
-        await post('/schools', formData)
+        result = await post('/schools', formData)
+      }
+      if (result?.pending_approval) {
+        ElMessage.warning('修改已提交审批，审批通过后生效')
+        clearDraft()
+        isDirty.value = false
+        pushSafe('/schools')
+        return
       }
       ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
       // 提交成功：清掉草稿并复位脏标记（否则下次进来会"复活"已提交的数据）

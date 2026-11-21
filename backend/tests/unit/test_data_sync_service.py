@@ -542,6 +542,7 @@ class TestDataSyncService:
                 1,
             )
         assert result["success"] == 1
+        assert result["updated"] == 1
         upd.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -576,6 +577,7 @@ class TestDataSyncService:
         with patch.object(service, "_update_record", new_callable=AsyncMock) as mock_upd:
             result = await service._import_table_data(db, "supported_villages", [{"id": 1, "name": "v2"}], "overwrite", 1)
             assert result["success"] == 1
+            assert result["updated"] == 1
             mock_upd.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -595,6 +597,7 @@ class TestDataSyncService:
         with patch.object(service, "_insert_record", new_callable=AsyncMock) as mock_ins:
             result = await service._import_table_data(db, "supported_villages", [{"id": 99, "name": "new"}], "skip", 1)
             assert result["success"] == 1
+            assert result["inserted"] == 1
             mock_ins.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -603,6 +606,7 @@ class TestDataSyncService:
         with patch.object(service, "_insert_record", new_callable=AsyncMock) as mock_ins:
             result = await service._import_table_data(db, "supported_villages", [{"name": "no_id"}], "skip", 1)
             assert result["success"] == 1
+            assert result["inserted"] == 1
             mock_ins.assert_awaited_once()
 
     @pytest.mark.asyncio

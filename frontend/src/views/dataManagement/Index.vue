@@ -257,9 +257,10 @@ async function loadStats() {
       const items = unwrapList<ImportRow>(hist).items
       recentImports.value = items.slice(0, 5)
       stats.value.monthlyImports = items.filter((row) => rowTime(row).startsWith(prefix)).length
-    } catch {
+    } catch (error) {
       recentImports.value = []
       stats.value.monthlyImports = 0
+      ElMessage.error(getErrorMessage(error, '导入历史加载失败，本月统计暂不可用'))
     }
 
     // 3) 导出审计（仅管理员）：本月次数 + 最近 5 条
@@ -269,9 +270,10 @@ async function loadStats() {
         const items = unwrapList<ExportRow>(exp).items
         recentExports.value = items.slice(0, 5)
         stats.value.monthlyExports = items.filter((row) => rowTime(row).startsWith(prefix)).length
-      } catch {
+      } catch (error) {
         recentExports.value = []
         stats.value.monthlyExports = 0
+        ElMessage.error(getErrorMessage(error, '导出审计加载失败，本月统计暂不可用'))
       }
     }
 
@@ -279,8 +281,9 @@ async function loadStats() {
     try {
       const bk: any = await get('/system/backup', { page: 1, page_size: 1000 })
       stats.value.backupCount = unwrapList(bk).total
-    } catch {
+    } catch (error) {
       stats.value.backupCount = 0
+      ElMessage.error(getErrorMessage(error, '备份数量加载失败，暂显示 0'))
     }
 
     // 5) 帮扶村抽样用于质量统计（后端 page_size 上限 200）

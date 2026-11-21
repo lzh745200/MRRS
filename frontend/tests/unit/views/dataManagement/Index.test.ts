@@ -403,7 +403,7 @@ describe('内部端点失败（单项归零，流程继续）', () => {
     expect(vm.stats.monthlyExports).toBe(2)
     expect(vm.stats.backupCount).toBe(3)
     expect(vm.recentImports).toEqual([])
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -417,7 +417,7 @@ describe('内部端点失败（单项归零，流程继续）', () => {
     expect(vm.stats.monthlyExports).toBe(0)
     expect(vm.recentExports).toEqual([])
     expect(vm.stats.backupCount).toBe(3)
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -430,7 +430,7 @@ describe('内部端点失败（单项归零，流程继续）', () => {
     expect(vm.stats.villageCount).toBe(120)
     expect(vm.stats.backupCount).toBe(0)
     expect(vm.stats.monthlyImports).toBe(2)
-    expect(ElMessage.error).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
     wrapper.unmount()
   })
 })

@@ -576,9 +576,9 @@ async function createArchiveFromUpload(url: string, file: any): Promise<void> {
   }
 }
 
-function handleUploadError(): void {
+function handleUploadError(error: any): void {
   uploading.value = false
-  ElMessage.error('上传失败，请重试')
+  ElMessage.error(getErrorMessage(error, '上传失败，请重试'))
 }
 
 // ── 编辑 ──
