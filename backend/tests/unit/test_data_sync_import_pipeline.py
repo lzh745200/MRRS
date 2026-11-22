@@ -59,7 +59,10 @@ class TestImportWritesBumpSyncVersion:
             db, "supported_villages", [payload], "overwrite", 1
         )
 
-        assert result == {"total": 1, "success": 1, "failed": 0, "skipped": 0, "conflicts": []}
+        assert result == {
+            "total": 1, "success": 1, "failed": 0,
+            "inserted": 0, "updated": 1, "skipped": 0, "conflicts": [],
+        }
         db.expire_all()
         stored = db.query(SupportedVillage).filter(SupportedVillage.id == rid).one()
         assert stored.village_name == "导入更新后的村名"
@@ -146,7 +149,10 @@ class TestImportInsertPath:
             db, "supported_villages", [payload], "skip", 1
         )
 
-        assert result == {"total": 1, "success": 1, "failed": 0, "skipped": 0, "conflicts": []}
+        assert result == {
+            "total": 1, "success": 1, "failed": 0,
+            "inserted": 1, "updated": 0, "skipped": 0, "conflicts": [],
+        }
         db.expire_all()
         copied = db.query(SupportedVillage).filter(SupportedVillage.id == 5001).one()
         assert copied.village_name == "复制村"
