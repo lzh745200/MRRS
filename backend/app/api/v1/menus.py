@@ -1364,8 +1364,11 @@ _PUBLIC_ACCESS_KEYS: frozenset[str] = frozenset({
 })
 
 
-def _get_user_accessible_menu_keys(user: User, db: Session) -> set[str]:
+def _get_user_accessible_menu_keys(user: User, db: Session, matrix=None) -> set[str]:
     """获取用户实际可见的菜单 key 集合
+
+    `matrix` 可由调用方传入已解析的单位授权矩阵，避免同一次请求重复查库
+    （有效权限解析器已先取一次）；不传时按原逻辑自行解析。
 
     优先级：用户级 allowed_menus 配置 > 绑定的启用中权限包 > 角色默认。
     之后无条件并入 _PUBLIC_ACCESS_KEYS（政策法规/数据分析全角色公开）。
@@ -1383,7 +1386,8 @@ def _get_user_accessible_menu_keys(user: User, db: Session) -> set[str]:
     # 否则上级"收掉数据分析"的意图会被强制公开项抵消）。
     from app.services.effective_grant_service import get_grant_matrix
 
-    matrix = get_grant_matrix(db, user)
+    if matrix is None:
+        matrix = get_grant_matrix(db, user)
     if matrix.active:
         keys = matrix.visible_keys()
         # 工作台是登录后的落地页，缺了会白屏，故恒定可见

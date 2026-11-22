@@ -1,14 +1,27 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.61
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.62
 
-![Version](https://img.shields.io/badge/version-1.18.61-blue)
+![Version](https://img.shields.io/badge/version-1.18.62-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C672-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C677-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.61）
+## 本版亮点（v1.18.62）
+
+- 🛡 **矩阵空授权 fail-closed**：单位矩阵已启用但授权被清空时，解析器不再回落全量 RBAC；
+  按 `matrix.active` 收窄后，空授权只保留页面可见性允许的读，写/删/授权管理一律不放行。
+- 🧠 **缓存口径修正**：`users.permissions_version` 尚未落库，真实用户暂不缓存（每次现算）；
+  缓存命中不再先查单位矩阵，单次解析只读取一次矩阵。
+- 🖥 **大屏字号 Token 修复**：`font-size` 不再误用颜色 Token `--bs-text-body`，改用
+  `--bs-*-size` 字号阶梯，删除页内失效的距离缩放副本，并新增源码级回归断言。
+- 🧾 **门禁基线补齐**：补登 v1.18.60 漏记的 `data_checksums` / `include_unassigned` /
+  `unassigned_counts`，package_contract 门禁恢复绿。
+- 🧪 验证：后端 **16,089 passed**（覆盖率 100%）；前端 **351 files / 7,588 tests**；
+  解析器 11 例、行/分支 100%。
+
+## 历史亮点（v1.18.61）
 
 - 🧭 **权限治理地基**：动作目录落地为 **54 个可导航动作页（48 page + 6 console）/
   32 个模块级 / 212 个动作码**；17 条 legacy 别名、7 条单数前缀别名，补全

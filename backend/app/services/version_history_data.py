@@ -4661,4 +4661,32 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.62",
+        "date": "2026-11-22",
+        "description": "权限解析 fail-closed 与大屏 Token 复核",
+        "features": [
+            (
+                "矩阵已启用但授权为空时不再回落全量 RBAC（安全）：effective_permission_service.resolve原以 if levels: 判断是否按矩阵收窄，而 _modu"
+                "le_levels() 对「矩阵未启用」与「已启用但授权被清空」都返回 {}。后者会跳过模块收窄、保留 RBAC 全部动作，与菜单几乎为空形成“页面进不去、动作全放行”的倒挂。"
+            ),
+            (
+                "解析器缓存只在权限版本列存在时启用：users.permissions_version 尚未落库（方案第 4 步），原缓存键恒为 0，角色/直授权/机器码变化不会失效。现以 hasattr"
+                "(user, \"permissions_version\")作为缓存开关，真实 User 暂不缓存、每次现算；缓存命中也不再先查单位矩阵，且单次解析只取一次矩阵。"
+            ),
+            (
+                "大屏字号 Token 串色：BigScreen.vue 的 font-size 误用颜色 Token --bs-text-body（值 #cfe7ff），CSS 变量解析成功但 font-"
+                "size 值非法，字号回退失效；改为设计系统已有的--bs-title-size / --bs-kpi-size / --bs-label-size / --bs-chart-title-"
+                "size…"
+            ),
+            (
+                "补齐 v1.18.60 漏登的 package_contract 基线：data_checksums、include_unassigned、unassigned_counts 三个字段在 "
+                "schema 已存在但基线未登记，导致门禁曾变红；本次随 1.18.62 记录。"
+            ),
+            (
+                "permission_catalog 去除 households 在 DATA_ALIAS_KEYS 模块段的重复项（集合去重，口径不变：54 页面 / 32 模块级 / 212 动作码 "
+                "/ 17 legacy / 7 单数别名）。"
+            ),
+        ],
+    },
 ]

@@ -15,6 +15,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const STYLES_DIR = resolve(process.cwd(), 'src/styles')
+const BIGSCREEN_VUE = resolve(process.cwd(), 'src/views/bigscreen/BigScreen.vue')
 
 /** 去掉 SCSS 行注释与块注释，避免注释中的示例/历史名污染断言 */
 function stripComments(source: string): string {
@@ -193,6 +194,23 @@ describe('W23 大屏字号距离分档契约', () => {
     expectBlockDeclaration('\\[data-bigscreen-distance="6m"\\]', '--bs-title-size:\\s*28px')
     expectBlockDeclaration('\\[data-bigscreen-distance="10m"\\]', '--bs-title-size:\\s*36px')
     expectBlockDeclaration('\\[data-bigscreen-distance="10m"\\]', '--bs-kpi-size:\\s*56px')
+  })
+
+  it('大屏页实际消费字号 token，且 font-size 不得引用同名的颜色 token', () => {
+    // 回归：曾把 font-size 写成 var(--bs-text-body, ...)，而 --bs-text-body 是颜色
+    // token —— var() 命中的是颜色，font-size 整条声明在 computed-value 阶段失效，
+    // 兜底值也不会生效。这里锁死「用 -size token」+「不得用 --bs-text-* 作字号」。
+    const source = stripComments(readFileSync(BIGSCREEN_VUE, 'utf8'))
+    for (const token of [
+      '--bs-title-size',
+      '--bs-kpi-size',
+      '--bs-label-size',
+      '--bs-chart-title-size',
+    ]) {
+      expect(source).toContain(`var(${token}`)
+    }
+    expect(source).not.toMatch(/font-size:\s*var\(--bs-text-/)
+    expect(source).not.toContain('--bs-distance-scale')
   })
 })
 

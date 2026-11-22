@@ -89,7 +89,7 @@ DATA_ALIAS_KEYS: frozenset[str] = frozenset({
     "work-calendar",
     # 纯后端模块（无独立导航页）
     "analytics", "batch-import", "checkin", "data", "data-tier",
-    "effectiveness", "funds", "households", "map-tiles", "sentiment",
+    "effectiveness", "funds", "map-tiles", "sentiment",
 })
 
 # 明确的敏感模块：任何 `data:*` / `approve:*` 通配都不得覆盖它们。

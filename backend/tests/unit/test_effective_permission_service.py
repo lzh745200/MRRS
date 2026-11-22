@@ -47,7 +47,7 @@ def _patch_sources(monkeypatch, *, permissions, pages, matrix, restricted=None):
     )
     monkeypatch.setattr(
         "app.api.v1.menus._get_user_accessible_menu_keys",
-        lambda user, db: set(pages),
+        lambda user, db, matrix=None: set(pages),
     )
 
 
@@ -127,7 +127,10 @@ async def test_resolve_cache_hits_until_version_changes(monkeypatch):
         "app.services.effective_grant_service.get_grant_matrix",
         lambda db, user: _matrix(False),
     )
-    monkeypatch.setattr("app.api.v1.menus._get_user_accessible_menu_keys", lambda u, d: {"villages"})
+    monkeypatch.setattr(
+        "app.api.v1.menus._get_user_accessible_menu_keys",
+        lambda u, d, matrix=None: {"villages"},
+    )
 
     user = _user()
     first = await svc.resolve(None, user)
@@ -169,6 +172,125 @@ async def test_cache_limit_clears(monkeypatch):
     await svc.resolve(None, _user(id=1))
     await svc.resolve(None, _user(id=2))
     assert len(svc._CACHE) == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_active_empty_matrix_fails_closed(monkeypatch):
+    """active=True 但 levels 为空（授权被清空/账号包只激活版本）必须裁剪。
+
+    历史缺陷：按 `if levels:` 判断是否裁剪，active-empty 会直接跳过过滤，
+    把 RBAC 全量动作放行，而菜单侧此时几乎为空 —— 一旦接入路由即为越权。
+    """
+    _patch_sources(
+        monkeypatch,
+        permissions=[
+            "villages:read", "villages:write", "dashboard:read",
+            "users-orgs:manage_roles",
+        ],
+        pages=["dashboard"],
+        matrix=_matrix(True, {}),
+    )
+    result = await svc.resolve(None, _user())
+
+    assert result.actions == frozenset({"dashboard:read"})
+    assert not result.has("villages:read")
+    assert not result.has("villages:write")
+    assert not result.has("users-orgs:manage_roles")
+
+
+@pytest.mark.asyncio
+async def test_resolve_does_not_cache_without_permissions_version(monkeypatch):
+    """真实 User 还没有 permissions_version 列 → 不得缓存，避免权限变更后读旧快照。"""
+    calls = {"n": 0}
+
+    async def fake_permissions(self, user_id, db):
+        calls["n"] += 1
+        return {"villages:read"}, set()
+
+    monkeypatch.setattr(
+        "app.services.rbac_service.RBACService.get_user_permissions_with_restrictions",
+        fake_permissions,
+    )
+    monkeypatch.setattr(
+        "app.services.effective_grant_service.get_grant_matrix",
+        lambda db, user: _matrix(False),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.menus._get_user_accessible_menu_keys",
+        lambda u, d, matrix=None: {"villages"},
+    )
+
+    user = SimpleNamespace(
+        id=9, organization_id=1, organization=SimpleNamespace(grant_version=0)
+    )
+    first = await svc.resolve(None, user)
+    second = await svc.resolve(None, user)
+
+    assert first is not second
+    assert calls["n"] == 2
+    assert svc._CACHE == {}
+    assert svc.get_cached(None, user) is None
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_skips_grant_matrix_query(monkeypatch):
+    """缓存命中不应再查单位授权矩阵（原实现先查矩阵后查缓存）。"""
+    matrix_calls = {"n": 0}
+
+    async def fake_permissions(self, user_id, db):
+        return {"villages:read"}, set()
+
+    def fake_matrix(db, user):
+        matrix_calls["n"] += 1
+        return _matrix(False)
+
+    monkeypatch.setattr(
+        "app.services.rbac_service.RBACService.get_user_permissions_with_restrictions",
+        fake_permissions,
+    )
+    monkeypatch.setattr(
+        "app.services.effective_grant_service.get_grant_matrix", fake_matrix
+    )
+    monkeypatch.setattr(
+        "app.api.v1.menus._get_user_accessible_menu_keys",
+        lambda u, d, matrix=None: {"villages"},
+    )
+
+    user = _user()
+    first = await svc.resolve(None, user)
+    second = await svc.resolve(None, user)
+
+    assert first is second
+    assert matrix_calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_passes_resolved_matrix_to_menu_helper(monkeypatch):
+    """菜单解析必须复用已解析的矩阵，避免一次请求查两次库。"""
+    seen = {}
+    sentinel = _matrix(False)
+
+    async def fake_permissions(self, user_id, db):
+        return {"villages:read"}, set()
+
+    def fake_menu(user, db, matrix=None):
+        seen["matrix"] = matrix
+        return {"villages"}
+
+    monkeypatch.setattr(
+        "app.services.rbac_service.RBACService.get_user_permissions_with_restrictions",
+        fake_permissions,
+    )
+    monkeypatch.setattr(
+        "app.services.effective_grant_service.get_grant_matrix",
+        lambda db, user: sentinel,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.menus._get_user_accessible_menu_keys", fake_menu
+    )
+
+    await svc.resolve(None, _user())
+    assert seen["matrix"] is sentinel
 
 
 @pytest.mark.asyncio

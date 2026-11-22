@@ -922,20 +922,10 @@ onUnmounted(() => {
 
 <style lang="scss" scoped>
 // ── W23 距离字号分档（契约 §0.4：3m 标准 / 6m ×1.25 / 10m ×1.5，默认 6m）──
-// 优先消费 W1 提供的 --bs-text-* token；未提供时用本地 --bs-distance-scale 兜底，
-// 保证大屏页在 token 落地前后都有正确的距离字号分档。
-.bigscreen {
-  --bs-distance-scale: 1.25;
-}
-.bigscreen[data-bigscreen-distance='3m'] {
-  --bs-distance-scale: 1;
-}
-.bigscreen[data-bigscreen-distance='6m'] {
-  --bs-distance-scale: 1.25;
-}
-.bigscreen[data-bigscreen-distance='10m'] {
-  --bs-distance-scale: 1.5;
-}
+// 直接消费 tokens.scss 的 --bs-*-size token：三档由全局
+// [data-bigscreen-distance="3m|6m|10m"] 覆盖，:root 提供默认 6m 基线。
+// 不再本地维护 --bs-distance-scale：曾出现 font-size 误用 --bs-text-body
+// （该名是颜色 token）导致字号整条声明失效的问题。
 .big-screen {
   min-height: 100vh;
   background: radial-gradient(
@@ -988,7 +978,7 @@ onUnmounted(() => {
   letter-spacing: 1px;
 }
 .bs-header h1 {
-  font-size: var(--bs-text-title, calc(22px * var(--bs-distance-scale, 1.25)));
+  font-size: var(--bs-title-size, 28px);
   font-weight: 600;
   letter-spacing: 2px;
   background: linear-gradient(90deg, var(--bs-blue-400), var(--bs-gold));
@@ -1089,12 +1079,12 @@ onUnmounted(() => {
   background: linear-gradient(90deg, transparent, var(--bs-blue-a80), transparent);
 }
 .kpi-value {
-  font-size: var(--bs-text-kpi, calc(34px * var(--bs-distance-scale, 1.25)));
+  font-size: var(--bs-kpi-size, 40px);
   font-weight: 700;
   color: var(--bs-blue-400);
 }
 .kpi-label {
-  font-size: var(--bs-text-body, calc(13px * var(--bs-distance-scale, 1.25)));
+  font-size: var(--bs-label-size, 14px);
   color: var(--bs-text-muted);
   margin-top: 4px;
 }
@@ -1126,7 +1116,7 @@ onUnmounted(() => {
   min-height: 220px;
 }
 .chart-title {
-  font-size: var(--bs-text-chart-title, calc(13px * var(--bs-distance-scale, 1.25)));
+  font-size: var(--bs-chart-title-size, 18px);
   color: var(--bs-text-muted);
   margin-bottom: 4px;
 }
