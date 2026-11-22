@@ -459,11 +459,13 @@ const backupForm = ref({
 })
 const restoreForm = ref({ password: '', allowKeyMismatch: false })
 // 恢复成功后延迟跳登录页；组件卸载/重复恢复时必须取消，避免在用户已离开时强行跳转。
-let reloginTimer: ReturnType<typeof setTimeout> | null = null
+// 用 window.setTimeout（返回 number）而不是全局 setTimeout：后者在装了 @types/node
+// 的工程里会推到 NodeJS.Timeout，与 clearTimeout 的形参类型对不上，只能靠强制转型绕过。
+let reloginTimer: number | null = null
 
 function scheduleRelogin() {
-  clearTimeout(reloginTimer as any)
-  reloginTimer = setTimeout(() => {
+  if (reloginTimer !== null) window.clearTimeout(reloginTimer)
+  reloginTimer = window.setTimeout(() => {
     window.location.href = '/login'
   }, 2000)
 }
@@ -888,7 +890,7 @@ const formatTime = (time?: string | number | Date | null): string =>
   format.formatDateTimeLocale(time)
 
 onUnmounted(() => {
-  clearTimeout(reloginTimer as any)
+  if (reloginTimer !== null) window.clearTimeout(reloginTimer)
   reloginTimer = null
 })
 

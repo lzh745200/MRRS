@@ -67,24 +67,6 @@
   "#0a1a12",
   "#e0c048"
  ],
- "frontend/src/views/bigscreen/BigScreen.vue": [
-  "#0b1e3a",
-  "#060d1f",
-  "#04070f",
-  "#e6f1ff",
-  "rgba(64, 169, 255, 0.35)",
-  "#40a9ff",
-  "#ffd666",
-  "#ffd666",
-  "rgba(64, 169, 255, 0.08)",
-  "rgba(64, 169, 255, 0.25)",
-  "#40a9ff",
-  "#9fc6ef",
-  "rgba(9, 24, 48, 0.65)",
-  "rgba(64, 169, 255, 0.2)",
-  "#9fc6ef",
-  "#5a7ba8"
- ],
  "frontend/src/views/dashboard/components/GlobalSearch.vue": [
   "rgba(0, 0, 0, 0.12)",
   "#f0f5ff"
@@ -175,16 +157,7 @@
   "#ddd",
   "#0055aa",
   "#0055aa",
-  "rgba(0, 51, 102, 0.2)",
-  "#f0f9ff",
-  "#096dd9",
-  "#f6ffed",
-  "#52c41a",
-  "#fff7e6",
-  "#fa8c16",
-  "#fff1f0",
-  "#f5222d",
-  "#f5f5f5"
+  "rgba(0, 51, 102, 0.2)"
  ],
  "frontend/src/views/ruralWorks/Index.vue": [
   "rgba(212, 175, 55, 0.12)"

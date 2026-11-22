@@ -20,6 +20,10 @@
       "annotation": "typing.Optional[datetime.datetime]",
       "required": false
     },
+    "data_checksums": {
+      "annotation": "typing.Dict[str, str]",
+      "required": false
+    },
     "data_types": {
       "annotation": "typing.List[str]",
       "required": false
@@ -52,6 +56,10 @@
       "annotation": "typing.Optional[str]",
       "required": false
     },
+    "include_unassigned": {
+      "annotation": "<class 'bool'>",
+      "required": false
+    },
     "incremental": {
       "annotation": "<class 'bool'>",
       "required": false
@@ -73,6 +81,10 @@
       "required": false
     },
     "record_counts": {
+      "annotation": "typing.Dict[str, int]",
+      "required": false
+    },
+    "unassigned_counts": {
       "annotation": "typing.Dict[str, int]",
       "required": false
     },
