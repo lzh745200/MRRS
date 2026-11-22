@@ -24,6 +24,11 @@
 - 三份 PPT 更新到 v1.18.60，安装页补 `Install-MRRS.cmd`/TEMP 空间预检，备份页补同盘 WARN。
 - 完整 PR Checks、Windows x64 + ARM64 构建按 v1.18.60 重跑。
 
+### Docs
+
+- **统一权限管理方案 v1.2（代码核验版）**：拿实际代码逐条对账 v1.1，修正 19 处与实现不符的断言——动作枚举与 `authStore.modulePermissions` 词汇不兼容（按 `create/update/export` 落库会让按钮全隐藏）、legacy 别名表错漏（`school:manage` 不存在、漏 5 条）、菜单可见性漏写"矩阵 active 时不并公开项 / 用户级只收窄 / dashboard 恒定"三条既有约束、`require_permission` 误当新实现（实际 `permission_utils.py:359` 已存在且零路由使用）、`authStore.refreshUser` 与 `menuStore.fetchMenus(force)` 均不存在、`POST /users` 不走 `user_service.create_user` 等；新增 §0.2 六个阻塞项、§2.5.1 两分支伪码、§10.1 逐条修订记录。
+- 核验同时确认：两个 layout 与 `App.vue` 均无 `keep-alive`（`permEpoch` 改造无副作用）；`SystemConfig` 模型与服务存在（§4.6 热改通道有依据）。
+
 ## [1.18.59] - 2026-11-21 — NSIS 插件依赖 / TEMP 空间预检
 
 ### Fixed
