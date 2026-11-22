@@ -348,6 +348,8 @@ const createFormRules = {
 // ==================== 自动刷新 ====================
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null
+// 自动刷新持续失败时只提示一次，避免每 5 秒弹一个 toast；恢复成功后重新武装。
+let refreshFailureNotified = false
 
 function toggleAutoRefresh(value: string | number | boolean) {
   if (value) {
@@ -359,15 +361,21 @@ function toggleAutoRefresh(value: string | number | boolean) {
 
 function startAutoRefresh() {
   stopAutoRefresh()
+  refreshFailureNotified = false
   refreshInterval = setInterval(async () => {
     try {
       const countRes = await tasksApi.getRunningCount()
+      refreshFailureNotified = false
       if (countRes.success && countRes.data.total_active > 0) {
         await fetchTaskList(false)
         updateLastUpdated()
       }
     } catch {
-      // auto-refresh silently fails
+      // 静默失败会让列表永远停在旧进度；提示一次并保留手动刷新入口。
+      if (!refreshFailureNotified) {
+        refreshFailureNotified = true
+        ElMessage.error('自动刷新失败，请检查网络或手动刷新')
+      }
     }
   }, 5000)
 }

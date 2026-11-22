@@ -8,7 +8,7 @@
 而**运行期不会报错**——只是按钮不出现、权限勾了不生效。这类问题人眼极难发现，
 必须靠门禁。
 
-## 断言的 10 条
+## 断言的 11 条
 
 1. 目录能正常构建（菜单定义 / 写路由映射没有结构性错误）；
 2. 每个 `kind == "page"` 的菜单条目都有非空动作集；
@@ -17,10 +17,11 @@
 4. 目录里的码不含 `*`（通配只允许出现在别名表里，落库即后门）；
 5. `PERMISSION_OPTIONS` 的每一条都在 `LEGACY_ACTION_ALIAS` 里（否则切换后该码 403）；
 6. 每条 legacy 别名的目标都真实存在（含 `*:<action>` 展开后非空）——防悬空映射；
-7. 单数前缀别名的目标必须是真实页面 key；
-8. 模块级动作与页面级动作不重叠（重叠会让同一码有两个来源，判定口径不清）；
-9. 前端 `PermissionTreePanel` 的 11 个单数前缀必须仍可解析；
-10. `data:*` / `approve:*` 别名不得覆盖敏感模块，且非 legacy 页面必须有 path。
+7. 单数前缀别名的目标必须是真实页面/模块 key；
+8. 页面→模块映射的目标必须存在（console 页尤其容易写错）；
+9. 模块级动作与页面级动作不重叠；
+10. 前端 `PermissionTreePanel` 的 11 个单数前缀必须仍可解析；
+11. `data:*` / `approve:*` 不得覆盖敏感模块，非 legacy 页面必须有 path。
 
 ## 用法
 
@@ -55,7 +56,7 @@ def _permission_option_codes() -> list[str]:
     return [str(item.get("code")) for item in PERMISSION_OPTIONS if item.get("code")]
 
 
-def check() -> list[str]:  # noqa: C901 - 10 条断言按方案顺序展开，拆散后更难对照
+def check() -> list[str]:  # noqa: C901 - 11 条断言按方案顺序展开，拆散后更难对照
     """返回问题列表（空 = 通过）。"""
     problems: list[str] = []
 
@@ -149,12 +150,23 @@ def check() -> list[str]:  # noqa: C901 - 10 条断言按方案顺序展开，�
         if leaked:
             problems.append(f"{alias_name} 覆盖敏感模块: " + ", ".join(leaked[:8]))
 
-    # 9. 页面级与模块级不得重叠
+    # 9. 页面→模块映射的目标必须存在（console 页尤其容易写错）
+    known_modules = set(catalog.page_actions) | set(catalog.module_actions)
+    bad_page_modules = [
+        f"{page} → {module}"
+        for page, modules in catalog.page_modules.items()
+        for module in modules
+        if module not in known_modules
+    ]
+    if bad_page_modules:
+        problems.append("页面→模块映射指向不存在的 key: " + ", ".join(bad_page_modules[:8]))
+
+    # 10. 页面级与模块级不得重叠
     overlap = sorted(set(catalog.page_actions) & set(catalog.module_actions))
     if overlap:
         problems.append("页面级与模块级动作重叠: " + ", ".join(overlap[:8]))
 
-    # 10. 菜单结构：非 legacy 的 page/console 必须有 path；legacy 不得被当成
+    # 11. 菜单结构：非 legacy 的 page/console 必须有 path；legacy 不得被当成
     # 可导航页面（这正是 v1.2 把 15 个无 path 历史 key 算成页面的根因）。
     from app.api.v1.menus import MENU_DEFINITIONS
     from app.core.permission_catalog import _iter_entries

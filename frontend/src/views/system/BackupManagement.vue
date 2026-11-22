@@ -369,7 +369,7 @@
 import { DIALOG_SM } from '@/config/dialog'
 import { unwrapList } from '@/utils/unwrapList'
 import EmptyState from '@/components/business/EmptyState/EmptyState.vue'
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { get, post, put, del } from '@/api/request'
 import { useBackupSchedule } from '@/composables/useBackupSchedule'
@@ -458,6 +458,15 @@ const backupForm = ref({
   password: '',
 })
 const restoreForm = ref({ password: '', allowKeyMismatch: false })
+// 恢复成功后延迟跳登录页；组件卸载/重复恢复时必须取消，避免在用户已离开时强行跳转。
+let reloginTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleRelogin() {
+  clearTimeout(reloginTimer as any)
+  reloginTimer = setTimeout(() => {
+    window.location.href = '/login'
+  }, 2000)
+}
 /** 409 密钥不一致时后端 detail；非空即进入"强制恢复（密钥不一致）"分支 */
 const keyMismatchDetail = ref('')
 
@@ -728,9 +737,7 @@ async function confirmRestore(options: { forceKeyMismatch?: boolean } = {}) {
       restoreDialogVisible.value = false
       keyMismatchDetail.value = ''
       restoreForm.value.allowKeyMismatch = false
-      setTimeout(() => {
-        window.location.href = '/login'
-      }, 2000)
+      scheduleRelogin()
     }
   } catch (e: any) {
     if (isKeyMismatchError(e)) {
@@ -806,9 +813,7 @@ async function confirmImportRestore(options: { forceKeyMismatch?: boolean } = {}
       importFileList.value = []
       importForm.value = { password: '', allowKeyMismatch: false }
       importKeyMismatchDetail.value = ''
-      setTimeout(() => {
-        window.location.href = '/login'
-      }, 2000)
+      scheduleRelogin()
     }
   } catch (e: any) {
     if (isKeyMismatchError(e)) {
@@ -881,6 +886,11 @@ function formatSize(bytes: number) {
 
 const formatTime = (time?: string | number | Date | null): string =>
   format.formatDateTimeLocale(time)
+
+onUnmounted(() => {
+  clearTimeout(reloginTimer as any)
+  reloginTimer = null
+})
 
 onMounted(() => {
   refreshAll()

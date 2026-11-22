@@ -765,3 +765,59 @@ $form-label-width: var(--form-label-width);
   --bs-label-size: 18px;
   --bs-chart-title-size: 24px;
 }
+
+// ==================== 汇报大屏深色调色板（BigScreen 专用）====================
+// 大屏页固定使用深蓝科技风，与军绿主色板是两套视觉语言，故单列一组 --bs-* token。
+// 挂在 :root 而不是 [data-theme]：大屏「显示设置」抽屉 teleport 到 body，
+// 若挂在主题作用域下会取不到变量（抽屉会掉回默认底色）。
+// 硬编码色棘轮（scripts/check_hardcoded_styles.py）要求 .vue 内不得出现字面色值，
+// 新增配色请在此登记后再用 var() 引用。
+
+:root {
+  // 背景层次：页面径向渐变三站 + 抽屉底色
+  --bs-bg-top: #0b1e3a;
+  --bs-bg-mid: #060d1f;
+  --bs-bg-deep: #04070f;
+  --bs-drawer-bg: #07162d;
+
+  // 半透明面板（header / KPI / 图表 / 筛选条 / 控件 / 输入框）
+  --bs-panel-header-from: rgba(8, 28, 58, 0.92);
+  --bs-panel-header-to: rgba(4, 12, 28, 0.72);
+  --bs-panel-kpi-from: rgba(14, 45, 82, 0.82);
+  --bs-panel-kpi-to: rgba(5, 17, 36, 0.72);
+  --bs-panel-chart-from: rgba(11, 34, 65, 0.82);
+  --bs-panel-chart-to: rgba(4, 14, 30, 0.74);
+  --bs-panel-filter: rgba(7, 20, 40, 0.82);
+  --bs-panel-control: rgba(8, 30, 58, 0.86);
+  --bs-panel-input: rgba(3, 12, 28, 0.9);
+
+  // 主色阶（蓝调）与半透明边框阶梯
+  --bs-blue-700: #1769aa;
+  --bs-blue-500: #2f9be0;
+  --bs-blue-400: #40a9ff;
+  --bs-blue-300: #45b6ff;
+  --bs-blue-a22: rgba(64, 169, 255, 0.22);
+  --bs-blue-a24: rgba(64, 169, 255, 0.24);
+  --bs-blue-a25: rgba(64, 169, 255, 0.25);
+  --bs-blue-a28: rgba(64, 169, 255, 0.28);
+  --bs-blue-a80: rgba(64, 169, 255, 0.8);
+
+  // 文字色阶（强 → 弱）
+  --bs-text-strong: #e6f1ff;
+  --bs-text-body: #cfe7ff;
+  --bs-text-muted: #9fc6ef;
+  --bs-text-dim: #7fa9ce;
+  --bs-text-faint: #5a7ba8;
+  --bs-text-on-accent: #ffffff;
+
+  // 金色点缀与高光内描边
+  --bs-gold: #ffd666;
+  --bs-gold-a55: rgba(255, 214, 102, 0.55);
+  --bs-sheen-soft: rgba(120, 200, 255, 0.08);
+  --bs-sheen-strong: rgba(120, 200, 255, 0.12);
+
+  // 阴影三层：深底上靠明度区分层级，避免糊成一片
+  --bs-shadow-soft: rgba(0, 0, 0, 0.18);
+  --bs-shadow: rgba(0, 0, 0, 0.2);
+  --bs-shadow-strong: rgba(0, 0, 0, 0.28);
+}

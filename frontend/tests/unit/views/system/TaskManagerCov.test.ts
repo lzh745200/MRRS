@@ -225,7 +225,7 @@ describe('挂载与数据加载', () => {
 })
 
 describe('自动刷新定时器', () => {
-  it('toggle/start/stop 全分支：total_active>0 触发静默刷新，其余跳过，异常静默', async () => {
+  it('toggle/start/stop 全分支：total_active>0 触发刷新，异常只提示一次', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -255,10 +255,14 @@ describe('自动刷新定时器', () => {
       await vi.advanceTimersByTimeAsync(5000)
       expect(tasksApi.listTasks).toHaveBeenCalledTimes(1)
 
-      // 异常 → 静默
+      // 异常 → 只提示一次，不每 5 秒刷屏
       tasksApi.getRunningCount.mockRejectedValueOnce(new Error('net'))
       await vi.advanceTimersByTimeAsync(5000)
       expect(tasksApi.listTasks).toHaveBeenCalledTimes(1)
+      expect(ElMessage.error).toHaveBeenCalledWith('自动刷新失败，请检查网络或手动刷新')
+      tasksApi.getRunningCount.mockRejectedValueOnce(new Error('net'))
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(ElMessage.error).toHaveBeenCalledTimes(1)
 
       // 再次开启 → stopAutoRefresh 的 interval 非空分支
       vm.toggleAutoRefresh(false)

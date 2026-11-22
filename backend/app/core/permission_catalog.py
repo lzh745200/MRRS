@@ -59,6 +59,17 @@ MODULE_ONLY_EXTRA_ACTIONS: dict[str, tuple[str, ...]] = {
     "roles": ("manage_roles",),
 }
 
+# console 页自身没有同名的 write_route_map 模块，但它们的按钮会调用多个后端模块。
+# 这个映射只用于“页面动作 → 可写性”和后续有效权限裁决；不等于新增路由。
+PAGE_MODULE_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "system-console-org": ("users-orgs", "organizations", "roles"),
+    "system-console-security": ("system", "audit"),
+    "system-console-ops": ("system", "monitor"),
+    "system-console-storage": ("system", "backup"),
+    "system-console-settings": ("system",),
+    "system-console-about": ("system",),
+}
+
 # legacy 的 `data:*` / `approve:*` 是跨模块粗粒度码。这里用**数据域白名单**展开，
 # 绝不能用 `*` 扫全部目录：`data:create` 一旦展开到 system/roles/users-orgs，
 # 等于把系统管理写权限送给普通数据录入员。新增业务页时必须显式归入此表，
@@ -128,6 +139,7 @@ class ActionCatalog:
     """动作目录快照（不可变，构建一次全程复用）。"""
 
     page_actions: dict[str, tuple[str, ...]]
+    page_modules: dict[str, tuple[str, ...]]
     module_actions: dict[str, tuple[str, ...]]
     all_codes: frozenset[str]
     prefix_alias: dict[str, str]
@@ -188,6 +200,10 @@ class ActionCatalog:
 
     # ── 只读视图（供门禁 / UI 使用）────────────────────────────
 
+    def modules_of_page(self, page_key: str) -> tuple[str, ...]:
+        """页面可写性对应的后端模块（普通页通常是自己，console 页可能多个）。"""
+        return self.page_modules.get(page_key, ())
+
     def page_keys(self) -> frozenset[str]:
         return frozenset(self.page_actions)
 
@@ -212,12 +228,21 @@ def _iter_entries(definitions: Sequence[dict]) -> list[dict]:
     return out
 
 
-def _build_page_actions(page_keys: Sequence[str], write_modules: set[str]) -> dict[str, tuple[str, ...]]:
-    """页面级动作：所有页面可 read；有写接口的页面再加 write/delete。"""
+def _build_page_actions(
+    page_keys: Sequence[str],
+    write_modules: set[str],
+    page_modules: dict[str, tuple[str, ...]],
+) -> dict[str, tuple[str, ...]]:
+    """页面级动作：所有页面可 read；有可写模块的页面再加 write/delete。
+
+    console 页通过 ``page_modules`` 映射到真实后端模块，否则 system 管理页
+    会永远只有 read，勾选界面无法表达系统管理写权限。
+    """
     out: dict[str, tuple[str, ...]] = {}
     for key in page_keys:
         actions = ["read"]
-        if key in write_modules:
+        modules = page_modules.get(key, (key,) if key in write_modules else ())
+        if any(module in write_modules for module in modules):
             actions.extend(("write", "delete"))
         out[key] = tuple(actions)
     return out
@@ -284,7 +309,15 @@ def build_catalog() -> ActionCatalog:
     ]
     write_modules = {module for _prefix, module in MODULE_RULES}
 
-    page_actions = _build_page_actions(page_keys, write_modules)
+    page_modules: dict[str, tuple[str, ...]] = {}
+    for key in page_keys:
+        if key in PAGE_MODULE_OVERRIDES:
+            page_modules[key] = PAGE_MODULE_OVERRIDES[key]
+        elif key in write_modules:
+            page_modules[key] = (key,)
+        else:
+            page_modules[key] = ()
+    page_actions = _build_page_actions(page_keys, write_modules, page_modules)
     module_actions = _build_module_actions(write_modules, set(page_keys))
     all_codes = frozenset(
         f"{key}:{action}"
@@ -294,6 +327,7 @@ def build_catalog() -> ActionCatalog:
     )
     return ActionCatalog(
         page_actions=page_actions,
+        page_modules=page_modules,
         module_actions=module_actions,
         all_codes=all_codes,
         prefix_alias=_build_prefix_alias(page_keys, module_actions),

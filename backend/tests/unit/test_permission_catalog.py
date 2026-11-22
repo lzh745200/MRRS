@@ -54,9 +54,14 @@ def test_iter_entries_skips_non_dict_tabs():
 
 
 def test_build_page_actions_adds_write_for_write_modules():
-    out = pc._build_page_actions(["villages", "dashboard"], {"villages"})
+    out = pc._build_page_actions(
+        ["villages", "dashboard", "system-console-org"],
+        {"villages", "users-orgs"},
+        {"system-console-org": ("users-orgs",)},
+    )
     assert out["villages"] == ("read", "write", "delete")
     assert out["dashboard"] == ("read",)
+    assert out["system-console-org"] == ("read", "write", "delete")
 
 
 def test_build_module_actions_excludes_pages_and_adds_extra():
@@ -179,6 +184,10 @@ def test_catalog_excludes_legacy_pages_and_includes_console():
     # 6 个 system console 有真实 path，必须可被勾选/守卫
     assert "system-console-org" in catalog.page_actions
     assert "system-console-security" in catalog.page_actions
+    assert "write" in catalog.actions_of_page("system-console-org")
+    assert catalog.modules_of_page("system-console-org") == (
+        "users-orgs", "organizations", "roles"
+    )
 
 
 def test_frontend_singular_prefixes_are_known():

@@ -5,7 +5,7 @@
 ![Version](https://img.shields.io/badge/version-1.18.60-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C665-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C672-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 本版亮点（v1.18.60）
@@ -19,10 +19,10 @@
   不再出现 7 天与 30 天两套默认值；访问令牌仍 8 小时。
 - 💾 **备份同盘自检**：系统自检新增「备份位置」，备份目录与数据库同卷时明确告警，
   提示改到独立磁盘/移动硬盘/网络盘，避免盘损时数据与备份一起丢。
-- 🧪 验证：后端 **16,078 passed**（覆盖率 100%）；前端 **351 files / 7,587 tests**（覆盖率 100%）；
+- 🧪 验证：后端 **16,085 passed**（覆盖率 100%）；前端 **351 files / 7,587 tests**（覆盖率 100%）；
   PR Checks 与双平台构建全绿。
-- 🚧 **未发布（main）**：权限动作目录 + 10 条目录门禁（54 个可导航动作页 / 32 个模块级 /
-  204 个动作码），为后续统一裁决点打地基；尚未接入运行时守卫，不计入 v1.18.60 安装包。
+- 🚧 **未发布（main）**：权限动作目录 + 11 条目录门禁（54 个可导航动作页 / 32 个模块级 /
+  212 个动作码）+ 有效权限解析器（含 7 例单测），为后续统一裁决点打地基；尚未接入运行时守卫，不计入 v1.18.60 安装包。
 
 ## 历史亮点（v1.18.48）
 
