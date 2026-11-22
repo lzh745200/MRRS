@@ -5,7 +5,7 @@
 ![Version](https://img.shields.io/badge/version-1.18.62-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C677-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C678-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
 ## 本版亮点（v1.18.62）
@@ -18,7 +18,7 @@
   `--bs-*-size` 字号阶梯，删除页内失效的距离缩放副本，并新增源码级回归断言。
 - 🧾 **门禁基线补齐**：补登 v1.18.60 漏记的 `data_checksums` / `include_unassigned` /
   `unassigned_counts`，package_contract 门禁恢复绿。
-- 🧪 验证：后端 **16,089 passed**（覆盖率 100%）；前端 **351 files / 7,588 tests**；
+- 🧪 验证：后端 **16,090 passed**（覆盖率 100%）；前端 **351 files / 7,588 tests**；
   解析器 11 例、行/分支 100%。
 
 ## 历史亮点（v1.18.61）
@@ -339,8 +339,8 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **15,828 用例**, 0 skipped（CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **7,523 passed**（348 个 `.test.ts`），0 失败 |
+| 后端测试 | **16,090 用例**, 1 skipped（CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **7,588 passed**（351 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -354,17 +354,19 @@
 | Sass | 1.101.0（modern-compiler API） |
 | 角色体系 | 4 核心角色 (super_admin/admin/user/viewer) |
 | UI 设计系统 | **UI v2.0**：主题 3 套（军绿默认 / 深色大屏 / 户外高对比）+ 显示偏好 4 档（字号/密度/高对比/简化，localStorage `ui:prefs`）+ 三档场景预设（标准/紧凑/演示，首次启动按视口自适应）+ 统一 Token/组件类 |
-| 前端质量门禁 | 视觉回归基线 10 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 **146**（40 个文件；基线 345 → 146，只紧不松） |
+| 前端质量门禁 | 视觉回归基线 10 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 **121**（39 个文件；基线 345 → 121，只紧不松） |
 
 | 预防门禁 | 6 个棘轮扫描器（os._exit / 上传限长 / 无界读 / 子进程编码 / 目录替换 / 周期任务注册）接入 CI，NEW=0 |
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-11-15（v1.18.43 发布）— 后端 **15,828** 用例（4 分片矩阵
-> 4/4 PASS + 聚合门禁）、前端 **348 个 `.test.ts` / 7,523 用例**；PR Checks **14/14 作业 success**。
-> 覆盖率 **100.00%**（48,727 语句 / 12,360 分支；`coverage combine` 后在聚合 job 统一判定）。
-> flake8 app 0 / vue-tsc 0 / 改动源文件 eslint 0；Alembic 单 head（68 版本，audit_chain_001）；
-> 三层对齐、菜单对齐、同步覆盖率、零断言棘轮、迁移自证等门禁全绿。
+> **上次全量验证**: 2026-11-22（v1.18.62）— 后端 **16,090** 用例（12 段串行 **16,089 全绿** +
+> 新增菜单矩阵透传 1 例定向通过；CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,588 用例**、
+> Electron 外壳 **23 用例**；质量门禁脚本 **42/42 PASS**。
+> 覆盖率语句 **100.00%**（49,738/49,738）；分支 **12,651/12,652** —— 唯一缺口为 `menus.py`
+> 矩阵透传分支，已由新增用例 `test_preparsed_matrix_skips_resolver_and_is_used` 覆盖，
+> CI `coverage combine` 后按 100% 判定。flake8 app 0 / vue-tsc 0 / 源码 eslint 0；
+> Alembic 单 head（73 版本）；三层对齐、菜单对齐、同步覆盖率、零断言棘轮、迁移自证等门禁全绿。
 
 ## 快速开始
 
@@ -449,10 +451,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 15,828（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 16,090（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 7,523（348 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 7,588（351 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
 | 视觉回归 | Playwright | 10 个关键页面（DOM 结构快照，非像素） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |

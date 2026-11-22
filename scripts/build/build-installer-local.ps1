@@ -18,10 +18,19 @@ Set-Location $Root
 $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'
 
+# W24：显式解析项目 Python（PATH 里的裸 python 可能缺失或指向已删除/32 位安装）。
+# STEP 1 的 vcredist 校验与 STEP 4 的 PyInstaller 必须使用同一个解释器。
+$PythonExe = Join-Path $Root 'backend\.venv\Scripts\python.exe'
+if (-not (Test-Path $PythonExe)) {
+  Write-Host "[BUILD-FAIL] 缺少 $PythonExe"
+  Write-Host "请安装 64-bit Python 3.11 后重建 venv（scripts\dev-setup.bat 或 py -3.11 -m venv backend\.venv）"
+  exit 1
+}
+
 Write-Host "=== STEP 1/5: fetch vcredist ==="
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build\fetch_vcredist.ps1
 if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD-FAIL] fetch_vcredist exit=$LASTEXITCODE"; exit 1 }
-python scripts\verify_vcredist_bundle.py
+& $PythonExe scripts\verify_vcredist_bundle.py
 if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD-FAIL] verify_vcredist_bundle exit=$LASTEXITCODE"; exit 1 }
 
 Write-Host "=== STEP 2/5: frontend build ==="
@@ -36,13 +45,6 @@ cmd /c scripts\build\sync-frontend-dist.bat
 if ($LASTEXITCODE -ne 0) { Write-Host "[BUILD-FAIL] sync-frontend-dist exit=$LASTEXITCODE"; exit 1 }
 
 Write-Host "=== STEP 4/5: pyinstaller backend (onedir) ==="
-# W24：显式解析项目 Python（PATH 里的裸 python 可能指向已删除/32 位安装）
-$PythonExe = Join-Path $Root 'backend\.venv\Scripts\python.exe'
-if (-not (Test-Path $PythonExe)) {
-  Write-Host "[BUILD-FAIL] 缺少 $PythonExe"
-  Write-Host "请安装 64-bit Python 3.11 后重建 venv（scripts\dev-setup.bat 或 py -3.11 -m venv backend\.venv）"
-  exit 1
-}
 Push-Location backend
 & $PythonExe -m PyInstaller assistance-backend.spec --clean --noconfirm
 $code = $LASTEXITCODE

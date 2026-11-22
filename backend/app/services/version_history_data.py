@@ -4684,6 +4684,15 @@ VERSION_HISTORY_DATA = [
                 "schema 已存在但基线未登记，导致门禁曾变红；本次随 1.18.62 记录。"
             ),
             (
+                "消息查询日期用例时区无关化：tests/unit/test_messages_api.py 原先按 UTC 断言_parse_query_date 返回值，在 Asia/Shanghai "
+                "主机上 8 例偏移 8 小时；改为按to_utc_naive(datetime(...)) 断言“本地日历 → UTC 存储”契约，任何时区均通过。"
+            ),
+            (
+                "本地安装包脚本 STEP 1 误用裸 python：scripts/build/build-installer-local.ps1的 vcredist 校验在 PATH 无 python "
+                "时未真正执行（$LASTEXITCODE 残留 0，错误被吞），已改为脚本开头统一解析 backend/.venv/Scripts/python.exe 并 fail-fast，STEP "
+                "1 与STEP 4 复用同一解释器。"
+            ),
+            (
                 "permission_catalog 去除 households 在 DATA_ALIAS_KEYS 模块段的重复项（集合去重，口径不变：54 页面 / 32 模块级 / 212 动作码 "
                 "/ 17 legacy / 7 单数别名）。"
             ),

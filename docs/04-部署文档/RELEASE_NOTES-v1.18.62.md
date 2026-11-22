@@ -25,6 +25,12 @@
   `unassigned_counts` 三个字段在 schema 已存在但 v1.18.60 基线漏登，曾使门禁变红；
   本版随变更记录，门禁恢复绿。
 - `permission_catalog` 去除 `households` 在 `DATA_ALIAS_KEYS` 模块段的重复项，口径不变。
+- **消息查询日期用例时区无关化**：`test_messages_api.py` 原先按 UTC 断言解析结果，
+  在 Asia/Shanghai 主机上 8 例偏移 8 小时；改为断言“本地日历 → UTC 存储”契约，
+  任何时区均通过。
+- **本地安装包脚本 STEP 1 修正**：`build-installer-local.ps1` 的 vcredist 校验原用裸
+  `python`，PATH 缺失时错误被吞、校验未执行；现统一使用 `backend/.venv/Scripts/python.exe`
+  并在脚本开头 fail-fast。
 
 ### 对 v1.18.61 说明的更正
 
@@ -38,8 +44,11 @@ v1.18.61 发布说明中的两处口径在本版更正：
 
 ## 二、验证
 
-- 后端 **16,089** 用例；前端 **351 文件 / 7,588 用例**。
+- 后端 **16,090** 用例（12 段串行 **16,089 全绿** + 新增矩阵透传 1 例定向通过）；
+  前端 **351 文件 / 7,588 用例**；Electron 外壳 **23 用例**；门禁脚本 **42/42 PASS**。
 - `permission_catalog` / `effective_permission_service` 行分支覆盖 **100%**。
+- 全库语句覆盖 **49,738/49,738（100.00%）**；分支 **12,651/12,652**，唯一缺口为
+  `menus.py` 矩阵透传分支，由新增用例覆盖，CI `coverage combine` 后按 100% 判定。
 - `check_permission_catalog`、`check_doc_numbers --full`、`check_changelog`、
   `check_update_log`、`sync-version --check`、`check_hardcoded_styles`、
   菜单/console 映射、`check_package_contract` 全通过。

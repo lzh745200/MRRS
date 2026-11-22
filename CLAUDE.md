@@ -77,7 +77,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 16,089 用例（1 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 16,090 用例（1 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -96,7 +96,7 @@ cd backend && .venv/Scripts/python.exe scripts/check_dir_replace.py
 cd backend && .venv/Scripts/python.exe scripts/check_scheduler_registration.py
 python scripts/check_hardcoded_styles.py          # 前端硬编码色值棘轮（只紧不松）
 python scripts/check_changelog.py                 # 更新日志时效性（当前版本必须已记录）
-npm run test:electron                             # Electron 外壳单测（10 例；CI 的 Linux+Windows 两侧都跑）
+npm run test:electron                             # 仓库根执行；Electron 外壳单测（23 例；CI 的 Linux+Windows 两侧都跑）
 
 # lint-staged：仅检查 git 暂存文件（加速提交）
 cd frontend && npx lint-staged

@@ -232,6 +232,15 @@ class TestMenusIntegration:
         assert keys == {"projects", "funds", "dashboard"}
         assert "policies" not in keys
 
+    def test_preparsed_matrix_skips_resolver_and_is_used(self, db, monkeypatch):
+        """有效权限解析器已先取矩阵；菜单解析传 matrix 时不得再查一次。"""
+        matrix = GrantMatrix(active=True, levels={"projects": "edit"})
+        monkeypatch.setattr(
+            egs, "get_grant_matrix", lambda _db, _u: (_ for _ in ()).throw(AssertionError("不应重查"))
+        )
+        keys = menus._get_user_accessible_menu_keys(_user(), MagicMock(), matrix=matrix)
+        assert keys == {"projects", "dashboard"}
+
     def test_matrix_active_user_allowed_can_only_narrow(self, db, monkeypatch):
         """用户级 allowed_menus 只能收窄 —— 防本地管理员绕过上级授权扩权。"""
         matrix = GrantMatrix(active=True, levels={"projects": "edit", "funds": "view"})

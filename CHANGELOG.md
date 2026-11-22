@@ -16,6 +16,13 @@
   删除页内失效的 `--bs-distance-scale` 副本。新增源码级回归断言。
 - **补齐 v1.18.60 漏登的 package_contract 基线**：`data_checksums`、`include_unassigned`、
   `unassigned_counts` 三个字段在 schema 已存在但基线未登记，导致门禁曾变红；本次随 1.18.62 记录。
+- **消息查询日期用例时区无关化**：`tests/unit/test_messages_api.py` 原先按 UTC 断言
+  `_parse_query_date` 返回值，在 Asia/Shanghai 主机上 8 例偏移 8 小时；改为按
+  `to_utc_naive(datetime(...))` 断言“本地日历 → UTC 存储”契约，任何时区均通过。
+- **本地安装包脚本 STEP 1 误用裸 `python`**：`scripts/build/build-installer-local.ps1`
+  的 vcredist 校验在 PATH 无 `python` 时未真正执行（`$LASTEXITCODE` 残留 0，错误被吞），
+  已改为脚本开头统一解析 `backend/.venv/Scripts/python.exe` 并 fail-fast，STEP 1 与
+  STEP 4 复用同一解释器。
 
 ### Changed
 
@@ -24,7 +31,10 @@
 
 ### Verification
 
-- 后端 **16,089** 用例；前端 **351 文件 / 7,588 用例**。
+- 后端 **16,090** 用例（12 段串行 16,089 绿 + 矩阵透传 1 例定向）+ 前端 **351 文件 / 7,588 用例**
+  + Electron **23 用例**；门禁脚本 **42/42 PASS**。
+- 新增 1 例菜单矩阵透传回归（`test_preparsed_matrix_skips_resolver_and_is_used`），
+  锁定 `resolve()` 只解析一次单位矩阵并原样传给菜单辅助函数。
 - `permission_catalog` / `effective_permission_service` 行分支覆盖 **100%**（解析器 11 例）。
 - `check_permission_catalog`、`check_doc_numbers --full`、`check_changelog`、`check_update_log`、
   `sync-version --check`、`check_hardcoded_styles`、菜单/console 映射、`check_package_contract` 通过。
