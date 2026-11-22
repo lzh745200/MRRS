@@ -1,28 +1,29 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.60
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.61
 
-![Version](https://img.shields.io/badge/version-1.18.60-blue)
+![Version](https://img.shields.io/badge/version-1.18.61-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
 ![Tests](https://img.shields.io/badge/tests-23%2C672-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.60）
+## 本版亮点（v1.18.61）
 
-- 🔐 **全库审计收口**：用户导出补数据域、refresh 补凭据过期校验、消息/年度/导出时间统一
-  UTC↔本地口径；模板与填报导出超过 5000 行显式提示；ZIP 导入新增/更新/跳过不再恒为 0。
-- 🧰 **安装与交互可靠性**：NSIS `ExecWait + taskkill /T` 先停旧进程，Helper 预检 TEMP
-  空间（2×安装包 + 512MB）；非管理员编辑/删除学校/帮扶村提示“已提交审批”；分片上传
-  离开页面即停止；上传/统计失败不再静默。
-- 🔑 **刷新令牌统一 30 天**：`config.py`/`security.py`/`token_manager.py`/`.env.example`
-  不再出现 7 天与 30 天两套默认值；访问令牌仍 8 小时。
-- 💾 **备份同盘自检**：系统自检新增「备份位置」，备份目录与数据库同卷时明确告警，
-  提示改到独立磁盘/移动硬盘/网络盘，避免盘损时数据与备份一起丢。
-- 🧪 验证：后端 **16,085 passed**（覆盖率 100%）；前端 **351 files / 7,587 tests**（覆盖率 100%）；
-  PR Checks 与双平台构建全绿。
-- 🚧 **未发布（main）**：权限动作目录 + 11 条目录门禁（54 个可导航动作页 / 32 个模块级 /
-  212 个动作码）+ 有效权限解析器（含 7 例单测），为后续统一裁决点打地基；尚未接入运行时守卫，不计入 v1.18.60 安装包。
+- 🧭 **权限治理地基**：动作目录落地为 **54 个可导航动作页（48 page + 6 console）/
+  32 个模块级 / 212 个动作码**；17 条 legacy 别名、7 条单数前缀别名，补全
+  `system-console-*` 的 page→module 映射；`data:create` 不再越权到系统管理模块。
+- 🛡 **有效权限解析器**：新增只读 `EffectivePermissions` 快照，复用 RBAC、白名单、
+  机器码扣减、单位矩阵和菜单两条分支，7 例单测、行/分支 100%；**尚未接入路由**，
+  本版只交付地基，不改变现有线上判权。
+- 🚦 **目录门禁**：11 条断言覆盖假页面、通配/敏感越权、前端单数前缀、别名悬空、
+  page→module 悬空；已接入 `stack-alignment`。
+- 🧰 **可靠性收口**：任务自动刷新失败只提示一次；恢复备份后的登录跳转可被卸载取消；
+  同步修复 BigScreen 格式门禁告警。
+- 🧪 验证：后端 **16,085 passed**（覆盖率 100%）；前端 **351 files / 7,587 tests**
+  （覆盖率 100%）；`check_changelog` / `check_doc_numbers --full` / 目录门禁通过。
+- 📦 本版沿用 v1.18.60 的安装可靠性改造（NSIS `ExecWait + taskkill /T`、TEMP 预检、
+  同盘备份自检），并统一 refreshed token / 导出与时间口径修复。
 
 ## 历史亮点（v1.18.48）
 

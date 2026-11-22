@@ -4639,4 +4639,26 @@ VERSION_HISTORY_DATA = [
             "上传/统计静默失败：合同/影像上传透出服务端原因；备份统计、数据管理本月统计失败明确提示，不再伪装成 0。",
         ],
     },
+    {
+        "version": "1.18.61",
+        "date": "2026-11-22",
+        "description": "权限治理地基 + 可靠性收口",
+        "features": [
+            (
+                "有效权限解析器：effective_permission_service 复用 RBAC/单位矩阵/菜单解析，提供只读 EffectivePermissions 快照（页面、模块级、动作、"
+                "denied、版本）；7 例测试、行/分支 100%。尚未接入路由/中间件，不是已生效的运行时守卫。"
+            ),
+            (
+                "动作权限目录复核：permission_catalog 改为只收录 54 个可导航动作页（48 page + 6 console，排除 15 个无 path 的 legacy key），补"
+                " 7 条单数前缀别名与 console 页→模块映射；新增 24 例目录测试与 11 条目录门禁（已挂 stack-alignment）。"
+            ),
+            "任务自动刷新失败不再静默：TaskManager 连续轮询失败只提示一次并保留手动刷新，不再让任务列表永久停在旧进度。",
+            "恢复备份跳转可取消：BackupManagement 的 2 秒登录跳转定时器在组件卸载/重复恢复时清除，避免用户已离开页面仍被强制跳转。",
+            "data:* / approve:* 不再用 * 扫全目录：data:create 不得获得roles/users-orgs/system 写权限；data:view 仅额外给报表读取。",
+            (
+                "system:manage / user:manage / org:manage / role:manage 明确映射到模块级，report:manage 映射到两个报表页面；消除 leg"
+                "acy 悬空和假页面。"
+            ),
+        ],
+    },
 ]

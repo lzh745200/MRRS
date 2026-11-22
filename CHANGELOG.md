@@ -1,6 +1,7 @@
-## [Unreleased]
+## [1.18.61] - 2026-11-22 — 权限治理地基 + 可靠性收口
 
 ### Added
+
 - **有效权限解析器**：`effective_permission_service` 复用 RBAC/单位矩阵/菜单解析，
   提供只读 `EffectivePermissions` 快照（页面、模块级、动作、denied、版本）；7 例测试、
   行/分支 100%。**尚未接入路由/中间件**，不是已生效的运行时守卫。
