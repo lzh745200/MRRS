@@ -882,6 +882,14 @@ jobs:
       - name: Route auth coverage gate
         working-directory: backend
         run: python ../scripts/check_route_auth.py
+      # 动作权限目录门禁（2026-11-22，统一权限管理方案 §7 第 1 步）：
+      # 断言 MENU_DEFINITIONS 与动作目录始终一致 —— 每个页面有动作、动作只在
+      # read/write/delete/manage_roles 四个枚举内（前端 modulePermissions 只认这四个）、
+      # PERMISSION_OPTIONS 的 17 条全被 legacy 别名覆盖、别名目标无悬空、目录内无通配码。
+      # 漂移后果是"勾选界面勾到不存在的页面 / 按钮静默消失"，运行期不报错、极难发现。
+      - name: Permission action catalog gate
+        working-directory: backend
+        run: python ../scripts/check_permission_catalog.py
       # 文档数字漂移门禁：CLAUDE.md 里的 API 端点数 / 路由模块数 / 前端测试文件数 /
       # 后端测试用例数必须与实测一致。缘起（2026-10-26 体检）：文档写"14,726 用例"，
       # 实测 14,731→14,757，而这行数字此前**从未接进 CI**，只有人手工跑 --full 才发现，
