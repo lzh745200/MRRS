@@ -36,11 +36,12 @@ const STORAGE_KEYS = {
   REFRESH_TOKEN: 'refresh_token',
   // 迁移标记
   MIGRATED: 'auth_migrated',
-  // 记住登录（自动登录）：持久化到 localStorage
+  // 记住登录（自动登录）：Electron 下持久化到 safeStorage 加密存储，
+  // 仅浏览器/无 bridge 环境回退 localStorage（见 secureAuthBridge）。
   PERSIST_TOKEN: 'auth_persist_token',
   PERSIST_USER: 'auth_persist_user',
   PERSIST_REFRESH: 'auth_persist_refresh',
-  // 锁屏标记（2026-10-31 F2）：必须与"记住登录"同为 localStorage 级，
+  // 锁屏标记（2026-10-31 F2）：必须持久化（localStorage 级），
   // 否则新标签页/重启后 sessionStorage 为空，锁屏会被守卫判为未锁。
   LOCK: 'auto_lock_active',
 } as const
@@ -279,7 +280,8 @@ export class AuthStorage {
   }
 
   /**
-   * 记住登录：将认证数据持久化到 localStorage（供"本机自动登录"使用）。
+   * 记住登录：将认证数据持久化到安全存储（Electron safeStorage；
+   * 浏览器/无 bridge 环境回退 localStorage），供"本机自动登录"使用。
    * 默认关闭——由登录页"记住登录"勾选显式开启。
    *
    * 同时持久化 refresh token（30 天有效，每次续期轮换）：access token 过期后
@@ -319,10 +321,10 @@ export class AuthStorage {
   /**
    * 写入锁屏标记（2026-10-31 安全修复 F2：锁屏可绕过）。
    *
-   * 旧实现只写 sessionStorage，而「记住登录」的令牌在 localStorage；新标签页 /
-   * 重启应用后 sessionStorage 为空 → readLockFlag() 判为未锁 → 路由守卫凭持久
-   * 令牌直接放行进工作台，锁屏形同虚设。此处 local 为主、session 同步写一份，
-   * 兼容既有读取点与旧测试；解除时两处一起清。
+   * 旧实现只写 sessionStorage，而「记住登录」的令牌在安全存储（浏览器回退
+   * localStorage）；新标签页 / 重启应用后 sessionStorage 为空 → readLockFlag()
+   * 判为未锁 → 路由守卫凭持久令牌直接放行进工作台，锁屏形同虚设。此处 local 为主、
+   * session 同步写一份，兼容既有读取点与旧测试；解除时两处一起清。
    */
   static setLocked(): void {
     safeSetItem(STORAGE_KEYS.LOCK, '1', 'local')

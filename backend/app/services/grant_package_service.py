@@ -174,8 +174,13 @@ def apply_package(
         if not verify_payload(package, signature, public_key):
             raise GrantPackageError("授权包签名校验失败（可能被篡改或来自非授权上级）")
     elif signature:
-        # 未配置公钥：不强制验签（v1.18.45 起默认放行），仅留痕。
-        # 需要强验签的部署：配置 GRANT_PUBKEY 后即回到上面的严格分支。
+        # 带签名但本机未配置公钥：无法验签。宽松模式仅留痕放行；严格模式必须拒收，
+        # 否则任何人自签一个包即可绕过“强制验签”（把 allow_unsigned=False 当摆设）。
+        if not allow_unsigned:
+            raise GrantPackageError(
+                "授权包带签名但本机未配置 GRANT_PUBKEY，无法验签；"
+                "已开启强制验签（GRANT_ALLOW_UNSIGNED=false），拒绝导入"
+            )
         logger.warning(
             "授权包带签名但本机未配置 GRANT_PUBKEY，已跳过来源校验；如需强制验签请配置验签公钥"
         )

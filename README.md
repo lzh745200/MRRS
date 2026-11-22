@@ -5,10 +5,19 @@
 ![Version](https://img.shields.io/badge/version-1.18.63-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C678-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C683-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.62）
+## 本版亮点（v1.18.63）
+
+- 🪟 **Windows 图标二次收口**：安装后把图标复制为 `icon-<时间戳>.ico`，快捷方式指向新文件，
+  绕过 iconcache 按路径复用旧白纸条目；再逐项发 `SHCNE_UPDATEITEM`，`-ClearIconCache` 仅作兜底。
+- 🐧 **Linux 装完刷新图标缓存**：新增 `scripts/linux/after-install.sh` 并接入 `deb.afterInstall`，
+  补 `gtk-update-icon-cache` 与 UKUI 用户缓存清理。
+- 🧪 新增 4 例图标链路回归；后端 **16,095** / 前端 **351 files / 7,588 tests** 全绿。
+- 📄 文档校准：授权包签名默认与实现对齐、补充 `/uploads` 非回环边界、认证存储注释更正。
+
+## 历史亮点（v1.18.62）
 
 - 🛡 **矩阵空授权 fail-closed**：单位矩阵已启用但授权被清空时，解析器不再回落全量 RBAC；
   按 `matrix.active` 收窄后，空授权只保留页面可见性允许的读，写/删/授权管理一律不放行。
@@ -339,7 +348,7 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **16,090 用例**, 1 skipped（CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
+| 后端测试 | **16,095 用例**, 0 skipped（本地 12 段全量；CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
 | 前端测试 | **7,588 passed**（351 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
@@ -360,13 +369,12 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-11-22（v1.18.62）— 后端 **16,090** 用例（12 段串行 **16,089 全绿** +
-> 新增菜单矩阵透传 1 例定向通过；CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,588 用例**、
+> **上次全量验证**: 2026-11-22（v1.18.63）— 后端 **16,095** 用例（12 段串行 **16,095 passed / 0 skipped**；
+> CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,588 用例**、
 > Electron 外壳 **23 用例**；质量门禁脚本 **42/42 PASS**。
-> 覆盖率语句 **100.00%**（49,738/49,738）；分支 **12,651/12,652** —— 唯一缺口为 `menus.py`
-> 矩阵透传分支，已由新增用例 `test_preparsed_matrix_skips_resolver_and_is_used` 覆盖，
-> CI `coverage combine` 后按 100% 判定。flake8 app 0 / vue-tsc 0 / 源码 eslint 0；
-> Alembic 单 head（73 版本）；三层对齐、菜单对齐、同步覆盖率、零断言棘轮、迁移自证等门禁全绿。
+> 覆盖率语句 **100.00%**（49,740/49,740）；分支 **100.00%**（12,654/12,654，0 partial）。
+> flake8 app 0 / vue-tsc 0 / 源码 eslint 0；Alembic 单 head（73 版本）；
+> 三层对齐、菜单对齐、同步覆盖率、零断言棘轮、迁移自证等门禁全绿。
 
 ## 快速开始
 
@@ -405,7 +413,7 @@ cd frontend && npm install && npm run dev
 
 - **多机 / 局域网 / 非回环部署**：所有实例必须配置**同一**随机 `PASS_CODE_SECRET`（否则非本机自助注册 fail-closed 403）。
 - **viewer 为严格只读**：写操作（含直连 API）服务端一律 403；需要录入/审批请用 `user` 及以上角色。
-- **R33 单位授权包**：上级配置 `GRANT_SIGNING_KEY`（Ed25519 私钥，保密勿入库）签发授权包；下级配置 `GRANT_PUBKEY` 验签——**导入授权包前必须先配置验签公钥**，否则导入被拒绝（400）。`GRANT_ALLOW_UNSIGNED` 永远保持 false。
+- **R33 单位授权包**：上级配置 `GRANT_SIGNING_KEY`（Ed25519 私钥，保密勿入库）签发授权包；下级配置 `GRANT_PUBKEY` 验签。`GRANT_ALLOW_UNSIGNED` 默认 `true`（兼容离线摆渡）；生产建议配置公钥，如需“无签名/无法验签一律拒收”再显式设 `false`。
 - **R33 写收窄** `GRANT_GUARD_MODE` 默认 `off`（仅菜单裁剪生效）；可选 `shadow`（只记日志）→ `enforce`（越权写 403），生产建议先 shadow 观察再 enforce。
 
 ### 访问地址与默认账号
@@ -451,7 +459,7 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 16,090（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 16,095（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
 | 前端单元测试 | Vitest | 7,588（351 文件） | API/Store/Component/Composable/Utils |
@@ -724,7 +732,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 ### 2026-10-19（v1.15.8 ~ v1.15.12）安全收官 + R33 单位授权 + CI 稳定化
 
 - **viewer 严格只读**：写操作（含直连 API）服务端一律 403；未配置 `PASS_CODE_SECRET` 时非回环自助注册 fail-closed。
-- **R33 单位授权**：上级配置单位模块授权矩阵并按 Ed25519 签发授权包，下级验签导入；写收窄 `GRANT_GUARD_MODE` 默认 off（可选 shadow→enforce）。**导入授权包前必须配置 `GRANT_PUBKEY`**，`GRANT_ALLOW_UNSIGNED` 永远 false。
+- **R33 单位授权**：上级配置单位模块授权矩阵并按 Ed25519 签发授权包，下级验签导入；写收窄 `GRANT_GUARD_MODE` 默认 off（可选 shadow→enforce）。生产建议配置 `GRANT_PUBKEY`；`GRANT_ALLOW_UNSIGNED` 默认 true，严格拒收未签名/无法验签包时设 false。
 - **发布门禁**：ARM64 工作流补 release gate（与 Windows 同口径：tag commit 的 PR Checks 必须全绿才发布）。
 - **CI 稳定性**：后端测试改 **12 段独立进程**（`--cov-append` 合并 + 覆盖率 100% 单一来源），消除“约 24 分钟进程消失”型失败；nightly 后端同步 6 段。
 - 测试规模：后端 13,926 用例（1 skipped）、前端 6,865 用例（328 文件）。

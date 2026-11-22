@@ -4704,6 +4704,10 @@ VERSION_HISTORY_DATA = [
         "description": "图标二次收口：外壳缓存按路径记账 / Linux 装完不刷图标缓存",
         "features": [
             (
+                "严格验签模式拒绝“带签名但无法验签”的包（安全）：apply_package 原在“有签名、无 GRANT_PUBKEY”分支无条件跳过验签，即使部署已设 GRANT_ALLOW_UNSI"
+                "GNED=false——任何人自签一个包即可绕过“强制验签”。"
+            ),
+            (
                 "Windows：图标缓存按\"路径\"记账，同名资源换不掉旧的白纸条目（主因）Windows 的 iconcache 以路径为键。升级后 exe 图标已换新，但 Explorer 继续复用"
                 "旧的空白条目；而安装器在提权上下文里执行 ie4uinit -show 常被拒（0x80070522）或静默无效，SHCNE_ASSOCCHANGED 又只清通用关联缓存、不清单条目。"
             ),
@@ -4716,6 +4720,19 @@ VERSION_HISTORY_DATA = [
             (
                 "tests/unit/test_icon_shortcut_chain.py（4 例）：钉死\"时间戳图标 + UPDATEITEM + ClearIconCache\"、deb.afte"
                 "rInstall 接线与 gtk-update-icon-cache、以及 ico 仍为「小尺寸 BMP + 256 PNG」。"
+            ),
+            (
+                "授权包签名说明与实现对齐：GRANT_ALLOW_UNSIGNED 自 v1.18.45 起默认 true，未签名包可导入；带签名但未配置 GRANT_PUBKEY 时，宽松模式跳过验签并"
+                "告警、严格模式拒收。此前 README、部署文档、用户手册、一键安装指南与 .env.example 均写成\"必须 false / 未配公钥即 400\"，与代码不符；现统一为“默认宽松"
+                "、生产建议配公钥、严格拒收显式设 false”。"
+            ),
+            (
+                "补充 /uploads 非回环部署边界：单机默认 127.0.0.1 可维持现状；HOST=0.0.0.0 或反向代理暴露时该静态目录无鉴权，建议在代理层加 auth_request/签名"
+                " URL，不要把后端端口直接暴露公网。"
+            ),
+            (
+                "前端认证存储注释纠正：Electron 下“记住登录”走 safeStorage 加密存储，仅浏览器/无 bridge 环境回退 localStorage；原注释与实现不符，已更正（无行为"
+                "变化）。"
             ),
         ],
     },

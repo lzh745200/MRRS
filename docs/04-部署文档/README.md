@@ -44,17 +44,19 @@
 - 旧角色值由 `normalize_role()` 自动归一：`approval_leader`/`manager` → `admin`，
   `operator` → `user`。
 
-### 3. R33 单位授权包签名（**导入授权包前必须先配置验签公钥**）
+### 3. R33 单位授权包签名（生产建议配置验签公钥）
 
 授权包 = 上级单位下发给下级单位的"模块授权矩阵"JSON，Ed25519 签名用于防篡改。
-出厂配置下不配置密钥，**导入授权包会直接失败**（带签名包 → 400「本机未配置验签公钥」；
-未签名包 → 400「授权包未签名」）。
+**出厂配置不强制签名**：`GRANT_ALLOW_UNSIGNED` 默认 `true`（v1.18.45 起，兼容没有密钥基建的离线摆渡），
+未签名包可直接导入；带签名但本机未配置 `GRANT_PUBKEY` 时：宽松模式（默认）跳过验签并写 WARNING，
+严格模式（`GRANT_ALLOW_UNSIGNED=false`）**直接拒收**——否则自签包可绕过强制验签。
 
 - **上级（下发方）**：配置 `GRANT_SIGNING_KEY`（32 字节 hex Ed25519 **私钥**）用于签发授权包。
-  ⚠️ 私钥必须保密、不得提交版本库、不得下发给下级。未配置时导出的包为未签名包，下级默认拒绝。
-- **下级（接收方）**：只配置 `GRANT_PUBKEY`（32 字节 hex **公钥**）用于导入验签。
-- `GRANT_ALLOW_UNSIGNED` **永远保持 false**：一旦开启即摧毁"授权包不可篡改"的防篡改设计
-  （仅离线演练可临时开启，演练后必须改回）。
+  ⚠️ 私钥必须保密、不得提交版本库、不得下发给下级。未配置时导出的包为未签名包。
+- **下级（接收方）**：配置 `GRANT_PUBKEY`（32 字节 hex **公钥**）后，带签名包强制验签、失败即拒收（fail-closed）。
+- **生产 / 多机建议**：配置 `GRANT_PUBKEY`；如需"无签名一律拒收"，显式设 `GRANT_ALLOW_UNSIGNED=false`
+  （`.env.example` 即该严格示例）。这会拒绝上级在无密钥基建下导出的未签名包，需两侧同步启用签名。
+- 单机离线不导入授权包时，上述配置均无影响。
 - 生成密钥对（在 `backend` 目录执行，输出 hex 私钥/公钥；私钥只留在上级机器）：
 
   ```bash
@@ -67,7 +69,7 @@
 - 配置位置：Linux（麒麟/国产系统 DEB）写入 `/opt/assistance-management-system/config/kylin.env`
   或 systemd `Environment=`；Windows 安装版配置系统/用户环境变量；后端可读取的 `.env` 同样生效。
 - 操作路径：上级「系统管理 → 组织与权限 → 单位授权」配置矩阵并导出签名包 → U 盘/内网摆渡
-  → 下级「单位授权 → 导入授权包」。**导入前必须先配置 `GRANT_PUBKEY`**。
+  → 下级「单位授权 → 导入授权包」。建议先配置 `GRANT_PUBKEY` 以启用验签；未配置时宽松模式跳过验签并告警，严格模式拒收（见第 3 条）。
 - 密钥轮换：旧包验签会全部失败，需上级用新私钥重签、所有下级同步更新公钥。
 
 ### 4. R33 写收窄（GRANT_GUARD_MODE）为可选能力
@@ -82,7 +84,27 @@
   不要直接把默认值改为 enforce（会把存量权限配置问题一次性暴露成 403）。
 - 切换只需改环境变量并重启后端，无需改代码。
 
-## 本版发布物（v1.18.34，2026-11-02）
+### 5. `/uploads` 在非回环部署下的边界（2026-11-22 复核）
+
+- 单机桌面（Electron）与默认配置只监听 `127.0.0.1`，`/uploads` 仅本机可读；本机 OS 用户本就可直接读文件，
+  维持现状即可。
+- 若改为 `HOST=0.0.0.0`、Docker 映射或反向代理暴露到局域网/公网，`/uploads` 是**无鉴权静态目录**：
+  文件名虽随机（不可枚举），但 URL 可能经导出文件、聊天、日志泄露给未登录访问者。
+- 生产建议：在反向代理层对 `/uploads/` 加 `auth_request` 或签名 URL；不要把后端端口直接暴露到公网。
+  如使用 Nginx，至少限制来源网段并禁用目录列表（目录列表默认已关闭）。
+
+## 本版发布物（v1.18.63，2026-11-22）
+
+- **Windows x64**：`MRRS-Setup-1.18.63-x64.exe`（NSIS，含 `latest.yml` / `.blockmap` 供增量更新）。
+  安装后脚本会写入带时间戳的 `icon-<时间戳>.ico` 并逐项刷新快捷方式图标，避免 Explorer
+  按路径复用旧白纸条目；已装机的机器可直接运行 `scripts/windows/fix-trust-and-icon.ps1` 修复。
+- **Linux ARM64（麒麟）**：`MRRS-Setup-1.18.63-arm64.deb` 与 standalone
+  `assistance-management-system_1.18.63_arm64.deb`；Electron DEB 新增 `after-install.sh`，
+  安装后刷新 hicolor 图标缓存与 UKUI 用户缓存。
+- 安装包与校验值以 GitHub Release `v1.18.63` 页面为准；升级前请先备份
+  `backend/data/rural_revitalization.db` 与上传目录。
+
+## 上一版发布物（v1.18.34，2026-11-02）
 
 GitHub Release [v1.18.34](https://github.com/lzh745200/MRRS/releases/tag/v1.18.34) 产出（Windows x64 + 麒麟 ARM64）：
 
@@ -248,7 +270,7 @@ sudo dpkg -i assistance-management-system_1.18.33_arm64.deb
   请核对 SHA256 后选择「仍要运行」。
 - 监控面板业务计数为 0：本版计数为进程内累计，重启后归零；跨重启请查日志/导出记录。
 - 多机/局域网注册被拒 403：所有实例统一配置同一 PASS_CODE_SECRET。
-- 导入授权包失败 400：本机未配置 GRANT_PUBKEY（或包未签名），见 README「部署前置检查」第 3 条。
+- 导入授权包被拒：严格模式（`GRANT_ALLOW_UNSIGNED=false`）下未签名包、或带签名但本机未配置 `GRANT_PUBKEY` 的包会被拒收；宽松模式仅未签名包可导入并告警。见 README「部署前置检查」第 3 条。
 - 写操作被 403 且响应头有 X-Org-Module-Policy：组织模块策略处于 shadow/enforce 下的预期拦截，
   联系超管调整「组织模块策略」。
 
@@ -292,7 +314,7 @@ sudo dpkg -i assistance-management-system_1.18.33_arm64.deb
 - 装完打不开 / 白屏 / 启动即退：见《打包态启动排障与离线包验证》
   （冻结模块自检 verify_frozen_modules.py、环境变量清单、日志位置）。
 - 多机/局域网注册被拒 403：所有实例统一配置同一 PASS_CODE_SECRET。
-- 导入授权包失败 400：本机未配置 GRANT_PUBKEY（或包未签名），见 README「部署前置检查」第 3 条。
+- 导入授权包被拒：严格模式（`GRANT_ALLOW_UNSIGNED=false`）下未签名包、或带签名但本机未配置 `GRANT_PUBKEY` 的包会被拒收；宽松模式仅未签名包可导入并告警。见 README「部署前置检查」第 3 条。
 - 写操作被 403 且响应头有 X-Org-Module-Policy：组织模块策略处于 shadow/enforce 下的预期拦截，
   联系超管调整「组织模块策略」。
 
@@ -338,7 +360,7 @@ sudo dpkg -i assistance-management-system_1.18.33_arm64.deb
 - 装完打不开 / 白屏 / 启动即退：见《打包态启动排障与离线包验证》
   （冻结模块自检 verify_frozen_modules.py、环境变量清单、日志位置）。
 - 多机/局域网注册被拒 403：所有实例统一配置同一 PASS_CODE_SECRET。
-- 导入授权包失败 400：本机未配置 GRANT_PUBKEY（或包未签名），见 README「部署前置检查」第 3 条。
+- 导入授权包被拒：严格模式（`GRANT_ALLOW_UNSIGNED=false`）下未签名包、或带签名但本机未配置 `GRANT_PUBKEY` 的包会被拒收；宽松模式仅未签名包可导入并告警。见 README「部署前置检查」第 3 条。
 
 五、反馈
 请在派单中附：安装包名 + 架构 + 操作系统版本 + 报错截图 + 日志
@@ -371,7 +393,7 @@ sudo dpkg -i assistance-management-system_1.18.33_arm64.deb
 - 装完打不开 / 白屏 / 启动即退：见《打包态启动排障与离线包验证》
   （冻结模块自检 verify_frozen_modules.py、环境变量清单、日志位置）。
 - 多机/局域网注册被拒 403：所有实例统一配置同一 PASS_CODE_SECRET。
-- 导入授权包失败 400：本机未配置 GRANT_PUBKEY（或包未签名），见 README「部署前置检查」第 3 条。
+- 导入授权包被拒：严格模式（`GRANT_ALLOW_UNSIGNED=false`）下未签名包、或带签名但本机未配置 `GRANT_PUBKEY` 的包会被拒收；宽松模式仅未签名包可导入并告警。见 README「部署前置检查」第 3 条。
 
 五、反馈
 请在派单中附：安装包名 + 架构 + 操作系统版本 + 报错截图 + 日志

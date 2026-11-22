@@ -299,6 +299,15 @@ class TestApplyPackage:
         assert result["signed"] is True
         assert "GRANT_PUBKEY" in caplog.text
 
+    def test_signed_without_public_key_rejected_in_strict_mode(self, db, keys):
+        """严格模式下“带签名但本机无公钥”必须拒收，否则自签包可绕过强制验签。"""
+        _org(db)
+        pkg, _ = self._pkg(keys)
+        with pytest.raises(GrantPackageError) as exc:
+            apply_package(db, pkg, allow_unsigned=False)
+        assert "GRANT_PUBKEY" in str(exc.value)
+        assert "拒绝导入" in str(exc.value)
+
     def test_bad_signature_rejected(self, db, keys):
         _org(db)
         pkg, public_hex = self._pkg(keys)
