@@ -354,7 +354,7 @@
 | Sass | 1.101.0（modern-compiler API） |
 | 角色体系 | 4 核心角色 (super_admin/admin/user/viewer) |
 | UI 设计系统 | **UI v2.0**：主题 3 套（军绿默认 / 深色大屏 / 户外高对比）+ 显示偏好 4 档（字号/密度/高对比/简化，localStorage `ui:prefs`）+ 三档场景预设（标准/紧凑/演示，首次启动按视口自适应）+ 统一 Token/组件类 |
-| 前端质量门禁 | 视觉回归基线 10 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 **121**（39 个文件；基线 345 → 121，只紧不松） |
+| 前端质量门禁 | 视觉回归基线 44 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 **121**（39 个文件；基线 345 → 121，只紧不松） |
 
 | 预防门禁 | 6 个棘轮扫描器（os._exit / 上传限长 / 无界读 / 子进程编码 / 目录替换 / 周期任务注册）接入 CI，NEW=0 |
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
@@ -440,7 +440,7 @@ cd frontend && npm install && npm run dev
 - **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`，6 板块 / 104 key / 84 带 path 入口 / 16 legacy）数据驱动侧栏/移动端/权限面板；Ctrl+K 命令面板 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）；侧栏当前板块金色竖条 + 收起态浮层 + 面包屑「板块 › 页面」；v1.15.15 起「一户一档」入口并入帮扶村「年度数据管理」页（`households` key 转 legacy，路由 `meta.menuKey` 跟随 `villages`）
 - **组件体系**: 全局类 `.app-card/.app-stat-card/.app-empty/.app-loading/.app-error/.app-table-toolbar` + `components/common/` 通用组件 10 个（BaseChart/BulkPasteDialog/ChangeHistoryDialog/ChartErrorState/ErrorBoundary/GuizhouRegionSelector/MoneyText/PageHeader/StatsCard/VirtualList）
 - **状态**: Pinia
-- **测试**: Vitest + Playwright；视觉回归基线（10 个关键页面 DOM 结构快照）+ Token 契约测试
+- **测试**: Vitest + Playwright；视觉回归基线（44 个关键页面 DOM 结构快照）+ Token 契约测试
 - **代码质量**: ESLint + Prettier + lint-staged
 
 ### 桌面
@@ -456,7 +456,7 @@ cd frontend && npm install && npm run dev
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
 | 前端单元测试 | Vitest | 7,588（351 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
-| 视觉回归 | Playwright | 10 个关键页面（DOM 结构快照，非像素） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 |
+| 视觉回归 | Playwright | 44 个关键页面（DOM 结构快照，非像素；含 30 个 tab 与 4 个表单） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 等 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |
 | 性能测试 | Locust | 配置可用 | 负载测试 |
 | 属性测试 | fast-check | 多组 | 组件属性验证 |
@@ -473,7 +473,7 @@ cd backend && pytest tests/ -q --tb=short
 # 前端
 cd frontend && npm test
 
-# 前端视觉回归基线（10 个关键页面 DOM 结构快照）
+# 前端视觉回归基线（44 个关键页面 DOM 结构快照）
 cd frontend && npx playwright test tests/e2e/visual --reporter=list
 
 # UI Token 契约（主题 3 套 / 显示偏好 / 全局类）
@@ -741,7 +741,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
   `components/common/` 6 个通用组件（AppPageHeader/AppStatCard/AppEmpty/AppLoading/AppError/AppTableToolbar）
 - 🧭 **导航体验**：侧栏当前板块金色竖条、收起态 hover/键盘聚焦浮层、面包屑「板块 › 页面」、Ctrl+K 命令面板
 - 🖥️ **工作台/大屏**：工作台 KPI 统计卡 + 待办清单 + 图表层级；大屏三层结构 + 3m/6m/10m 距离字号分档 + 15s 自动轮播（可暂停/关闭）
-- 🧪 **视觉回归门禁**：`tests/unit/ui/ui-tokens.test.ts`（Token/主题/偏好/类契约）+ `tests/e2e/visual`（10 页 DOM 结构基线）；
+- 🧪 **视觉回归门禁**：`tests/unit/ui/ui-tokens.test.ts`（Token/主题/偏好/类契约）+ `tests/e2e/visual`（44 页 DOM 结构基线）；
   硬编码色基线 345 → 305（57 个文件，目标 ≤200，改动文件零新增）
 - 🐛 **本轮修复的真实问题**：多列表页 `page_size=500` 超后端上限 200 → 422（统一为 200）；工作台 KPI 取消请求被误判为错误（已降级）；
   Token 重复定义覆盖（已清理）；面包屑最长路径优先（`/rural-works/list` 不再错误命中父级目录）
