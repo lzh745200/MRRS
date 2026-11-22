@@ -437,7 +437,7 @@ cd frontend && npm install && npm run dev
 - **框架**: Vue 3 + TypeScript + Vite
 - **UI**: Element Plus + ECharts + Leaflet；**UI v2.0 设计系统**（`tokens.scss`：主色阶/卡片边框/两级阴影/三档圆角/字号 calc 缩放/行高 1.6/tabular-nums）
 - **主题与显示偏好**: 主题 3 套（军绿默认 / 深色大屏 `dark-bigscreen` / 户外高对比 `outdoor`）；显示偏好 4 档（字号 compact/standard/large、密度 comfortable/compact、高对比、简化模式；localStorage `ui:prefs` + `<html data-*>`），外观设置面板统一入口
-- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`，6 板块 / 104 key / 84 带 path 入口 / 16 legacy）数据驱动侧栏/移动端/权限面板；Ctrl+K 命令面板 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）；侧栏当前板块金色竖条 + 收起态浮层 + 面包屑「板块 › 页面」；v1.15.15 起「一户一档」入口并入帮扶村「年度数据管理」页（`households` key 转 legacy，路由 `meta.menuKey` 跟随 `villages`）
+- **导航**: 后端单一菜单源（`menus.py` v2 `sections`+`flat_keys`，6 板块 / 104 key / 85 带 path 入口 / 15 legacy）数据驱动侧栏/移动端/权限面板；Ctrl+K 命令面板 + 收藏/最近访问；7 板块默认折叠、可展开（`nav:expanded-sections`）；侧栏当前板块金色竖条 + 收起态浮层 + 面包屑「板块 › 页面」；v1.15.15 起「一户一档」入口并入帮扶村「年度数据管理」页（`households` key 转 legacy，路由 `meta.menuKey` 跟随 `villages`）
 - **组件体系**: 全局类 `.app-card/.app-stat-card/.app-empty/.app-loading/.app-error/.app-table-toolbar` + `components/common/` 通用组件 10 个（BaseChart/BulkPasteDialog/ChangeHistoryDialog/ChartErrorState/ErrorBoundary/GuizhouRegionSelector/MoneyText/PageHeader/StatsCard/VirtualList）
 - **状态**: Pinia
 - **测试**: Vitest + Playwright；视觉回归基线（44 个关键页面 DOM 结构快照）+ Token 契约测试
@@ -776,7 +776,7 @@ Copyright © 2025-2026 贵州省乡村振兴项目组
 - 🧰 **系统管理 6 聚合页**：组织与权限 / 安全与审计 / 运维与监控 / 备份与存储 / 系统设置 / 关于与反馈，
   页内 Tab 切换；旧页面、旧路由、旧菜单 key 全部保留（深链不失效、权限包配置兼容）
 - ⌨️ **导航增强**：Ctrl+K 菜单搜索、最近访问与收藏（localStorage `nav:recent` / `nav:favorites`，上限 8）
-- ✅ **门禁**：`scripts/check_menu_alignment.py` 重写为规则 A~E（当前口径 6 板块 / 104 key / 84 带 path 入口 / 16 legacy 全对齐）；
+- ✅ **门禁**：`scripts/check_menu_alignment.py` 重写为规则 A~E（当前口径 6 板块 / 104 key / 85 带 path 入口 / 15 legacy 全对齐）；
   相关改动文件覆盖率 100%，`menus.py` 语句+分支 100%；发布门禁全量实测：后端 13,550 用例 / 语句 100.00%（43,293/43,293）+ 分支 100.00%（10,636/10,636），前端 6,707 用例（316 文件）/ 12 组 glob 四指标 100%
 
 ### 2026-09-14（v1.12.8）
