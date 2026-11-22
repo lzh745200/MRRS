@@ -47,12 +47,50 @@ ACTION_ENUM: tuple[str, ...] = ("read", "write", "delete", "manage_roles")
 # 通配前缀：仅用于 legacy 别名展开，**不得**出现在任何落库的码里。
 WILDCARD = "*"
 
+# 可导航且承载动作的菜单类型：page 与 console 都有 path、都能挂按钮/接口；
+# kind=tab 是父页内部的子视图，不单独作为动作页面；legacy 条目无 path，只是历史
+# 权限 key，不能当成“页面”渲进勾选界面（否则勾了也没有导航入口）。
+NAVIGABLE_KINDS: tuple[str, ...] = ("page", "console")
+
 # 无对应页面的模块，其能力只能以"模块级动作码"存在（UI 不渲染，接口可判）。
 # 键 = write_route_map 的 module key；值为附加动作（基础 read/write/delete 自动补齐）。
 MODULE_ONLY_EXTRA_ACTIONS: dict[str, tuple[str, ...]] = {
     "users-orgs": ("manage_roles",),
     "roles": ("manage_roles",),
 }
+
+# legacy 的 `data:*` / `approve:*` 是跨模块粗粒度码。这里用**数据域白名单**展开，
+# 绝不能用 `*` 扫全部目录：`data:create` 一旦展开到 system/roles/users-orgs，
+# 等于把系统管理写权限送给普通数据录入员。新增业务页时必须显式归入此表，
+# 门禁第 9 条会检查“敏感模块不得被 data/approve 别名覆盖”。
+DATA_ALIAS_KEYS: frozenset[str] = frozenset({
+    # 页面（审批与报表模板/导出不在此列：前者只走 approve:*，后者由 data:export 精确授予）
+    "analytics-dashboard", "analytics-map", "batch-operations", "bigscreen",
+    "comprehensive-entry", "consumption", "data-overview", "data-package",
+    "data-package-receive", "data-package-report", "data-package-version",
+    "data-sync-export", "data-sync-import", "data-verify", "donation",
+    "effectiveness-evaluate", "effectiveness-rankings", "funds-admin",
+    "funds-analysis", "funds-anomaly", "funds-budget", "funds-contract",
+    "funds-lifecycle", "funds-report", "funds-settlement", "funds-transfer",
+    "funds-user", "handover", "households", "media-library", "messages",
+    "pairing", "policies", "projects", "reminder", "rural-works",
+    "rural-works-list", "schools", "todos", "villages", "work-analysis",
+    "work-calendar",
+    # 纯后端模块（无独立导航页）
+    "analytics", "batch-import", "checkin", "data", "data-tier",
+    "effectiveness", "funds", "households", "map-tiles", "sentiment",
+})
+
+# 明确的敏感模块：任何 `data:*` / `approve:*` 通配都不得覆盖它们。
+SENSITIVE_MODULE_KEYS: frozenset[str] = frozenset({
+    "system", "system-permission-packs", "system-console-about",
+    "system-console-ops", "system-console-org", "system-console-security",
+    "system-console-settings", "system-console-storage", "users-orgs",
+    "organizations", "roles", "menus", "audit", "backup", "cache",
+    "config-package", "control-package", "encryption", "health-check",
+    "machine-code", "monitor", "pass-code", "secrets", "validation-rules",
+    "zero-trust",
+})
 
 # 17 条 legacy 码 → 具体动作码（v1.2 §1.2 的定稿表）。
 # 目标既可以是页面级（`villages:read`），也可以是模块级（`users-orgs:read`）——
@@ -71,16 +109,17 @@ LEGACY_ACTION_ALIAS: dict[str, tuple[str, ...]] = {
         "report-templates:read", "report-templates:write", "report-templates:delete",
         "report-export:read", "report-export:write", "report-export:delete",
     ),
-    # 跨模块操作类（通配展开到"所有具备该动作的码"）
-    "data:view": (f"{WILDCARD}:read",),
-    "data:create": (f"{WILDCARD}:write",),
-    "data:edit": (f"{WILDCARD}:write",),
-    "data:delete": (f"{WILDCARD}:delete",),
-    "data:export": (f"{WILDCARD}:read",),
-    "data:import": (f"{WILDCARD}:write",),
-    "approve:view": (f"{WILDCARD}:read",),
-    "approve:submit": (f"{WILDCARD}:write",),
-    "approve:process": (f"{WILDCARD}:write",),
+    # 跨模块操作类：只展开到 DATA_ALIAS_KEYS，绝不扫 system/roles/users-orgs。
+    "data:view": ("@data:read", "report-export:read", "report-templates:read"),
+    "data:create": ("@data:write",),
+    "data:edit": ("@data:write",),
+    "data:delete": ("@data:delete",),
+    # 导出是副作用写操作，但不能因此获得数据编辑权：只给报表导出页的 write。
+    "data:export": ("report-export:write",),
+    "data:import": ("batch-import:write", "data-sync-import:write", "data-package:write"),
+    "approve:view": ("approval:read",),
+    "approve:submit": ("approval:write",),
+    "approve:process": ("approval:write",),
 }
 
 
@@ -138,6 +177,11 @@ class ActionCatalog:
     def _expand_target(self, target: str) -> set[str]:
         """展开单个别名目标，支持 `*:<action>` 通配。"""
         prefix, sep, action = target.partition(":")
+        if sep and prefix == "@data":
+            return {
+                c for c in self.all_codes
+                if c.endswith(f":{action}") and c.split(":", 1)[0] in DATA_ALIAS_KEYS
+            }
         if sep and prefix == WILDCARD:
             return {c for c in self.all_codes if c.endswith(f":{action}")}
         return {target}
@@ -191,32 +235,35 @@ def _build_module_actions(write_modules: Iterable[str], page_keys: set[str]) -> 
     return out
 
 
-# 单数前缀来源：前端 `PermissionTreePanel.vue` 的 MODULE_DEFINITIONS 就写这几个
-# （它把 `village:read` 写进 rbac_user_permissions）。只为这些**已知**单数建别名，
-# 不用"去掉末尾 s"的朴素规则 —— 那会把 effectiveness 切成 effectivenes、
-# 把 work-analysis 切成 work-analysi，产生一堆无意义别名。
-KNOWN_SINGULAR_PREFIXES: tuple[str, ...] = (
-    "user", "village", "project", "fund", "policy", "school",
-    "org", "analytics", "audit", "backup", "system",
-)
+# 前端 `PermissionTreePanel.vue` 实际写出的单数前缀 → 目录目标。
+# 不能按“去尾加 s”推导：user→users-orgs、org→organizations、fund→funds 都是不规则；
+# 而 analytics/audit/backup/system 本身就是模块级 key。目标是 page 或 module 均可。
+SINGULAR_TARGET: dict[str, str] = {
+    "user": "users-orgs",
+    "village": "villages",
+    "project": "projects",
+    "fund": "funds",
+    "policy": "policies",
+    "school": "schools",
+    "org": "organizations",
+    "analytics": "analytics",
+    "audit": "audit",
+    "backup": "backup",
+    "system": "system",
+}
 
-# 不规则复数（不能靠 +s 推导）。当前只有 policy → policies。
-IRREGULAR_PLURALS: dict[str, str] = {"policy": "policies"}
 
+def _build_prefix_alias(page_keys: Iterable[str], module_keys: Iterable[str]) -> dict[str, str]:
+    """单数前缀 → 真实目录目标（页面或模块级）。
 
-def _build_prefix_alias(page_keys: Iterable[str]) -> dict[str, str]:
-    """单数前缀 → 复数页面 key（只针对已知单数，且目标必须真实存在）。
-
-    例：`village` → `villages`、`project` → `projects`、`policy` → `policies`；
-    `fund` 没有对应页面（资金页是 `funds-admin` / `funds-user`）→ 不建别名，
-    这类码继续按模块级处理。
+    目标不存在时不建别名（宁可让门禁报出未知码，也不把权限悄悄映射到错误模块）。
+    单数本身已是目标时无需别名（`system:read` 原样就是合法模块级码）。
     """
-    keys = set(page_keys)
+    keys = set(page_keys) | set(module_keys)
     alias: dict[str, str] = {}
-    for singular in KNOWN_SINGULAR_PREFIXES:
-        plural = IRREGULAR_PLURALS.get(singular, f"{singular}s")
-        if plural in keys and singular not in keys:
-            alias[singular] = plural
+    for singular, target in SINGULAR_TARGET.items():
+        if target in keys and singular not in keys and target != singular:
+            alias[singular] = target
     return alias
 
 
@@ -226,7 +273,15 @@ def build_catalog() -> ActionCatalog:
     from app.core.write_route_map import MODULE_RULES
 
     entries = _iter_entries(MENU_DEFINITIONS)
-    page_keys = [e["key"] for e in entries if e.get("kind") == "page" and e.get("key")]
+    # 只有“有导航路径且非 legacy”的 page/console 才是动作页面；不要把 15 个
+    # legacy key 或无 path 的历史 key 当页面，也不要漏掉 6 个 system console 页。
+    page_keys = [
+        e["key"] for e in entries
+        if e.get("kind") in NAVIGABLE_KINDS
+        and e.get("path")
+        and not e.get("legacy")
+        and e.get("key")
+    ]
     write_modules = {module for _prefix, module in MODULE_RULES}
 
     page_actions = _build_page_actions(page_keys, write_modules)
@@ -241,7 +296,7 @@ def build_catalog() -> ActionCatalog:
         page_actions=page_actions,
         module_actions=module_actions,
         all_codes=all_codes,
-        prefix_alias=_build_prefix_alias(page_keys),
+        prefix_alias=_build_prefix_alias(page_keys, module_actions),
         legacy_alias=dict(LEGACY_ACTION_ALIAS),
     )
 

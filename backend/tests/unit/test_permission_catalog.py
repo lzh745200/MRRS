@@ -71,18 +71,22 @@ def test_build_module_actions_without_extra_actions():
     assert out["audit"] == ("read", "write", "delete")
 
 
-def test_build_prefix_alias_handles_irregular_and_missing_targets():
-    alias = pc._build_prefix_alias(["villages", "policies", "funds-admin", "system"])
+def test_build_prefix_alias_handles_irregular_and_module_targets():
+    alias = pc._build_prefix_alias(
+        ["villages", "policies", "funds-admin", "system"],
+        {"funds", "organizations", "users-orgs", "analytics", "audit", "backup", "system"},
+    )
     assert alias["village"] == "villages"
     assert alias["policy"] == "policies"
-    # fund 的复数 funds 不是页面（资金页是 funds-admin）→ 不建别名
-    assert "fund" not in alias
-    # system 本身是页面，且 systems 不存在 → 不建
-    assert "system" not in alias
+    assert alias["fund"] == "funds"          # 模块级目标，不是页面
+    assert alias["user"] == "users-orgs"
+    assert alias["org"] == "organizations"
+    assert "system" not in alias             # 单数本身就是目标 → 不建
+    assert "analytics" not in alias
 
 
 def test_build_prefix_alias_skips_when_singular_is_also_a_page():
-    alias = pc._build_prefix_alias(["policy", "policies"])
+    alias = pc._build_prefix_alias(["policy", "policies"], set())
     assert alias == {}
 
 
@@ -162,8 +166,40 @@ def test_expand_target_wildcard_and_plain():
 def test_page_keys_and_actions_of_page():
     catalog = pc.get_catalog()
     assert "villages" in catalog.page_keys()
+    assert "system-console-org" in catalog.page_keys()
     assert "read" in catalog.actions_of_page("villages")
     assert catalog.actions_of_page("not-a-page") == ()
+
+
+def test_catalog_excludes_legacy_pages_and_includes_console():
+    catalog = pc.get_catalog()
+    # 15 个 legacy key 没有 path，不能出现在动作页面里（勾了也没有导航入口）
+    assert "system" not in catalog.page_actions
+    assert "households" not in catalog.page_actions
+    # 6 个 system console 有真实 path，必须可被勾选/守卫
+    assert "system-console-org" in catalog.page_actions
+    assert "system-console-security" in catalog.page_actions
+
+
+def test_frontend_singular_prefixes_are_known():
+    catalog = pc.get_catalog()
+    for prefix in ("user", "village", "project", "fund", "policy", "school",
+                   "org", "analytics", "audit", "backup", "system"):
+        assert catalog.is_known(f"{prefix}:read"), prefix
+
+
+def test_data_alias_does_not_escalate_to_sensitive_modules():
+    catalog = pc.get_catalog()
+    for alias in ("data:view", "data:create", "data:edit", "data:delete",
+                  "approve:view", "approve:submit", "approve:process"):
+        expanded = catalog.expand([alias])
+        assert not any(code.split(":", 1)[0] in pc.SENSITIVE_MODULE_KEYS for code in expanded), alias
+    assert "villages:write" in catalog.expand(["data:create"])
+    assert "projects:write" in catalog.expand(["data:create"])
+    assert "roles:write" not in catalog.expand(["data:create"])
+    assert "approval:write" not in catalog.expand(["data:create"])
+    assert "report-templates:write" not in catalog.expand(["data:create"])
+    assert "report-export:read" in catalog.expand(["data:view"])
 
 
 def test_get_catalog_is_cached_until_reset():

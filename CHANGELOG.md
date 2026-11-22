@@ -1,3 +1,18 @@
+## [Unreleased]
+
+### Added
+
+- **动作权限目录复核**：`permission_catalog` 改为只收录 54 个可导航动作页
+  （48 page + 6 console，排除 15 个无 path 的 legacy key），补 7 条单数前缀别名；
+  新增 24 例目录测试与 10 条目录门禁（已挂 `stack-alignment`）。
+
+### Fixed
+
+- `data:*` / `approve:*` 不再用 `*` 扫全目录：`data:create` 不得获得
+  `roles/users-orgs/system` 写权限；`data:view` 仅额外给报表读取。
+- `system:manage` / `user:manage` / `org:manage` / `role:manage` 明确映射到模块级，
+  `report:manage` 映射到两个报表页面；消除 legacy 悬空和假页面。
+
 ## [1.18.60] - 2026-11-21 — 全库审计收口：导出隔离 / 时区 / 审批提示 / 安装可靠性
 
 ### Fixed

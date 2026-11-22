@@ -8,7 +8,7 @@
 而**运行期不会报错**——只是按钮不出现、权限勾了不生效。这类问题人眼极难发现，
 必须靠门禁。
 
-## 断言的 8 条
+## 断言的 10 条
 
 1. 目录能正常构建（菜单定义 / 写路由映射没有结构性错误）；
 2. 每个 `kind == "page"` 的菜单条目都有非空动作集；
@@ -18,7 +18,9 @@
 5. `PERMISSION_OPTIONS` 的每一条都在 `LEGACY_ACTION_ALIAS` 里（否则切换后该码 403）；
 6. 每条 legacy 别名的目标都真实存在（含 `*:<action>` 展开后非空）——防悬空映射；
 7. 单数前缀别名的目标必须是真实页面 key；
-8. 模块级动作与页面级动作不重叠（重叠会让同一码有两个来源，判定口径不清）。
+8. 模块级动作与页面级动作不重叠（重叠会让同一码有两个来源，判定口径不清）；
+9. 前端 `PermissionTreePanel` 的 11 个单数前缀必须仍可解析；
+10. `data:*` / `approve:*` 别名不得覆盖敏感模块，且非 legacy 页面必须有 path。
 
 ## 用法
 
@@ -39,6 +41,8 @@ sys.path.insert(0, ".")
 
 from app.core.permission_catalog import (  # noqa: E402
     ACTION_ENUM,
+    DATA_ALIAS_KEYS,
+    SENSITIVE_MODULE_KEYS,
     WILDCARD,
     get_catalog,
 )
@@ -51,7 +55,7 @@ def _permission_option_codes() -> list[str]:
     return [str(item.get("code")) for item in PERMISSION_OPTIONS if item.get("code")]
 
 
-def check() -> list[str]:
+def check() -> list[str]:  # noqa: C901 - 10 条断言按方案顺序展开，拆散后更难对照
     """返回问题列表（空 = 通过）。"""
     problems: list[str] = []
 
@@ -103,22 +107,67 @@ def check() -> list[str]:
             if prefix == WILDCARD:
                 if not any(c.endswith(f":{action}") for c in catalog.all_codes):
                     dangling.append(f"{code} → {target}")
+            elif prefix == "@data":
+                if not any(
+                    c.endswith(f":{action}") and c.split(":", 1)[0] in DATA_ALIAS_KEYS
+                    for c in catalog.all_codes
+                ):
+                    dangling.append(f"{code} → {target}")
             elif target not in catalog.all_codes:
                 dangling.append(f"{code} → {target}")
     if dangling:
         problems.append("别名指向不存在的码: " + ", ".join(dangling[:8]))
 
-    # 6. 前缀别名目标必须是页面
+    # 6. 前缀别名目标必须是页面或模块级 key（user/org/fund 的目标是模块级）
+    valid_targets = set(catalog.page_actions) | set(catalog.module_actions)
     bad_prefix = [
-        f"{s} → {p}" for s, p in sorted(catalog.prefix_alias.items()) if p not in catalog.page_actions
+        f"{s} → {p}" for s, p in sorted(catalog.prefix_alias.items()) if p not in valid_targets
     ]
     if bad_prefix:
-        problems.append("单数前缀别名指向非页面 key: " + ", ".join(bad_prefix))
+        problems.append("单数前缀别名指向不存在的页面/模块 key: " + ", ".join(bad_prefix))
 
-    # 7. 页面级与模块级不得重叠
+    # 7. 前端 PermissionTreePanel 的 11 个单数前缀必须仍可解析，否则现有勾选
+    # 写出的 village:read / fund:write 会变成未知码，切换后静默降权。
+    frontend_prefixes = (
+        "user", "village", "project", "fund", "policy", "school",
+        "org", "analytics", "audit", "backup", "system",
+    )
+    unresolved = [
+        p for p in frontend_prefixes
+        if not catalog.is_known(f"{p}:read")
+    ]
+    if unresolved:
+        problems.append("前端权限面板单数前缀无法解析: " + ", ".join(unresolved))
+
+    # 8. data/approve 粗粒度别名不得覆盖敏感模块（防止 data:create 变成系统管理员）
+    for alias_name in ("data:view", "data:create", "data:edit", "data:delete",
+                       "approve:view", "approve:submit", "approve:process"):
+        leaked = sorted(
+            code for code in catalog.expand([alias_name])
+            if code.split(":", 1)[0] in SENSITIVE_MODULE_KEYS
+        )
+        if leaked:
+            problems.append(f"{alias_name} 覆盖敏感模块: " + ", ".join(leaked[:8]))
+
+    # 9. 页面级与模块级不得重叠
     overlap = sorted(set(catalog.page_actions) & set(catalog.module_actions))
     if overlap:
         problems.append("页面级与模块级动作重叠: " + ", ".join(overlap[:8]))
+
+    # 10. 菜单结构：非 legacy 的 page/console 必须有 path；legacy 不得被当成
+    # 可导航页面（这正是 v1.2 把 15 个无 path 历史 key 算成页面的根因）。
+    from app.api.v1.menus import MENU_DEFINITIONS
+    from app.core.permission_catalog import _iter_entries
+
+    for entry in _iter_entries(MENU_DEFINITIONS):
+        kind = entry.get("kind")
+        if kind not in ("page", "console"):
+            continue
+        key = entry.get("key") or "<unknown>"
+        if not entry.get("legacy") and not entry.get("path"):
+            problems.append(f"非 legacy 页面缺少 path: {key}")
+        if entry.get("legacy") and entry.get("path"):
+            problems.append(f"legacy 页面不应有导航 path: {key}")
 
     return problems
 

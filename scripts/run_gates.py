@@ -83,6 +83,8 @@ GATES: List[Gate] = [
     _gate("hardcoded_styles", "scripts/check_hardcoded_styles.py", why="硬编码色棘轮"),
     _gate("stack_alignment", "../scripts/check_stack_alignment.py", backend=True, why="前后端/库四层对齐"),
     _gate("route_auth", "../scripts/check_route_auth.py", backend=True, why="路由认证覆盖"),
+    _gate("permission_catalog", "../scripts/check_permission_catalog.py", backend=True,
+          why="动作权限目录：页面/模块/别名/敏感越权一致"),
     _gate("type_debt", "../scripts/check_type_debt.py", backend=True, args=["--no-mypy"],
           why="技术债棘轮（本地快速档，不含 mypy）"),
     _gate("error_leaks", "scripts/check_error_message_leaks.py", why="错误文案不泄技术细节"),
