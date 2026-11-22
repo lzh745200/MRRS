@@ -1,6 +1,6 @@
 {
   "name": "Assistance-Management-Information-System",
-  "version": "1.18.62",
+  "version": "1.18.63",
   "private": true,
   "description": "帮扶管理系统 - 贵州省版 Standalone桌面应用",
   "main": "electron/main.js",
@@ -190,7 +190,8 @@
         "libcairo2",
         "libxtst6",
         "libatspi2.0-0"
-      ]
+      ],
+      "afterInstall": "scripts/linux/after-install.sh"
     }
   }
 }

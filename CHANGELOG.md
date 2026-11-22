@@ -1,3 +1,33 @@
+## [1.18.63] - 2026-11-22 — 图标二次收口：外壳缓存按路径记账 / Linux 装完不刷图标缓存
+
+> 复盘：v1.18.44 修的是"图标资源"（ICO 混合编码、exe 内嵌 7 档、快捷方式统一源），
+> 资源层此后一直正确（门禁持续校验）。但现场仍报白纸，实测证据指向另外两环：
+> `%LOCALAPPDATA%\Microsoft\Windows\Explorer\iconcache_256.db` 自 11-19 后再未更新，
+> 而 11-21 的安装日志里明确写着「刷新图标缓存失败：客户端没有所需的特权」。
+
+### Fixed
+
+- **Windows：图标缓存按"路径"记账，同名资源换不掉旧的白纸条目（主因）**
+  Windows 的 iconcache 以路径为键。升级后 exe 图标已换新，但 Explorer 继续复用旧的空白条目；
+  而安装器在提权上下文里执行 `ie4uinit -show` 常被拒（0x80070522）或静默无效，
+  `SHCNE_ASSOCCHANGED` 又只清通用关联缓存、不清单条目。
+  修复：安装后脚本把 `app-circle.ico` 复制成 **`icon-<时间戳>.ico`**，快捷方式图标指向新文件
+  —— 缓存键必然变化，**不依赖任何缓存刷新接口**；同时对桌面/开始菜单两个 .lnk 逐个发
+  `SHCNE_UPDATEITEM`，最后再补 `-ClearIconCache` + `-show`（失败不影响主方案）。
+- **Linux（麒麟）：Electron DEB 装完不刷新图标缓存**
+  electron-builder 默认 after-install 只跑 `update-mime-database` / `update-desktop-database`，
+  **不含** `gtk-update-icon-cache`，UKUI 的菜单/桌面因此解析不到 `Icon=assistance-management-system`。
+  修复：新增 `scripts/linux/after-install.sh` 并接到 `build.deb.afterInstall`，
+  安装后刷新 hicolor 缓存、更新 desktop 数据库，并清理用户级 UKUI 图标缓存。
+  （standalone DEB 的 postinst 早已包含这两步，本次只补 Electron DEB。）
+- **现场修复脚本同步升级**：`fix-trust-and-icon.ps1` 改为同样"时间戳图标 + 逐项通知"，
+  已装机的机器无需重装即可修好。
+
+### Added
+
+- `tests/unit/test_icon_shortcut_chain.py`（4 例）：钉死"时间戳图标 + UPDATEITEM + ClearIconCache"、
+  `deb.afterInstall` 接线与 `gtk-update-icon-cache`、以及 ico 仍为「小尺寸 BMP + 256 PNG」。
+
 ## [1.18.62] - 2026-11-22 — 权限解析 fail-closed 与大屏 Token 复核
 
 ### Fixed

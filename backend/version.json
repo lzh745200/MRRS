@@ -1,5 +1,5 @@
 {
-  "version": "1.18.62",
+  "version": "1.18.63",
   "build": "20261122",
   "release_date": "2026-11-22",
   "description": "权限解析 fail-closed 与大屏 Token 复核",

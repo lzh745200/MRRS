@@ -70,10 +70,21 @@ if (-not $SkipUnblock) {
   Ok "解除下载标记 $n 个文件"
 }
 
-# ── 3. 重建快捷方式（图标统一指向 ico） ───────────────────────────────
+# ── 3. 重建快捷方式（图标指向**带时间戳的新文件**） ──────────────────
+# 2026-11-22：Windows 图标缓存按"路径"记账。已中招的机器上，同名 exe/ico 的
+# 空白缓存条目不会被 ie4uinit 清掉（提权会话里常直接 0x80070522 失败）。
+# 换成新文件名 → 缓存键必然变化 → Explorer 只能重新提取。
+$lnkPaths = @()
 if (-not $SkipShortcut) {
-  # 2026-11-21：优先使用主程序内嵌图标（构建期已校验 7 档），避免 ico 路径/缓存问题
   $iconLoc = "$exe,0"
+  if (Test-Path -LiteralPath $ico) {
+    $stamp = Get-Date -Format "yyyyMMddHHmmss"
+    $icoDst = Join-Path (Split-Path -Parent $ico) "icon-$stamp.ico"
+    Copy-Item -LiteralPath $ico -Destination $icoDst -Force
+    $iconLoc = "$icoDst,0"
+  } else {
+    Warn "安装目录缺少 app-circle.ico，回退 exe 内嵌图标；建议重装或从安装包补回该文件"
+  }
   $targets = @(
     (Join-Path ([Environment]::GetFolderPath("CommonDesktopDirectory")) "帮扶管理系统.lnk"),
     (Join-Path ([Environment]::GetFolderPath("CommonPrograms")) "帮扶管理系统.lnk")
@@ -86,23 +97,31 @@ if (-not $SkipShortcut) {
     $lnk.IconLocation = $iconLoc
     $lnk.Description = "帮扶管理系统 - 贵州省版 Standalone桌面应用"
     $lnk.Save()
+    $lnkPaths += $lnkPath
     Ok "快捷方式已重建：$lnkPath（图标 $iconLoc）"
   }
-  if (-not (Test-Path -LiteralPath $ico)) {
-    Warn "安装目录缺少 app-circle.ico，快捷方式回退到 exe 内嵌图标；建议重装或从安装包补回该文件"
-  }
+  [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell)
 }
 
-# ── 4. 刷新图标缓存 ───────────────────────────────────────────────────
-Start-Process -FilePath (Join-Path $env:SystemRoot "System32\ie4uinit.exe") -ArgumentList "-show" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
-if (-not ("Shell32Notify" -as [type])) {
-  Add-Type -Namespace Win32 -Name Shell32Notify -MemberDefinition @'
+# ── 4. 刷新图标缓存（清缓存 + 逐项通知） ─────────────────────────────
+$ie4 = Join-Path $env:SystemRoot "System32\ie4uinit.exe"
+Start-Process -FilePath $ie4 -ArgumentList "-ClearIconCache" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
+Start-Process -FilePath $ie4 -ArgumentList "-show" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue
+if (-not ("Shell32Notify2" -as [type])) {
+  Add-Type -Namespace Win32 -Name Shell32Notify2 -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("shell32.dll")]
-public static extern void SHChangeNotify(int eventId, uint flags, System.IntPtr item1, System.IntPtr item2);
+public static extern void AssocChanged(int eventId, uint flags, System.IntPtr item1, System.IntPtr item2);
+[System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern void UpdateItem(int eventId, uint flags, string item1, System.IntPtr item2);
 '@
 }
-[Win32.Shell32Notify]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
-Ok "图标缓存已刷新（若桌面仍显示旧图标，注销一次或按 F5）"
+if ("Shell32Notify2" -as [type]) {
+  foreach ($lp in $lnkPaths) {
+    [Win32.Shell32Notify2]::UpdateItem(0x00002000, 0x0005, $lp, [IntPtr]::Zero)  # SHCNE_UPDATEITEM
+  }
+  [Win32.Shell32Notify2]::AssocChanged(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+}
+Ok "图标缓存已清理并通知外壳（若桌面仍显示旧图标，注销一次或按 F5）"
 
 # ── 5. 结果核验 ───────────────────────────────────────────────────────
 $sig = Get-AuthenticodeSignature -LiteralPath $exe
