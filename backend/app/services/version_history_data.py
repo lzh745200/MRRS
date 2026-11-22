@@ -4698,4 +4698,25 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.63",
+        "date": "2026-11-22",
+        "description": "图标二次收口：外壳缓存按路径记账 / Linux 装完不刷图标缓存",
+        "features": [
+            (
+                "Windows：图标缓存按\"路径\"记账，同名资源换不掉旧的白纸条目（主因）Windows 的 iconcache 以路径为键。升级后 exe 图标已换新，但 Explorer 继续复用"
+                "旧的空白条目；而安装器在提权上下文里执行 ie4uinit -show 常被拒（0x80070522）或静默无效，SHCNE_ASSOCCHANGED 又只清通用关联缓存、不清单条目。"
+            ),
+            (
+                "Linux（麒麟）：Electron DEB 装完不刷新图标缓存electron-builder 默认 after-install 只跑 update-mime-database / up"
+                "date-desktop-database，不含 gtk-update-icon-cache，UKUI 的菜单/桌面因此解析不到 Icon=assistance-management-sy"
+                "stem。"
+            ),
+            "现场修复脚本同步升级：fix-trust-and-icon.ps1 改为同样\"时间戳图标 + 逐项通知\"，已装机的机器无需重装即可修好。",
+            (
+                "tests/unit/test_icon_shortcut_chain.py（4 例）：钉死\"时间戳图标 + UPDATEITEM + ClearIconCache\"、deb.afte"
+                "rInstall 接线与 gtk-update-icon-cache、以及 ico 仍为「小尺寸 BMP + 256 PNG」。"
+            ),
+        ],
+    },
 ]
