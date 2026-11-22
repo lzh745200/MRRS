@@ -938,7 +938,12 @@ onUnmounted(() => {
 }
 .big-screen {
   min-height: 100vh;
-  background: radial-gradient(ellipse at top, var(--bs-bg-top) 0%, var(--bs-bg-mid) 60%, var(--bs-bg-deep) 100%);
+  background: radial-gradient(
+    ellipse at top,
+    var(--bs-bg-top) 0%,
+    var(--bs-bg-mid) 60%,
+    var(--bs-bg-deep) 100%
+  );
   color: var(--bs-text-strong);
   padding: 16px 24px 8px;
   display: flex;
