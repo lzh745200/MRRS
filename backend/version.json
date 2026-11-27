@@ -1,7 +1,7 @@
 {
   "version": "1.18.64",
-  "build": "20261127",
-  "release_date": "2026-11-27",
+  "build": "20261128",
+  "release_date": "2026-11-28",
   "description": "跨机账号包：页面级授权树与导入矩阵收口",
   "features": [
     "安装 TEMP 兜底：Helper 同目录查找 + Install-MRRS.cmd；",
