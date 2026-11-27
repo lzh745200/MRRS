@@ -426,6 +426,8 @@ describe('AccountPackage extra', () => {
     vm.selectGrant(vm.authzCatalog.pages[0], 'view')
     await vm.exportPackage()
     expect(ElMessage.error).toHaveBeenCalled()
+    vm.selectGrant(vm.authzCatalog.pages[0], '')
+    expect(vm.buildGrants()).toEqual({})
     vm.addAccount()
     expect(vm.exportForm.accounts).toHaveLength(2)
     expect(vm.exportForm.accounts[1].role).toBe('user')
@@ -498,5 +500,55 @@ describe('AccountPackage extra', () => {
       'business',
       'system',
     ])
+  })
+
+  it('树节点辅助函数与凭证清单下载覆盖模板分支', async () => {
+    const { vm } = await mountAndOpen()
+    const page = vm.authzCatalog.pages[0]
+    const group = { key: 'business', label: '业务管理', kind: 'group', children: [page] }
+    expect(vm.groupChildren(group)).toEqual([page])
+    expect(vm.groupChildren(page)).toEqual([])
+    expect(vm.pageItem(page)).toBe(page)
+    expect(vm.grantValue(page)).toBe('')
+    vm.selectGrant(page, 'edit')
+    expect(vm.grantValue(page)).toBe('edit')
+    expect(vm.buildGrants()).toEqual({ projects: 'edit' })
+
+    vm.exportResult = {
+      package_id: 'p1',
+      organization_code: '520100',
+      organization_name: '市局',
+      expires_at: '2030-01-01',
+      accounts: [
+        {
+          username: 'alice',
+          one_time_password: 'otp123',
+          role: 'user',
+          data_scope: 'org',
+        },
+      ],
+    }
+    vm.downloadCredentialSheet()
+    expect(downloadBlob).toHaveBeenCalledTimes(1)
+    const [blob, filename] = downloadBlob.mock.calls[0]
+    expect(blob).toBeInstanceOf(Blob)
+    expect(filename).toBe('account-package-p1-credentials.csv')
+    vm.resetGrantSelections()
+    vm.resetGrantSelections()
+    vm.exportResult = {
+      package_id: 'p2',
+      accounts: [
+        {
+          username: 'bob',
+          one_time_password: 'otp456',
+          generated_password: false,
+        },
+      ],
+    }
+    vm.downloadCredentialSheet()
+    expect(downloadBlob).toHaveBeenCalledTimes(2)
+    vm.exportResult = null
+    vm.downloadCredentialSheet()
+    expect(downloadBlob).toHaveBeenCalledTimes(2)
   })
 })
