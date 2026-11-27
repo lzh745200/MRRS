@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.permission_package import _client_is_loopback, _optional_current_user
 from app.core.account_package import MAX_PACKAGE_BYTES, AccountPackageError
+from app.core.account_package_authz import get_authorization_catalog
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.permission_utils import is_superuser, require_admin, require_superuser
 from app.core.security import get_current_user
@@ -138,7 +140,12 @@ def export_account_package(
         username=getattr(current_user, "username", None),
         resource_type="account_package",
         resource_id=package_id,
-        details={"target_org": body.organization_code},
+        details={
+            "target_org": body.organization_code,
+            "target_machine_code": body.target_machine_code,
+            "account_count": len(result.get("accounts") or []),
+            **(result.get("authorization") or {}),
+        },
     )
     return success_response(data=result)
 
@@ -184,6 +191,42 @@ def list_account_package_receipts(
 ):
     rows = AccountPackageService(db).list_receipts()
     return success_response(data={"items": [row.to_dict() for row in rows], "total": len(rows)})
+
+
+@router.get("/authorization-catalog")
+def account_package_authorization_catalog(
+    _current_user: User = Depends(_require_admin),
+):
+    """页面/模块授权目录；超管用它勾选，普通管理员只读查看。"""
+    return success_response(data=get_authorization_catalog())
+
+
+@router.get("/can-issue")
+def account_package_can_issue(
+    current_user: User = Depends(_require_admin),
+):
+    """当前账号能否签发：页面据此显示原因，而不是等提交后 403。"""
+    enabled = bool(settings.ACCOUNT_PACKAGE_ENABLED)
+    signing = bool(settings.ACCOUNT_PACKAGE_SIGNING_KEY)
+    superuser = is_superuser(current_user)
+    if not enabled:
+        reason, code = "账号开通包功能未启用", "AP_DISABLED"
+    elif not signing:
+        reason, code = "当前机器未配置签发私钥", "AP_SIGNING_MISSING"
+    elif not superuser:
+        reason, code = "仅超级管理员可签发账号包", "AP_FORBIDDEN"
+    else:
+        reason, code = "", None
+    return success_response(
+        data={
+            "can_issue": enabled and signing and superuser,
+            "enabled": enabled,
+            "signing_key_configured": signing,
+            "is_superuser": superuser,
+            "reason": reason,
+            "reason_code": code,
+        }
+    )
 
 
 @router.post("/{package_id}/revoke")
@@ -277,7 +320,12 @@ async def confirm_account_package(
         username=getattr(current_user, "username", None),
         resource_type="account_package",
         resource_id=data["package_id"],
-        details={"usernames": [u["username"] for u in data.get("users", [])]},
+        details={
+            "usernames": [u["username"] for u in data.get("users", [])],
+            "account_count": len(data.get("users") or []),
+            "target_machine_code": machine_code,
+            **(data.get("authorization") or {}),
+        },
     )
     return success_response(data=data)
 

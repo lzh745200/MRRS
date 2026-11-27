@@ -12,7 +12,13 @@
               刷新
             </el-button>
             <el-button data-testid="open-import" @click="openImportDialog">导入账号包</el-button>
-            <el-button type="primary" data-testid="open-export" @click="openExportDialog">
+            <el-button
+              type="primary"
+              data-testid="open-export"
+              :disabled="issueStatus !== null && !issueStatus.can_issue"
+              :title="issueStatus && !issueStatus.can_issue ? issueStatus.reason : ''"
+              @click="openExportDialog"
+            >
               签发账号包
             </el-button>
           </div>
@@ -24,6 +30,14 @@
         :closable="false"
         show-icon
         title="账号包与包口令必须分渠道传递；一次性口令仅在签发成功时展示一次，关闭后无法找回。"
+      />
+      <el-alert
+        v-if="issueStatus && !issueStatus.can_issue"
+        class="issue-blocked"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="`当前不可签发：${issueStatus.reason}`"
       />
 
       <h3>签发记录</h3>
@@ -116,13 +130,60 @@
             <el-input-number v-model="exportForm.valid_days" :min="1" :max="30" />
           </el-form-item>
         </div>
-        <el-form-item label="授权配置">
-          <el-input
-            v-model="exportForm.grantsText"
-            type="textarea"
-            :rows="3"
-            placeholder='JSON 对象，例如 {"villages":"edit","projects":"view"}'
-          />
+        <el-form-item label="页面授权">
+          <div class="grant-block">
+            <div class="grant-hint">
+              按页面勾选只读/可操作；“可操作”会自动包含该页面对应的接口模块。未勾选的页面不开放。
+            </div>
+            <el-scrollbar max-height="320px" class="grant-scroll">
+              <div
+                v-for="section in authzCatalog?.sections || []"
+                :key="section.key"
+                class="grant-section"
+              >
+                <div class="grant-section-title">{{ section.label }}</div>
+                <template v-for="item in section.items" :key="item.key">
+                  <div v-if="item.kind === 'group'" class="grant-group">
+                    <div class="grant-group-title">{{ item.label }}</div>
+                    <div v-for="page in groupChildren(item)" :key="page.key" class="grant-row">
+                      <span class="grant-label">{{ page.label }}</span>
+                      <el-select
+                        :model-value="grantValue(page)"
+                        clearable
+                        placeholder="不开放"
+                        @update:model-value="selectGrant(page, $event)"
+                      >
+                        <el-option label="只读" value="view" />
+                        <el-option label="可操作" value="edit" :disabled="!canEditPage(page)" />
+                      </el-select>
+                    </div>
+                  </div>
+                  <div v-else class="grant-row">
+                    <span class="grant-label">{{ pageItem(item).label }}</span>
+                    <el-select
+                      :model-value="grantValue(pageItem(item))"
+                      clearable
+                      placeholder="不开放"
+                      @update:model-value="selectGrant(pageItem(item), $event)"
+                    >
+                      <el-option label="只读" value="view" />
+                      <el-option
+                        label="可操作"
+                        value="edit"
+                        :disabled="!canEditPage(pageItem(item))"
+                      />
+                    </el-select>
+                  </div>
+                </template>
+              </div>
+            </el-scrollbar>
+            <div class="grant-summary">
+              已选择 {{ selectedGrantCount }} 个页面
+              <span v-if="issueStatus && !issueStatus.can_issue" class="grant-blocked">
+                · {{ issueStatus.reason }}
+              </span>
+            </div>
+          </div>
         </el-form-item>
         <div class="accounts-heading">
           <span>开通账号</span>
@@ -176,21 +237,6 @@
                 :value="option.key"
               />
             </el-select>
-            <el-select
-              v-model="account.allowed_permissions"
-              multiple
-              filterable
-              collapse-tags
-              clearable
-              placeholder="操作权限（留空=角色默认）"
-            >
-              <el-option
-                v-for="option in permissionOptions"
-                :key="option.code"
-                :label="`${option.category} / ${option.name}`"
-                :value="option.code"
-              />
-            </el-select>
           </div>
         </div>
       </el-form>
@@ -238,7 +284,7 @@
       </template>
       <template #footer>
         <el-button data-testid="download-credential-sheet" @click="downloadCredentialSheet"
-          >下载初始化清单（光盘用）</el-button
+          >下载初始化清单（与账号包分渠道传递）</el-button
         >
         <el-button v-if="exportResult" @click="downloadPackage(exportResult)">下载账号包</el-button>
         <el-button type="primary" data-testid="close-otp" @click="closeOtpDialog"
@@ -298,6 +344,16 @@
             <dd>{{ importPreview.package_id }}</dd>
             <dt>过期时间</dt>
             <dd>{{ formatDateTimeLocale(importPreview.expires_at) }}</dd>
+            <dt>授权范围</dt>
+            <dd>
+              <template v-if="importPreview.authorization">
+                页面 {{ importPreview.authorization.page_count }} 个（可操作
+                {{ importPreview.authorization.edit_page_count }} / 只读
+                {{ importPreview.authorization.view_page_count }}），接口模块
+                {{ importPreview.authorization.module_count }} 个
+              </template>
+              <span v-else>未携带页面授权</span>
+            </dd>
             <dt>开通账号</dt>
             <dd>
               <span
@@ -322,6 +378,12 @@
       </template>
       <div v-else class="import-result" data-testid="import-result">
         <el-result icon="success" title="账号包导入成功" />
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          title="请使用本机管理员账号登录后立即修改出厂管理员密码；跨机账号首次登录也须修改一次性口令。"
+        />
         <p>组织编码：{{ importResult.organization_code }}</p>
         <div v-for="user in importResult.users" :key="user.user_id" class="imported-user">
           {{ user.username }}<span v-if="user.must_change_password">（首次登录须修改密码）</span>
@@ -351,7 +413,46 @@ interface AccountDraft {
   data_scope: string
   initial_password: string
   allowed_menus: string[]
-  allowed_permissions: string[]
+}
+
+interface AuthzPage {
+  key: string
+  label: string
+  section: string
+  section_label: string
+  kind: string
+  modules: string[]
+  can_edit: boolean
+  tabs?: Array<{ key: string; label: string }>
+}
+
+interface AuthzGroup {
+  key: string
+  label: string
+  kind: 'group'
+  children: AuthzPage[]
+}
+
+interface AuthzSection {
+  key: string
+  label: string
+  items: Array<AuthzPage | AuthzGroup>
+}
+
+interface AuthzCatalog {
+  catalog_version: string
+  sections: AuthzSection[]
+  pages: AuthzPage[]
+  modules: string[]
+}
+
+interface IssueStatus {
+  can_issue: boolean
+  enabled: boolean
+  signing_key_configured: boolean
+  is_superuser: boolean
+  reason: string
+  reason_code?: string | null
 }
 
 interface PackageRow {
@@ -397,6 +498,13 @@ interface ImportPreview {
   expires_at: string
   admin?: PreviewAccount
   accounts?: PreviewAccount[]
+  authorization?: {
+    page_count: number
+    edit_page_count: number
+    view_page_count: number
+    module_count: number
+    digest: string
+  }
 }
 
 interface ImportResult {
@@ -419,7 +527,9 @@ const importResult = ref<ImportResult | null>(null)
 const previewing = ref(false)
 const confirming = ref(false)
 const menuStore = useMenuStore()
-const permissionOptions = ref<Array<{ code: string; name: string; category: string }>>([])
+const authzCatalog = ref<AuthzCatalog | null>(null)
+const issueStatus = ref<IssueStatus | null>(null)
+const grantSelections = reactive<Record<string, string>>({})
 
 const menuOptions = computed(() =>
   menuStore.flatEntries.map((entry: any) => ({
@@ -429,15 +539,55 @@ const menuOptions = computed(() =>
   }))
 )
 
-function newAccount(): AccountDraft {
+const selectedGrantCount = computed(
+  () =>
+    Object.values(grantSelections).filter((level) => level === 'view' || level === 'edit').length
+)
+
+function canEditPage(page: AuthzPage): boolean {
+  return page.can_edit && Array.isArray(page.modules) && page.modules.length > 0
+}
+
+function groupChildren(item: AuthzPage | AuthzGroup): AuthzPage[] {
+  return item.kind === 'group' ? (item as AuthzGroup).children : []
+}
+
+function pageItem(item: AuthzPage | AuthzGroup): AuthzPage {
+  return item as AuthzPage
+}
+
+function selectGrant(page: AuthzPage, value: string): void {
+  if (!value) {
+    delete grantSelections[page.key]
+    return
+  }
+  grantSelections[page.key] = value
+}
+
+function grantValue(page: AuthzPage): string {
+  return grantSelections[page.key] || ''
+}
+
+function buildGrants(): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [key, level] of Object.entries(grantSelections)) {
+    if (level === 'view' || level === 'edit') result[key] = level
+  }
+  return result
+}
+
+function resetGrantSelections(): void {
+  for (const key of Object.keys(grantSelections)) delete grantSelections[key]
+}
+
+function newAccount(role: 'admin' | 'user' | 'viewer' = 'admin'): AccountDraft {
   return {
     username: '',
     full_name: '',
-    role: 'admin',
+    role,
     data_scope: 'org',
     initial_password: '',
     allowed_menus: [],
-    allowed_permissions: [],
   }
 }
 
@@ -448,7 +598,6 @@ const exportForm = reactive({
   target_machine_code: '',
   package_password: '',
   valid_days: 7,
-  grantsText: '',
   accounts: [newAccount()],
 })
 
@@ -498,9 +647,9 @@ function resetExportForm(): void {
     target_machine_code: '',
     package_password: '',
     valid_days: 7,
-    grantsText: '',
     accounts: [newAccount()],
   })
+  resetGrantSelections()
 }
 
 function openExportDialog(): void {
@@ -509,21 +658,11 @@ function openExportDialog(): void {
 }
 
 function addAccount(): void {
-  exportForm.accounts.push(newAccount())
+  exportForm.accounts.push(newAccount('user'))
 }
 
 function removeAccount(index: number): void {
   if (exportForm.accounts.length > 1) exportForm.accounts.splice(index, 1)
-}
-
-function parseGrants(): Record<string, string> {
-  const text = exportForm.grantsText.trim()
-  if (!text) return {}
-  const parsed: unknown = JSON.parse(text)
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('授权配置必须是 JSON 对象')
-  }
-  return parsed as Record<string, string>
 }
 
 async function exportPackage(): Promise<void> {
@@ -537,6 +676,10 @@ async function exportPackage(): Promise<void> {
     ElMessage.warning('请填写 6 位组织编码、目标机器码、至少 12 位包口令及所有账号用户名')
     return
   }
+  if (selectedGrantCount.value === 0) {
+    ElMessage.warning('请至少勾选一个页面的授权级别')
+    return
+  }
   exporting.value = true
   try {
     const result = await post<ExportResult>('/account-packages/export', {
@@ -547,7 +690,7 @@ async function exportPackage(): Promise<void> {
       admin_full_name: first.full_name,
       target_machine_code: exportForm.target_machine_code,
       package_password: exportForm.package_password,
-      grants: parseGrants(),
+      grants: buildGrants(),
       valid_days: exportForm.valid_days,
       accounts: exportForm.accounts.map((account) => ({
         username: account.username,
@@ -556,7 +699,6 @@ async function exportPackage(): Promise<void> {
         data_scope: account.data_scope,
         initial_password: account.initial_password,
         allowed_menus: account.allowed_menus,
-        allowed_permissions: account.allowed_permissions,
       })),
     })
     exportResult.value = result
@@ -718,19 +860,24 @@ async function confirmImport(): Promise<void> {
   }
 }
 
-async function loadPermissionOptions(): Promise<void> {
+async function loadAuthorization(): Promise<void> {
   try {
-    const data = await get<{
-      permissions?: Array<{ code: string; name: string; category: string }>
-    }>('/users/form-options')
-    permissionOptions.value = Array.isArray(data.permissions) ? data.permissions : []
-  } catch {
-    permissionOptions.value = []
+    const [catalog, status] = await Promise.all([
+      get<AuthzCatalog>('/account-packages/authorization-catalog'),
+      get<IssueStatus>('/account-packages/can-issue'),
+    ])
+    authzCatalog.value = catalog
+    issueStatus.value = status
+  } catch (error) {
+    authzCatalog.value = null
+    issueStatus.value = null
+    ElMessage.error(errorText(error, '加载授权目录失败'))
   }
 }
 
 onMounted(async () => {
   void refresh()
+  void loadAuthorization()
   if (!menuStore.loaded) {
     try {
       await menuStore.fetchMenus()
@@ -738,7 +885,6 @@ onMounted(async () => {
       // 菜单加载失败不阻断签发；未加载时用户只能留空继承角色默认
     }
   }
-  await loadPermissionOptions()
 })
 
 defineExpose({
@@ -747,6 +893,12 @@ defineExpose({
   exportForm,
   exportResult,
   menuOptions,
+  authzCatalog,
+  issueStatus,
+  grantSelections,
+  selectedGrantCount,
+  buildGrants,
+  loadAuthorization,
   importFile,
   importPassword,
   importPreview,
@@ -796,6 +948,60 @@ defineExpose({
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 16px;
+}
+.grant-block {
+  width: 100%;
+}
+.grant-hint {
+  margin-bottom: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.grant-scroll {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+.grant-section + .grant-section {
+  margin-top: 10px;
+}
+.grant-section-title {
+  font-weight: 600;
+  margin: 6px 0;
+}
+.grant-group {
+  margin-left: 12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--el-border-color-lighter);
+}
+.grant-group-title {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  margin: 6px 0;
+}
+.grant-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+}
+.grant-label {
+  font-size: 13px;
+}
+.grant-row .el-select {
+  width: 150px;
+}
+.grant-summary {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.grant-blocked {
+  color: var(--el-color-warning);
+}
+.issue-blocked {
+  margin-top: 10px;
 }
 .accounts-heading {
   margin: 8px 0 12px;

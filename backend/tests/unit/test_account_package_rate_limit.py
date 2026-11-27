@@ -153,7 +153,8 @@ def _export_body(**over):
     body = {
         "organization_code": "520100", "organization_name": "市局", "parent_code": "520000",
         "admin_username": "u1", "admin_full_name": "用户",
-        "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass", "grants": {},
+        "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass",
+        "grants": {"projects": "view"},
     }
     body.update(over)
     return body

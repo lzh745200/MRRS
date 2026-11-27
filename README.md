@@ -1,20 +1,22 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.63
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.64
 
-![Version](https://img.shields.io/badge/version-1.18.63-blue)
+![Version](https://img.shields.io/badge/version-1.18.64-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C683-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C704-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.63）
+## 本版亮点（v1.18.64）
 
+- 🔐 **跨机账号包页面级授权**：导出按菜单页勾选“不开放/只读/可操作”，服务端推导页面与模块 key；
+  空授权拒绝导出，历史空授权包导入不激活矩阵；新增授权目录/可签发状态接口与导入授权摘要。
 - 🪟 **Windows 图标二次收口**：安装后把图标复制为 `icon-<时间戳>.ico`，快捷方式指向新文件，
   绕过 iconcache 按路径复用旧白纸条目；再逐项发 `SHCNE_UPDATEITEM`，`-ClearIconCache` 仅作兜底。
 - 🐧 **Linux 装完刷新图标缓存**：新增 `scripts/linux/after-install.sh` 并接入 `deb.afterInstall`，
   补 `gtk-update-icon-cache` 与 UKUI 用户缓存清理。
-- 🧪 新增 4 例图标链路回归；后端 **16,095** / 前端 **351 files / 7,588 tests** 全绿。
+- 🧪 新增 16 例账号包授权目录/推导回归、4 例 API 授权回归；后端 **16,117** / 前端 **351 files / 7,590 tests** 全绿。
 - 📄 文档校准：授权包签名默认与实现对齐、补充 `/uploads` 非回环边界、认证存储注释更正。
 
 ## 历史亮点（v1.18.62）
@@ -348,8 +350,8 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **16,095 用例**, 0 skipped（本地 12 段全量；CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **7,588 passed**（351 个 `.test.ts`），0 失败 |
+| 后端测试 | **16,117 用例**, 0 skipped（本地 12 段全量；CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **7,590 passed**（351 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -369,10 +371,10 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-11-22（v1.18.63）— 后端 **16,095** 用例（12 段串行 **16,095 passed / 0 skipped**；
-> CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,588 用例**、
+> **上次全量验证**: 2026-11-27（v1.18.64）— 后端 **16,117** 用例（12 段串行 **16,117 passed / 0 skipped**；
+> CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,590 用例**、
 > Electron 外壳 **23 用例**；质量门禁脚本 **42/42 PASS**。
-> 覆盖率语句 **100.00%**（49,740/49,740）；分支 **100.00%**（12,654/12,654，0 partial）。
+> 覆盖率语句 **100.00%**（50,006/50,006）；分支 **100.00%**（12,758/12,758，0 partial）。
 > flake8 app 0 / vue-tsc 0 / 源码 eslint 0；Alembic 单 head（73 版本）；
 > 三层对齐、菜单对齐、同步覆盖率、零断言棘轮、迁移自证等门禁全绿。
 
@@ -459,10 +461,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 16,095（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 16,117（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 7,588（351 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 7,590（351 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
 | 视觉回归 | Playwright | 44 个关键页面（DOM 结构快照，非像素；含 30 个 tab 与 4 个表单） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 等 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |

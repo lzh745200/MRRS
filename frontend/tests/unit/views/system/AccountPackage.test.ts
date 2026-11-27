@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 
-
 const { get, post, requestGet, downloadBlob, ElMessage } = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
@@ -18,6 +17,108 @@ const menuState = vi.hoisted(() => ({
     { key: 'projects', label: '项目管理', sectionLabel: '业务管理' },
     { key: 'dashboard', label: '工作台' },
   ],
+}))
+
+const authzCatalog = vi.hoisted(() => ({
+  catalog_version: 'catalog-v1',
+  modules: ['projects', 'villages'],
+  pages: [
+    {
+      key: 'projects',
+      label: '项目管理',
+      section: 'business',
+      section_label: '业务管理',
+      kind: 'page',
+      modules: ['projects'],
+      can_edit: true,
+      tabs: [],
+    },
+    {
+      key: 'dashboard',
+      label: '工作台',
+      section: 'dashboard',
+      section_label: '工作台',
+      kind: 'page',
+      modules: [],
+      can_edit: false,
+      tabs: [],
+    },
+    {
+      key: 'system-console-org',
+      label: '组织与权限',
+      section: 'system',
+      section_label: '系统管理',
+      kind: 'console',
+      modules: ['users-orgs', 'organizations'],
+      can_edit: true,
+      tabs: [
+        { key: 'users-orgs', label: '用户与组织' },
+        { key: 'organizations', label: '组织管理' },
+      ],
+    },
+  ],
+  sections: [
+    {
+      key: 'dashboard',
+      label: '工作台',
+      items: [
+        {
+          key: 'dashboard',
+          label: '工作台',
+          section: 'dashboard',
+          section_label: '工作台',
+          kind: 'page',
+          modules: [],
+          can_edit: false,
+          tabs: [],
+        },
+      ],
+    },
+    {
+      key: 'business',
+      label: '业务管理',
+      items: [
+        {
+          key: 'projects',
+          label: '项目管理',
+          section: 'business',
+          section_label: '业务管理',
+          kind: 'page',
+          modules: ['projects'],
+          can_edit: true,
+          tabs: [],
+        },
+      ],
+    },
+    {
+      key: 'system',
+      label: '系统管理',
+      items: [
+        {
+          key: 'system-console-org',
+          label: '组织与权限',
+          section: 'system',
+          section_label: '系统管理',
+          kind: 'console',
+          modules: ['users-orgs', 'organizations'],
+          can_edit: true,
+          tabs: [
+            { key: 'users-orgs', label: '用户与组织' },
+            { key: 'organizations', label: '组织管理' },
+          ],
+        },
+      ],
+    },
+  ],
+}))
+
+const canIssue = vi.hoisted(() => ({
+  can_issue: true,
+  enabled: true,
+  signing_key_configured: true,
+  is_superuser: true,
+  reason: '',
+  reason_code: null,
 }))
 
 vi.mock('@/stores/menu', () => ({
@@ -46,53 +147,180 @@ vi.mock('element-plus', async () => {
 
 import AccountPackage from '@/views/system/AccountPackage.vue'
 
+function defaultGet(url: string) {
+  if (url === '/account-packages/authorization-catalog') return Promise.resolve(authzCatalog)
+  if (url === '/account-packages/can-issue') return Promise.resolve({ ...canIssue })
+  return Promise.resolve({ items: [] })
+}
+
 function mountComp() {
   return mount(AccountPackage, { global: { plugins: [ElementPlus], stubs: { teleport: true } } })
+}
+
+async function mountAndOpen() {
+  const wrapper = mountComp()
+  await flushPromises()
+  const vm = wrapper.vm as any
+  vm.openExportDialog()
+  await flushPromises()
+  return { wrapper, vm }
+}
+
+function fillExport(vm: any, overrides: Record<string, unknown> = {}) {
+  Object.assign(vm.exportForm, {
+    organization_code: '520100',
+    organization_name: '市局',
+    parent_code: '520000',
+    target_machine_code: 'MC-API-123',
+    package_password: 'passw0rd-pass',
+    valid_days: 7,
+    ...overrides,
+  })
+  vm.exportForm.accounts[0] = {
+    username: 'alice',
+    full_name: 'A',
+    role: 'admin',
+    data_scope: 'org',
+    initial_password: 'InitPass123',
+    allowed_menus: ['projects'],
+  }
 }
 
 describe('AccountPackage.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    get.mockImplementation((url: string) =>
-      Promise.resolve(url.endsWith('/receipts') ? { items: [] } : { items: [] })
-    )
+    get.mockImplementation(defaultGet)
   })
 
-  it('挂载加载列表和回执', async () => {
+  it('挂载加载列表、回执、授权目录与签发状态', async () => {
     const wrapper = mountComp()
     await flushPromises()
     expect(get).toHaveBeenCalledWith('/account-packages', { limit: 100 })
     expect(get).toHaveBeenCalledWith('/account-packages/receipts')
-    expect((wrapper.vm as any).packages).toEqual([])
+    expect(get).toHaveBeenCalledWith('/account-packages/authorization-catalog')
+    expect(get).toHaveBeenCalledWith('/account-packages/can-issue')
+    const vm = wrapper.vm as any
+    expect(vm.packages).toEqual([])
+    expect(vm.authzCatalog.catalog_version).toBe('catalog-v1')
+    expect(vm.issueStatus.can_issue).toBe(true)
   })
 
-  it('导出后展示一次性口令并刷新列表', async () => {
-    post.mockResolvedValue({ package_id: 'p1', file_name: 'p1.apkg', accounts: [{ username: 'alice', one_time_password: 'otp123' }] })
-    const wrapper = mountComp(); await flushPromises()
-    const vm = wrapper.vm as any
-    vm.openExportDialog()
-    Object.assign(vm.exportForm, {
-      organization_code: '520100', organization_name: '市局', parent_code: '520000',
-      target_machine_code: 'MC-API-123', package_password: 'passw0rd-pass', valid_days: 7,
-      grantsText: '{"projects":"edit"}',
+  it('按页面树推导授权并导出，不再提交权限码', async () => {
+    post.mockResolvedValue({
+      package_id: 'p1',
+      file_name: 'p1.apkg',
+      accounts: [{ username: 'alice', one_time_password: 'otp123' }],
     })
-    vm.exportForm.accounts[0] = { username: 'alice', full_name: 'A', role: 'admin', data_scope: 'org' }
-    await vm.exportPackage(); await flushPromises()
-    expect(post).toHaveBeenCalledWith('/account-packages/export', expect.objectContaining({ accounts: expect.any(Array) }))
+    const { vm } = await mountAndOpen()
+    fillExport(vm)
+    vm.selectGrant(vm.authzCatalog.pages[0], 'edit')
+    await vm.exportPackage()
+    await flushPromises()
+    expect(post).toHaveBeenCalledWith(
+      '/account-packages/export',
+      expect.objectContaining({
+        grants: { projects: 'edit' },
+        accounts: [
+          expect.objectContaining({
+            username: 'alice',
+            allowed_menus: ['projects'],
+          }),
+        ],
+      })
+    )
+    const payload = post.mock.calls[0][1]
+    expect(payload.accounts[0]).not.toHaveProperty('allowed_permissions')
     expect(vm.exportResult.accounts[0].one_time_password).toBe('otp123')
     expect(ElMessage.success).toHaveBeenCalled()
   })
 
-  it('导入预览后确认', async () => {
-    post.mockResolvedValueOnce({ package_id: 'p1', organization_code: '520100', organization_name: '市局', expires_at: '2030-01-01' })
-      .mockResolvedValueOnce({ organization_code: '520100', users: [{ user_id: 1, username: 'alice', must_change_password: true }] })
-    const wrapper = mountComp(); await flushPromises()
+  it('未勾选授权时阻止导出', async () => {
+    const { vm } = await mountAndOpen()
+    fillExport(vm)
+    await vm.exportPackage()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请至少勾选一个页面的授权级别')
+    expect(post).not.toHaveBeenCalled()
+  })
+
+  it('不可签发时按钮禁用并展示原因', async () => {
+    get.mockImplementation((url: string) => {
+      if (url === '/account-packages/can-issue') {
+        return Promise.resolve({
+          ...canIssue,
+          can_issue: false,
+          reason: '未配置签名私钥',
+          reason_code: 'AP_SIGNING_MISSING',
+        })
+      }
+      return defaultGet(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
     const vm = wrapper.vm as any
+    expect(vm.issueStatus.can_issue).toBe(false)
+    expect(vm.issueStatus.reason).toBe('未配置签名私钥')
+    expect(vm.issueStatus.reason_code).toBe('AP_SIGNING_MISSING')
+  })
+
+  it('授权目录加载失败时给出错误且不阻断列表', async () => {
+    get.mockImplementation((url: string) => {
+      if (url.startsWith('/account-packages/authorization')) {
+        return Promise.reject({ response: { data: { detail: { message: '目录不可用' } } } })
+      }
+      return defaultGet(url)
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    expect(ElMessage.error).toHaveBeenCalled()
+    expect((wrapper.vm as any).authzCatalog).toBeNull()
+    expect((wrapper.vm as any).packages).toEqual([])
+  })
+
+  it('导入预览展示授权摘要，确认后展示用户', async () => {
+    post.mockImplementation((url: string) => {
+      if (url === '/account-packages/preview') {
+        return Promise.resolve({
+          package_id: 'p1',
+          organization_code: '520100',
+          organization_name: '市局',
+          expires_at: '2030-01-01',
+          accounts: [{ username: 'alice', full_name: 'A', role: 'user', data_scope: 'org' }],
+          authorization: {
+            page_count: 2,
+            edit_page_count: 1,
+            view_page_count: 1,
+            module_count: 2,
+            digest: 'a'.repeat(64),
+          },
+        })
+      }
+      if (url === '/account-packages/confirm') {
+        return Promise.resolve({
+          organization_code: '520100',
+          users: [{ user_id: 1, username: 'alice', must_change_password: true }],
+        })
+      }
+      return Promise.resolve({})
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openImportDialog()
     vm.importFile = new File(['x'], 'p.apkg')
     vm.importPassword = 'passw0rd-pass'
-    await vm.previewImport(); await flushPromises()
+    await vm.previewImport()
+    await flushPromises()
     expect(vm.importPreview.package_id).toBe('p1')
-    await vm.confirmImport(); await flushPromises()
+    expect(vm.importPreview.authorization).toEqual(
+      expect.objectContaining({
+        page_count: 2,
+        edit_page_count: 1,
+        view_page_count: 1,
+        module_count: 2,
+      })
+    )
+    await vm.confirmImport()
+    await flushPromises()
     expect(vm.importResult.users[0].username).toBe('alice')
   })
 
@@ -100,39 +328,57 @@ describe('AccountPackage.vue', () => {
     const { ElMessageBox } = await import('element-plus')
     vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: '过期' } as any)
     post.mockResolvedValue({})
-    const wrapper = mountComp(); await flushPromises()
+    const wrapper = mountComp()
+    await flushPromises()
     await (wrapper.vm as any).revokePackage({ package_id: 'p1', state: 'active' })
     expect(post).toHaveBeenCalledWith('/account-packages/p1/revoke', { reason: '过期' })
   })
 })
 
 describe('AccountPackage extra', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    get.mockImplementation(defaultGet)
+  })
+
   it('列表状态与错误映射全分支', async () => {
     get.mockImplementation((url: string) => {
       if (url === '/account-packages') {
-        return Promise.resolve({ items: [
-          { package_id: 'a', state: 'active' },
-          { package_id: 'b', state: 'revoked' },
-          { package_id: 'c' },
-        ] })
+        return Promise.resolve({
+          items: [
+            { package_id: 'a', state: 'active' },
+            { package_id: 'b', state: 'revoked' },
+            { package_id: 'c' },
+          ],
+        })
       }
       if (url === '/account-packages/receipts') {
         return Promise.resolve({ items: [{ package_id: 'r' }] })
       }
+      if (url === '/account-packages/authorization-catalog') {
+        return Promise.resolve(authzCatalog)
+      }
+      if (url === '/account-packages/can-issue') {
+        return Promise.resolve({ ...canIssue })
+      }
       return Promise.reject({ response: { data: { detail: { message: '对象错误' } } } })
     })
-    const wrapper = mountComp(); await flushPromises()
+    const wrapper = mountComp()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.stateLabel('active')).toBe('有效')
     expect(vm.stateLabel('revoked')).toBe('已撤销')
     expect(vm.stateLabel(undefined)).toBe('未知')
     vm.openImportDialog()
-    vm.importFile = null; vm.importPassword = 'p'
+    vm.importFile = null
+    vm.importPassword = 'p'
     await vm.previewImport()
     expect(ElMessage.warning).toHaveBeenCalled()
     await vm.confirmImport()
     expect(ElMessage.warning).toHaveBeenCalled()
-    vm.importFile = new File(['x'], 'x.apkg'); vm.importPassword = 'p'; vm.importPreview = { package_id: 'p' }
+    vm.importFile = new File(['x'], 'x.apkg')
+    vm.importPassword = 'p'
+    vm.importPreview = { package_id: 'p' }
     post.mockRejectedValue({ response: { data: { detail: { message: '预览对象错误' } } } })
     await vm.previewImport()
     expect(ElMessage.error).toHaveBeenCalled()
@@ -144,56 +390,56 @@ describe('AccountPackage extra', () => {
 
   it('列表/回执加载异常进入错误提示', async () => {
     get.mockRejectedValue({ response: { data: { detail: { message: '网络错误' } } } })
-    const wrapper = mountComp(); await flushPromises()
+    const wrapper = mountComp()
+    await flushPromises()
     expect(ElMessage.error).toHaveBeenCalled()
     expect((wrapper.vm as any).loading).toBe(false)
   })
 
   it('非数组列表、空授权与无 raw 文件分支', async () => {
-    get.mockImplementation((url: string) => Promise.resolve({ items: null }))
-    const wrapper = mountComp(); await flushPromises()
+    get.mockImplementation((url: string) => {
+      if (url === '/account-packages/authorization-catalog') return Promise.resolve(authzCatalog)
+      if (url === '/account-packages/can-issue') return Promise.resolve({ ...canIssue })
+      return Promise.resolve({ items: null })
+    })
+    const wrapper = mountComp()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.packages).toEqual([])
     expect(vm.receipts).toEqual([])
-    Object.assign(vm.exportForm, {
-      organization_code: '520100', target_machine_code: 'MC-API-123', package_password: 'passw0rd-pass',
-      accounts: [{ username: 'a', full_name: 'A', role: 'admin', data_scope: 'org' }], grantsText: '   ',
-    })
-    post.mockResolvedValue({ package_id: 'p', file_name: 'p.apkg', accounts: [] })
+    vm.openExportDialog()
+    fillExport(vm)
     await vm.exportPackage()
-    expect(post).toHaveBeenCalledWith('/account-packages/export', expect.objectContaining({ grants: {} }))
+    expect(ElMessage.warning).toHaveBeenCalled()
     vm.onImportFileChange({} as any)
     expect(vm.importFile).toBeNull()
     const dialogs = wrapper.findAllComponents({ name: 'ElDialog' })
     dialogs.forEach((d: any) => d.vm.$emit('update:modelValue', false))
   })
 
-  it('导出校验、授权 JSON 与异常分支', async () => {
-    const wrapper = mountComp(); await flushPromises()
-    const vm = wrapper.vm as any
-    vm.openExportDialog()
+  it('导出校验与异常分支', async () => {
+    const { vm } = await mountAndOpen()
     await vm.exportPackage()
     expect(ElMessage.warning).toHaveBeenCalled()
-    Object.assign(vm.exportForm, {
-      organization_code: '520100', target_machine_code: 'MC-API-123', package_password: 'passw0rd-pass',
-      accounts: [{ username: 'a', full_name: 'A', role: 'admin', data_scope: 'org' }],
-      grantsText: '[1]',
-    })
-    await vm.exportPackage()
-    expect(ElMessage.error).toHaveBeenCalled()
-    vm.exportForm.grantsText = '{"x":"edit"}'
+    fillExport(vm)
     post.mockRejectedValue({ response: { data: { detail: { message: '导出失败' } } } })
+    vm.selectGrant(vm.authzCatalog.pages[0], 'view')
     await vm.exportPackage()
     expect(ElMessage.error).toHaveBeenCalled()
-    vm.addAccount(); expect(vm.exportForm.accounts).toHaveLength(2)
-    vm.removeAccount(1); expect(vm.exportForm.accounts).toHaveLength(1)
-    vm.removeAccount(0); expect(vm.exportForm.accounts).toHaveLength(1)
+    vm.addAccount()
+    expect(vm.exportForm.accounts).toHaveLength(2)
+    expect(vm.exportForm.accounts[1].role).toBe('user')
+    vm.removeAccount(1)
+    expect(vm.exportForm.accounts).toHaveLength(1)
+    vm.removeAccount(0)
+    expect(vm.exportForm.accounts).toHaveLength(1)
     vm.closeOtpDialog()
   })
 
   it('下载成功/失败、撤销取消与失败、文件事件', async () => {
     requestGet.mockResolvedValueOnce({ data: new Blob(['x']), headers: {} })
-    const wrapper = mountComp(); await flushPromises()
+    const wrapper = mountComp()
+    await flushPromises()
     const vm = wrapper.vm as any
     await vm.downloadPackage({ package_id: 'p1' })
     expect(downloadBlob).toHaveBeenCalled()
@@ -215,52 +461,10 @@ describe('AccountPackage extra', () => {
     expect(vm.importPassword).toBe('')
   })
 
-
-})
-
-describe('AccountPackage offline handoff', () => {
-  it('passes visual authorization lists and downloads CSV', async () => {
-    post.mockResolvedValue({
-      package_id: 'pkg-1', file_name: 'pkg.apkg', organization_code: '520100',
-      organization_name: '市局', expires_at: '2030-01-01',
-      accounts: [{ username: 'a', one_time_password: 'InitPass123', generated_password: false }],
-    })
-    get.mockResolvedValue({ items: [] })
-    const wrapper = mountComp(); await flushPromises()
-    const vm = wrapper.vm as any
-    vm.openExportDialog()
-    Object.assign(vm.exportForm, {
-      organization_code: '520100', organization_name: '市局', target_machine_code: 'MC-API-123',
-      package_password: 'passw0rd-pass', grantsText: '',
-      accounts: [{
-        username: 'a', full_name: 'A', role: 'user', data_scope: 'self',
-        initial_password: 'InitPass123', allowed_menus: ['projects', 'funds'],
-        allowed_permissions: ['project:view', 'fund:view'],
-      }],
-    })
-    await vm.exportPackage()
-    expect(post).toHaveBeenCalledWith('/account-packages/export', expect.objectContaining({
-      accounts: [expect.objectContaining({
-        allowed_menus: ['projects', 'funds'],
-        allowed_permissions: ['project:view', 'fund:view'],
-        initial_password: 'InitPass123',
-      })],
-    }))
-    vm.downloadCredentialSheet()
-    expect(downloadBlob).toHaveBeenCalled()
-    vm.exportResult = { package_id: 'p2', target_org_code: '520100', accounts: [{ username: 'b', one_time_password: 'x', generated_password: true }] }
-    vm.downloadCredentialSheet()
-    vm.exportResult = { package_id: 'p3', accounts: [{ username: 'c', one_time_password: 'y' }] }
-    vm.downloadCredentialSheet()
-    vm.exportResult = null
-    vm.downloadCredentialSheet()
-  })
-
-
-
   it('菜单选项与菜单加载失败分支', async () => {
     menuState.loaded = true
-    const w = mountComp(); await flushPromises()
+    const w = mountComp()
+    await flushPromises()
     expect((w.vm as any).menuOptions).toEqual([
       { key: 'projects', label: '项目管理', group: '业务管理' },
       { key: 'dashboard', label: '工作台', group: '菜单' },
@@ -268,7 +472,8 @@ describe('AccountPackage offline handoff', () => {
     w.unmount()
     menuState.loaded = false
     menuState.fetchError = false
-    const w2 = mountComp(); await flushPromises()
+    const w2 = mountComp()
+    await flushPromises()
     expect((w2.vm as any).menuOptions).toEqual([
       { key: 'projects', label: '项目管理', group: '业务管理' },
       { key: 'dashboard', label: '工作台', group: '菜单' },
@@ -276,25 +481,22 @@ describe('AccountPackage offline handoff', () => {
     w2.unmount()
     menuState.loaded = false
     menuState.fetchError = true
-    const w3 = mountComp(); await flushPromises()
+    const w3 = mountComp()
+    await flushPromises()
     w3.unmount()
     menuState.loaded = true
     menuState.fetchError = false
   })
 
-  it('权限选项数组与非数组分支', async () => {
-    get.mockImplementation((url: string) => {
-      if (url === '/users/form-options') {
-        return Promise.resolve({ permissions: [{ code: 'data:view', name: '查看', category: '操作' }] })
-      }
-      return Promise.resolve({ items: [] })
-    })
-    const w = mountComp(); await flushPromises()
-    expect((w.vm as any).permissionOptions).toHaveLength(1)
-    w.unmount()
-    get.mockResolvedValue({ items: [] })
-    const w2 = mountComp(); await flushPromises()
-    expect((w2.vm as any).permissionOptions).toEqual([])
-    w2.unmount()
+  it('页面树把无写模块页面限制为只读', async () => {
+    const { vm } = await mountAndOpen()
+    const dashboard = vm.authzCatalog.pages.find((page: any) => page.key === 'dashboard')
+    expect(vm.canEditPage(dashboard)).toBe(false)
+    expect(vm.canEditPage(vm.authzCatalog.pages[0])).toBe(true)
+    expect(vm.authzCatalog.sections.map((section: any) => section.key)).toEqual([
+      'dashboard',
+      'business',
+      'system',
+    ])
   })
 })

@@ -41,6 +41,12 @@
           <h3>包内容预览</h3>
           <p>组织：{{ previewData.organization_name }}（{{ previewData.organization_code }}）</p>
           <p>过期时间：{{ formatDateTimeLocale(previewData.expires_at) }}</p>
+          <p v-if="previewData.authorization" data-testid="account-import-authorization">
+            授权范围：页面 {{ previewData.authorization.page_count }} 个（可操作
+            {{ previewData.authorization.edit_page_count }} / 只读
+            {{ previewData.authorization.view_page_count }}），接口模块
+            {{ previewData.authorization.module_count }} 个
+          </p>
           <ul>
             <li v-for="account in previewData.accounts || []" :key="account.username">
               {{ account.full_name || account.username }}（{{ account.username }} /
@@ -56,6 +62,12 @@
       <div v-else class="result" data-testid="account-import-result">
         <el-result icon="success" title="账号包导入成功" />
         <p>组织编码：{{ result.organization_code }}</p>
+        <el-alert
+          type="warning"
+          :closable="false"
+          show-icon
+          title="本机的出厂管理员仍是出厂密码，请现在登录修改。"
+        />
         <p v-for="user in result.users" :key="user.user_id">
           {{ user.username }}（首次登录须修改密码）
         </p>
@@ -85,6 +97,12 @@ interface PreviewData {
   organization_name: string
   expires_at: string
   accounts?: PreviewAccount[]
+  authorization?: {
+    page_count: number
+    edit_page_count: number
+    view_page_count: number
+    module_count: number
+  }
 }
 
 interface ImportResult {

@@ -15,6 +15,7 @@ from app.models.base import Base
 from app.models.organization import Organization
 from app.services.account_package_service import AccountPackageService
 from app.services.machine_code_service import MachineCodeService
+from app.utils.audit_logger import AuditLogger
 
 
 def _db():
@@ -68,6 +69,8 @@ def test_export_download_list_revoke(client, api_env):
         assert r.status_code == 200, r.text
         data = r.json()["data"]
         assert data["accounts"][0]["one_time_password"]
+        assert data["authorization"]["page_count"] == 1
+        assert data["authorization"]["module_count"] == 1
         pid = data["package_id"]
 
         assert client.get(f"/api/v1/account-packages/{pid}/download").status_code == 200
@@ -89,7 +92,8 @@ def test_pristine_preview_confirm(client, api_env):
     r = client.post("/api/v1/account-packages/export", json={
         "organization_code": "520100", "organization_name": "市局", "parent_code": "520000",
         "admin_username": "p_admin", "admin_full_name": "管理员",
-        "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass", "grants": {},
+        "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass",
+        "grants": {"projects": "view"},
     })
     assert r.status_code == 200, r.text
     pid = r.json()["data"]["package_id"]
@@ -164,3 +168,99 @@ def test_admin_list_and_preview_errors(client, api_env, monkeypatch):
     monkeypatch.setattr("app.api.v1.account_package._client_is_loopback", lambda request: True)
     monkeypatch.setattr("app.api.v1.account_package.MAX_PACKAGE_BYTES", 1)
     assert client.post("/api/v1/account-packages/preview", files=files, data={"password": "x"}).status_code == 413
+
+def test_authorization_catalog_and_can_issue_routes(client, api_env):
+    db = _db()
+    root = _org(db)
+    admin = SimpleNamespace(id=1, username="root", role="admin", is_superuser=True, organization_id=root.id)
+    _use_db(db, admin)
+    try:
+        catalog = client.get("/api/v1/account-packages/authorization-catalog")
+        assert catalog.status_code == 200, catalog.text
+        data = catalog.json()["data"]
+        assert len(data["pages"]) == 54
+        assert len(data["modules"]) == 32
+        assert data["catalog_version"]
+
+        status = client.get("/api/v1/account-packages/can-issue")
+        assert status.status_code == 200, status.text
+        info = status.json()["data"]
+        assert info["can_issue"] is True
+        assert info["enabled"] is True
+        assert info["signing_key_configured"] is True
+
+        non_super = SimpleNamespace(id=3, username="admin2", role="admin", is_superuser=False, organization_id=root.id)
+        app.dependency_overrides[get_current_user] = lambda: non_super
+        blocked = client.get("/api/v1/account-packages/can-issue")
+        assert blocked.status_code == 200, blocked.text
+        assert blocked.json()["data"]["can_issue"] is False
+        assert blocked.json()["data"]["reason_code"] == "AP_FORBIDDEN"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_export_audit_records_authorization_summary(client, api_env, monkeypatch):
+    db = _db()
+    root = _org(db)
+    _org(db, "520100", "市局", root, "2")
+    admin = SimpleNamespace(id=1, username="root", role="super_admin", is_superuser=True, organization_id=root.id)
+    _use_db(db, admin)
+    captured = []
+    monkeypatch.setattr(AuditLogger, "log", staticmethod(lambda **kwargs: captured.append(kwargs)))
+    try:
+        body = {
+            "organization_code": "520100", "organization_name": "市局", "parent_code": "520000",
+            "admin_username": "audit_admin", "admin_full_name": "管理员",
+            "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass",
+            "grants": {"projects": "edit"},
+        }
+        response = client.post("/api/v1/account-packages/export", json=body)
+        assert response.status_code == 200, response.text
+    finally:
+        app.dependency_overrides.clear()
+    details = captured[-1]["details"]
+    assert details["target_org"] == "520100"
+    assert details["target_machine_code"] == "MC-API-123"
+    assert details["account_count"] == 1
+    assert details["page_count"] == 1
+    assert details["edit_page_count"] == 1
+    assert details["module_count"] == 1
+    assert len(details["digest"]) == 64
+
+
+def test_can_issue_reports_disabled_and_missing_key(client, api_env, monkeypatch):
+    db = _db()
+    root = _org(db)
+    admin = SimpleNamespace(id=1, username="root", role="super_admin", is_superuser=True, organization_id=root.id)
+    _use_db(db, admin)
+    try:
+        monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_ENABLED", False)
+        disabled = client.get("/api/v1/account-packages/can-issue").json()["data"]
+        assert disabled["can_issue"] is False
+        assert disabled["reason_code"] == "AP_DISABLED"
+
+        monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_ENABLED", True)
+        monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_SIGNING_KEY", "")
+        missing = client.get("/api/v1/account-packages/can-issue").json()["data"]
+        assert missing["can_issue"] is False
+        assert missing["reason_code"] == "AP_SIGNING_MISSING"
+    finally:
+        app.dependency_overrides.clear()
+
+def test_export_authorization_error_maps_to_400(client, api_env):
+    source = _db()
+    root = _org(source)
+    _org(source, "520100", "市局", root, "2")
+    admin = SimpleNamespace(id=1, username="root", role="super_admin", is_superuser=True, organization_id=root.id)
+    _use_db(source, admin)
+    try:
+        r = client.post("/api/v1/account-packages/export", json={
+            "organization_code": "520100", "organization_name": "市局", "parent_code": "520000",
+            "admin_username": "api_admin", "admin_full_name": "管理员",
+            "target_machine_code": "MC-API-123", "package_password": "passw0rd-pass",
+            "grants": {"not-a-page": "view"},
+        })
+        assert r.status_code == 400, r.text
+        assert r.json()["detail"]["code"] == "AP_GRANT_INVALID"
+    finally:
+        app.dependency_overrides.clear()

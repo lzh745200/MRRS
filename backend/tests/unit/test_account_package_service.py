@@ -11,10 +11,13 @@ from app.core.config import settings
 from app.core.grant_signing import generate_keypair
 from app.models.base import Base
 from app.models.organization import Organization
+from app.models.org_grant import OrgGrant
 from app.models.user import User
 from app.services.account_package_service import (
     AccountPackageBusinessError,
     AccountPackageService,
+    _normalize_menu_selection,
+    _validated_accounts,
 )
 
 
@@ -62,6 +65,8 @@ def test_export_preview_confirm_and_receipt_unique(env, tmp_path):
         issued_by=issuer,
     )
     assert out["one_time_password"]
+    assert out["authorization"]["page_count"] == 1
+    assert out["authorization"]["edit_page_count"] == 1
     raw = (tmp_path / out["file_name"]).read_bytes()
 
     target = _db()
@@ -70,14 +75,23 @@ def test_export_preview_confirm_and_receipt_unique(env, tmp_path):
     preview = target_service.preview(raw, password="passw0rd-pass", machine_code="MC-1")
     assert preview["organization_exists"] is False
     assert "credential_hash" not in preview["admin"]
+    assert preview["authorization"]["page_count"] == 1
+    assert preview["authorization"]["edit_page_count"] == 1
+    assert preview["authorization"]["module_count"] == 1
 
     result = target_service.confirm(raw, password="passw0rd-pass", machine_code="mc-1")
+    assert result["authorization"]["page_count"] == 1
     assert result["users"][0]["username"] == "gy_admin"
     created = target.query(User).filter(User.username == "gy_admin").first()
     assert created.must_change_password is True
     assert created.credential_expires_at is not None
     assert created.organization_id == result["organization_id"]
-    assert target.query(Organization).filter(Organization.code == "520100").first() is not None
+    assert created.allowed_permissions_list == []
+    org = target.query(Organization).filter(Organization.code == "520100").first()
+    assert org is not None
+    assert org.grant_version == 1
+    grants = target.query(OrgGrant).filter(OrgGrant.organization_id == org.id).all()
+    assert {(grant.module_key, grant.level) for grant in grants} == {("projects", "edit")}
 
     with pytest.raises(AccountPackageBusinessError) as exc:
         target_service.confirm(raw, password="passw0rd-pass", machine_code="mc-1")
@@ -97,7 +111,7 @@ def test_preview_rejects_wrong_machine(env, tmp_path):
         admin_username="gy_admin2",
         admin_full_name="贵阳管理员",
         target_machine_code="MC-2",
-        grants={},
+        grants={"projects": "view"},
         password="passw0rd-pass",
         issued_by=SimpleNamespace(id=1, organization_id=root.id),
     )
@@ -170,8 +184,21 @@ def test_export_validation_branches(env):
         AccountPackageService(db).export_package(**{**base, "accounts": [{"username": "u", "role": "god"}]})
     with pytest.raises(AccountPackageBusinessError):
         AccountPackageService(db).export_package(**{**base, "accounts": [{"username": ""}]})
-    with pytest.raises(AccountPackageBusinessError):
+    with pytest.raises(AccountPackageBusinessError) as exc:
         AccountPackageService(db).export_package(**{**base, "grants": {"x": "bad"}})
+    assert exc.value.code == "AP_GRANT_INVALID"
+
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(db).export_package(**{**base, "grants": {"unknown-page": "view"}})
+    assert exc.value.code == "AP_GRANT_INVALID"
+
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(db).export_package(**{**base, "grants": {}})
+    assert exc.value.code == "AP_GRANT_EMPTY"
+
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(db).export_package(**{**base, "grants": {"dashboard": "edit"}})
+    assert exc.value.code == "AP_GRANT_INVALID"
 
 
 def test_confirm_conflicts_and_api_helpers(env, monkeypatch):
@@ -236,6 +263,20 @@ def test_more_confirm_conflicts(env):
         AccountPackageService(target).confirm(_raw_package(env, pid), password="passw0rd-pass", machine_code="MC-API-123")
     assert exc.value.code == "AP_ORG_CONFLICT"
 
+    # 旧版空授权包不得激活矩阵：不写 OrgGrant，grant_version 保持 0。
+    legacy_target = _db()
+    _org(legacy_target, "520000")
+    legacy = AccountPackageService(legacy_target).confirm(
+        _raw_package(env, "12121212-1212-1212-1212-121212121212"),
+        password="passw0rd-pass",
+        machine_code="MC-API-123",
+    )
+    legacy_org = legacy_target.query(Organization).filter(Organization.code == "520100").first()
+    assert legacy["users"][0]["username"] == "xuser"
+    assert legacy_org is not None
+    assert legacy_org.grant_version == 0
+    assert legacy_target.query(OrgGrant).count() == 0
+
     fresh = _db(); _org(fresh, "520000")
     raw = _raw_package(env, "88888888-8888-8888-8888-888888888888", parent_code="", org_name="")
     with pytest.raises(AccountPackageBusinessError) as exc:
@@ -269,7 +310,7 @@ def test_export_without_issuer_org_and_confirm_without_parent(env):
         package_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         organization_code="520100", organization_name="市局", parent_code="",
         admin_username="no_org", admin_full_name="无组织签发人",
-        target_machine_code="MC-API-123", grants={}, password="passw0rd-pass",
+        target_machine_code="MC-API-123", grants={"projects": "view"}, password="passw0rd-pass",
         issued_by=SimpleNamespace(id=1, organization_id=None),
     )
     raw = (__import__("pathlib").Path(AccountPackageService.package_dir()) / out["file_name"]).read_bytes()
@@ -287,12 +328,12 @@ def test_offline_accounts_carry_password_menus_permissions(env):
         package_id="cccccccc-cccc-cccc-cccc-cccccccccccc",
         organization_code="520100", organization_name="市局", parent_code="520000",
         admin_username="", admin_full_name="", target_machine_code="MC-API-123",
-        grants={}, password="passw0rd-pass",
+        grants={"projects": "view"}, password="passw0rd-pass",
         issued_by=SimpleNamespace(id=1, organization_id=root.id),
         accounts=[{
             "username": "restricted", "full_name": "受限用户", "role": "user",
             "data_scope": "self", "initial_password": "CustomPass123",
-            "allowed_menus": ["projects", "funds"],
+            "allowed_menus": ["projects"],
             "allowed_permissions": ["project:view", "fund:view"],
         }],
     )
@@ -301,15 +342,16 @@ def test_offline_accounts_carry_password_menus_permissions(env):
     target = _db(); _org(target, "520000")
     AccountPackageService(target).confirm(raw, password="passw0rd-pass", machine_code="MC-API-123")
     user = target.query(User).filter(User.username == "restricted").first()
-    assert user.allowed_menus_list == ["projects", "funds"]
-    assert user.allowed_permissions_list == ["project:view", "fund:view"]
+    assert user.allowed_menus_list == ["projects"]
+    # 设计约束：包内不再携带逐账号权限码，允许矩阵是唯一权限上限。
+    assert not user.allowed_permissions_list
 
     with pytest.raises(AccountPackageBusinessError):
         AccountPackageService(source).export_package(
             package_id="dddddddd-dddd-dddd-dddd-dddddddddddd",
             organization_code="520100", organization_name="市局", parent_code="520000",
             admin_username="", admin_full_name="", target_machine_code="MC-API-123",
-            grants={}, password="passw0rd-pass",
+            grants={"projects": "view"}, password="passw0rd-pass",
             issued_by=SimpleNamespace(id=1, organization_id=root.id),
             accounts=[{"username": "weak", "initial_password": "short"}],
         )
@@ -323,7 +365,55 @@ def test_offline_initial_password_requires_letters_and_digits(env):
             package_id="eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
             organization_code="520100", organization_name="市局", parent_code="520000",
             admin_username="", admin_full_name="", target_machine_code="MC-API-123",
-            grants={}, password="passw0rd-pass",
+            grants={"projects": "view"}, password="passw0rd-pass",
             issued_by=SimpleNamespace(id=1, organization_id=root.id),
             accounts=[{"username": "digits", "initial_password": "123456789012"}],
         )
+
+def test_export_account_validation_errors(env):
+    source = _db(); root = _org(source)
+    _org(source, "520100", "市局", root, "2")
+    source.add(User(username="existing_user", hashed_password="x", role="user", data_scope="org"))
+    source.commit()
+    svc = AccountPackageService(source)
+    issuer = SimpleNamespace(id=1, organization_id=root.id)
+
+    def _export(accounts):
+        return svc.export_package(
+            package_id="ffffffff-ffff-ffff-ffff-ffffffffffff",
+            organization_code="520100", organization_name="市局", parent_code="520000",
+            admin_username="", admin_full_name="", target_machine_code="MC-API-123",
+            grants={"projects": "view"}, password="passw0rd-pass", issued_by=issuer,
+            accounts=accounts,
+        )
+
+    for accounts in (
+        [{"username": ""}],
+        [{"username": "dup"}, {"username": "dup"}],
+        [{"username": "existing_user"}],
+        [{"username": "bad_role", "role": "super_admin"}],
+        [{"username": "bad_scope", "data_scope": "all"}],
+        [{"username": "weak_short", "initial_password": "short"}],
+        [{"username": "weak_digits", "initial_password": "123456789012"}],
+        [{"username": "bad_menu", "allowed_menus": ["not-a-menu"]}],
+    ):
+        with pytest.raises(AccountPackageBusinessError):
+            _export(accounts)
+
+
+def test_normalize_menu_selection_and_validated_accounts_errors():
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        _normalize_menu_selection(["not-a-menu"], {"projects": "view"})
+    assert exc.value.code == "AP_MENU_NOT_ALLOWED"
+
+    for manifest in (
+        {"items": []},
+        {"items": "bad"},
+        {"items": [None]},
+        {"items": [{"username": ""}]},
+        {"items": [{"username": "u", "role": "super_admin"}]},
+        {"items": [{"username": "u", "data_scope": "all"}]},
+        {"items": [{"username": "u", "allowed_menus": ["not-a-menu"]}]},
+    ):
+        with pytest.raises(AccountPackageBusinessError):
+            _validated_accounts(manifest, {"projects": "view"})

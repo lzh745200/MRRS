@@ -1,8 +1,8 @@
 {
-  "version": "1.18.63",
-  "build": "20261122",
-  "release_date": "2026-11-22",
-  "description": "图标二次收口：外壳缓存按路径记账 / Linux 装完不刷图标缓存",
+  "version": "1.18.64",
+  "build": "20261127",
+  "release_date": "2026-11-27",
+  "description": "跨机账号包：页面级授权树与导入矩阵收口",
   "features": [
     "安装 TEMP 兜底：Helper 同目录查找 + Install-MRRS.cmd；",
     "刷新令牌统一为 30 天长期会话；",

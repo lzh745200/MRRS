@@ -37,13 +37,16 @@ describe('AccountPackageImport.vue', () => {
     post.mockResolvedValueOnce({
       organization_code: '520100', organization_name: '市局', expires_at: '2030-01-01',
       accounts: [{ username: 'a', full_name: 'A', role: 'admin', data_scope: 'org' }],
+      authorization: { page_count: 2, edit_page_count: 1, view_page_count: 1, module_count: 2 },
     }).mockResolvedValueOnce({ organization_code: '520100', users: [{ user_id: 1, username: 'a' }] })
     const w = mountPage(); const vm = w.vm as any
     vm.file = new File(['x'], 'p.apkg'); vm.password = 'passw0rd-pass'
     await vm.preview(); await flushPromises()
     expect(vm.previewData.accounts[0].username).toBe('a')
+    expect(vm.previewData.authorization.page_count).toBe(2)
     await vm.confirm(); await flushPromises()
     expect(vm.result.users[0].username).toBe('a')
+    expect(vm.result.organization_code).toBe('520100')
     expect(ElMessage.success).toHaveBeenCalled()
     vm.goLogin()
     expect(pushSafe).toHaveBeenCalledWith('/login')

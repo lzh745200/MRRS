@@ -21,12 +21,18 @@ from app.core.account_package import (
     open_package,
     seal_package,
 )
+from app.core.account_package_authz import (
+    AccountPackageAuthorizationError,
+    authorization_summary,
+    validate_manifest_grants,
+    validate_menu_selection,
+)
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.core.transaction import safe_commit
 from app.models.account_package import AccountPackageAttempt, AccountPackageExport, AccountPackageReceipt
 from app.models.organization import Organization
-from app.models.org_grant import VALID_GRANT_LEVELS, OrgGrant
+from app.models.org_grant import OrgGrant
 from app.models.user import User
 from app.services.effective_grant_service import clear_cache
 from app.services.user_service import UserService
@@ -48,6 +54,58 @@ def _normalize_machine(code: Optional[str]) -> str:
 
 def _safe_name(item: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in item.items() if k != "credential_hash"}
+
+
+def _normalize_grants(raw: Any) -> Dict[str, str]:
+    """校验并推导授权矩阵；错误统一映射为稳定 AP_* 业务错误。"""
+    try:
+        return validate_manifest_grants(raw)
+    except AccountPackageAuthorizationError as exc:
+        raise AccountPackageBusinessError(str(exc), code=exc.code) from exc
+
+
+def _normalize_menu_selection(raw: Any, grants: Dict[str, str]) -> Optional[List[str]]:
+    try:
+        return validate_menu_selection(raw, grants)
+    except AccountPackageAuthorizationError as exc:
+        raise AccountPackageBusinessError(str(exc), code=exc.code) from exc
+
+
+def _validated_accounts(
+    manifest: Dict[str, Any], grants: Dict[str, str]
+) -> List[Dict[str, Any]]:
+    """导入前校验账号身份/角色/范围/菜单，返回清洗后的账号列表。
+
+    设计约束：包内不再接受 ``allowed_permissions``；菜单只能收窄到包授权页面。
+    该校验在创建组织之前执行，避免“建了组织再失败”的半成品状态。
+    """
+    items = manifest.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise AccountPackageBusinessError("包内没有账号", code="AP_BAD_PACKAGE")
+    seen: set[str] = set()
+    cleaned: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise AccountPackageBusinessError("包内账号格式非法", code="AP_BAD_PACKAGE")
+        username = str(item.get("username") or "").strip()
+        if not username or username in seen:
+            raise AccountPackageBusinessError("账号用户名缺失或重复", code="AP_USERNAME_TAKEN", status=409)
+        seen.add(username)
+        role = str(item.get("role") or "user")
+        scope = str(item.get("data_scope") or "org")
+        if role not in ("admin", "user", "viewer") or scope not in ("org", "org_children", "self"):
+            raise AccountPackageBusinessError("账号角色或数据范围非法", code="AP_INVALID_ROLE")
+        cleaned.append(
+            {
+                "username": username,
+                "full_name": str(item.get("full_name") or username),
+                "credential_hash": str(item.get("credential_hash") or ""),
+                "role": role,
+                "data_scope": scope,
+                "allowed_menus": _normalize_menu_selection(item.get("allowed_menus"), grants),
+            }
+        )
+    return cleaned
 
 
 class AccountPackageService:
@@ -164,9 +222,11 @@ class AccountPackageService:
         org = self.db.query(Organization).filter(Organization.code == organization_code).first()
         if org is None:
             raise AccountPackageBusinessError("目标组织不存在", code="AP_ORG_NOT_FOUND", status=404)
-        bad_grants = {k: v for k, v in grants.items() if v not in VALID_GRANT_LEVELS}
-        if bad_grants:
-            raise AccountPackageBusinessError("授权级别非法", code="AP_GRANT_INVALID")
+        grants = _normalize_grants(grants)
+        if not grants:
+            raise AccountPackageBusinessError(
+                "请至少勾选一个页面或功能再签发", code="AP_GRANT_EMPTY"
+            )
 
         # P3：单包可携带多个账号；每个账号独立 128-bit OTP，明文只在本次响应返回。
         raw_accounts = accounts or [
@@ -202,8 +262,7 @@ class AccountPackageService:
                 otp = initial_password
             else:
                 otp = generate_otp()
-            menus = [str(k) for k in (account.get("allowed_menus") or []) if str(k).strip()]
-            perms = [str(k) for k in (account.get("allowed_permissions") or []) if str(k).strip()]
+            menus = _normalize_menu_selection(account.get("allowed_menus"), grants)
             credentials.append({
                 "username": username,
                 "one_time_password": otp,
@@ -211,15 +270,17 @@ class AccountPackageService:
                 "role": role,
                 "data_scope": scope,
             })
-            items.append({
+            item: Dict[str, Any] = {
                 "username": username,
                 "full_name": str(account.get("full_name") or username),
                 "credential_hash": get_password_hash(otp),
                 "role": role,
                 "data_scope": scope,
-                "allowed_menus": menus,
-                "allowed_permissions": perms,
-            })
+            }
+            # 空值不写空数组：否则导入侧会把“未收窄”误判为“无可见菜单”。
+            if menus:
+                item["allowed_menus"] = menus
+            items.append(item)
         manifest = build_manifest(
             package_id=package_id,
             organization_code=organization_code,
@@ -269,6 +330,7 @@ class AccountPackageService:
             "one_time_password": credentials[0]["one_time_password"],
             "admin_username": credentials[0]["username"],
             "accounts": credentials,
+            "authorization": authorization_summary(grants),
             "download_path": f"/api/v1/account-packages/{package_id}/download",
         }
 
@@ -280,6 +342,8 @@ class AccountPackageService:
         )
         if _normalize_machine(manifest.get("target_machine_code")) != _normalize_machine(machine_code):
             raise AccountPackageBusinessError("账号包与当前机器不匹配", code="AP_MACHINE_MISMATCH", status=403)
+        grants = _normalize_grants(manifest.get("grants"))
+        accounts = _validated_accounts(manifest, grants)
         org = self.db.query(Organization).filter(
             Organization.code == manifest.get("organization_code")
         ).first()
@@ -291,9 +355,10 @@ class AccountPackageService:
             "organization_name": manifest.get("organization_name"),
             "parent_code": manifest.get("parent_code"),
             "expires_at": manifest.get("expires_at"),
-            "admin": _safe_name((manifest.get("items") or [{}])[0]),
-            "accounts": [_safe_name(item) for item in (manifest.get("items") or [])],
-            "grants": manifest.get("grants") or {},
+            "admin": _safe_name(accounts[0]),
+            "accounts": [_safe_name(item) for item in accounts],
+            "grants": grants,
+            "authorization": authorization_summary(grants),
             "organization_exists": org is not None,
         }
 
@@ -310,6 +375,8 @@ class AccountPackageService:
             AccountPackageReceipt.package_id == package_id
         ).first() is not None:
             raise AccountPackageBusinessError("该账号包已在本机导入", code="AP_ALREADY_IMPORTED", status=409)
+        grants = _normalize_grants(manifest.get("grants"))
+        accounts = _validated_accounts(manifest, grants)
 
         code = str(manifest.get("organization_code") or "")
         if self.db.query(Organization.id).filter(Organization.code == code).first() is not None:
@@ -340,26 +407,26 @@ class AccountPackageService:
         user_service = UserService(self.db)
         valid_days = int((manifest.get("policy") or {}).get("credential_valid_days") or 30)
         credential_expires_at = utcnow() + timedelta(days=valid_days)
-        for item in manifest.get("items") or []:
+        for item in accounts:
             try:
                 users.append(user_service.create_user_with_password_hash(
-                    str(item.get("username") or ""),
-                    str(item.get("credential_hash") or ""),
-                    role=str(item.get("role") or "user"),
+                    item["username"],
+                    item["credential_hash"],
+                    role=item["role"],
                     organization_id=org.id,
-                    data_scope=str(item.get("data_scope") or "org"),
+                    data_scope=item["data_scope"],
                     full_name=item.get("full_name"),
                     credential_expires_at=credential_expires_at,
                     allowed_menus=item.get("allowed_menus"),
-                    allowed_permissions=item.get("allowed_permissions"),
                     commit=False,
                 ))
             except ValueError as exc:
                 raise AccountPackageBusinessError(str(exc), code="AP_USERNAME_TAKEN", status=409) from exc
 
-        for module_key, level in (manifest.get("grants") or {}).items():
+        # 只有包内授权非空才激活矩阵；空 grants 绝不能把组织切到“仅授权矩阵可见”。
+        for module_key, level in grants.items():
             self.db.add(OrgGrant(organization_id=org.id, module_key=module_key, level=level))
-        org.grant_version = 1
+        org.grant_version = 1 if grants else 0
 
         receipt = AccountPackageReceipt(
             package_id=package_id,
@@ -383,6 +450,7 @@ class AccountPackageService:
             "package_id": package_id,
             "organization_id": org.id,
             "organization_code": org.code,
+            "authorization": authorization_summary(grants),
             "users": [
                 {
                     "user_id": getattr(user, "id", None),

@@ -4736,4 +4736,30 @@ VERSION_HISTORY_DATA = [
             ),
         ],
     },
+    {
+        "version": "1.18.64",
+        "date": "2026-11-27",
+        "description": "跨机账号包：页面级授权树与导入矩阵收口",
+        "features": [
+            (
+                "页面级授权树：账号包不再接收手写 JSON 授权码，改为按菜单页勾选“不开放/只读/可操作”。服务端从 menus.py 与 permission_catalog 推导页面 key 与后端"
+                "模块 key；页面“可操作”自动补齐映射模块 edit，页面“只读”只给页面 key；工作台/大屏等只读页面禁止“可操作”。"
+            ),
+            (
+                "授权目录与可签发状态接口：GET /account-packages/authorization-catalog 返回 54 个页面 /7 个分组 / 32 个模块及 catalog_ve"
+                "rsion；GET /account-packages/can-issue 返回当前用户是否可签发、账号包开关、签名密钥状态和原因码。前端据此禁用“签发”并展示原因。"
+            ),
+            "导入侧授权摘要：预览与成功页展示页面数、可操作页数、只读页数、模块数；导出与确认审计记录授权摘要（不含密码/密钥），目标机成功页提示首次登录修改出厂管理员口令。",
+            (
+                "新增 backend/tests/unit/test_account_package_authz.py（16 例，行/分支 100%）；test_account_package_servi"
+                "ce.py / test_account_package_api.py 补空授权拒绝、矩阵激活、历史空授权包不激活矩阵、两个只读接口权限等回归；前端账号包与目标机导入页测试同步更新。"
+            ),
+            "空授权包不再“激活矩阵却只留工作台”：导出至少要求一个页面/功能；导入时空授权包不写 OrgGrant、org.grant_version 保持 0，避免导入用户被空矩阵锁死。",
+            "导入账号不再写 allowed_permissions 权限码：权限上限统一由页面级授权矩阵控制，避免自由填写权限码绕过页面勾选；账号菜单只能是所授权页面的子集，越界整包拒绝。",
+            (
+                "同步更新 README.md、CLAUDE.md、项目文件结构说明.md 与 v1.18.64 发布说明：后端 16,117 用例、前端 7,590 用例、Electron 23 例，合计"
+                " 23,707。"
+            ),
+        ],
+    },
 ]
