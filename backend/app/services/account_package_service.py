@@ -28,7 +28,8 @@ from app.core.account_package_authz import (
     validate_menu_selection,
 )
 from app.core.config import settings
-from app.core.security import get_password_hash
+from app.core.constants import FACTORY_ADMIN_PASSWORD, FACTORY_ADMIN_USERNAME
+from app.core.security import PasswordPolicy, get_password_hash
 from app.core.transaction import safe_commit
 from app.models.account_package import AccountPackageAttempt, AccountPackageExport, AccountPackageReceipt
 from app.models.organization import Organization
@@ -69,6 +70,49 @@ def _normalize_menu_selection(raw: Any, grants: Dict[str, str]) -> Optional[List
         return validate_menu_selection(raw, grants)
     except AccountPackageAuthorizationError as exc:
         raise AccountPackageBusinessError(str(exc), code=exc.code) from exc
+
+
+def _unrotated_factory_admins(db: Session) -> List[User]:
+    """仍是出厂状态的出厂超管：从未完成首登改密。
+
+    登录前导入的机器上，这类账号可被出厂密码直接登录并完成“强制改密”后接管，
+    因此导入时必须一并换成现场设置的新密码。
+    """
+    return (
+        db.query(User)
+        .filter(
+            User.username == FACTORY_ADMIN_USERNAME,
+            User.is_superuser.is_(True),
+            User.is_active.is_(True),
+            User.must_change_password.is_(True),
+        )
+        .order_by(User.id)
+        .all()
+    )
+
+
+def _resolve_factory_admin_password(
+    factory_admins: List[User],
+    password: Optional[str],
+    required: bool,
+) -> Optional[str]:
+    """返回要写入的超管新密码；没有待接管的出厂超管时一律返回 None（不改动任何超管）。"""
+    if not factory_admins:
+        return None
+    if not password:
+        if required:
+            raise AccountPackageBusinessError(
+                "导入时必须设置本机超级管理员的新密码", code="AP_FACTORY_PASSWORD_REQUIRED"
+            )
+        return None
+    if password == FACTORY_ADMIN_PASSWORD:
+        raise AccountPackageBusinessError("不能继续使用出厂密码", code="AP_FACTORY_PASSWORD_WEAK")
+    ok, reason = PasswordPolicy.validate(password, FACTORY_ADMIN_USERNAME)
+    if not ok:
+        raise AccountPackageBusinessError(
+            f"超级管理员新密码不符合要求：{reason}", code="AP_FACTORY_PASSWORD_WEAK"
+        )
+    return password
 
 
 def _validated_accounts(
@@ -359,10 +403,19 @@ class AccountPackageService:
             "accounts": [_safe_name(item) for item in accounts],
             "grants": grants,
             "authorization": authorization_summary(grants),
+            "factory_admin_rotation_required": bool(_unrotated_factory_admins(self.db)),
             "organization_exists": org is not None,
         }
 
-    def confirm(self, raw: bytes, *, password: str, machine_code: str) -> Dict[str, Any]:
+    def confirm(
+        self,
+        raw: bytes,
+        *,
+        password: str,
+        machine_code: str,
+        factory_admin_password: Optional[str] = None,
+        require_factory_rotation: bool = False,
+    ) -> Dict[str, Any]:
         manifest = open_package(
             raw,
             password=password,
@@ -377,6 +430,13 @@ class AccountPackageService:
             raise AccountPackageBusinessError("该账号包已在本机导入", code="AP_ALREADY_IMPORTED", status=409)
         grants = _normalize_grants(manifest.get("grants"))
         accounts = _validated_accounts(manifest, grants)
+
+        # 出厂超管接管：登录前导入的机器上，仍处出厂状态的超管必须同时换掉密码，
+        # 否则任何知道出厂密码的人都能登录并完成“强制改密”接管本机（已实测）。
+        factory_admins = _unrotated_factory_admins(self.db)
+        factory_admin_password = _resolve_factory_admin_password(
+            factory_admins, factory_admin_password, require_factory_rotation
+        )
 
         code = str(manifest.get("organization_code") or "")
         if self.db.query(Organization.id).filter(Organization.code == code).first() is not None:
@@ -423,6 +483,13 @@ class AccountPackageService:
             except ValueError as exc:
                 raise AccountPackageBusinessError(str(exc), code="AP_USERNAME_TAKEN", status=409) from exc
 
+        if factory_admin_password:
+            # 与建号、授权同一个事务：任何一步失败，超管密码也不变。
+            for factory_admin in factory_admins:
+                factory_admin.hashed_password = get_password_hash(factory_admin_password)
+                factory_admin.must_change_password = False
+                factory_admin.revoke_all_tokens()
+
         # 只有包内授权非空才激活矩阵；空 grants 绝不能把组织切到“仅授权矩阵可见”。
         for module_key, level in grants.items():
             self.db.add(OrgGrant(organization_id=org.id, module_key=module_key, level=level))
@@ -451,6 +518,7 @@ class AccountPackageService:
             "organization_id": org.id,
             "organization_code": org.code,
             "authorization": authorization_summary(grants),
+            "factory_admin_rotated": bool(factory_admin_password),
             "users": [
                 {
                     "user_id": getattr(user, "id", None),

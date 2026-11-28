@@ -285,6 +285,7 @@ async def confirm_account_package(
     request: Request,
     file: UploadFile = File(...),
     password: str = Form(...),
+    factory_admin_password: str = Form(""),
     current_user: Optional[User] = Depends(_optional_current_user),
     confirm_password: str = Header("", alias="X-Confirm-Password"),
     db: Session = Depends(get_db),
@@ -301,7 +302,15 @@ async def confirm_account_package(
     except AccountPackageBusinessError as exc:
         _raise_http_error(exc)
     try:
-        data = service.confirm(raw, password=password, machine_code=machine_code)
+        # 只有登录前（匿名）导入才接管出厂超管；已登录管理员的导入不改动任何超管密码。
+        anonymous_import = current_user is None
+        data = service.confirm(
+            raw,
+            password=password,
+            machine_code=machine_code,
+            factory_admin_password=(factory_admin_password or None) if anonymous_import else None,
+            require_factory_rotation=anonymous_import,
+        )
     except (AccountPackageBusinessError, AccountPackageError) as exc:
         err = _fail(exc)
         service.record_attempt_failure(subject, err.code)
@@ -324,6 +333,7 @@ async def confirm_account_package(
             "usernames": [u["username"] for u in data.get("users", [])],
             "account_count": len(data.get("users") or []),
             "target_machine_code": machine_code,
+            "factory_admin_rotated": bool(data.get("factory_admin_rotated")),
             **(data.get("authorization") or {}),
         },
     )

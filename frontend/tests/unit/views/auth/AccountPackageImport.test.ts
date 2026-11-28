@@ -71,6 +71,22 @@ describe('AccountPackageImport.vue', () => {
     expect(ElMessage.error).toHaveBeenCalled()
   })
 
+  it('blocks confirm when the factory admin passwords differ, then submits the new password', async () => {
+    const w = mountPage(); const vm = w.vm as any
+    vm.file = new File(['x'], 'p.apkg'); vm.password = 'passw0rd-pass'
+    vm.previewData = { organization_code: '520100', organization_name: '市局', expires_at: '2030-01-01' }
+    vm.factoryPassword = 'Local#Pass2026'; vm.factoryPasswordConfirm = 'Local#Pass2027'
+    await vm.confirm()
+    expect(ElMessage.warning).toHaveBeenCalledWith('两次输入的超级管理员新密码不一致')
+    expect(post).not.toHaveBeenCalled()
+    vm.factoryPasswordConfirm = 'Local#Pass2026'
+    post.mockResolvedValueOnce({ organization_code: '520100', users: [] })
+    await vm.confirm()
+    const form = post.mock.calls[0][1] as FormData
+    expect(form.get('factory_admin_password')).toBe('Local#Pass2026')
+    expect(form.get('password')).toBe('passw0rd-pass')
+  })
+
   it('warns confirm before preview and handles no raw file', async () => {
     const w = mountPage(); const vm = w.vm as any
     await vm.confirm()

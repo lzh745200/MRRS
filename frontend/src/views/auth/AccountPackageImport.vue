@@ -37,6 +37,30 @@
         />
         <el-button type="primary" :loading="previewing" @click="preview">校验并预览</el-button>
 
+        <div class="takeover-block">
+          <p class="takeover-hint">
+            全新机器导入时，必须同时为本机的出厂管理员设置新密码；导入成功后出厂密码立即失效。
+          </p>
+          <el-input
+            v-model="factoryPassword"
+            type="password"
+            show-password
+            autocomplete="new-password"
+            placeholder="本机超级管理员新密码"
+            class="password-input"
+            data-testid="factory-password"
+          />
+          <el-input
+            v-model="factoryPasswordConfirm"
+            type="password"
+            show-password
+            autocomplete="new-password"
+            placeholder="再次输入新密码"
+            class="password-input"
+            data-testid="factory-password-confirm"
+          />
+        </div>
+
         <div v-if="previewData" class="preview" data-testid="account-import-preview">
           <h3>包内容预览</h3>
           <p>组织：{{ previewData.organization_name }}（{{ previewData.organization_code }}）</p>
@@ -103,6 +127,7 @@ interface PreviewData {
     view_page_count: number
     module_count: number
   }
+  factory_admin_rotation_required?: boolean
 }
 
 interface ImportResult {
@@ -113,6 +138,8 @@ interface ImportResult {
 const { pushSafe } = useRouterSafe()
 const file = ref<File | null>(null)
 const password = ref('')
+const factoryPassword = ref('')
+const factoryPasswordConfirm = ref('')
 const previewing = ref(false)
 const confirming = ref(false)
 const previewData = ref<PreviewData | null>(null)
@@ -141,6 +168,8 @@ function formData(): FormData {
   const form = new FormData()
   form.append('file', file.value as File)
   form.append('password', password.value)
+  // 登录前导入专用：本机出厂管理员的新密码；服务端只在确有未改密的出厂超管时使用
+  form.append('factory_admin_password', factoryPassword.value)
   return form
 }
 
@@ -163,6 +192,10 @@ async function preview(): Promise<void> {
 async function confirm(): Promise<void> {
   if (!file.value || !password.value || !previewData.value) {
     ElMessage.warning('请先完成账号包预览')
+    return
+  }
+  if (factoryPassword.value !== factoryPasswordConfirm.value) {
+    ElMessage.warning('两次输入的超级管理员新密码不一致')
     return
   }
   confirming.value = true
@@ -207,6 +240,11 @@ function goLogin(): void {
 }
 .password-input {
   margin: 16px 0;
+}
+.takeover-hint {
+  margin: 12px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 .preview {
   margin-top: 20px;
