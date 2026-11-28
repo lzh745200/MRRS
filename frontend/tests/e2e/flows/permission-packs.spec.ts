@@ -144,6 +144,15 @@ test('权限包绑定用户后，菜单按包解析（包内可见、包外不�
     await page.locator('input[placeholder="请输入新密码"]').fill(PACK_USER_NEW_PASSWORD)
     await page.locator('input[placeholder="请再次输入新密码"]').fill(PACK_USER_NEW_PASSWORD)
     await page.locator('button.submit-button').click()
+    // 改密二次确认 → 成功后强制回登录页，必须用新口令重新登录
+    await page.locator('.el-message-box__btns .el-button--primary').click()
+    await page.waitForURL(/\/login/, { timeout: 15000 })
+    await page
+      .locator('input[placeholder*="用户名"], input[type="text"]')
+      .first()
+      .fill(USERNAME)
+    await page.locator('input[type="password"]').fill(PACK_USER_NEW_PASSWORD)
+    await page.locator('button[type="submit"]').click()
   }
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 })
 
