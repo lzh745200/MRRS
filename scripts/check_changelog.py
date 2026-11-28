@@ -81,6 +81,18 @@ def _to_date(value: str) -> _dt.date | None:
         return None
 
 
+# CHANGELOG 的日期按项目本地时区（UTC+8）书写，而 CI 运行在 UTC 机器上：
+# 本地 00:00–08:00 发版时 UTC 还是"昨天"，直接取机器日期会把刚写好的当天判成"未来"
+# （v1.18.64 于 2026-11-28 凌晨发版，因此连续两轮门禁失败）。规则本身不变：仍不允许未来日期。
+AUTHOR_TZ = _dt.timezone(_dt.timedelta(hours=8))
+
+
+def author_today(now: _dt.datetime | None = None) -> _dt.date:
+    """按项目书写日期所用的时区取"今天"；``now`` 须带时区，仅供测试注入。"""
+    moment = now or _dt.datetime.now(AUTHOR_TZ)
+    return moment.astimezone(AUTHOR_TZ).date()
+
+
 def validate(
     entries: list[dict],
     current_version: str | None,
@@ -93,7 +105,7 @@ def validate(
     格式/降序/非空只查最近 `strict_top` 段（历史遗留不追）。
     """
     problems: list[str] = []
-    today = today or _dt.date.today()
+    today = today or author_today()
 
     if not entries:
         return ["未找到任何 `## [x.y.z] - YYYY-MM-DD` 版本段；CHANGELOG 至少要有当前版本一条"]

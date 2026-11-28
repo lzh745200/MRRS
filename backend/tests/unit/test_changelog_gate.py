@@ -123,6 +123,21 @@ class TestValidateNegative:
         problems = mod.validate(mod.parse_entries(text), "1.18.1", today=TODAY)
         assert any("晚于今天" in p for p in problems)
 
+    def test_default_today_follows_author_timezone(self, mod):
+        """默认"今天"按项目时区（UTC+8）取，而不是机器本地日期。
+
+        CI 机器跑在 UTC：本地 00:00–08:00 发版时 UTC 还是昨天，用机器日期会把
+        刚写好的当天判成"未来"（v1.18.64 即因此连续两轮门禁失败）。
+        """
+        utc_moment = dt.datetime(2026, 11, 27, 17, 30, tzinfo=dt.timezone.utc)
+        assert mod.author_today(utc_moment) == dt.date(2026, 11, 28)
+
+    def test_author_today_entry_is_not_future(self, mod):
+        """项目时区的当天写进 CHANGELOG，默认口径不得判成未来日期。"""
+        text = f"## [1.18.1] - {mod.author_today().isoformat()} — 主题\n\n- 变更\n"
+        problems = mod.validate(mod.parse_entries(text), "1.18.1")
+        assert not any("晚于今天" in p for p in problems)
+
     def test_strict_top_zero_still_checks_one(self, mod):
         """strict_top 传 0/负数时至少校验最新一段，避免"关掉门禁"。"""
         text = "## [1.18.1] - 2026-10-24 — 主题\n\n### Added\n"
