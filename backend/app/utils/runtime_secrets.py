@@ -206,6 +206,26 @@ def get_or_create_secret(key: str, *, generate=None, require_persisted: bool = F
     return new_value
 
 
+def get_secret(key: str) -> str:
+    """只读取指定密钥，不存在或文件不可读时返回空串（绝不创建）。
+
+    与 ``get_or_create_secret`` 的区别：本函数用于"读取可选配置"场景 ——
+    例如账号开通包的信任公钥列表，未配置时应返回空而不是顺手生成一个。
+    """
+    secrets_file = _resolve_secrets_file()
+    try:
+        with open(secrets_file, "r", encoding="utf-8") as f:
+            loaded = json.load(f) or {}
+    except FileNotFoundError:
+        return ""
+    except (json.JSONDecodeError, PermissionError, OSError):
+        return ""
+    if not isinstance(loaded, dict):
+        return ""
+    raw = loaded.get(key)
+    return str(raw).strip() if raw else ""
+
+
 def set_secret(key: str, value: str) -> None:
     """覆盖写入指定密钥（用于导入跨机密钥，如 PII_AESSIV_KEY）。
 

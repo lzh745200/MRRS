@@ -27,7 +27,7 @@ from typing import Any, Dict, Iterable, Optional, cast
 
 from cryptography.fernet import InvalidToken
 
-from app.core.grant_signing import sign_payload, verify_payload
+from app.core.grant_signing import derive_public_key, sign_payload, verify_payload
 from app.services.password_encryption_service import (
     InvalidPasswordError,
     PasswordEncryptionService,
@@ -223,6 +223,9 @@ def seal_package(
         "manifest_sha256": _sha256_hex(manifest_bytes),
         "cipher_sha256": _sha256_hex(cipher),
         "cipher_len": len(cipher),
+        # 内嵌签发公钥：让目标机无需预配环境变量即可完成**完整性**验签；
+        # 是否信任该来源由 service 层用带外核对的指纹单独决定，绝不由包内公钥自动放行。
+        "signer_public_key": derive_public_key(private_key_hex),
     }
     header["signature"] = sign_payload(header, private_key_hex)
     header_bytes = canonical_bytes(header)
@@ -270,18 +273,43 @@ def inspect_package(raw: bytes) -> Dict[str, Any]:
     return public
 
 
-def _verify_header_signature(header: Dict[str, Any], public_key_hex: Optional[str]) -> None:
-    """验签只覆盖包头（含 cipher_sha256）；未签名或未配公钥都拒绝。"""
+def _candidate_public_keys(
+    header: Dict[str, Any], public_keys: Optional[Iterable[str] | str]
+) -> list[str]:
+    candidates: list[str] = []
+    embedded = header.get("signer_public_key")
+    if isinstance(embedded, str) and embedded.strip():
+        candidates.append(embedded.strip())
+    if isinstance(public_keys, str):
+        candidates.extend(
+            item for item in public_keys.replace(";", ",").split(",") if item.strip()
+        )
+    elif public_keys:
+        candidates.extend(str(item).strip() for item in public_keys if str(item).strip())
+    return candidates
+
+
+def _verify_header_signature(
+    header: Dict[str, Any], public_keys: Optional[Iterable[str] | str]
+) -> None:
+    """验签只覆盖包头（含 cipher_sha256）。
+
+    候选公钥 = 包头内嵌签发公钥 + 调用方提供的信任公钥。内嵌公钥只证明
+    "包头自洽、未被篡改"，不证明来源可信；来源信任由 service 层单独判断。
+    """
     signature = header.get("signature")
     if not signature:
         raise AccountPackageUnsigned("账号包未签名，拒绝导入")
-    if not public_key_hex:
+    candidates = _candidate_public_keys(header, public_keys)
+    if not candidates:
         raise AccountPackageUnsigned(
-            "本机未配置 ACCOUNT_PACKAGE_PUBKEY，无法校验账号包来源（fail-closed）"
+            "无法确认账号包来源：包内没有签发公钥，本机也没有配置信任公钥（fail-closed）"
         )
     unsigned_header = {k: v for k, v in header.items() if k != "signature"}
-    if not verify_payload(unsigned_header, signature, public_key_hex):
-        raise AccountPackageBadSignature("账号包签名校验失败（可能被篡改或来源不符）")
+    for candidate in candidates:
+        if verify_payload(unsigned_header, signature, candidate):
+            return
+    raise AccountPackageBadSignature("账号包签名校验失败（可能被篡改或来源不符）")
 
 
 def _extract_salt(kdf: Dict[str, Any]) -> bytes:

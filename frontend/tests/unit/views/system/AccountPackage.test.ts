@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 
-const { get, post, requestGet, downloadBlob, ElMessage } = vi.hoisted(() => ({
+const { get, post, requestGet, downloadBlob, del, ElMessage } = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   requestGet: vi.fn(),
   downloadBlob: vi.fn(),
+  del: vi.fn(),
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
 
@@ -119,6 +120,17 @@ const canIssue = vi.hoisted(() => ({
   is_superuser: true,
   reason: '',
   reason_code: null,
+  signing_public_key: 'a'.repeat(64),
+  signing_fingerprint: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+  signing_key_source: 'runtime',
+}))
+
+const signingKeys = vi.hoisted(() => ({
+  public_key: 'a'.repeat(64),
+  fingerprint: 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111',
+  source: 'runtime',
+  ready: true,
+  trusted_keys: [] as Array<{ public_key: string; fingerprint: string }>,
 }))
 
 vi.mock('@/stores/menu', () => ({
@@ -134,9 +146,10 @@ vi.mock('@/stores/menu', () => ({
 }))
 
 vi.mock('@/api/request', () => ({
-  default: { get: requestGet },
+  default: { get: requestGet, del },
   get,
   post,
+  del,
   downloadBlob,
   parseContentDisposition: (_h: unknown, fallback: string) => fallback,
 }))
@@ -150,6 +163,9 @@ import AccountPackage from '@/views/system/AccountPackage.vue'
 function defaultGet(url: string) {
   if (url === '/account-packages/authorization-catalog') return Promise.resolve(authzCatalog)
   if (url === '/account-packages/can-issue') return Promise.resolve({ ...canIssue })
+  if (url === '/account-packages/signing-keys') {
+    return Promise.resolve({ ...signingKeys, trusted_keys: [...signingKeys.trusted_keys] })
+  }
   return Promise.resolve({ items: [] })
 }
 
@@ -199,10 +215,92 @@ describe('AccountPackage.vue', () => {
     expect(get).toHaveBeenCalledWith('/account-packages/receipts')
     expect(get).toHaveBeenCalledWith('/account-packages/authorization-catalog')
     expect(get).toHaveBeenCalledWith('/account-packages/can-issue')
+    expect(get).toHaveBeenCalledWith('/account-packages/signing-keys')
     const vm = wrapper.vm as any
     expect(vm.packages).toEqual([])
     expect(vm.authzCatalog.catalog_version).toBe('catalog-v1')
     expect(vm.issueStatus.can_issue).toBe(true)
+    expect(vm.signingKeys.fingerprint).toBe('AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111')
+  })
+
+  it('展示本机签发密钥并支持信任/移除外部签发机', async () => {
+    const trusted = {
+      public_key: 'b'.repeat(64),
+      fingerprint: 'BBBB-CCCC-DDDD-EEEE-FFFF-0000-1111-2222',
+    }
+    get.mockImplementation((url: string) => {
+      if (url === '/account-packages/signing-keys') {
+        return Promise.resolve({ ...signingKeys, trusted_keys: [trusted] })
+      }
+      return defaultGet(url)
+    })
+    post.mockResolvedValue({ fingerprint: 'CCCC-DDDD-EEEE-FFFF-0000-1111-2222-3333' })
+    del.mockResolvedValue({ removed: true })
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as any)
+
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.signingKeys.trusted_keys[0].fingerprint).toBe(trusted.fingerprint)
+
+    vm.trustKeyPublicKey = 'c'.repeat(64)
+    await vm.trustSigningKey()
+    expect(post).toHaveBeenCalledWith('/account-packages/signing-keys/trusted', {
+      public_key: 'c'.repeat(64),
+    })
+
+    await vm.untrustSigningKey(trusted.fingerprint)
+    expect(del).toHaveBeenCalledWith(
+      `/account-packages/signing-keys/trusted/${encodeURIComponent(trusted.fingerprint)}`
+    )
+  })
+
+  it('首次来自未信任签发机时必须核对指纹确认', async () => {
+    post.mockImplementation((url: string) => {
+      if (url === '/account-packages/preview') {
+        return Promise.resolve({
+          package_id: 'p1',
+          organization_code: '520100',
+          organization_name: '市局',
+          expires_at: '2030-01-01',
+          accounts: [{ username: 'alice', full_name: 'A', role: 'user', data_scope: 'org' }],
+          signer_public_key: 'd'.repeat(64),
+          signer_fingerprint: 'DDDD-EEEE-FFFF-0000-1111-2222-3333-4444',
+          signer_trusted: false,
+          trust_required: true,
+        })
+      }
+      if (url === '/account-packages/confirm') {
+        return Promise.resolve({
+          organization_code: '520100',
+          users: [{ user_id: 1, username: 'alice', must_change_password: true }],
+        })
+      }
+      return Promise.resolve({})
+    })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openImportDialog()
+    vm.importFile = new File(['x'], 'p.apkg')
+    vm.importPassword = 'passw0rd-pass'
+    await vm.previewImport()
+    await flushPromises()
+    expect(vm.importPreview.trust_required).toBe(true)
+
+    await vm.confirmImport()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请先通过独立渠道核对签发机指纹并勾选确认')
+    expect(post).not.toHaveBeenCalledWith('/account-packages/confirm', expect.anything())
+
+    vm.importTrustAcknowledged = true
+    await vm.confirmImport()
+    await flushPromises()
+    const form = post.mock.calls.find(
+      (call) => call[0] === '/account-packages/confirm'
+    )?.[1] as FormData
+    expect(form.get('confirmed_fingerprint')).toBe('DDDD-EEEE-FFFF-0000-1111-2222-3333-4444')
+    expect(vm.importResult.users[0].username).toBe('alice')
   })
 
   it('按页面树推导授权并导出，不再提交权限码', async () => {

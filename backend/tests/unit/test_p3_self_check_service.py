@@ -301,16 +301,18 @@ class TestPackageSigningCheck:
         db.query.return_value.filter.return_value.count.return_value = 0
         return db
 
-    def test_warns_when_pubkeys_missing(self, monkeypatch):
+    def test_warns_when_pubkeys_missing(self, monkeypatch, tmp_path):
         from app.core.config import settings
 
-        for name in ("PACKAGE_PUBKEY", "GRANT_PUBKEY", "ACCOUNT_PACKAGE_PUBKEY"):
+        monkeypatch.setenv("RUNTIME_SECRETS_FILE", str(tmp_path / "self-check-secrets.json"))
+        for name in ("PACKAGE_PUBKEY", "GRANT_PUBKEY", "ACCOUNT_PACKAGE_PUBKEY", "ACCOUNT_PACKAGE_SIGNING_KEY"):
             monkeypatch.setattr(settings, name, "", raising=False)
         result = collect_self_check(self._db())
         check = next(c for c in result["checks"] if c["name"] == "包签名校验")
         assert check["level"] == LEVEL_WARN
         assert check["count"] == 3
         assert "PACKAGE_PUBKEY" in check["detail"]
+        assert "账号开通包尚未生成签发密钥" in check["detail"]
 
     def test_ok_when_all_pubkeys_configured(self, monkeypatch):
         from app.core.config import settings

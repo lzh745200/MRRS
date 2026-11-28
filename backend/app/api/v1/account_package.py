@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.v1.permission_package import _client_is_loopback, _optional_current_user
+from app.core import account_package_keys
 from app.core.account_package import MAX_PACKAGE_BYTES, AccountPackageError
 from app.core.account_package_authz import get_authorization_catalog
 from app.core.config import settings
@@ -61,6 +62,10 @@ class ExportAccountPackageRequest(BaseModel):
 
 class RevokeAccountPackageRequest(BaseModel):
     reason: str = Field("", max_length=500)
+
+
+class TrustSigningKeyRequest(BaseModel):
+    public_key: str = Field(..., min_length=64, max_length=128)
 
 
 def _fail(exc: Exception) -> AccountPackageBusinessError:
@@ -144,6 +149,7 @@ def export_account_package(
             "target_org": body.organization_code,
             "target_machine_code": body.target_machine_code,
             "account_count": len(result.get("accounts") or []),
+            "signer_fingerprint": result.get("signer_fingerprint", ""),
             **(result.get("authorization") or {}),
         },
     )
@@ -207,14 +213,29 @@ def account_package_can_issue(
 ):
     """当前账号能否签发：页面据此显示原因，而不是等提交后 403。"""
     enabled = bool(settings.ACCOUNT_PACKAGE_ENABLED)
-    signing = bool(settings.ACCOUNT_PACKAGE_SIGNING_KEY)
     superuser = is_superuser(current_user)
+    key_info = {
+        "public_key": "",
+        "fingerprint": "",
+        "source": "none",
+        "ready": False,
+    }
+    key_error = False
+    if enabled and superuser:
+        try:
+            key_info = account_package_keys.signing_key_info(create=True)
+        except account_package_keys.AccountPackageKeyError:
+            key_error = True
+    signing = bool(key_info.get("ready"))
     if not enabled:
         reason, code = "账号开通包功能未启用", "AP_DISABLED"
-    elif not signing:
-        reason, code = "当前机器未配置签发私钥", "AP_SIGNING_MISSING"
     elif not superuser:
         reason, code = "仅超级管理员可签发账号包", "AP_FORBIDDEN"
+    elif not signing:
+        reason, code = (
+            "本机签发密钥不可用，请检查数据目录写入权限" if key_error else "本机签发密钥不可用",
+            "AP_SIGNING_MISSING",
+        )
     else:
         reason, code = "", None
     return success_response(
@@ -225,7 +246,71 @@ def account_package_can_issue(
             "is_superuser": superuser,
             "reason": reason,
             "reason_code": code,
+            "signing_public_key": key_info.get("public_key", ""),
+            "signing_fingerprint": key_info.get("fingerprint", ""),
+            "signing_key_source": key_info.get("source", "none"),
         }
+    )
+
+
+@router.get("/signing-keys")
+def account_package_signing_keys(
+    _current_user: User = Depends(_require_admin),
+):
+    """本机签发密钥与已信任的签发机公钥（供页面展示/复制/核对）。"""
+    info = account_package_keys.signing_key_info(create=False)
+    return success_response(
+        data={
+            **info,
+            "trusted_keys": account_package_keys.trusted_key_info(),
+        }
+    )
+
+
+@router.post("/signing-keys/trusted")
+def trust_account_package_key(
+    body: TrustSigningKeyRequest,
+    current_user: User = Depends(_require_superuser),
+):
+    """手动信任一个签发机公钥（供有公钥、但尚未导入该机包的场景）。"""
+    try:
+        fingerprint = account_package_keys.add_trusted_public_key(body.public_key)
+    except account_package_keys.AccountPackageKeyError as exc:
+        _raise_http_error(AccountPackageBusinessError(str(exc), code="AP_INVALID_PUBLIC_KEY"))
+    AuditLogger.log(
+        action=AuditAction.ACCOUNT_PACKAGE_TRUST_KEY,
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", None),
+        resource_type="account_package",
+        resource_id=fingerprint,
+        details={"fingerprint": fingerprint},
+    )
+    return success_response(
+        data={
+            "fingerprint": fingerprint,
+            "trusted_keys": account_package_keys.trusted_key_info(),
+        }
+    )
+
+
+@router.delete("/signing-keys/trusted/{fingerprint}")
+def untrust_account_package_key(
+    fingerprint: str,
+    current_user: User = Depends(_require_superuser),
+):
+    removed = account_package_keys.remove_trusted_public_key(fingerprint)
+    if not removed:
+        _raise_http_error(AccountPackageBusinessError("未找到该指纹的信任公钥", code="AP_NOT_FOUND", status=404))
+    AuditLogger.log(
+        action=AuditAction.ACCOUNT_PACKAGE_UNTRUST_KEY,
+        user_id=getattr(current_user, "id", None),
+        username=getattr(current_user, "username", None),
+        resource_type="account_package",
+        resource_id=fingerprint,
+        details={"fingerprint": fingerprint},
+    )
+    return success_response(
+        data={"removed": True, "trusted_keys": account_package_keys.trusted_key_info()}
     )
 
 
@@ -286,6 +371,7 @@ async def confirm_account_package(
     file: UploadFile = File(...),
     password: str = Form(...),
     factory_admin_password: str = Form(""),
+    confirmed_fingerprint: str = Form(""),
     current_user: Optional[User] = Depends(_optional_current_user),
     confirm_password: str = Header("", alias="X-Confirm-Password"),
     db: Session = Depends(get_db),
@@ -310,6 +396,7 @@ async def confirm_account_package(
             machine_code=machine_code,
             factory_admin_password=(factory_admin_password or None) if anonymous_import else None,
             require_factory_rotation=anonymous_import,
+            confirmed_fingerprint=confirmed_fingerprint or None,
         )
     except (AccountPackageBusinessError, AccountPackageError) as exc:
         err = _fail(exc)
@@ -334,6 +421,8 @@ async def confirm_account_package(
             "account_count": len(data.get("users") or []),
             "target_machine_code": machine_code,
             "factory_admin_rotated": bool(data.get("factory_admin_rotated")),
+            "signer_fingerprint": data.get("signer_fingerprint", ""),
+            "signer_trusted": bool(data.get("signer_trusted")),
             **(data.get("authorization") or {}),
         },
     )

@@ -65,6 +65,35 @@
           <h3>包内容预览</h3>
           <p>组织：{{ previewData.organization_name }}（{{ previewData.organization_code }}）</p>
           <p>过期时间：{{ formatDateTimeLocale(previewData.expires_at) }}</p>
+          <div
+            v-if="previewData.signer_fingerprint"
+            class="signer-trust"
+            data-testid="signer-trust"
+          >
+            <el-alert
+              v-if="previewData.signer_trusted"
+              type="success"
+              :closable="false"
+              show-icon
+              title="签发机已在本机信任列表中"
+            />
+            <template v-else>
+              <el-alert
+                type="warning"
+                :closable="false"
+                show-icon
+                title="首次来自该签发机：请通过独立渠道核对指纹后再确认导入。"
+              />
+              <p>
+                签发机指纹：<code data-testid="import-signer-fingerprint">{{
+                  previewData.signer_fingerprint
+                }}</code>
+              </p>
+              <el-checkbox v-model="trustAcknowledged" data-testid="ack-signer-fingerprint">
+                我已通过独立渠道核对上述指纹
+              </el-checkbox>
+            </template>
+          </div>
           <p v-if="previewData.authorization" data-testid="account-import-authorization">
             授权范围：页面 {{ previewData.authorization.page_count }} 个（可操作
             {{ previewData.authorization.edit_page_count }} / 只读
@@ -121,6 +150,10 @@ interface PreviewData {
   organization_name: string
   expires_at: string
   accounts?: PreviewAccount[]
+  signer_public_key?: string
+  signer_fingerprint?: string
+  signer_trusted?: boolean
+  trust_required?: boolean
   authorization?: {
     page_count: number
     edit_page_count: number
@@ -144,6 +177,7 @@ const previewing = ref(false)
 const confirming = ref(false)
 const previewData = ref<PreviewData | null>(null)
 const result = ref<ImportResult | null>(null)
+const trustAcknowledged = ref(false)
 
 function errorText(error: unknown, fallback: string): string {
   const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
@@ -157,11 +191,13 @@ function errorText(error: unknown, fallback: string): string {
 function onFileChange(uploadFile: UploadFile): void {
   file.value = uploadFile.raw || null
   previewData.value = null
+  trustAcknowledged.value = false
 }
 
 function onFileRemove(): void {
   file.value = null
   previewData.value = null
+  trustAcknowledged.value = false
 }
 
 function formData(): FormData {
@@ -170,6 +206,9 @@ function formData(): FormData {
   form.append('password', password.value)
   // 登录前导入专用：本机出厂管理员的新密码；服务端只在确有未改密的出厂超管时使用
   form.append('factory_admin_password', factoryPassword.value)
+  if (trustAcknowledged.value && previewData.value?.signer_fingerprint) {
+    form.append('confirmed_fingerprint', previewData.value.signer_fingerprint)
+  }
   return form
 }
 
@@ -181,6 +220,7 @@ async function preview(): Promise<void> {
   previewing.value = true
   try {
     previewData.value = await post<PreviewData>('/account-packages/preview', formData())
+    trustAcknowledged.value = false
   } catch (error) {
     previewData.value = null
     ElMessage.error(errorText(error, '账号包预览失败'))
@@ -192,6 +232,10 @@ async function preview(): Promise<void> {
 async function confirm(): Promise<void> {
   if (!file.value || !password.value || !previewData.value) {
     ElMessage.warning('请先完成账号包预览')
+    return
+  }
+  if (previewData.value.trust_required && !trustAcknowledged.value) {
+    ElMessage.warning('请先通过独立渠道核对签发机指纹并勾选确认')
     return
   }
   if (factoryPassword.value !== factoryPasswordConfirm.value) {
@@ -248,6 +292,15 @@ function goLogin(): void {
 }
 .preview {
   margin-top: 20px;
+}
+.signer-trust {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+}
+.signer-trust code {
+  word-break: break-all;
 }
 .result {
   margin-top: 16px;

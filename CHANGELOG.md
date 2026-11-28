@@ -1,3 +1,34 @@
+## [1.18.66] - 2026-11-28 — 账号开通包开箱即用：默认启用、自动签发密钥、指纹确认信任
+
+### Added
+
+- **账号开通包默认启用**：`ACCOUNT_PACKAGE_ENABLED` 默认改为 `true`，安装后无需再配置环境变量；
+  首次打开「账号开通包」页面或首次签到时自动生成 Ed25519 签发密钥，持久化到本机
+  `runtime_secrets.json`，并派生公钥/指纹，不再要求手工配置 `ACCOUNT_PACKAGE_SIGNING_KEY`。
+- **包内嵌签发公钥 + 指纹确认**：签名头新增 `signer_public_key`（参与签名），未预置公钥的机器
+  也能验证包完整性；导入预览返回签发机指纹与 `trust_required`，目标机必须通过独立渠道核对指纹
+  并勾选确认，确认成功后才把该公钥写入本机信任列表，后续同签发机导入不再逐次核对。
+- **密钥/信任管理接口**：`GET /account-packages/signing-keys`、
+  `POST /account-packages/signing-keys/trusted`、`DELETE /account-packages/signing-keys/trusted/{fingerprint}`；
+  系统页面新增「本机签发密钥 / 信任签发机」面板，可复制公钥、指纹，增删信任。
+- **预登录导入页支持指纹确认**：全新机器在登录前导入账号包时展示签发机指纹，未核对不得确认导入。
+- 新增 `backend/tests/unit/test_account_package_auto_signing.py`（9 例）与跨机信任、
+  API 密钥管理回归；自检 `_check_package_signing` 改为读取密钥模块，不再误报缺公钥。
+
+### Fixed
+
+- **“当前不可签发：账号开通包功能未启用”**：根因是默认关闭 + 空签名私钥；现默认启用并自动生成，
+  安装版无需 `.env`/环境变量即可签发。
+- 旧包（无内嵌公钥）仍可导入：需预置 `ACCOUNT_PACKAGE_PUBKEY` 或已信任的签发机公钥；
+  未配置任何公钥时继续 fail-closed 并提示“无法确认账号包来源”。
+
+### Docs
+
+- 更新 `.env.example` 与 `docs/账号开通包-双机离线演练清单.md`：无需环境变量、首次自动生成密钥、
+  指纹核对流程与通过标准；`CLAUDE.md` 端点/用例数字同步（865 端点 / 16,168 用例）。
+- 后端 **16,168** 用例收集；账号包/自检相关 **89** 例、相邻账号包链路 **34** 例通过；
+  前端账号包与登录前导入 **227** 例（9 文件）通过，`vue-tsc --noEmit`、ESLint 通过。
+
 ## [1.18.65] - 2026-11-28 — 权限闭环：矩阵按角色收窄、数据范围统一、账号首登改密
 
 ### Added

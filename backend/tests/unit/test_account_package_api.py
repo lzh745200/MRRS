@@ -241,11 +241,53 @@ def test_can_issue_reports_disabled_and_missing_key(client, api_env, monkeypatch
 
         monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_ENABLED", True)
         monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_SIGNING_KEY", "")
-        missing = client.get("/api/v1/account-packages/can-issue").json()["data"]
-        assert missing["can_issue"] is False
-        assert missing["reason_code"] == "AP_SIGNING_MISSING"
+        auto = client.get("/api/v1/account-packages/can-issue").json()["data"]
+        assert auto["can_issue"] is True
+        assert auto["reason_code"] is None
+        assert auto["signing_key_configured"] is True
+        assert auto["signing_fingerprint"]
     finally:
         app.dependency_overrides.clear()
+
+def test_signing_key_management_endpoints(client, api_env, monkeypatch):
+    monkeypatch.setenv("RUNTIME_SECRETS_FILE", str(api_env / "runtime_secrets.json"))
+    db = _db()
+    root = _org(db)
+    superuser = SimpleNamespace(id=1, username="root", role="super_admin", is_superuser=True, organization_id=root.id)
+    _use_db(db, superuser)
+    try:
+        status = client.get("/api/v1/account-packages/signing-keys")
+        assert status.status_code == 200, status.text
+        info = status.json()["data"]
+        assert info["ready"] is True
+        assert info["public_key"]
+        assert info["fingerprint"]
+        assert info["trusted_keys"] == []
+
+        _other_priv, other_pub = generate_keypair()
+        added = client.post("/api/v1/account-packages/signing-keys/trusted", json={"public_key": other_pub})
+        assert added.status_code == 200, added.text
+        fingerprint = added.json()["data"]["fingerprint"]
+        assert added.json()["data"]["trusted_keys"][0]["fingerprint"] == fingerprint
+
+        removed = client.delete(f"/api/v1/account-packages/signing-keys/trusted/{fingerprint}")
+        assert removed.status_code == 200, removed.text
+        assert removed.json()["data"]["trusted_keys"] == []
+
+        # 普通管理员可以查看密钥信息，但改信任列表仅超管。
+        normal = SimpleNamespace(id=2, username="normal", role="admin", is_superuser=False, organization_id=root.id)
+        app.dependency_overrides[get_current_user] = lambda: normal
+        assert client.get("/api/v1/account-packages/signing-keys").status_code == 200
+        assert client.post(
+            "/api/v1/account-packages/signing-keys/trusted", json={"public_key": other_pub}
+        ).status_code == 403
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+            id=3, username="viewer", role="user", is_superuser=False, organization_id=root.id
+        )
+        assert client.get("/api/v1/account-packages/signing-keys").status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
 
 def test_export_authorization_error_maps_to_400(client, api_env):
     source = _db()

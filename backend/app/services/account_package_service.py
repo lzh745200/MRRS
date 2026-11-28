@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import logging
+import re
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -14,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core import account_package_keys
 from app.core.account_package import (
     build_manifest,
     generate_otp,
@@ -39,6 +42,8 @@ from app.services.effective_grant_service import clear_cache
 from app.services.user_service import UserService
 from app.utils.paths import get_runtime_uploads_path
 from app.utils.time_utils import utcnow
+
+logger = logging.getLogger(__name__)
 
 
 class AccountPackageBusinessError(RuntimeError):
@@ -70,6 +75,103 @@ def _normalize_menu_selection(raw: Any, grants: Dict[str, str]) -> Optional[List
         return validate_menu_selection(raw, grants)
     except AccountPackageAuthorizationError as exc:
         raise AccountPackageBusinessError(str(exc), code=exc.code) from exc
+
+
+def _normalize_fingerprint(value: Optional[str]) -> str:
+    return re.sub(r"[^0-9A-F]", "", (value or "").upper())
+
+
+def _signature_trust(raw: bytes) -> tuple[Dict[str, Any], str, bool, List[str]]:
+    """读取包头签发公钥，判断它是否已在本机信任列表内。
+
+    返回 ``(head, signer, signer_trusted, trusted_keys)``。``signer`` 为空表示
+    旧版包（包头没有内嵌公钥），此时只能靠本机预置的信任公钥验签。
+    """
+    head = inspect_package(raw)
+    signer = str(head.get("signer_public_key") or "").strip().lower()
+    trusted_keys = account_package_keys.trusted_public_keys()
+    if signer:
+        return head, signer, signer in set(trusted_keys), trusted_keys
+    return head, "", False, trusted_keys
+
+
+def _assert_signer_trusted(
+    signer: str, signer_trusted: bool, confirmed_fingerprint: Optional[str]
+) -> None:
+    """来源未受信任时必须由操作者带外核对指纹，禁止仅凭包内公钥静默信任。"""
+    if not signer or signer_trusted:
+        return
+    expected = account_package_keys.key_fingerprint(signer)
+    provided = _normalize_fingerprint(confirmed_fingerprint)
+    if not provided or provided != _normalize_fingerprint(expected):
+        raise AccountPackageBusinessError(
+            "无法确认账号包来源：请先在目标机核对签发机指纹，再确认导入",
+            code="AP_SIGNING_UNTRUSTED",
+            status=403,
+        )
+
+
+def _persist_signer_trust(signer: str, signer_trusted: bool) -> bool:
+    """把已人工核对的来源公钥持久化；失败只记录，不影响本次已完成的导入。"""
+    if not signer or signer_trusted:
+        return signer_trusted
+    try:
+        account_package_keys.add_trusted_public_key(signer)
+        return True
+    except account_package_keys.AccountPackageKeyError as exc:
+        logger.warning("账号包来源公钥持久化失败（本次导入仍成功）: %s", exc)
+        return False
+
+
+def _build_export_accounts(
+    db, raw_accounts: List[Dict[str, str]], grants: Dict[str, str]
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """校验导出账号并生成凭据/清单项；任一账号非法即整体拒绝。"""
+    seen: set[str] = set()
+    credentials: List[Dict[str, Any]] = []
+    items: List[Dict[str, Any]] = []
+    for account in raw_accounts:
+        username = str(account.get("username") or "").strip()
+        if not username or username in seen:
+            raise AccountPackageBusinessError("账号用户名缺失或重复", code="AP_USERNAME_TAKEN", status=409)
+        seen.add(username)
+        if db.query(User).filter(User.username == username).first() is not None:
+            raise AccountPackageBusinessError(f"用户名已存在: {username}", code="AP_USERNAME_TAKEN", status=409)
+        role = str(account.get("role") or "user")
+        scope = str(account.get("data_scope") or "org")
+        if role not in ("admin", "user", "viewer") or scope not in ("org", "org_children", "self"):
+            raise AccountPackageBusinessError("账号角色或数据范围非法", code="AP_INVALID_ROLE")
+        initial_password = str(account.get("initial_password") or "").strip()
+        if initial_password:
+            if len(initial_password) < settings.ACCOUNT_PACKAGE_MIN_PASSWORD:
+                raise AccountPackageBusinessError("初始密码长度不足", code="AP_PASSWORD_WEAK")
+            if not any(c.isalpha() for c in initial_password) or not any(
+                c.isdigit() for c in initial_password
+            ):
+                raise AccountPackageBusinessError("初始密码必须同时包含字母和数字", code="AP_PASSWORD_WEAK")
+            otp = initial_password
+        else:
+            otp = generate_otp()
+        menus = _normalize_menu_selection(account.get("allowed_menus"), grants)
+        credentials.append({
+            "username": username,
+            "one_time_password": otp,
+            "generated_password": not bool(initial_password),
+            "role": role,
+            "data_scope": scope,
+        })
+        item: Dict[str, Any] = {
+            "username": username,
+            "full_name": str(account.get("full_name") or username),
+            "credential_hash": get_password_hash(otp),
+            "role": role,
+            "data_scope": scope,
+        }
+        # 空值不写空数组：否则导入侧会把“未收窄”误判为“无可见菜单”。
+        if menus:
+            item["allowed_menus"] = menus
+        items.append(item)
+    return credentials, items
 
 
 def _unrotated_factory_admins(db: Session) -> List[User]:
@@ -257,8 +359,14 @@ class AccountPackageService:
     ) -> Dict[str, Any]:
         if not settings.ACCOUNT_PACKAGE_ENABLED:
             raise AccountPackageBusinessError("账号开通包功能未启用", code="AP_DISABLED", status=403)
-        if not settings.ACCOUNT_PACKAGE_SIGNING_KEY:
-            raise AccountPackageBusinessError("签发机未配置签名私钥", code="AP_SIGNING_MISSING", status=403)
+        try:
+            private_key_hex = account_package_keys.local_private_key(create=True)
+        except account_package_keys.AccountPackageKeyError as exc:
+            raise AccountPackageBusinessError(
+                f"本机签发密钥不可用：{exc}", code="AP_SIGNING_MISSING", status=403
+            ) from exc
+        if not private_key_hex:
+            raise AccountPackageBusinessError("本机签发密钥不可用", code="AP_SIGNING_MISSING", status=403)
         if len(password or "") < settings.ACCOUNT_PACKAGE_MIN_PASSWORD:
             raise AccountPackageBusinessError("包口令长度不足", code="AP_PASSWORD_WEAK")
         if not any(ch.isalpha() for ch in password) or not any(ch.isdigit() for ch in password):
@@ -281,50 +389,7 @@ class AccountPackageService:
                 "data_scope": "org",
             }
         ]
-        seen = set()
-        credentials = []
-        items = []
-        for account in raw_accounts:
-            username = str(account.get("username") or "").strip()
-            if not username or username in seen:
-                raise AccountPackageBusinessError("账号用户名缺失或重复", code="AP_USERNAME_TAKEN", status=409)
-            seen.add(username)
-            if self.db.query(User).filter(User.username == username).first() is not None:
-                raise AccountPackageBusinessError(f"用户名已存在: {username}", code="AP_USERNAME_TAKEN", status=409)
-            role = str(account.get("role") or "user")
-            scope = str(account.get("data_scope") or "org")
-            if role not in ("admin", "user", "viewer") or scope not in ("org", "org_children", "self"):
-                raise AccountPackageBusinessError("账号角色或数据范围非法", code="AP_INVALID_ROLE")
-            initial_password = str(account.get("initial_password") or "").strip()
-            if initial_password:
-                if len(initial_password) < settings.ACCOUNT_PACKAGE_MIN_PASSWORD:
-                    raise AccountPackageBusinessError("初始密码长度不足", code="AP_PASSWORD_WEAK")
-                if not any(c.isalpha() for c in initial_password) or not any(
-                    c.isdigit() for c in initial_password
-                ):
-                    raise AccountPackageBusinessError("初始密码必须同时包含字母和数字", code="AP_PASSWORD_WEAK")
-                otp = initial_password
-            else:
-                otp = generate_otp()
-            menus = _normalize_menu_selection(account.get("allowed_menus"), grants)
-            credentials.append({
-                "username": username,
-                "one_time_password": otp,
-                "generated_password": not bool(initial_password),
-                "role": role,
-                "data_scope": scope,
-            })
-            item: Dict[str, Any] = {
-                "username": username,
-                "full_name": str(account.get("full_name") or username),
-                "credential_hash": get_password_hash(otp),
-                "role": role,
-                "data_scope": scope,
-            }
-            # 空值不写空数组：否则导入侧会把“未收窄”误判为“无可见菜单”。
-            if menus:
-                item["allowed_menus"] = menus
-            items.append(item)
+        credentials, items = _build_export_accounts(self.db, raw_accounts, grants)
         manifest = build_manifest(
             package_id=package_id,
             organization_code=organization_code,
@@ -339,7 +404,7 @@ class AccountPackageService:
         raw = seal_package(
             manifest,
             password=password,
-            private_key_hex=settings.ACCOUNT_PACKAGE_SIGNING_KEY,
+            private_key_hex=private_key_hex,
             iterations=settings.ACCOUNT_PACKAGE_KDF_ITERATIONS,
         )
         issuer_org = None
@@ -376,14 +441,23 @@ class AccountPackageService:
             "accounts": credentials,
             "authorization": authorization_summary(grants),
             "download_path": f"/api/v1/account-packages/{package_id}/download",
+            "signer_public_key": head.get("signer_public_key") or "",
+            "signer_fingerprint": account_package_keys.key_fingerprint(
+                str(head.get("signer_public_key") or "")
+            ) if head.get("signer_public_key") else "",
         }
 
     def preview(self, raw: bytes, *, password: str, machine_code: str) -> Dict[str, Any]:
+        _head, signer, signer_trusted, trusted_keys = _signature_trust(raw)
+        candidates = ([signer] if signer else []) + trusted_keys
         manifest = open_package(
             raw,
             password=password,
-            public_key_hex=settings.ACCOUNT_PACKAGE_PUBKEY or None,
+            public_key_hex=candidates or None,
         )
+        if not signer:
+            # 旧包：只有本机信任公钥能验通，open_package 已证明来源可信。
+            signer_trusted = bool(trusted_keys)
         if _normalize_machine(manifest.get("target_machine_code")) != _normalize_machine(machine_code):
             raise AccountPackageBusinessError("账号包与当前机器不匹配", code="AP_MACHINE_MISMATCH", status=403)
         grants = _normalize_grants(manifest.get("grants"))
@@ -405,6 +479,10 @@ class AccountPackageService:
             "authorization": authorization_summary(grants),
             "factory_admin_rotation_required": bool(_unrotated_factory_admins(self.db)),
             "organization_exists": org is not None,
+            "signer_public_key": signer,
+            "signer_fingerprint": account_package_keys.key_fingerprint(signer) if signer else "",
+            "signer_trusted": signer_trusted,
+            "trust_required": bool(signer) and not signer_trusted,
         }
 
     def confirm(
@@ -415,11 +493,15 @@ class AccountPackageService:
         machine_code: str,
         factory_admin_password: Optional[str] = None,
         require_factory_rotation: bool = False,
+        confirmed_fingerprint: Optional[str] = None,
     ) -> Dict[str, Any]:
+        _head, signer, signer_trusted, trusted_keys = _signature_trust(raw)
+        _assert_signer_trusted(signer, signer_trusted, confirmed_fingerprint)
+        candidates = ([signer] if signer else []) + trusted_keys
         manifest = open_package(
             raw,
             password=password,
-            public_key_hex=settings.ACCOUNT_PACKAGE_PUBKEY or None,
+            public_key_hex=candidates or None,
         )
         if _normalize_machine(manifest.get("target_machine_code")) != _normalize_machine(machine_code):
             raise AccountPackageBusinessError("账号包与当前机器不匹配", code="AP_MACHINE_MISMATCH", status=403)
@@ -513,12 +595,17 @@ class AccountPackageService:
                 "该账号包已在本机导入或写入冲突", code="AP_ALREADY_IMPORTED", status=409
             ) from exc
         clear_cache()
+        # 来源信任一旦由人工核对确认，就持久化到本机信任列表：后续同一签发机的包
+        # 不再要求重复核对。持久化失败不影响本次已落库的导入，下次会再次要求核对。
+        signer_trusted = _persist_signer_trust(signer, signer_trusted)
         return {
             "package_id": package_id,
             "organization_id": org.id,
             "organization_code": org.code,
             "authorization": authorization_summary(grants),
             "factory_admin_rotated": bool(factory_admin_password),
+            "signer_fingerprint": account_package_keys.key_fingerprint(signer) if signer else "",
+            "signer_trusted": signer_trusted,
             "users": [
                 {
                     "user_id": getattr(user, "id", None),

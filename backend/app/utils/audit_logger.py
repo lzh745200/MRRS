@@ -92,6 +92,9 @@ class AuditAction(str, Enum):
     ACCOUNT_PACKAGE_REVOKE = "account_package_revoke"
     ACCOUNT_PACKAGE_CONFIRM = "account_package_confirm"
     ACCOUNT_PACKAGE_IMPORT_FAILED = "account_package_import_failed"
+    # 跨机信任：手动信任/移除签发机公钥（指纹带外核对后的落库动作）。
+    ACCOUNT_PACKAGE_TRUST_KEY = "account_package_trust_key"
+    ACCOUNT_PACKAGE_UNTRUST_KEY = "account_package_untrust_key"
 
     PERMISSION_GRANT = "permission_grant"
     PERMISSION_REVOKE = "permission_revoke"

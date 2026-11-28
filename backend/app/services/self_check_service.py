@@ -213,6 +213,7 @@ def _result(name: str, level: str, detail: str, count: int) -> Dict[str, Any]:
 
 def _check_package_signing() -> Dict[str, Any]:
     """检查四类"人带 U 盘"包的来源校验配置（只读配置，不查库）。"""
+    from app.core import account_package_keys
     from app.core.config import settings
 
     def _blank(name: str) -> bool:
@@ -223,27 +224,48 @@ def _check_package_signing() -> Dict[str, Any]:
         missing.append("PACKAGE_PUBKEY")
     if _blank("GRANT_PUBKEY"):
         missing.append("GRANT_PUBKEY")
-    if _blank("ACCOUNT_PACKAGE_PUBKEY"):
-        missing.append("ACCOUNT_PACKAGE_PUBKEY")
 
+    # 账号开通包不再要求预配 ACCOUNT_PACKAGE_PUBKEY：本机首次签发时自动生成
+    # 签发密钥，导入端用"包内公钥验完整性 + 人工核对指纹"建立信任。只有本机
+    # 既无签发密钥、也无信任公钥时，才提示账号包尚未建立任何信任锚。
+    account_ready = False
+    if not _blank("ACCOUNT_PACKAGE_PUBKEY"):
+        account_ready = True
+    else:
+        try:
+            account_ready = bool(
+                account_package_keys.signing_key_info(create=False).get("ready")
+                or account_package_keys.trusted_public_keys()
+            )
+        except Exception:  # noqa: BLE001 - 自检不得因密钥文件异常而失败
+            account_ready = False
+
+    details: List[str] = []
     if missing:
+        details.append(
+            "未配置 "
+            + " / ".join(missing)
+            + "：导入包只校验 SHA-256 完整性，能查损坏、查不出"
+            "「载体被换成另一份合法包」。需要防替换的部署请配置公钥"
+            "（见 docs/04-部署文档/01-Windows部署/代码签名.md）。"
+        )
+    if not account_ready:
+        details.append(
+            "账号开通包尚未生成签发密钥或信任任何签发机：首次签发/导入时"
+            "会自动生成并引导核对指纹，完成后此项自动恢复。"
+        )
+    if details:
         return {
             "name": "包签名校验",
             "level": LEVEL_WARN,
-            "count": len(missing),
-            "detail": (
-                "未配置 "
-                + " / ".join(missing)
-                + "：导入包只校验 SHA-256 完整性，能查损坏、查不出"
-                "「载体被换成另一份合法包」。需要防替换的部署请配置公钥"
-                "（见 docs/04-部署文档/01-Windows部署/代码签名.md）。"
-            ),
+            "count": len(missing) + (0 if account_ready else 1),
+            "detail": "\n".join(details),
         }
     return {
         "name": "包签名校验",
         "level": LEVEL_OK,
         "count": 0,
-        "detail": "配置包 / 单位授权包 / 账号开通包均已启用 Ed25519 验签",
+        "detail": "配置包 / 单位授权包已启用 Ed25519 验签；账号开通包使用应用内签发密钥与信任列表",
     }
 
 

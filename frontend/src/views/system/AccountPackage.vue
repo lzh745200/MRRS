@@ -40,6 +40,86 @@
         :title="`当前不可签发：${issueStatus.reason}`"
       />
 
+      <div class="signing-key-panel" data-testid="signing-key-panel">
+        <div class="signing-key-head">
+          <div>
+            <strong>本机签发密钥</strong>
+            <p class="signing-key-hint">
+              首次签发时自动生成，私钥只保存在本机。目标机导入时会显示此指纹，请通过独立渠道核对。
+            </p>
+          </div>
+          <el-tag :type="signingKeys?.ready ? 'success' : 'info'" size="small">
+            {{ signingKeys?.ready ? '已就绪' : '未生成' }}
+          </el-tag>
+        </div>
+        <template v-if="signingKeys?.ready">
+          <div class="signing-key-row">
+            <span class="signing-key-label">签名指纹</span>
+            <code data-testid="signing-fingerprint">{{ signingKeys.fingerprint }}</code>
+            <el-button link type="primary" @click="copyText(signingKeys.fingerprint, '指纹')">
+              复制
+            </el-button>
+            <el-tag v-if="signingKeys.source === 'environment'" size="small" type="warning">
+              使用环境变量私钥
+            </el-tag>
+          </div>
+          <div class="signing-key-row">
+            <span class="signing-key-label">签发公钥</span>
+            <el-input
+              :model-value="signingKeys.public_key"
+              readonly
+              data-testid="signing-public-key"
+            />
+            <el-button link type="primary" @click="copyText(signingKeys.public_key, '公钥')">
+              复制
+            </el-button>
+          </div>
+        </template>
+        <el-alert
+          v-else
+          type="info"
+          :closable="false"
+          title="尚未生成签发密钥；超级管理员首次打开本页或签发时会自动生成。"
+        />
+
+        <div class="trusted-keys">
+          <div class="trusted-keys-title">
+            信任的签发机
+            <span class="signing-key-hint">
+              导入账号包并核对指纹后自动加入；也可手动添加对方公钥。
+            </span>
+          </div>
+          <div v-if="(signingKeys?.trusted_keys || []).length === 0" class="signing-key-hint">
+            暂无外部信任的签发机（本机签发的包默认信任）。
+          </div>
+          <div
+            v-for="key in signingKeys?.trusted_keys || []"
+            :key="key.fingerprint"
+            class="signing-key-row"
+          >
+            <code>{{ key.fingerprint }}</code>
+            <el-button
+              v-if="issueStatus?.is_superuser"
+              link
+              type="danger"
+              @click="untrustSigningKey(key.fingerprint)"
+            >
+              移除
+            </el-button>
+          </div>
+          <div v-if="issueStatus?.is_superuser" class="trust-key-form">
+            <el-input
+              v-model.trim="trustKeyPublicKey"
+              placeholder="粘贴对方签发机公钥（64 位十六进制）"
+              data-testid="trust-public-key"
+            />
+            <el-button type="primary" plain :loading="trusting" @click="trustSigningKey">
+              信任此签发机
+            </el-button>
+          </div>
+        </div>
+      </div>
+
       <h3>签发记录</h3>
       <el-table v-loading="loading" :data="packages" empty-text="暂无签发记录">
         <el-table-column prop="target_org_code" label="目标组织" min-width="110" />
@@ -273,6 +353,10 @@
           title="以下一次性口令仅显示这一次。关闭窗口后无法再次查看，请立即安全抄录并分别交付对应用户。"
         />
         <p>文件：{{ exportResult.file_name }}</p>
+        <p v-if="exportResult.signer_fingerprint">
+          签发机指纹：<code>{{ exportResult.signer_fingerprint }}</code>
+          （目标机导入时会显示，请通过独立渠道核对）
+        </p>
         <div
           v-for="account in exportResult.accounts"
           :key="account.username"
@@ -366,6 +450,36 @@
               </span>
             </dd>
           </dl>
+          <div
+            v-if="importPreview.signer_fingerprint"
+            class="signer-trust"
+            data-testid="signer-trust"
+          >
+            <el-alert
+              v-if="importPreview.signer_trusted"
+              type="success"
+              :closable="false"
+              show-icon
+              title="签发机已在本机信任列表中"
+            />
+            <template v-else>
+              <el-alert
+                type="warning"
+                :closable="false"
+                show-icon
+                title="首次来自该签发机：请通过独立渠道核对指纹后再确认导入。"
+              />
+              <div class="signing-key-row">
+                <span class="signing-key-label">签发机指纹</span>
+                <code data-testid="import-signer-fingerprint">
+                  {{ importPreview.signer_fingerprint }}
+                </code>
+              </div>
+              <el-checkbox v-model="importTrustAcknowledged" data-testid="ack-signer-fingerprint">
+                我已通过独立渠道核对上述指纹
+              </el-checkbox>
+            </template>
+          </div>
           <el-button
             type="danger"
             data-testid="confirm-import"
@@ -401,7 +515,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus'
-import request, { downloadBlob, get, parseContentDisposition, post } from '@/api/request'
+import request, { del, downloadBlob, get, parseContentDisposition, post } from '@/api/request'
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { formatDateTimeLocale } from '@/utils/datetime'
 import { useMenuStore } from '@/stores/menu'
@@ -453,6 +567,22 @@ interface IssueStatus {
   is_superuser: boolean
   reason: string
   reason_code?: string | null
+  signing_public_key?: string
+  signing_fingerprint?: string
+  signing_key_source?: string
+}
+
+interface TrustedSigningKey {
+  public_key: string
+  fingerprint: string
+}
+
+interface SigningKeyInfo {
+  public_key: string
+  fingerprint: string
+  source: string
+  ready: boolean
+  trusted_keys: TrustedSigningKey[]
 }
 
 interface PackageRow {
@@ -475,6 +605,8 @@ interface ExportResult extends PackageRow {
   file_name: string
   organization_code?: string
   organization_name?: string
+  signer_public_key?: string
+  signer_fingerprint?: string
   accounts: Array<{
     username: string
     one_time_password: string
@@ -498,6 +630,10 @@ interface ImportPreview {
   expires_at: string
   admin?: PreviewAccount
   accounts?: PreviewAccount[]
+  signer_public_key?: string
+  signer_fingerprint?: string
+  signer_trusted?: boolean
+  trust_required?: boolean
   authorization?: {
     page_count: number
     edit_page_count: number
@@ -529,6 +665,10 @@ const confirming = ref(false)
 const menuStore = useMenuStore()
 const authzCatalog = ref<AuthzCatalog | null>(null)
 const issueStatus = ref<IssueStatus | null>(null)
+const signingKeys = ref<SigningKeyInfo | null>(null)
+const trustKeyPublicKey = ref('')
+const trusting = ref(false)
+const importTrustAcknowledged = ref(false)
 const grantSelections = reactive<Record<string, string>>({})
 
 const menuOptions = computed(() =>
@@ -804,23 +944,29 @@ function resetImport(): void {
   importPassword.value = ''
   importPreview.value = null
   importResult.value = null
+  importTrustAcknowledged.value = false
 }
 
 function onImportFileChange(file: UploadFile): void {
   importFile.value = file.raw || null
   importPreview.value = null
   importResult.value = null
+  importTrustAcknowledged.value = false
 }
 
 function onImportFileRemove(): void {
   importFile.value = null
   importPreview.value = null
+  importTrustAcknowledged.value = false
 }
 
 function importFormData(): FormData {
   const form = new FormData()
   form.append('file', importFile.value as File)
   form.append('password', importPassword.value)
+  if (importTrustAcknowledged.value && importPreview.value?.signer_fingerprint) {
+    form.append('confirmed_fingerprint', importPreview.value.signer_fingerprint)
+  }
   return form
 }
 
@@ -833,6 +979,7 @@ async function previewImport(): Promise<void> {
   try {
     importPreview.value = await post<ImportPreview>('/account-packages/preview', importFormData())
     importResult.value = null
+    importTrustAcknowledged.value = false
   } catch (error) {
     importPreview.value = null
     ElMessage.error(errorText(error, '账号包预览失败'))
@@ -846,17 +993,79 @@ async function confirmImport(): Promise<void> {
     ElMessage.warning('请先完成账号包预览')
     return
   }
+  if (importPreview.value.trust_required && !importTrustAcknowledged.value) {
+    ElMessage.warning('请先通过独立渠道核对签发机指纹并勾选确认')
+    return
+  }
   confirming.value = true
   try {
     // 已初始化系统由 request 拦截器处理 428，并通过 X-Confirm-Password 安全重放。
     importResult.value = await post<ImportResult>('/account-packages/confirm', importFormData())
     importPreview.value = null
+    importTrustAcknowledged.value = false
     ElMessage.success('账号包导入成功，用户首次登录须修改一次性口令')
-    await loadReceipts()
+    await Promise.all([loadReceipts(), loadSigningKeys()])
   } catch (error) {
     ElMessage.error(errorText(error, '确认导入失败'))
   } finally {
     confirming.value = false
+  }
+}
+
+async function loadSigningKeys(): Promise<void> {
+  try {
+    signingKeys.value = await get<SigningKeyInfo>('/account-packages/signing-keys')
+  } catch (error) {
+    signingKeys.value = null
+    ElMessage.error(errorText(error, '加载签发密钥失败'))
+  }
+}
+
+async function copyText(value: string, label: string): Promise<void> {
+  if (!value) return
+  try {
+    await navigator.clipboard.writeText(value)
+    ElMessage.success(`${label}已复制`)
+  } catch {
+    ElMessage.warning('浏览器不允许自动复制，请手动选择文本')
+  }
+}
+
+async function trustSigningKey(): Promise<void> {
+  const publicKey = trustKeyPublicKey.value.trim()
+  if (!/^[0-9a-fA-F]{64}$/.test(publicKey)) {
+    ElMessage.warning('请粘贴 64 位十六进制的签发机公钥')
+    return
+  }
+  trusting.value = true
+  try {
+    await post('/account-packages/signing-keys/trusted', { public_key: publicKey })
+    trustKeyPublicKey.value = ''
+    ElMessage.success('已信任该签发机')
+    await loadSigningKeys()
+  } catch (error) {
+    ElMessage.error(errorText(error, '添加信任失败'))
+  } finally {
+    trusting.value = false
+  }
+}
+
+async function untrustSigningKey(fingerprint: string): Promise<void> {
+  try {
+    await ElMessageBox.confirm(`移除后来自该签发机的包需要重新核对指纹，确定移除？`, '移除信任', {
+      type: 'warning',
+      confirmButtonText: '移除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await del(`/account-packages/signing-keys/trusted/${encodeURIComponent(fingerprint)}`)
+    ElMessage.success('已移除该签发机的信任')
+    await loadSigningKeys()
+  } catch (error) {
+    ElMessage.error(errorText(error, '移除信任失败'))
   }
 }
 
@@ -878,6 +1087,7 @@ async function loadAuthorization(): Promise<void> {
 onMounted(async () => {
   void refresh()
   void loadAuthorization()
+  void loadSigningKeys()
   if (!menuStore.loaded) {
     try {
       await menuStore.fetchMenus()
@@ -895,10 +1105,17 @@ defineExpose({
   menuOptions,
   authzCatalog,
   issueStatus,
+  signingKeys,
+  trustKeyPublicKey,
+  importTrustAcknowledged,
   grantSelections,
   selectedGrantCount,
   buildGrants,
   loadAuthorization,
+  loadSigningKeys,
+  trustSigningKey,
+  untrustSigningKey,
+  copyText,
   importFile,
   importPassword,
   importPreview,
@@ -1055,6 +1272,68 @@ defineExpose({
 }
 .imported-user {
   padding: 6px 0;
+}
+.signing-key-panel {
+  margin: 12px 0 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+}
+.signing-key-head,
+.signing-key-row,
+.trust-key-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.signing-key-head {
+  justify-content: space-between;
+}
+.signing-key-hint {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.signing-key-row {
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.signing-key-row code {
+  font-size: 13px;
+  word-break: break-all;
+}
+.signing-key-label {
+  min-width: 76px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+.signing-key-row .el-input {
+  max-width: 520px;
+}
+.trusted-keys {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--el-border-color);
+}
+.trusted-keys-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.trust-key-form {
+  margin-top: 10px;
+}
+.trust-key-form .el-input {
+  max-width: 520px;
+}
+.signer-trust {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+}
+.signer-trust .signing-key-row {
+  margin: 10px 0;
 }
 @media (max-width: 800px) {
   .form-grid {

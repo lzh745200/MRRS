@@ -28,7 +28,7 @@ from app.core.account_package import (
     open_package,
     seal_package,
 )
-from app.core.grant_signing import generate_keypair
+from app.core.grant_signing import generate_keypair, sign_payload
 
 FAKE_HASH = "$2b$12$" + "a" * 53
 PASSWORD = "pkg-pass-1"
@@ -104,15 +104,34 @@ def test_rejects_unsigned_package(keypair):
         seal_package(_manifest(), password=PASSWORD, private_key_hex="")
 
 
+def _strip_embedded_signer(raw: bytes, private_hex: str) -> bytes:
+    """模拟旧版账号包：header 不内嵌签发公钥，但仍由同一私钥签名。"""
+    magic_len = len(PACKAGE_MAGIC)
+    magic = raw[:magic_len]
+    header_len = struct.unpack(">I", raw[magic_len : magic_len + 4])[0]
+    body_start = magic_len + 4
+    header = json.loads(raw[body_start : body_start + header_len])
+    header.pop("signer_public_key", None)
+    header["signature"] = sign_payload(header, private_hex)
+    payload = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return magic + struct.pack(">I", len(payload)) + payload + raw[body_start + header_len :]
+
+
 def test_rejects_when_public_key_missing(keypair):
-    raw = _seal(keypair, _manifest())
+    raw = _strip_embedded_signer(_seal(keypair, _manifest()), keypair[0])
     with pytest.raises(AccountPackageUnsigned):
         open_package(raw, password=PASSWORD, public_key_hex=None)
 
 
-def test_rejects_wrong_public_key(keypair):
-    other_priv, other_pub = generate_keypair()
+def test_embedded_signer_verifies_without_external_key(keypair):
     raw = _seal(keypair, _manifest())
+    opened = open_package(raw, password=PASSWORD, public_key_hex=None)
+    assert opened["package_id"] == "pkg-1"
+
+
+def test_rejects_wrong_public_key_for_legacy_package(keypair):
+    other_priv, other_pub = generate_keypair()
+    raw = _strip_embedded_signer(_seal(keypair, _manifest()), keypair[0])
     with pytest.raises(AccountPackageBadSignature):
         open_package(raw, password=PASSWORD, public_key_hex=other_pub)
 

@@ -417,3 +417,63 @@ def test_normalize_menu_selection_and_validated_accounts_errors():
     ):
         with pytest.raises(AccountPackageBusinessError):
             _validated_accounts(manifest, {"projects": "view"})
+
+
+def test_cross_machine_import_requires_and_persists_signer_trust(tmp_path, monkeypatch):
+    """跨机首次导入：包内公钥只验完整性，必须人工核对指纹后才落信任。"""
+    from app.core import account_package_keys
+
+    monkeypatch.setenv("RUNTIME_SECRETS_FILE", str(tmp_path / "target-runtime-secrets.json"))
+    priv, _pub = generate_keypair()
+    monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_ENABLED", True)
+    monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_SIGNING_KEY", priv)
+    monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_PUBKEY", "")
+    monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_KDF_ITERATIONS", 310_000)
+    monkeypatch.setattr(AccountPackageService, "package_dir", classmethod(lambda cls: tmp_path))
+
+    source = _db()
+    root = _org(source)
+    _org(source, "520100", "贵阳", root, "2")
+    out = AccountPackageService(source).export_package(
+        package_id="77777777-7777-7777-7777-777777777777",
+        organization_code="520100", organization_name="贵阳市局", parent_code="520000",
+        admin_username="gy_cross", admin_full_name="跨机管理员",
+        target_machine_code="MC-CROSS", grants={"projects": "view"},
+        password="passw0rd-pass", issued_by=SimpleNamespace(id=1, organization_id=root.id),
+    )
+    fingerprint = out["signer_fingerprint"]
+    assert fingerprint
+    raw = (tmp_path / out["file_name"]).read_bytes()
+
+    # 目标机：没有预置公钥、没有本机密钥，签发包来源应显示"未信任"。
+    monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_SIGNING_KEY", "")
+    target = _db()
+    _org(target, "520000")
+    service = AccountPackageService(target)
+    preview = service.preview(raw, password="passw0rd-pass", machine_code="MC-CROSS")
+    assert preview["signer_fingerprint"] == fingerprint
+    assert preview["signer_trusted"] is False
+    assert preview["trust_required"] is True
+
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        service.confirm(raw, password="passw0rd-pass", machine_code="MC-CROSS")
+    assert exc.value.code == "AP_SIGNING_UNTRUSTED"
+
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        service.confirm(
+            raw, password="passw0rd-pass", machine_code="MC-CROSS",
+            confirmed_fingerprint="0000-0000-0000-0000-0000-0000-0000-0000",
+        )
+    assert exc.value.code == "AP_SIGNING_UNTRUSTED"
+
+    result = service.confirm(
+        raw, password="passw0rd-pass", machine_code="MC-CROSS",
+        confirmed_fingerprint=fingerprint,
+    )
+    assert result["signer_trusted"] is True
+    assert [item["fingerprint"] for item in account_package_keys.trusted_key_info()] == [fingerprint]
+
+    # 信任已持久化：再次导入同一包应直接走到回执唯一校验，而不是再次要求指纹。
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        service.confirm(raw, password="passw0rd-pass", machine_code="MC-CROSS")
+    assert exc.value.code == "AP_ALREADY_IMPORTED"

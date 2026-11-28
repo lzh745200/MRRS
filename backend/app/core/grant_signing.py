@@ -57,6 +57,21 @@ def generate_keypair() -> Tuple[str, str]:
     return private_hex, public_hex
 
 
+def derive_public_key(private_hex: str) -> str:
+    """从私钥派生公钥 hex（32 字节 raw）。
+
+    账号开通包在包头内嵌签发公钥：私钥只留在签发机，目标机用内嵌公钥做
+    完整性验签，再用带外核对的指纹决定是否信任 —— 这样既不需要目标机提前
+    配置公钥，也不会把"包内自带公钥"直接当成信任依据。
+    """
+    if not private_hex:
+        raise GrantSigningError("未配置签名私钥")
+    return _load_private(private_hex).public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    ).hex()
+
+
 def _load_private(private_hex: str) -> Ed25519PrivateKey:
     try:
         raw = bytes.fromhex(private_hex)
