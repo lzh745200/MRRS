@@ -472,3 +472,52 @@ class TestSetSecret:
             with pytest.raises(RuntimeError, match="无法持久化密钥"):
                 set_secret("K", "v")
 
+
+# ---------------------------------------------------------------------------
+# get_secret（只读可选配置；绝不创建/覆盖）
+# ---------------------------------------------------------------------------
+
+
+class TestGetSecret:
+    """`get_secret` 用于读取"可以不存在"的配置（如账号包信任公钥列表）。"""
+
+    def test_returns_stripped_value(self, tmp_path):
+        from app.utils.runtime_secrets import get_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text(json.dumps({"TRUSTED": "  abc  "}), encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}):
+            assert get_secret("TRUSTED") == "abc"
+
+    def test_missing_file_returns_empty(self, tmp_path):
+        from app.utils.runtime_secrets import get_secret
+
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(tmp_path / "absent.json")}):
+            assert get_secret("K") == ""
+
+    def test_corrupt_json_returns_empty(self, tmp_path):
+        from app.utils.runtime_secrets import get_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text("{not-json", encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}):
+            assert get_secret("K") == ""
+
+    def test_non_dict_json_returns_empty(self, tmp_path):
+        from app.utils.runtime_secrets import get_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text("[1, 2, 3]", encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}):
+            assert get_secret("K") == ""
+
+    def test_permission_error_returns_empty(self, tmp_path):
+        from app.utils.runtime_secrets import get_secret
+
+        dest = tmp_path / "secrets.json"
+        dest.write_text("{}", encoding="utf-8")
+        with patch.dict(os.environ, {"RUNTIME_SECRETS_FILE": str(dest)}), \
+             patch("builtins.open", side_effect=PermissionError("denied")):
+            assert get_secret("K") == ""
+
+

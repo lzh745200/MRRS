@@ -323,3 +323,26 @@ class TestPackageSigningCheck:
         check = next(c for c in result["checks"] if c["name"] == "包签名校验")
         assert check["level"] == LEVEL_OK
         assert check["count"] == 0
+
+    def test_degrades_to_warn_when_key_state_unreadable(self, monkeypatch, caplog):
+        """密钥文件损坏/读取异常时自检必须降级告警，而不是整份自检失败。"""
+        import logging
+
+        from app.core import account_package_keys
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "PACKAGE_PUBKEY", "b" * 64, raising=False)
+        monkeypatch.setattr(settings, "GRANT_PUBKEY", "b" * 64, raising=False)
+        monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_PUBKEY", "", raising=False)
+
+        def _boom(**kwargs):
+            raise RuntimeError("secrets file unreadable")
+
+        monkeypatch.setattr(account_package_keys, "signing_key_info", _boom)
+        caplog.set_level(logging.WARNING)
+        result = collect_self_check(self._db())
+        check = next(c for c in result["checks"] if c["name"] == "包签名校验")
+        assert check["level"] == LEVEL_WARN
+        assert check["count"] == 1
+        assert "账号开通包尚未生成签发密钥" in check["detail"]
+        assert "账号开通包密钥状态自检失败" in caplog.text

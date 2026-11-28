@@ -238,6 +238,7 @@ def _check_package_signing() -> Dict[str, Any]:
                 or account_package_keys.trusted_public_keys()
             )
         except Exception:  # noqa: BLE001 - 自检不得因密钥文件异常而失败
+            logger.warning("账号开通包密钥状态自检失败（已降级为未就绪）", exc_info=True)
             account_ready = False
 
     details: List[str] = []

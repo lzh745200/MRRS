@@ -256,6 +256,58 @@ describe('AccountPackage.vue', () => {
     )
   })
 
+  it('取消移除信任时不发删除请求', async () => {
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel' as any)
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.untrustSigningKey('BBBB-CCCC-DDDD-EEEE')
+    expect(del).not.toHaveBeenCalled()
+  })
+
+  it('移除信任失败时提示错误', async () => {
+    const { ElMessageBox } = await import('element-plus')
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as any)
+    del.mockRejectedValue({ response: { data: { detail: { message: '服务不可用' } } } })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.untrustSigningKey('BBBB-CCCC-DDDD-EEEE')
+    expect(ElMessage.error).toHaveBeenCalledWith('服务不可用')
+  })
+
+  it('复制公钥/指纹并处理浏览器拒绝复制', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    await vm.copyText('abc', '公钥')
+    expect(writeText).toHaveBeenCalledWith('abc')
+    expect(ElMessage.success).toHaveBeenCalledWith('公钥已复制')
+    writeText.mockRejectedValueOnce(new Error('denied'))
+    await vm.copyText('abc', '指纹')
+    expect(ElMessage.warning).toHaveBeenCalledWith('浏览器不允许自动复制，请手动选择文本')
+    writeText.mockClear()
+    await vm.copyText('', '空值')
+    expect(writeText).not.toHaveBeenCalled()
+  })
+
+  it('拒绝非法公钥并处理添加信任失败', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.trustKeyPublicKey = 'short'
+    await vm.trustSigningKey()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请粘贴 64 位十六进制的签发机公钥')
+    expect(post).not.toHaveBeenCalled()
+    vm.trustKeyPublicKey = 'c'.repeat(64)
+    post.mockRejectedValueOnce({ response: { data: { detail: { message: '已存在' } } } })
+    await vm.trustSigningKey()
+    expect(ElMessage.error).toHaveBeenCalledWith('已存在')
+  })
+
   it('首次来自未信任签发机时必须核对指纹确认', async () => {
     post.mockImplementation((url: string) => {
       if (url === '/account-packages/preview') {

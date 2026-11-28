@@ -33,7 +33,7 @@ import re
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set, cast
 
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -807,12 +807,14 @@ class PermissionPackageService:
         # 源 id 只有在本次映射中可解析时才建立父子关系，否则落为根节点。
         resolved: Dict[int, str] = {}
 
-        def _resolve_path(org: Organization, chain: set) -> str:
-            if org.id in resolved:
-                return resolved[org.id]
-            chain.add(org.id)
-            parent = source_map.get(pending_parent.get(org.id))
-            if parent is not None and parent.id != org.id and parent.id not in chain:
+        def _resolve_path(org: Organization, chain: Set[int]) -> str:
+            org_id = cast(int, org.id)
+            if org_id in resolved:
+                return resolved[org_id]
+            chain.add(org_id)
+            parent_source_id = pending_parent.get(org_id)
+            parent = source_map.get(parent_source_id) if parent_source_id is not None else None
+            if parent is not None and parent.id != org_id and parent.id not in chain:
                 parent_path = (
                     _resolve_path(parent, chain)
                     if parent.id in created
@@ -822,10 +824,10 @@ class PermissionPackageService:
             else:
                 parent = None
                 parent_path = ""
-            path = f"{parent_path}{org.id}/" if parent is not None and parent_path else f"/{org.id}/"
+            path = f"{parent_path}{org_id}/" if parent is not None and parent_path else f"/{org_id}/"
             org.path = path
-            org.level = len([seg for seg in path.split("/") if seg])
-            resolved[org.id] = path
+            org.level = cast(Any, len([seg for seg in path.split("/") if seg]))
+            resolved[org_id] = path
             return path
 
         for org in created.values():

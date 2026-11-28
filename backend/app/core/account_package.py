@@ -340,10 +340,13 @@ def open_package(
     raw: bytes,
     *,
     password: str,
-    public_key_hex: Optional[str],
+    public_key_hex: Optional[Iterable[str] | str],
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """验签 → 校验 KDF → 解密 → 校验清单，返回内层 manifest。
+
+    ``public_key_hex`` 可以是单个公钥、分隔字符串或候选公钥集合；包头内嵌的
+    ``signer_public_key`` 会与这些候选一起参与验签，来源是否可信由调用方判断。
 
     任何一步失败都抛 :class:`AccountPackageError` 子类；调用方不应把底层异常细节透给用户。
     """
