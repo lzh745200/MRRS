@@ -4858,6 +4858,10 @@ VERSION_HISTORY_DATA = [
             ),
             "前端角色选项：非超管不再看到 super_admin 选项；未知角色 fail-closed 显示「未知角色」，不再误判为管理员；删除无运行时守卫的“功能权限”表单。",
             "移除死字段 UserUpdate.role_id。",
+            (
+                "CI 门禁修复（本版二次提交）：account_package_service 拆出 _assert_signer_trusted /_persist_signer_trust / _bu"
+                "ild_export_accounts，降低分支复杂度；权限包角色 code 派生的SHA-1 改为 SHA-256（bandit B324）；"
+            ),
             "更新 CLAUDE.md、AGENTS.md、API 文档、数据字典与部署文档中关于注册、角色、权限包的描述。",
             "本版包含 v1.18.66 的账号开通包开箱即用修复；安装版升级后即可直接签发，无需配置签名环境变量。",
         ],
