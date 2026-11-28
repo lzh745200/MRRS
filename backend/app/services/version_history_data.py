@@ -4763,4 +4763,37 @@ VERSION_HISTORY_DATA = [
             "三份 docs/*.pptx 同步到 v1.18.64：版本号、发布日期与测试口径（16,117 / 7,591 / 23,708）更新，并保留原有页面结构与版式。",
         ],
     },
+    {
+        "version": "1.18.65",
+        "date": "2026-11-28",
+        "description": "权限闭环：矩阵按角色收窄、数据范围统一、账号首登改密",
+        "features": [
+            (
+                "矩阵模式菜单按角色收窄（T05）：menus.py 在 matrix.visible_keys() 之后按角色默认菜单再收窄；分组按子项 roles 过滤、控制台按页签 roles 过滤，"
+                "普通用户不再看到管理员专属页面/控制台页签。保留“用户 allowed_menus 只能进一步收窄”的既有语义。"
+            ),
+            (
+                "数据范围统一判定（T06）：新增 has_unrestricted_data_scope(user)（仅超管为真）；apply_scope_filter / get_org_scope /"
+                " get_accessible_org_ids 三个入口统一调用，非超管 data_scope=\"all\" 收敛为本组织及子树或仅本人；组织树缓存只对真正全局用户启用。"
+            ),
+            (
+                "只读核查工具：backend/scripts/check_legacy_account_package_scope.py（旧账号包现场回执/空授权）与 backend/scripts/au"
+                "dit_data_scope_all.py（非超管 all 账号盘点）；均只读、不自动改库。"
+            ),
+            "新增 backend/tests/unit/test_data_scope_unify_t06.py（9 例）及矩阵角色收窄、写守卫真实链路回归。",
+            "界面建号强制首登改密（T09）：管理员在系统内创建账号时置 must_change_password=True，初始口令不再长期有效；存量账号不受影响。",
+            "登录页文案与死控件（T10）：副标题改为“请输入账号与密码”，删除从未显示的机器码输入框及其状态；机器码仍由服务端自动绑定。",
+            (
+                "数据范围越权红线：部门管理员带 data_scope=\"all\" 不再在任一入口获得跨组织全量；组织对比/回收站等直接判断同步收敛。大屏筛选、消费帮扶统计、捐赠统计等原“admin 全"
+                "局”用例改用超管身份验证全局口径，管理员口径由 T06 回归覆盖。"
+            ),
+            "写守卫回归补断言：test_grant_guard_enforce_chain.py 两个放行分支补 assert ... is None，满足 no_assert_tests 门禁。",
+            (
+                "更新 deliverables/未完成项与风险闭环处理方案.md 执行进度与 T01–T14 边界；T02/T04 强制模式/T07 读接口/T11–T14 标明现场或产品前置条件，不冒充"
+                "“已上线安全”。"
+            ),
+            "后端 16,156 用例、前端 7,592 用例、Electron 23 例，合计 23,748。",
+            "三份 docs/*.pptx 同步到 v1.18.65：版本号、发布日期（2026-11-28）与测试口径（16,156 / 7,592 / 23,748）更新。",
+        ],
+    },
 ]

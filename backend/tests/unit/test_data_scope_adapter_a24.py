@@ -54,12 +54,14 @@ class TestGetAccessibleOrgIds:
     def test_none_user_returns_empty(self):
         assert get_accessible_org_ids(None) == []
 
-    def test_admin_returns_none(self):
-        assert get_accessible_org_ids(ADMIN) is None
+    def test_admin_without_org_returns_empty(self):
+        # T06：部门级 admin 不再返回 None（不受限）；无组织时 fail-closed 到 OWN
+        assert get_accessible_org_ids(ADMIN) == []
         assert get_accessible_org_ids(SUPERUSER) is None
 
-    def test_data_scope_all_returns_none(self):
-        assert get_accessible_org_ids(SCOPE_ALL) is None
+    def test_data_scope_all_does_not_escalate_non_superuser(self):
+        # T06：非超管的 data_scope=all 不再当全局；viewer+all → 仅本人（无组织 id）
+        assert get_accessible_org_ids(SCOPE_ALL) == []
 
     def test_data_scope_self_returns_empty(self):
         assert get_accessible_org_ids(SCOPE_SELF) == []
@@ -107,10 +109,12 @@ class TestApplyScopeFilter:
         q.filter.assert_called_once()
         assert result is q.filter.return_value
 
-    def test_data_scope_all_query_unchanged(self):
+    def test_data_scope_all_does_not_bypass_filter(self):
+        # T06：viewer+all 收敛为仅本人（created_by 过滤），不再原样放行
         q = MagicMock()
-        assert apply_scope_filter(q, SCOPE_ALL, TinyModel) is q
-        q.filter.assert_not_called()
+        result = apply_scope_filter(q, SCOPE_ALL, TinyModel)
+        q.filter.assert_called_once()
+        assert result is q.filter.return_value
 
     def test_data_scope_self_applies_owner_filter_query(self):
         q = MagicMock()

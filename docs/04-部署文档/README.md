@@ -93,14 +93,14 @@
 - 生产建议：在反向代理层对 `/uploads/` 加 `auth_request` 或签名 URL；不要把后端端口直接暴露到公网。
   如使用 Nginx，至少限制来源网段并禁用目录列表（目录列表默认已关闭）。
 
-## 本版发布物（v1.18.64，2026-11-28）
+## 本版发布物（v1.18.65，2026-11-28）
 
-- **Windows x64**：`MRRS-Setup-1.18.64-x64.exe`（NSIS，含 `latest.yml` / `.blockmap` 供增量更新）。
+- **Windows x64**：`MRRS-Setup-1.18.65-x64.exe`（NSIS，含 `latest.yml` / `.blockmap` 供增量更新）。
   本版账号包改为页面级授权树，导入按授权矩阵收口；安装后脚本继续写入带时间戳的
   `icon-<时间戳>.ico` 并逐项刷新快捷方式图标。
-- **Linux ARM64（麒麟）**：`MRRS-Setup-1.18.64-arm64.deb` 与 standalone
-  `assistance-management-system_1.18.64_arm64.deb`；Electron DEB 继续刷新 hicolor 图标缓存与 UKUI 用户缓存。
-- 安装包与校验值以 GitHub Release `v1.18.64` 页面为准；升级前请先备份
+- **Linux ARM64（麒麟）**：`MRRS-Setup-1.18.65-arm64.deb` 与 standalone
+  `assistance-management-system_1.18.65_arm64.deb`；Electron DEB 继续刷新 hicolor 图标缓存与 UKUI 用户缓存。
+- 安装包与校验值以 GitHub Release `v1.18.65` 页面为准；升级前请先备份
   `backend/data/rural_revitalization.db` 与上传目录。
 
 ## 上一版发布物（v1.18.34，2026-11-02）

@@ -778,6 +778,7 @@ class TestFilters:
     def test_filters_admin(self, api_client):
         client, db, _state = api_client
         ns = _seed(db)
+        _as(_state, id=9, role="super_admin", is_superuser=True)
         resp = client.get("/api/v1/bigscreen/filters")
         assert resp.status_code == 200
         body = resp.json()
@@ -800,6 +801,7 @@ class TestFilters:
     def test_filters_unit_counts_merge_and_sort(self, api_client):
         _client, db, _state = api_client
         _seed(db)
+        _as(_state, id=9, role="super_admin", is_superuser=True)
         data = _client.get("/api/v1/bigscreen/filters").json()["data"]
         units = {item["name"]: item for item in data["units"]}
 
@@ -879,6 +881,7 @@ class TestOverviewAll:
     def test_overview_all(self, api_client):
         client, db, _state = api_client
         _seed(db)
+        _as(_state, id=9, role="super_admin", is_superuser=True)
         resp = client.get("/api/v1/bigscreen/overview")
         assert resp.status_code == 200
         body = resp.json()

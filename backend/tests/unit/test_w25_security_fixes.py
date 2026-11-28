@@ -104,10 +104,13 @@ class TestGetOrgScopeStrict:
         assert scope.is_admin is True
 
     @pytest.mark.asyncio
-    async def test_explicit_all_data_scope_full_access(self):
-        user = _user(role="user", data_scope="all")
+    async def test_non_super_all_data_scope_is_self_only(self):
+        """T06：非超管的 data_scope=all 不再获得全局视图，收敛为仅本人。"""
+        user = _user(role="user", data_scope="all", id=7)
         scope = await get_org_scope(current_user=user, db=None)
-        assert scope.is_admin is True
+        assert scope.is_admin is False
+        assert scope.self_only is True
+        assert scope.user_id == 7
 
 
 # ══════════════════════════════════════════════════════════════════

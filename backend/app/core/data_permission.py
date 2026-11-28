@@ -59,6 +59,22 @@ from app.core.security import get_current_user
 from app.models.organization import Organization
 from app.core.org_data_scope_shadow import observe_org_data_scope
 
+
+def has_unrestricted_data_scope(user: Any) -> bool:
+    """全仓唯一「可跨组织看全量」判定（T06）。
+
+    规则：只有真正的超级管理员（``is_superuser`` 或 ``role=super_admin``）
+    可以跨组织看全量。部门级 ``admin`` 即使被授予 ``data_scope="all"``，也只能
+    在本组织及子树内；普通用户/只读角色的 ``all`` 一律降级为角色默认范围。
+
+    历史实现曾在 ``apply_scope_filter`` / ``get_org_scope`` /
+    ``get_accessible_org_ids`` 里各自判断 ``data_scope == "all"``，导致同一
+    「部门管理员 + 全部数据」在列表/导出、组织树、组织对比三个入口分别得到
+    全量、本组织、403。T06 起三处统一调用本函数，禁止再各自判断。
+    """
+    return is_superuser(user)
+
+
 logger = logging.getLogger(__name__)
 
 # Max depth when expanding the org tree (guards against cyclic parent refs).
@@ -432,7 +448,7 @@ def assert_org_reachable(
         raise HTTPException(status_code=403, detail=f"无权对该组织{action}")
 
 
-async def get_org_scope(
+async def get_org_scope(  # noqa: C901 - 数据范围四类角色/六种组合，拆分反而分散审计口径
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> OrgScopeFilter:
@@ -441,17 +457,23 @@ async def get_org_scope(
     Uses the user's ``role``, ``data_scope`` field and ``organization_id``
     to build an :class:`OrgScopeFilter`.
 
-    口径（W25 收口，与 :func:`apply_scope_filter` 一致）：
-        * ``data_scope="all"`` / ``super_admin`` / ``is_superuser`` → 全量；
+    口径（T06 统一，与 :func:`apply_scope_filter` 一致）：
+        * 仅 ``super_admin`` / ``is_superuser`` → 全量，非超管的 ``data_scope="all"`` 不再全量；
         * 部门级 ``admin``（``is_superuser=False``）→ **本组织及子树**，绝不放行全量；
-        * 其他角色 → 按其 ``data_scope`` 字段（``org`` / ``org_children`` / ``self``）。
+        * 其他角色 → 按其 ``data_scope`` 字段（``org`` / ``org_children`` / ``self``），
+          非法的 ``all`` 降级为 ``self``。
     """
     role = getattr(current_user, "role", "user")
     user_data_scope = getattr(current_user, "data_scope", "org") or "org"
 
-    # 显式全局范围 → 放行全量（与 apply_scope_filter:574 同口径）
+    # T06：只有真正的超级管理员可因 data_scope="all" 全量；部门级 admin 的 all
+    # 收敛为本组织及子树，普通用户的 all 收敛为仅本人。此前这里无条件把 all
+    # 当作全局管理员，与 apply_scope_filter 的严格口径冲突。
     if user_data_scope == "all":
-        return OrgScopeFilter(is_admin=True)
+        if has_unrestricted_data_scope(current_user):
+            return OrgScopeFilter(is_admin=True)
+        # 非超管的 all 继续走角色/self 分支；普通用户落到 self 分支。
+        user_data_scope = "self"
 
     # 真正的全局管理员才放行全量。R27-H8/R28 只收口了 apply_scope_filter，
     # 本函数漏收口 → 部门级 admin 经 51 个调用点跨组织可见（W25 修复）。
@@ -553,14 +575,15 @@ def get_accessible_org_ids(user: Any, db: Any = None) -> Optional[List[int]]:
     if user is None:
         return []
 
-    # 管理员（含超级管理员）不受数据权限限制
-    if is_admin(user):
+    # T06：只有真正的超级管理员返回 None（不受组织限制）。
+    # 部门级 admin 即使 data_scope="all" 也只能返回本组织及子树 —— 以前这里
+    # 用 is_admin(user) 提前 return None，任何直接调用方都会把部门级 admin
+    # 当作全局管理员；与 apply_scope_filter 的严格口径相反。
+    if has_unrestricted_data_scope(user):
         return None
 
     # 兼容 user.data_scope 字段（组织树体系的显式配置）
     user_data_scope = getattr(user, "data_scope", None)
-    if user_data_scope == "all":
-        return None
     if user_data_scope == "self":
         return []
 
@@ -644,9 +667,11 @@ def apply_scope_filter(
     if admin_full_access and is_admin(user):
         return query
 
-    # 显式 data_scope 字段优先（兼容组织树体系的用户配置）
+    # T06：data_scope="all" 不再是跨组织豁免。只有真正的超级管理员可全量；
+    # 部门级 admin 的 all 收敛为本组织及子树，普通用户的 all 收敛为角色默认
+    # （仅本人）。此处不再提前 return query —— 交给下面的角色/范围分支统一判定。
     user_data_scope = getattr(user, "data_scope", None)
-    if user_data_scope == "all":
+    if user_data_scope == "all" and has_unrestricted_data_scope(user):
         return query
     if user_data_scope == "self":
         return _apply_owner_filter(query, model, owner_field, user)

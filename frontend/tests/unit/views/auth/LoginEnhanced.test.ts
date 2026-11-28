@@ -376,19 +376,16 @@ describe('LoginEnhanced.vue', () => {
     expect(w.find('input#login-totp-code').exists()).toBe(true)
     expect(w.find('label[for="login-totp-code"]').exists()).toBe(true)
 
-    // 机器码校验输入框
+    // T10：机器码由服务端自动绑定，登录页不再渲染机器码输入框
     ;(w.vm as any).twoFactorRequired = false
-    ;(w.vm as any).showMachineCodeInput = true
     await nextTick()
-    expect(w.find('input#login-machine-code').exists()).toBe(true)
-    expect(w.find('label[for="login-machine-code"]').exists()).toBe(true)
+    expect(w.find('input#login-machine-code').exists()).toBe(false)
     w.unmount()
   })
 
-  it('输入框 v-model 双向绑定：账号 / 密码 / 机器码输入都写回表单状态', async () => {
+  it('输入框 v-model 双向绑定：账号 / 密码输入写回表单状态', async () => {
     // 覆盖率门禁回归：v-model 为原生 input 生成 onInput 内联处理器，
-    // 若测试只用 vm 赋值、不触发真实输入事件，三个处理器会落在未覆盖行
-    // （LoginEnhanced.vue 66/81/109）→ functions 86.95%。此处逐一点击输入。
+    // 若测试只用 vm 赋值、不触发真实输入事件，处理器会落在未覆盖行。
     const w = await mountComp()
     const vm = w.vm as any
 
@@ -397,11 +394,6 @@ describe('LoginEnhanced.vue', () => {
 
     await w.find('input#login-password').setValue('Secret#2026')
     expect(vm.password).toBe('Secret#2026')
-
-    vm.showMachineCodeInput = true
-    await nextTick()
-    await w.find('input#login-machine-code').setValue('1234')
-    expect(vm.verificationCode).toBe('1234')
     w.unmount()
   })
 
@@ -793,17 +785,15 @@ describe('LoginEnhanced.vue', () => {
     expect(ElMessage.error).toHaveBeenCalledWith('权限包验证失败')
   })
 
-  it('机器码验证输入框渲染（showMachineCodeInput）', async () => {
+  it('T10：登录页不渲染机器码输入框，副标题只提示账号与密码', async () => {
     const w = mount(LoginEnhanced, {
       global: { renderStubDefaultSlot: true },
     })
     await flushPromises()
-    const vm = w.vm as any
     expect(w.find('.login-page').exists()).toBe(true)
-    vm.showMachineCodeInput = true
-    await nextTick()
-    expect(w.text()).toContain('机器码验证')
-    expect(w.text()).toContain('本机尚未授权登录')
+    expect(w.find('input#login-machine-code').exists()).toBe(false)
+    expect(w.text()).not.toContain('机器校验码')
+    expect(w.text()).toContain('请输入账号与密码')
   })
 
   describe('登录页公开配置', () => {

@@ -368,6 +368,7 @@ class TestStats:
         _mk_item(db, organization_id=1)
         _mk_item(db, organization_id=1, is_active=False)
         _mk_item(db, organization_id=2)
+        _as(state, id=9, role="super_admin", is_superuser=True)
         assert client.get("/api/v1/donations/stats").json()["data"]["total"] == 2
         assert (
             client.get("/api/v1/donations/stats", params={"include_deleted": True}).json()["data"]["total"]

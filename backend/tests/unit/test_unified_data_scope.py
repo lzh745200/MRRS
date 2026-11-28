@@ -415,14 +415,18 @@ class TestGetOrgScope:
         assert ds.is_admin is False
         assert ds.org_ids == [21]
 
-    async def test_data_scope_all_full_access(self):
+    async def test_non_super_data_scope_all_is_self_only(self):
+        """T06：非超管的 data_scope=all 收敛为仅本人，不再获得全局视图。"""
         from app.core.data_permission import get_org_scope
         user = MagicMock()
         user.role = "user"
         user.data_scope = "all"
+        user.id = 42
         with patch("app.core.data_permission.is_superuser", return_value=False):
             ds = await get_org_scope(current_user=user, db=None)
-        assert ds.is_admin is True
+        assert ds.is_admin is False
+        assert ds.self_only is True
+        assert ds.user_id == 42
 
     async def test_self_scope(self):
         from app.core.data_permission import get_org_scope

@@ -171,7 +171,7 @@ class TestEnforceOnImportedMatrix:
     def test_read_method_not_guarded(self, guard):
         """只读模块的读请求放行：读接口防护是另一件事（T07），不混进写守卫。"""
         request, _ = guard("enforce", "GET", READ_ONLY_PATH)
-        _run(enforce_write_grant(request))
+        assert _run(enforce_write_grant(request)) is None
 
     def test_shadow_logs_but_does_not_block(self, guard, caplog):
         import logging
@@ -248,4 +248,4 @@ class TestBehaviourUnchangedWhereItMust:
     def test_unauthenticated_passes_to_real_auth(self, guard):
         """无令牌：守卫放行，由路由自己的认证返回 401（守卫不做认证）。"""
         request, _ = guard("enforce", "POST", f"{READ_ONLY_PATH}/1", username=None)
-        _run(enforce_write_grant(request))
+        assert _run(enforce_write_grant(request)) is None

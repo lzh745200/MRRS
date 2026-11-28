@@ -250,7 +250,9 @@ async def get_organizations(
     # R27-H8 收口后：部门级 admin 的列表结果已被数据域收敛为「本组织及子树」，
     # 若仍写入全局键 "orgs:list"，组织 A 的管理员会把受限结果喂给组织 B 的管理员
     # （跨组织泄漏）。因此缓存只对**真正全局**的用户启用（超管 / is_superuser）。
-    _global_view = is_superuser(current_user) or getattr(current_user, "data_scope", None) == "all"
+    # T06：data_scope="all" 不再是跨组织豁免（只有超管可全量）。缓存只对
+    # 真正全局的用户启用，避免部门级 admin 的受限结果被写入全局键。
+    _global_view = is_superuser(current_user)
     _cache_key = "orgs:list"
     if (
         _global_view

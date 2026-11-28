@@ -793,6 +793,9 @@ async def create_user(
         role=role,
         organization_id=data.organization_id,
         data_scope=data_scope,
+        # T09：管理员在界面创建的账号必须首次登录改密。初始口令由管理员掌握，
+        # 不强制改密会让「管理员知道用户密码」长期成立，违背最小知悉。
+        must_change_password=True,
         permissions=data.permissions or "",  # 保留旧字段以兼容
         allowed_permissions=allowed_perms,  # RBAC服务使用此字段
         department=data.department,

@@ -262,6 +262,7 @@ class TestStatistics:
         _mk_record(db, amount=100, organization_id=1)
         _mk_record(db, amount=200, organization_id=1, is_active=False)
         _mk_record(db, amount=900, organization_id=2)
+        _as(state, id=9, role="super_admin", is_superuser=True)
         all_years = client.get("/api/v1/consumption/statistics").json()["data"]
         assert all_years["record_count"] == 2      # 管理员全量：org1 在用 + org2 在用
         assert all_years["total_amount"] == 1000.0

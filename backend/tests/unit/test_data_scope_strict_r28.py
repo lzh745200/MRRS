@@ -116,15 +116,15 @@ class TestDepartmentAdminIsScopedByDefault:
 
 
 class TestGlobalAdminsStayGlobal:
-    """super_admin / is_superuser / data_scope=all 不受开关约束。"""
+    """super_admin / is_superuser 不受开关约束。"""
 
-    @pytest.mark.parametrize("user", [SUPER_ADMIN, FLAG_SUPERUSER, GLOBAL_SCOPE])
+    @pytest.mark.parametrize("user", [SUPER_ADMIN, FLAG_SUPERUSER])
     def test_global_admin_query_unchanged(self, user):
         q = MagicMock(name="query")
         assert apply_scope_filter(q, user, ScopedModel) is q
         q.filter.assert_not_called()
 
-    @pytest.mark.parametrize("user", [SUPER_ADMIN, FLAG_SUPERUSER, GLOBAL_SCOPE])
+    @pytest.mark.parametrize("user", [SUPER_ADMIN, FLAG_SUPERUSER])
     def test_global_admin_select_unchanged(self, user):
         stmt = select(ScopedModel)
         assert apply_scope_filter(stmt, user, ScopedModel) is stmt

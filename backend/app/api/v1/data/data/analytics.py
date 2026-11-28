@@ -326,7 +326,13 @@ async def get_cross_org_comparison(
     另：越权由「HTTP 200 + success=False」改为标准 **403**，与全站错误口径一致
     （本端点无前端调用方，接口语义变更无破坏性）。
     """
-    from app.core.data_permission import DataScope, _get_org_subtree, _get_user_org_id, get_data_scope
+    from app.core.data_permission import (
+        DataScope,
+        _get_org_subtree,
+        _get_user_org_id,
+        get_data_scope,
+        has_unrestricted_data_scope,
+    )
 
     role = getattr(current_user, "role", "")
     is_super = getattr(current_user, "is_superuser", False)
@@ -338,18 +344,20 @@ async def get_cross_org_comparison(
     from app.models.fund import Fund
     from app.models.supported_village import SupportedVillage
 
-    # 决定可见组织集合：None = 不受限（真全局管理员）
+    # T06：决定可见组织集合。只有真正超级管理员可全量；部门级 admin 的
+    # data_scope="all" 收敛为本组织及子树，不再把 all 当全局放行。
     allowed_org_ids: Optional[list] = None
-    if getattr(current_user, "data_scope", None) != "all":
+    if not has_unrestricted_data_scope(current_user):
+        # 非超管不可能拿到 DataScope.ALL（get_data_scope 只按角色），
+        # 因此这里只需按 OWN_DEPT / OWN 两类收敛，避免留下不可达分支。
         data_scope = get_data_scope(current_user)
-        if data_scope != DataScope.ALL:
-            user_org_id = _get_user_org_id(current_user)
-            if data_scope == DataScope.OWN_DEPT and user_org_id is not None:
-                subtree_ids, _names = _get_org_subtree(db, user_org_id)
-                allowed_org_ids = subtree_ids or [user_org_id]
-            else:
-                # OWN（或有 org 约束但取不到组织）→ 组织级对比无可见范围
-                allowed_org_ids = []
+        user_org_id = _get_user_org_id(current_user)
+        if data_scope == DataScope.OWN_DEPT and user_org_id is not None:
+            subtree_ids, _names = _get_org_subtree(db, user_org_id)
+            allowed_org_ids = subtree_ids or [user_org_id]
+        else:
+            # OWN（或无 org 约束但取不到组织）→ 组织级对比无可见范围
+            allowed_org_ids = []
 
     if allowed_org_ids is not None and not allowed_org_ids:
         return AnalyticsResponse(

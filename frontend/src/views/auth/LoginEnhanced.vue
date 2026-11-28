@@ -30,7 +30,7 @@
           <h2>{{ twoFactorRequired ? '双因素认证' : '用户登录' }}</h2>
           <p>
             {{
-              twoFactorRequired ? '请输入认证器中的 6 位验证码' : '请输入您的账号、密码与机器校验码'
+              twoFactorRequired ? '请输入认证器中的 6 位验证码' : '请输入账号与密码'
             }}
           </p>
         </div>
@@ -150,23 +150,6 @@
               <p v-if="capsLockOn" class="field-hint field-hint--warn" role="status">
                 大写锁定已开启，请输入小写字母或先关闭 CapsLock
               </p>
-            </div>
-
-            <!-- 机器码验证（可选） -->
-            <div v-if="showMachineCodeInput" class="form-group">
-              <label for="login-machine-code">机器码验证</label>
-              <div class="input-wrapper">
-                <el-icon class="input-icon"><Key /></el-icon>
-                <input
-                  id="login-machine-code"
-                  v-model="verificationCode"
-                  type="text"
-                  placeholder="请输入 4 位校验码"
-                  class="custom-input"
-                  maxlength="4"
-                />
-              </div>
-              <p class="hint-text">本机尚未授权登录，请向管理员索取 4 位校验码</p>
             </div>
 
             <button type="submit" class="login-btn" :disabled="busy">
@@ -348,11 +331,9 @@ const machineCodeStepNote = '用于设备绑定与换机重置；获取后请把
 
 const username = ref('')
 const password = ref('')
-const verificationCode = ref('')
 const rememberMe = ref(false)
 const loading = ref(false)
 const showPassword = ref(false)
-const showMachineCodeInput = ref(false)
 /** 首次打开登录页的操作指引：未看过时自动展开；关闭后按浏览器持久化只展示一次。 */
 const LOGIN_GUIDE_SEEN_KEY = 'mrrs.login-guide.v1'
 function hasSeenLoginGuide(): boolean {

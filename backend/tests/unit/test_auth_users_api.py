@@ -457,6 +457,9 @@ class TestCreateUser:
                     mock_db.query.side_effect = query_side_effect
                     response = client.post(f"{self.prefix}", json={"username": "newuser", "password": "Str0ng!Pass1", "full_name": "New", "organization_id": 1})
                     assert response.status_code == 200
+                    # T09：管理员在界面创建的账号必须首次登录改密
+                    created = mock_db.add.call_args[0][0]
+                    assert created.must_change_password is True
         _clear_overrides(client, get_db, get_current_user)
 
     def test_create_user_with_old_permissions_format(self, client):
