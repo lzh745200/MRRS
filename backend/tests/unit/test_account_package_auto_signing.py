@@ -41,6 +41,13 @@ def test_derive_public_key_matches_keypair() -> None:
     assert derive_public_key(private_hex) == public_hex
 
 
+def test_derive_public_key_rejects_empty_private_key() -> None:
+    from app.core.grant_signing import GrantSigningError
+
+    with pytest.raises(GrantSigningError, match="未配置签名私钥"):
+        derive_public_key("")
+
+
 def test_local_key_generated_once_and_persisted(secrets_file) -> None:
     assert local_private_key(create=False) == ""
 

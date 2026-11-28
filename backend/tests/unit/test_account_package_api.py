@@ -274,6 +274,15 @@ def test_signing_key_management_endpoints(client, api_env, monkeypatch):
         assert removed.status_code == 200, removed.text
         assert removed.json()["data"]["trusted_keys"] == []
 
+        invalid = client.post(
+            "/api/v1/account-packages/signing-keys/trusted", json={"public_key": "z" * 64}
+        )
+        assert invalid.status_code == 400, invalid.text
+        assert invalid.json()["detail"]["code"] == "AP_INVALID_PUBLIC_KEY"
+        missing = client.delete("/api/v1/account-packages/signing-keys/trusted/0000-1111")
+        assert missing.status_code == 404, missing.text
+        assert missing.json()["detail"]["code"] == "AP_NOT_FOUND"
+
         # 普通管理员可以查看密钥信息，但改信任列表仅超管。
         normal = SimpleNamespace(id=2, username="normal", role="admin", is_superuser=False, organization_id=root.id)
         app.dependency_overrides[get_current_user] = lambda: normal
@@ -285,6 +294,28 @@ def test_signing_key_management_endpoints(client, api_env, monkeypatch):
             id=3, username="viewer", role="user", is_superuser=False, organization_id=root.id
         )
         assert client.get("/api/v1/account-packages/signing-keys").status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_can_issue_reports_signing_key_error(client, api_env, monkeypatch):
+    from app.core import account_package_keys
+
+    db = _db()
+    root = _org(db)
+    admin = SimpleNamespace(id=1, username="root", role="super_admin", is_superuser=True, organization_id=root.id)
+    _use_db(db, admin)
+
+    def _boom(**kwargs):
+        raise account_package_keys.AccountPackageKeyError("secrets dir unwritable")
+
+    monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_ENABLED", True)
+    monkeypatch.setattr(account_package_keys, "signing_key_info", _boom)
+    try:
+        data = client.get("/api/v1/account-packages/can-issue").json()["data"]
+        assert data["can_issue"] is False
+        assert data["reason_code"] == "AP_SIGNING_MISSING"
+        assert "写入权限" in data["reason"]
     finally:
         app.dependency_overrides.clear()
 

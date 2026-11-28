@@ -856,7 +856,7 @@ class PermissionPackageService:
         """由角色名派生 ASCII code（rbac_roles.code 唯一约束，不可为空）。"""
         base = re.sub(r"[^0-9A-Za-z]+", "_", (name or "").strip().upper()).strip("_")
         if not base:
-            digest = hashlib.sha1((name or "").encode("utf-8")).hexdigest()[:8].upper()
+            digest = hashlib.sha256((name or "").encode("utf-8")).hexdigest()[:8].upper()
             base = f"ROLE_{digest}"
         return base[:50]
 
@@ -868,7 +868,7 @@ class PermissionPackageService:
             query = query.filter(RbacRole.id != exclude_id)
         if query.first() is None:
             return base
-        digest = hashlib.sha1(
+        digest = hashlib.sha256(
             f"{base}:{exclude_id}".encode("utf-8")
         ).hexdigest()[:6].upper()
         candidate = f"{base[:43]}_{digest}"

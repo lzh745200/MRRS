@@ -477,3 +477,80 @@ def test_cross_machine_import_requires_and_persists_signer_trust(tmp_path, monke
     with pytest.raises(AccountPackageBusinessError) as exc:
         service.confirm(raw, password="passw0rd-pass", machine_code="MC-CROSS")
     assert exc.value.code == "AP_ALREADY_IMPORTED"
+
+
+def _strip_embedded_signer(raw: bytes, private_hex: str) -> bytes:
+    """构造 v1.18.66 之前的旧包：包头没有 signer_public_key，仍由同一私钥签名。"""
+    import json
+    import struct
+
+    from app.core.account_package import PACKAGE_MAGIC
+    from app.core.grant_signing import sign_payload
+
+    magic_len = len(PACKAGE_MAGIC)
+    header_len = struct.unpack(">I", raw[magic_len:magic_len + 4])[0]
+    header = json.loads(raw[magic_len + 4:magic_len + 4 + header_len])
+    header.pop("signer_public_key", None)
+    header["signature"] = sign_payload(header, private_hex)
+    payload = json.dumps(header, separators=(",", ":"), sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return PACKAGE_MAGIC + struct.pack(">I", len(payload)) + payload + raw[magic_len + 4 + header_len:]
+
+
+def test_legacy_package_preview_uses_pretrusted_public_key(env, tmp_path):
+    """旧包没有内嵌公钥时，只能靠本机预置公钥验签，预览应标记来源可信。"""
+    priv, _pub = env
+    source = _db()
+    root = _org(source)
+    _org(source, "520100", "贵阳", root, "2")
+    out = AccountPackageService(source).export_package(
+        package_id="88888888-8888-8888-8888-888888888888",
+        organization_code="520100", organization_name="贵阳市局", parent_code="520000",
+        admin_username="legacy_admin", admin_full_name="旧包管理员",
+        target_machine_code="MC-LEGACY", grants={"projects": "view"},
+        password="passw0rd-pass", issued_by=SimpleNamespace(id=1, organization_id=root.id),
+    )
+    raw = _strip_embedded_signer((tmp_path / out["file_name"]).read_bytes(), priv)
+
+    target = _db()
+    _org(target, "520000")
+    preview = AccountPackageService(target).preview(raw, password="passw0rd-pass", machine_code="MC-LEGACY")
+    assert preview["signer_fingerprint"] == ""
+    assert preview["signer_trusted"] is True
+
+
+def test_persist_signer_trust_failure_is_non_fatal(monkeypatch):
+    from app.core import account_package_keys
+    from app.services.account_package_service import _persist_signer_trust
+
+    def _fail(_public_key):
+        raise account_package_keys.AccountPackageKeyError("disk full")
+
+    monkeypatch.setattr(account_package_keys, "add_trusted_public_key", _fail)
+    assert _persist_signer_trust("ab" * 32, False) is False
+
+
+@pytest.mark.parametrize("mode", ["raise", "empty"])
+def test_export_reports_unavailable_signing_key(env, monkeypatch, mode):
+    from app.core import account_package_keys
+
+    def _boom(*_args, **_kwargs):
+        raise account_package_keys.AccountPackageKeyError("secrets dir unwritable")
+
+    monkeypatch.setattr(
+        account_package_keys,
+        "local_private_key",
+        _boom if mode == "raise" else (lambda **_kwargs: ""),
+    )
+    db = _db()
+    root = _org(db)
+    _org(db, "520100", "贵阳", root, "2")
+    with pytest.raises(AccountPackageBusinessError) as exc:
+        AccountPackageService(db).export_package(
+            package_id="99999999-9999-9999-9999-999999999999",
+            organization_code="520100", organization_name="贵阳市局", parent_code="520000",
+            admin_username="nokey_admin", admin_full_name="无密钥管理员",
+            target_machine_code="MC-NOKEY", grants={"projects": "view"},
+            password="passw0rd-pass", issued_by=SimpleNamespace(id=1, organization_id=root.id),
+        )
+    assert exc.value.code == "AP_SIGNING_MISSING"
+    assert exc.value.status == 403

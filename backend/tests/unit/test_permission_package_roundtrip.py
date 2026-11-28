@@ -393,6 +393,60 @@ class TestLegacyPrivilegeOptIn:
             db.close()
             engine.dispose()
 
+    def test_unique_role_code_probe_returns_first_free_candidate(self):
+        db, engine, _ = _db_with_bob()
+        service = PermissionPackageService(db)
+        db.add(RbacRole(
+            name="taken", code="DUP", description="d",
+            is_system=False, is_active=True, priority=10,
+        ))
+        db.commit()
+        try:
+            code = service._unique_role_code("DUP")
+            assert code.startswith("DUP_")
+            assert code != "DUP"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_role_code_uses_incoming_when_existing_has_none_and_no_clash(self):
+        db, engine, _ = _db_with_bob()
+        service = PermissionPackageService(db)
+        existing = RbacRole(
+            name="custom_role", code="", description="d",
+            is_system=False, is_active=True, priority=10,
+        )
+        db.add(existing)
+        db.commit()
+        db.refresh(existing)
+        try:
+            code = service._role_code({"code": "FREE_CODE"}, existing)
+            assert code == "FREE_CODE"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_role_code_derives_unique_when_incoming_clashes(self):
+        db, engine, _ = _db_with_bob()
+        service = PermissionPackageService(db)
+        db.add(RbacRole(
+            name="other", code="TAKEN", description="d",
+            is_system=False, is_active=True, priority=10,
+        ))
+        existing = RbacRole(
+            name="custom_role", code="", description="d",
+            is_system=False, is_active=True, priority=10,
+        )
+        db.add(existing)
+        db.commit()
+        db.refresh(existing)
+        try:
+            code = service._role_code({"code": "TAKEN"}, existing)
+            assert code and code != "TAKEN"
+        finally:
+            db.close()
+            engine.dispose()
+
 
 class TestConfirmApiLegacyFlag:
     """API 层：apply_legacy_privileges 默认 false，仅管理员可置 true。"""
