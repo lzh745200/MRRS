@@ -29,9 +29,7 @@
         <div class="card-header">
           <h2>{{ twoFactorRequired ? '双因素认证' : '用户登录' }}</h2>
           <p>
-            {{
-              twoFactorRequired ? '请输入认证器中的 6 位验证码' : '请输入账号与密码'
-            }}
+            {{ twoFactorRequired ? '请输入认证器中的 6 位验证码' : '请输入账号与密码' }}
           </p>
         </div>
 

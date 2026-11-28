@@ -26,6 +26,7 @@ const ADMIN = { username: 'admin', password: process.env.TEST_PASSWORD || 'E2e#P
 
 // 满足 PasswordPolicy：≥12 位、含大写+小写+数字+特殊字符（@ 在白名单内）
 const PACK_USER_PASSWORD = 'E2EPack@2026'
+const PACK_USER_NEW_PASSWORD = 'E2EPackNew@2026'
 
 // 时间戳后缀，保证共享 e2e_test.db 上可重复运行（即使上一次清理失败也不冲突）
 const STAMP = Date.now().toString(36)
@@ -136,7 +137,14 @@ test('权限包绑定用户后，菜单按包解析（包内可见、包外不�
   await page.locator('input[type="password"]').fill(PACK_USER_PASSWORD)
   await page.locator('button[type="submit"]').click()
 
-  // 登录成功落工作台（新用户未设置 must_change_password/2FA/机器码绑定）
+  // v1.18.65：管理员创建的账号首次登录必须改密，先完成改密再进入工作台
+  await page.waitForURL(/\/(change-password|dashboard)/, { timeout: 15000 })
+  if (!page.url().includes('/dashboard')) {
+    await page.locator('input[placeholder="请输入当前密码"]').fill(PACK_USER_PASSWORD)
+    await page.locator('input[placeholder="请输入新密码"]').fill(PACK_USER_NEW_PASSWORD)
+    await page.locator('input[placeholder="请再次输入新密码"]').fill(PACK_USER_NEW_PASSWORD)
+    await page.locator('button.submit-button').click()
+  }
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 })
 
   // W22（v1.14.0）：7 板块默认折叠 —— 先展开全部板块再断言子项可见性
