@@ -63,8 +63,8 @@ PUBLIC_PREFIXES = (
     # —— 设计必需公开 ——
     "/api/v1/auth/login",
     "/api/v1/auth/refresh",
-    "/api/v1/auth/register",
     "/api/v1/auth/logout",
+    # 登录页公开配置：登录前就要拿到锁定策略（自助注册已下线，仍保留该端点）。
     "/api/v1/auth/public-config",
     "/api/v1/auth/csrf-token",
     "/api/v1/auth/two-factor/verify-login",

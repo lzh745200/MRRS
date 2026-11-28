@@ -113,6 +113,11 @@ function mountComp() {
     global: {
       renderStubDefaultSlot: true,
       stubs: {
+        'el-alert': {
+          name: 'ElAlert',
+          props: ['title'],
+          template: '<div class="el-alert-stub"><slot /></div>',
+        },
         'el-card': {
           name: 'ElCard',
           template: '<div class="el-card-stub"><slot name="header" /><slot /></div>',
@@ -170,6 +175,17 @@ beforeEach(() => {
 })
 
 describe('挂载与数据加载', () => {
+  it('系统角色说明：固定 4 个系统角色，RBAC 不影响 users.role，且无自助注册措辞', async () => {
+    const wrapper = mountComp()
+    await flushPromises()
+    const text = wrapper.find('.el-alert-stub').text()
+    expect(text).toContain('系统角色固定 4 个')
+    expect(text).toContain('超级管理员/系统管理员/普通用户/访客')
+    expect(text).toContain('不影响 users.role')
+    expect(text).not.toContain('注册')
+    wrapper.unmount()
+  })
+
   it('onMounted 并行加载角色列表与权限树（含全部兜底分支）', async () => {
     const wrapper = mountComp()
     await flushPromises()

@@ -540,7 +540,7 @@ describe('删除与导出', () => {
     const vm = wrapper.vm as any
     await clickBtn(wrapper, '删除', 0) // passRowA pending → 有删除按钮
     expect(confirmMock).toHaveBeenCalledWith(
-      '确定删除该通行证码记录吗？删除后该通行证码将无法再用于注册。',
+      '确定删除该通行证码记录吗？删除后该通行证码将无法再用于设备绑定。',
       '删除确认',
       expect.anything()
     )

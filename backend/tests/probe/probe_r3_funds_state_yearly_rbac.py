@@ -58,12 +58,13 @@ with TestClient(app, raise_server_exceptions=False) as client:
     check("管理员登录", bool(at))
     AUTH = {"Authorization": f"Bearer {at}", "X-CSRF-Token": token}
 
-    # 前置：建一个普通用户（复用 R1 的通行码链路简版：直接建用户走 users API）
-    r = client.post("/api/v1/auth/register",
-                    json={"username": "probe_r3_user", "password": "Pr0be!R3#Passw0rd",
-                          "pass_code": "XXXX"},  # 伪造通行码应 400
-                    headers={"X-CSRF-Token": token})
-    check("无效通行码注册被拒(400)", r.status_code == 400, r.status_code)
+    # 前置：自助注册已下线；无效通行码仍应被机器码绑定链路拒绝
+    from app.core.database import SessionLocal
+    from app.services.machine_code_service import MachineCodeService
+
+    with SessionLocal() as _db:
+        _invalid = MachineCodeService(_db).verify_pass_code("XXXX", "probe-r3-machine")
+    check("无效通行码被拒", _invalid is None)
 
     # ═══ 链路 1：经费状态机全生命周期 ═══
     r = client.post("/api/v1/funds",

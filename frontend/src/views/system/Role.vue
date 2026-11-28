@@ -9,9 +9,8 @@
       style="margin-bottom: 16px"
     >
       <template #default>
-        系统固定角色为：<b>超级管理员</b>、<b>系统管理员</b>、<b>普通用户</b>、<b>访客</b>。
-        用户注册时默认为「普通用户」。此处的 RBAC 角色用于细粒度权限包管理，
-        不影响用户角色（users.role）的分配。
+        系统角色固定 4 个（超级管理员/系统管理员/普通用户/访客），由“用户与角色”分配； 此处 RBAC
+        角色仅用于权限配置包，不影响 users.role。
       </template>
     </el-alert>
     <el-card class="search-card">
@@ -195,7 +194,7 @@
 import { DIALOG_MD, DIALOG_LG } from '@/config/dialog'
 // ================================================================
 // 独立路由已下线：/system/roles → redirect /system/users（2026-09 权限收敛）
-// 但本组件**仍在使用**：UserManagement.vue 以「角色管理」页签内嵌引入
+// 但本组件**仍在使用**：UserManagement.vue 以「权限包角色（RBAC）」页签内嵌引入
 // （import RoleManagement from "./Role.vue"），并非“仅保留参考”的废弃文件。
 // 修改角色管理逻辑时需同步其单测：tests/unit/views/system/Role*.test.ts
 // ================================================================

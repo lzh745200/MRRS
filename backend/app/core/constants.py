@@ -60,6 +60,39 @@ PRACTICAL_ROLES = [
 # 历史角色值由 normalize_role() 在入口处归一化，不再作为合法值）
 ALL_ROLES = list(PRACTICAL_ROLES)
 
+# 角色/数据范围的展示文案单一源：前端通过 GET /users/form-options 读取，
+# 禁止在页面里再维护第二套中文标签。
+ROLE_LABELS = {
+    ROLE_SUPER_ADMIN: "超级管理员",
+    ROLE_ADMIN: "系统管理员",
+    ROLE_USER: "普通用户",
+    ROLE_VIEWER: "访客",
+}
+ROLE_DESCRIPTIONS = {
+    ROLE_SUPER_ADMIN: "系统最高权限，可管理所有功能",
+    ROLE_ADMIN: "可管理用户、组织、系统配置",
+    ROLE_USER: "日常数据录入和操作",
+    ROLE_VIEWER: "只能查看数据，无法修改",
+}
+
+DATA_SCOPES = ("all", "org_children", "org", "self")
+DATA_SCOPE_LABELS = {
+    "all": "全部数据",
+    "org_children": "本组织及下级",
+    "org": "仅本组织",
+    "self": "仅自己",
+}
+DATA_SCOPE_DESCRIPTIONS = {
+    "all": "可访问系统内所有数据",
+    "org_children": "可访问本组织及其下级组织的所有数据",
+    "org": "仅能访问本组织的数据",
+    "self": "仅能访问自己创建的数据",
+}
+
+# 账号开通包有意只允许这三类角色：不允许离线包创建超级管理员。
+ACCOUNT_PACKAGE_ROLES = (ROLE_ADMIN, ROLE_USER, ROLE_VIEWER)
+ACCOUNT_PACKAGE_DATA_SCOPES = ("org", "org_children", "self")
+
 # 旧角色值 → 新角色值的归一化映射（approval_leader/manager 视为管理员级，operator 视为普通用户）
 _ROLE_NORMALIZE_MAP = {
     ROLE_APPROVAL_LEADER: ROLE_ADMIN,

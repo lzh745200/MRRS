@@ -24,7 +24,16 @@ from app.models.machine_code import MachineCode
 from app.models.organization import Organization
 from app.models.user import User
 from app.services.user_service import VALID_ROLES
-from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, normalize_role
+from app.core.constants import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    DATA_SCOPES,
+    DATA_SCOPE_DESCRIPTIONS,
+    DATA_SCOPE_LABELS,
+    ROLE_DESCRIPTIONS,
+    ROLE_LABELS,
+    normalize_role,
+)
 from app.core.transaction import safe_commit
 from app.core.response import success_response
 from app.utils.pagination import clamp_offset_limit, coerce_page_param
@@ -40,16 +49,20 @@ router = APIRouter(prefix="/users", tags=["用户管理"])
 # /permissions/options 与聚合的 /form-options 必须返回同一份数据，避免前端
 # 各自硬编码后与后端策略漂移（“能选但提交 400/403”）。
 ROLE_OPTIONS = [
-    {"value": "super_admin", "label": "超级管理员", "description": "系统最高权限，可管理所有功能"},
-    {"value": "admin", "label": "系统管理员", "description": "可管理用户、组织、系统配置"},
-    {"value": "user", "label": "普通用户", "description": "日常数据录入和操作"},
-    {"value": "viewer", "label": "访客", "description": "只能查看数据，无法修改"},
+    {
+        "value": role,
+        "label": ROLE_LABELS[role],
+        "description": ROLE_DESCRIPTIONS[role],
+    }
+    for role in ROLE_LABELS
 ]
 DATA_SCOPE_OPTIONS = [
-    {"value": "all", "label": "全部数据", "description": "可访问系统内所有数据"},
-    {"value": "org_children", "label": "本组织及下级", "description": "可访问本组织及其下级组织的所有数据"},
-    {"value": "org", "label": "仅本组织", "description": "仅能访问本组织的数据"},
-    {"value": "self", "label": "仅自己", "description": "仅能访问自己创建的数据"},
+    {
+        "value": scope,
+        "label": DATA_SCOPE_LABELS[scope],
+        "description": DATA_SCOPE_DESCRIPTIONS[scope],
+    }
+    for scope in DATA_SCOPES
 ]
 PERMISSION_OPTIONS = [
     {"code": "system:manage", "name": "系统管理", "category": "系统"},
@@ -153,7 +166,7 @@ class AdminResetPasswordBody(BaseModel):
     new_password: str
 
 
-VALID_SCOPES = {"all", "org", "org_children", "self"}
+VALID_SCOPES = set(DATA_SCOPES)
 
 # 静态选项数据缓存 TTL (1小时)
 OPTIONS_CACHE_TTL = 3600

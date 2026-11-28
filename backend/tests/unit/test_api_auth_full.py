@@ -42,10 +42,10 @@ class TestAuthAPI:
         response = client.get("/api/v1/auth/me")
         assert response.status_code in [200, 401, 404]
 
-    def test_auth_register_empty(self, client):
-        """测试空注册请求"""
+    def test_auth_register_removed(self, client):
+        """自助注册端点已下线（路由不存在）"""
         response = client.post("/api/v1/auth/register", json={})
-        assert response.status_code in [200, 400, 405, 422]
+        assert response.status_code in [404, 405]
 
     def test_auth_change_password(self, client):
         """测试修改密码"""

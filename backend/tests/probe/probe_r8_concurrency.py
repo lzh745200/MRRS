@@ -156,27 +156,7 @@ with TestClient(app, raise_server_exceptions=False) as main_client:
         codes = list(ex.map(backup, range(3)))
     check("并发备份: 全 200（同秒不冲突）", all(c == 200 for c in codes), codes)
 
-    # ═══ 并发场景 4：同一通行码并发注册（单用竞态）═══
-    def register(_):
-        try:
-            c = get_client()
-            r = c.post("/api/v1/auth/register",
-                       json={"username": f"race_user_{threading.get_ident()}",
-                             "password": "Pr0be!R8#Passw0rd", "pass_code": pass_code},
-                       headers={"X-CSRF-Token": token})
-            return r.status_code
-        except Exception as e:
-            ERRORS.append(f"register:{e}")
-            return -1
-
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        codes = list(ex.map(register, range(2)))
-    check("同通行码并发注册: 恰好一成功一拒绝", sorted(codes) in ([200, 400], [200, 409]), codes)
-    r = main_client.get("/api/v1/users", params={"keyword": "race_user_"}, headers=AUTH)
-    users = unwrap(r.json()) or []
-    if isinstance(users, dict):
-        users = users.get("items") or []
-    check("竞态后仅创建一个用户", len(users) == 1, len(users))
+    # 并发场景 4（同一通行码并发注册）已随自助注册下线移除
 
     # ═══ 并发场景 5：并发数据包导入（同包双线程）═══
     r = main_client.post("/api/v1/data-packages/export",

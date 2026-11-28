@@ -1,6 +1,6 @@
 # API 接口文档
 
-> **版本**:v1.18.65  **更新日期**:2026-11-28（权限闭环：矩阵角色收窄 / 数据范围统一 / 账号首登改密）
+> **版本**:v1.18.67  **更新日期**:2026-11-28（账号开通包开箱即用 / 四角色收敛 / 自助注册下线 / RBAC 边界澄清）
 > **定位**:系统全部 HTTP 接口的清单与调用约定——**端点清单由脚本从源码自动提取**(与代码 100% 同步),业务导读人工维护。
 > **适用读者**:前后端开发者、联调与集成人员。零基础请先读《需求规格说明书》§3 理解业务流程。
 > **互动文档**:后端启动后(DEBUG 模式)访问 `http://127.0.0.1:8000/docs` 可在线调试(OpenAPI)。
@@ -9,7 +9,7 @@
 
 ## 1. 快速统计
 
-- **101 个 Python 文件（55 顶层 + 子包）/ 862 个端点**(按 `@router` 装饰器与 `/api` 前缀口径；另有 4 条非 `/api` 路由，全部 FastAPI 路由合计 866)
+- **101 个 Python 文件（55 顶层 + 子包）/ 864 个端点**(按 `@router` 装饰器与 `/api` 前缀口径；另有 4 条非 `/api` 路由，全部 FastAPI 路由合计 868)
 - **v1.18.43 变更**：新增 `GET /users/form-options`（聚合角色/数据范围/权限项/组织树，支持 ETag/304）
   与 `POST /async-export/tasks/{task_id}/retry`（失败/过期导出复制参数重试）；端点总数 850 → **852**。
   新增配置 `AUTHORIZE_MODE`、`AUDIT_CHAIN_ENABLED`、`SYNC_PACKAGE_SIGNING_KEY` / `SYNC_PACKAGE_PUBKEY` /
@@ -45,7 +45,7 @@
 | **命名** | 路径与请求体参数 snake_case;响应体同时兼容 camelCase(中间件自动转换) |
 | **数据隔离** | 绝大多数接口按登录人 data_scope 自动过滤,无需(也无法)传组织参数越权查询 |
 | **软删** | 列表默认只返回 `is_active=true`;`include_deleted=true` 仅管理员有效 |
-| **限流** | `/auth/login` 5 次/分、`/auth/register` 3 次/分、`/auth/refresh` 10 次/分、`/auth/csrf-token` 30 次/分 |
+| **限流** | `/auth/login` 5 次/分、`/auth/refresh` 10 次/分、`/auth/csrf-token` 30 次/分 |
 | **loopback 门禁** | 标注"仅本机"的接口只接受 127.0.0.1 来源(机器码校验/公开密码重置/权限包导入确认) |
 | **首登强制改密** | `must_change_password=true` 的账号（出厂管理员/重置后）在完成改密前，除 `/auth/{me,logout,refresh,csrf-token}`、`/users/me`、`/menus/accessible`、`PUT /users/{自己}/password` 与预检 `OPTIONS` 外，**一律返回 403**（服务端拦截，直连 API 无法绕过） |
 | **分页参数钳制** | 端点对 `skip/limit/page/page_size` 做钳制（`limit<=0` → 1、`skip<0` → 0、上限 200），不返回 422；`limit=-1`（SQLite 语义"不限量"）已被拦截 |
@@ -136,7 +136,11 @@
 | POST | `/auth/logout` | 用户登出 | 登录/公开 |
 | POST | `/auth/refresh` | 刷新访问令牌 | 登录/公开 |
 | GET | `/auth/csrf-token` | 获取 CSRF token | 登录/公开 |
-| POST | `/auth/register` | 用户注册（通过通行码） | 含校验码 |
+| GET | `/auth/public-config` | 登录页公开配置（账号锁定策略，无需登录） | 公开 |
+
+> **自助注册已下线（2026-11-28）**：`POST /auth/register` 端点已移除（访问返回 404/405），
+> 账号只能由管理员在「用户管理」创建，或通过权限包下发。登录页通过 `GET /auth/public-config`
+> 获取账号锁定策略，响应不再包含 `self_register_enabled`。
 
 ### rbac.py — 权限管理 `/rbac`
 

@@ -45,7 +45,6 @@ _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _CSRF_EXEMPT_PATH_PREFIXES: List[str] = [
     "/api/v1/auth/csrf-token",
     "/api/v1/auth/login",
-    "/api/v1/auth/register",
     "/api/v1/shutdown",
     "/health",
     "/api/v1/health",

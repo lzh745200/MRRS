@@ -126,11 +126,15 @@ class TestModelPostInit:
         assert s.DB_ECHO is False
 
     def test_production_pass_code_secret_missing_warns(self, caplog):
-        """生产环境未配置 PASS_CODE_SECRET → 跨机器自验证 fail-closed 告警（ADR-0004）。"""
+        """生产环境未配置 PASS_CODE_SECRET → 回退内置常量密钥的部署告警（ADR-0004）。
+
+        2026-09-06 产品决策取代了此前的 fail-closed：留空时使用随安装包分发的
+        内置常量密钥，保证单机/跨机通行码可用；多机部署仍应显式配置同一随机值。
+        """
         with caplog.at_level("WARNING", logger="app.core.config"):
             Settings(ENVIRONMENT="production", PASS_CODE_SECRET="")
         assert any(
-            "PASS_CODE_SECRET" in r.message and "fail-closed" in r.message
+            "PASS_CODE_SECRET" in r.message and "内置常量密钥" in r.message
             for r in caplog.records
         )
 

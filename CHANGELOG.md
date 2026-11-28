@@ -1,3 +1,38 @@
+## [1.18.67] - 2026-11-28 — 角色收敛为四类、下线自助注册、RBAC 边界澄清
+
+### Fixed
+
+- **固定四类系统角色并单一来源**：`super_admin`（超级管理员）/ `admin`（系统管理员）/
+  `user`（普通用户）/ `viewer`（访客）。中文标签、描述、数据范围与选项统一由
+  `backend/app/core/constants.py` 的 `ROLE_LABELS` / `ROLE_DESCRIPTIONS` / `DATA_SCOPES` 派生；
+  `GET /users/form-options` 与前端共享同一份数据，页面不再各写一套标签。
+- **彻底下线自助注册**：删除 `POST /auth/register` 及仅其使用的 helper、`SELF_REGISTER_MODE`、
+  `public-config.self_register_enabled`、CSRF/写路由表/路由鉴权白名单；登录页“首次使用”引导改为
+  “机器码 → 权限包 → 管理员开通账号”，通行码只用于机器码绑定/激活，不再出现“注册”措辞。
+- **RBAC 与账号角色边界**：`rbac_roles` / `rbac_user_roles` 仅服务权限配置包，不再影响
+  `users.role`；RBAC 角色名/码禁止占用四类系统角色；管理员判定改为按 `admin:all` 权限，
+  不再凭同名角色；前端 RBAC 页签更名「权限包角色（RBAC）」并说明边界。
+- **权限包导入默认不写账号级权限**：`apply_legacy_privileges` 默认 `false`，导入只恢复组织归属，
+  不再直接改 `users.role` / `data_scope` / `permissions`；确需恢复 v1 遗留权限须管理员显式开启
+  （非管理员 403）。数据范围统一为 `all` / `org_children` / `org` / `self`，`own` 归一为 `self`。
+- **历史角色值清洗**：新增迁移 `role_normalize_001`，将 `approval_leader` / `manager` → `admin`、
+  `operator` → `user`、空值 → `user`，`data_scope` 的 `own` → `self`、空值 → `org`；未知角色原样保留。
+- **前端角色选项**：非超管不再看到 `super_admin` 选项；未知角色 fail-closed 显示「未知角色」，
+  不再误判为管理员；删除无运行时守卫的“功能权限”表单。
+- 移除死字段 `UserUpdate.role_id`。
+
+### Docs
+
+- 更新 `CLAUDE.md`、`AGENTS.md`、API 文档、数据字典与部署文档中关于注册、角色、权限包的描述。
+- 本版包含 v1.18.66 的账号开通包开箱即用修复；安装版升级后即可直接签发，无需配置签名环境变量。
+
+### Verification
+
+- 后端账号包/自检/权限包/RBAC/注册/角色迁移合并回归 **244** 例通过；
+  前端角色、权限面板、组织、通行码、用户管理相关 **663** 例（17 文件）通过；
+  `flake8`、`check_stack_alignment.py`、`check_route_auth.py` 通过。
+- 文档数字门禁：API 端点 **864**、后端用例 **16,178**、前端测试文件 **351**。
+
 ## [1.18.66] - 2026-11-28 — 账号开通包开箱即用：默认启用、自动签发密钥、指纹确认信任
 
 ### Added

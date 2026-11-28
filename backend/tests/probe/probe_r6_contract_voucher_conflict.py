@@ -218,14 +218,22 @@ with TestClient(app, raise_server_exceptions=False) as client:
     flag_ok = any(str(pc.get("organization_id")) == str(sub_org_id)
                   and pc.get("allow_subordinate_generation") for pc in lst)
     check("列表标记 allow_subordinate", flag_ok, str(lst)[:200])
-    r = client.post("/api/v1/auth/register",
-                    json={"username": "probe_r6_sub", "password": "Pr0be!R6#Passw0rd",
-                          "pass_code": pass_code}, headers={"X-CSRF-Token": token})
-    check("通行码注册(级联前置)", r.status_code == 200, str(r.json())[:160])
-    r = client.post("/api/v1/auth/login",
-                    json={"username": "probe_r6_sub", "password": "Pr0be!R6#Passw0rd"},
-                    headers={"X-CSRF-Token": token})
-    check("新用户登录(改绑后)", r.status_code == 200, str(r.json())[:140])
+    # 自助注册已下线：级联通行码改由机器码绑定链路消费（verify + activate）
+    from app.core.database import SessionLocal
+    from app.services.machine_code_service import MachineCodeService
+
+    rec = None
+    bound = False
+    if pass_code:
+        _db = SessionLocal()
+        try:
+            svc = MachineCodeService(_db)
+            rec = svc.verify_pass_code(pass_code, "probe-r6-machine")
+            if rec:
+                bound = svc.activate_machine_code(rec, 1, "probe-r6-machine")
+        finally:
+            _db.close()
+    check("级联通行码可验证并绑定用户", rec is not None and bound, pass_code)
 
 print(f"\n===== PASS {len(PASS)} / FAIL {len(FAIL)} =====")
 for n, dd in FAIL:

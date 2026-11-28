@@ -24,6 +24,31 @@ router = APIRouter(prefix="/rbac", tags=["权限管理"])
 
 logger = __import__("logging").getLogger(__name__)
 
+#: users.role 的四个系统角色值（core.constants.PRACTICAL_ROLES 同口径）。
+#: RBAC 自建角色不得占用这些名称/编码，否则「角色名」与账号角色语义混淆。
+_RESERVED_ROLE_VALUES = frozenset({"super_admin", "admin", "user", "viewer"})
+
+
+def _assert_role_not_reserved(name=None, code=None, current_name=None, current_code=None) -> None:
+    """拒绝创建/重命名占用系统角色名或编码的自建角色（400）。
+
+    ``current_*`` 用于更新场景：系统角色自身的名称/编码保持不变时允许更新
+    其它字段（描述、权限等），只有真正改名/改码为保留值才拒绝。
+    """
+    for field, value, current in (
+        ("名称", name, current_name),
+        ("编码", code, current_code),
+    ):
+        normalized = str(value or "").strip().lower()
+        if normalized in _RESERVED_ROLE_VALUES and normalized != str(current or "").strip().lower():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"角色{field} '{value}' 与系统内置角色冲突（保留值: "
+                    f"{', '.join(sorted(_RESERVED_ROLE_VALUES))}），请使用其他{field}"
+                ),
+            )
+
 
 def _audit_permission_change(
     action: AuditAction,
@@ -183,6 +208,7 @@ async def create_role(
     current_user=Depends(require_admin()),
 ):
     """创建角色（具有事务原子性）"""
+    _assert_role_not_reserved(name=role_data.name, code=role_data.code)
     with TransactionManager.transaction(db) as sess:
         role_id = await rbac_service.create_role(
             name=role_data.name,
@@ -256,6 +282,13 @@ async def update_role(
         role = sess.query(RbacRole).filter(RbacRole.id == role_id).first()
         if not role:
             raise HTTPException(status_code=404, detail="角色不存在")
+        # 兼容测试桩与历史数据：旧角色可能没有 code 列值（SQLAlchemy 模型允许 NULL）。
+        _assert_role_not_reserved(
+            name=role_data.name,
+            code=role_data.code,
+            current_name=getattr(role, "name", ""),
+            current_code=getattr(role, "code", None),
+        )
 
         # 更新基本字段
         if role_data.name is not None:

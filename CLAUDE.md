@@ -13,7 +13,7 @@
 
 ```
 ├── backend/app/              # 后端（FastAPI）
-│   ├── api/v1/               # API 接口层（53 个路由模块文件 + 5 个子包；865 个端点）
+│   ├── api/v1/               # API 接口层（53 个路由模块文件 + 5 个子包；864 个端点）
 │   │   ├── auth/             # 认证模块
 │   │   ├── data/             # 数据分析
 │   │   ├── import_export/    # 异步导入导出
@@ -77,7 +77,7 @@ cd frontend && npm install && npm run dev
 ### 测试
 
 ```bash
-cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 16,168 用例（本地 12 段 0 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
+cd backend && .venv/Scripts/python.exe -m pytest tests/ -q --cov=app   # 后端 16,178 用例（本地 12 段 0 skipped；CI 4 分片矩阵）+ 覆盖率门禁 100%
 # ⚠️ 单进程跑全量会在约 88% 处进程级崩溃（SQLAlchemy engine.dispose 的 Windows
 #    access violation，崩溃前无 FAILED）。本地等价 CI 请用分段执行器：
 cd .. && backend/.venv/Scripts/python.exe scripts/run_backend_tests_segmented.py
@@ -310,8 +310,16 @@ make build-kylin-arm64                            # 麒麟 ARM64 安装包（Doc
   - 越权校验（`_assert_org_write_scope`）必须**早于**编码查重 —— 否则越权者可用 400/其它响应
     差异反推其它分支的组织编码。
   - 组织层级固定 **3 级**（`OrganizationLevel` 只有 level_1~3）；创建后 **编码不可修改**
-    （需变更只能停用后新建）。自助注册默认关闭（`SELF_REGISTER_MODE=off`），
-    注册流程 **不得自动创建组织**（组织树只由管理员或上级授权包建立）。
+    （需变更只能停用后新建）。**系统不提供自助注册**（`POST /auth/register` 与
+    `SELF_REGISTER_MODE` 已下线，2026-11-28），账号只能由管理员在「用户与角色」创建
+    或经账号开通包离线导入；开户流程 **不得自动创建组织**（组织树只由管理员或上级授权包建立）。
+  - **系统角色固定 4 个**：`super_admin`（超级管理员）/ `admin`（系统管理员）/
+    `user`（普通用户）/ `viewer`（访客）。角色/数据范围/中文标签的单一源是
+    `backend/app/core/constants.py` 的 `ROLE_LABELS` / `DATA_SCOPES`；前端经
+    `GET /users/form-options` 读取，禁止页面再维护第二套标签。RBAC 角色
+    （`rbac_roles`、`rbac_user_roles`）**仅用于权限配置包**，不影响 `users.role`；
+    权限包导入默认不写回账号级 role/data_scope/permissions（需管理员显式
+    `apply_legacy_privileges=true`）。历史角色值由 `role_normalize_001` 迁移清洗。
   - 回归：`backend/tests/unit/test_admin_divisions_r47.py`（表完整性 / 存在性 / 父子 / 降级 / 首启层级）。
 - **遗留表清理契约** (2026-10-22, v1.16.2): 迁移清理"代码零引用"的历史表时**禁止直接 DROP 有数据的表** ——
   统一走 `r35_drop_legacy_tables_001` 的三分支策略：表不存在→跳过；**0 行→DROP**；**有数据→改名 `legacy_<表名>` 归档**

@@ -195,13 +195,14 @@ def test_import_user_legacy_writes_clamped_role_for_non_privileged():
     user = SimpleNamespace(role="user", permissions="", data_scope="org")
     svc._resolve_user_by_username_or_id = lambda *a, **kw: user
 
-    stats: dict = {}
+    stats: dict = {"user_legacy_updated": 0}
     svc._import_user_legacy(
         [{"username": "x", "role": "super_admin", "data_scope": "all", "organization_id": None}],
         stats,
         [],
         merge_mode=False,
         allow_privileged=False,
+        apply_legacy_privileges=True,
     )
 
     assert user.role == "admin"

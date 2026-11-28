@@ -13,8 +13,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const { ElMessage, mockGetDetail, mockGetMembers, mockPushSafe, routeBox, logError, authBox } = vi.hoisted(
-  () => ({
+const { ElMessage, mockGetDetail, mockGetMembers, mockPushSafe, routeBox, logError, authBox } =
+  vi.hoisted(() => ({
     ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
     mockGetDetail: vi.fn(),
     mockGetMembers: vi.fn(),
@@ -22,8 +22,7 @@ const { ElMessage, mockGetDetail, mockGetMembers, mockPushSafe, routeBox, logErr
     routeBox: { params: {} as Record<string, any> },
     logError: vi.fn(),
     authBox: { user: null as any },
-  })
-)
+  }))
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeBox,
@@ -223,13 +222,13 @@ describe('挂载与详情加载', () => {
     expect(text).toContain('子单位')
     expect(text).toContain('部门B')
     expect(text).toContain('超级管理员')
-    expect(text).toContain('管理员')
-    expect(text).toContain('经理')
-    expect(text).toContain('审批领导')
+    expect(text).toContain('系统管理员')
+    expect(text).not.toContain('经理')
+    expect(text).not.toContain('审批领导')
     expect(text).toContain('普通用户')
     expect(text).toContain('访客')
-    expect(text).toContain('weird_role')
-    expect(text).toContain('未知')
+    expect(text).not.toContain('weird_role')
+    expect(text).toContain('未知角色')
     wrapper.unmount()
   })
 
@@ -343,17 +342,17 @@ describe('辅助函数', () => {
     expect(vm.formatLevel('level_5')).toBe('第5级')
     expect(vm.formatLevel('plain')).toBe('plain')
     expect(vm.roleLabel('super_admin')).toBe('超级管理员')
-    expect(vm.roleLabel('admin')).toBe('管理员')
-    expect(vm.roleLabel('manager')).toBe('经理')
-    expect(vm.roleLabel('approval_leader')).toBe('审批领导')
+    expect(vm.roleLabel('admin')).toBe('系统管理员')
+    expect(vm.roleLabel('manager')).toBe('系统管理员')
+    expect(vm.roleLabel('approval_leader')).toBe('系统管理员')
     expect(vm.roleLabel('user')).toBe('普通用户')
     expect(vm.roleLabel('viewer')).toBe('访客')
-    expect(vm.roleLabel('unknown')).toBe('unknown')
+    expect(vm.roleLabel('unknown')).toBe('未知角色')
     expect(vm.roleLabel('')).toBe('未知')
     expect(vm.roleTagType('super_admin')).toBe('danger')
     expect(vm.roleTagType('admin')).toBe('warning')
-    expect(vm.roleTagType('manager')).toBe('success')
-    expect(vm.roleTagType('approval_leader')).toBe('primary')
+    expect(vm.roleTagType('manager')).toBe('warning')
+    expect(vm.roleTagType('approval_leader')).toBe('warning')
     expect(vm.roleTagType('user')).toBe('info')
     expect(vm.roleTagType('viewer')).toBe('info')
     expect(vm.roleTagType('x')).toBe('info')

@@ -4,6 +4,7 @@
 #      或一次跑全部：python backend/tests/probe/run_all.py
 # 隔离契约：BUMOFU_BACKEND_DIR_OVERRIDE + DATABASE_URL 均指向本次运行临时目录，
 #           不触碰真实 backend/data；退出码 0=全过，1=有失败。
+# 2026-11-28：自助注册已下线，原「通行码注册」链路改为「注册端点不存在 + 组织通行码绑定」。
 """第 1 轮模块深探 v2（修正取值形态）"""
 import io
 import os
@@ -63,7 +64,7 @@ with TestClient(app, raise_server_exceptions=False) as client:
     check("管理员登录(access+refresh)", bool(at and rt), lj)
     AUTH = {"Authorization": f"Bearer {at}", "X-CSRF-Token": token}
 
-    # ═══ 链路 1：组织通行码注册 ═══
+    # ═══ 链路 1：组织通行码生成与机器码绑定时序 ═══
     r = client.post("/api/v1/organizations", json={"name": "探针下级组织", "code": "PROBE-ORG-1"}, headers=AUTH)
     oj = r.json()
     org_id = (oj.get("data") or oj).get("id") or (oj.get("data") or oj).get("organization_id")
@@ -85,25 +86,30 @@ with TestClient(app, raise_server_exceptions=False) as client:
                     json={"organization_id": org_id, "verification_code": "0000"}, headers=AUTH)
     check("错误校验码被拒(400)", r.status_code == 400, (r.status_code, str(r.json())[:140]))
 
+    # 自助注册已下线（产品不再提供注册入口）
     r = client.post("/api/v1/auth/register",
                     json={"username": "probe_user1", "password": "Pr0be!Passw0rd#2026",
                           "pass_code": pass_code, "full_name": "探针用户"},
                     headers={"X-CSRF-Token": token})
-    rj = r.json()
-    check("通行码注册成功", r.status_code == 200 and bool((rj.get("data") or {}).get("access_token")), rj)
+    check("自助注册端点已下线(404/405)", r.status_code in (404, 405),
+          (r.status_code, str(r.json())[:140]))
 
-    r = client.post("/api/v1/auth/login",
-                    json={"username": "probe_user1", "password": "Pr0be!Passw0rd#2026"},
-                    headers={"X-CSRF-Token": token})
-    lj2 = r.json()
-    uat = (lj2.get("data") or {}).get("access_token")
-    urt = lj2.get("refresh_token")
-    check("新用户可登录", bool(uat and urt), lj2)
+    # 组织通行码仍服务于机器码绑定链路：验证 → 激活绑定用户
+    from app.core.database import SessionLocal
+    from app.services.machine_code_service import MachineCodeService
 
-    r = client.post("/api/v1/auth/register",
-                    json={"username": "probe_user2", "password": "Pr0be!Passw0rd#2026", "pass_code": pass_code},
-                    headers={"X-CSRF-Token": token})
-    check("通行码不可复用", r.status_code in (400, 409), (r.status_code, str(r.json())[:140]))
+    rec = None
+    bound = False
+    if pass_code:
+        _db = SessionLocal()
+        try:
+            svc = MachineCodeService(_db)
+            rec = svc.verify_pass_code(pass_code, "probe-r1-machine")
+            if rec:
+                bound = svc.activate_machine_code(rec, 1, "probe-r1-machine")
+        finally:
+            _db.close()
+    check("组织通行码可验证并绑定用户", rec is not None and bound, pass_code)
 
     # ═══ 链路 2：refresh 轮换（admin 的 rt）═══
     r = client.post("/api/v1/auth/refresh", json={"token": rt}, headers={"X-CSRF-Token": token})

@@ -96,16 +96,19 @@
       <el-tab-pane label="系统角色" name="legacy">
         <div class="legacy-section">
           <el-alert type="warning" :closable="false" style="margin-bottom: 16px">
-            系统角色为向后兼容保留。新权限配置请使用"角色分配"和"权限配置"。
+            RBAC 角色仅用于权限配置包（菜单与操作权限），不会修改用户的系统角色（users.role）；
+            系统角色请在「用户与角色」中分配。
           </el-alert>
 
           <el-form label-width="100px" :model="legacyForm">
             <el-form-item label="系统角色">
               <el-select v-model="legacyForm.role" placeholder="选择系统角色">
-                <el-option label="超级管理员" value="super_admin" />
-                <el-option label="管理员" value="admin" />
-                <el-option label="普通用户" value="user" />
-                <el-option label="访客" value="viewer" />
+                <el-option
+                  v-for="option in SYSTEM_ROLE_OPTIONS"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
               </el-select>
             </el-form-item>
             <el-form-item label="数据范围">
@@ -135,6 +138,11 @@ import { get, post, put } from '@/api/request'
 import PermissionTreePanel from './PermissionTreePanel.vue'
 import RoleTagsPanel from './RoleTagsPanel.vue'
 import MenuVisibilityPanel from './MenuVisibilityPanel.vue'
+import {
+  SYSTEM_ROLE_OPTIONS,
+  normalizeRole,
+  roleLabel as formatRoleLabel,
+} from '@/utils/roleAccess'
 
 interface UserInfo {
   id: number
@@ -201,19 +209,11 @@ const legacyForm = ref({
   data_scope: '',
 })
 
-/** 系统角色中文标签（与全站 4 角色口径一致） */
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: '超级管理员',
-  admin: '管理员',
-  user: '普通用户',
-  viewer: '只读用户',
-}
-
-/** 当前生效的系统角色（优先抽屉里已加载的角色，其次用户身上的角色） */
+/** 系统角色展示名统一走 @/utils/roleAccess（四类系统角色单一事实源） */
 const roleLabel = computed(() => {
   const role = legacyForm.value.role || props.user?.role || ''
   if (!role) return '未设置'
-  return ROLE_LABELS[role] ? `${ROLE_LABELS[role]}（${role}）` : role
+  return `${formatRoleLabel(role)}（${normalizeRole(role)}）`
 })
 
 /** 数据范围中文标签 */

@@ -276,9 +276,12 @@
             <el-input v-model.trim="account.username" placeholder="用户名" maxlength="20" />
             <el-input v-model.trim="account.full_name" placeholder="姓名" maxlength="50" />
             <el-select v-model="account.role" aria-label="角色">
-              <el-option label="管理员" value="admin" />
-              <el-option label="普通用户" value="user" />
-              <el-option label="只读用户" value="viewer" />
+              <el-option
+                v-for="option in ACCOUNT_ROLE_OPTIONS"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
             </el-select>
             <el-select v-model="account.data_scope" aria-label="数据范围">
               <el-option label="本组织" value="org" />
@@ -519,6 +522,7 @@ import request, { del, downloadBlob, get, parseContentDisposition, post } from '
 import { getErrorMessage } from '@/utils/getErrorMessage'
 import { formatDateTimeLocale } from '@/utils/datetime'
 import { useMenuStore } from '@/stores/menu'
+import { SYSTEM_ROLE_OPTIONS } from '@/utils/roleAccess'
 
 interface AccountDraft {
   username: string
@@ -730,6 +734,9 @@ function newAccount(role: 'admin' | 'user' | 'viewer' = 'admin'): AccountDraft {
     allowed_menus: [],
   }
 }
+
+/** 账号开通包可选角色：与后端 ACCOUNT_PACKAGE_ROLES 一致（admin/user/viewer，不发放超管） */
+const ACCOUNT_ROLE_OPTIONS = SYSTEM_ROLE_OPTIONS.filter((option) => option.value !== 'super_admin')
 
 const exportForm = reactive({
   organization_code: '',

@@ -85,32 +85,11 @@
           @update:model-value="emit('update:organization_id', $event)"
         />
       </el-form-item>
-      <el-form-item v-if="!isEdit" label="功能权限">
-        <el-select
-          :model-value="form.permissions"
-          multiple
-          placeholder="请选择该用户的功能权限（不选则使用角色默认权限）"
-          style="width: 100%"
-          collapse-tags
-          collapse-tags-tooltip
-          teleported
-          fit-input-width
-          @update:model-value="emit('update:permissions', $event)"
-        >
-          <el-option-group
-            v-for="group in permissionGroups"
-            :key="group.category"
-            :label="group.category"
-          >
-            <el-option
-              v-for="perm in group.items"
-              :key="perm.code"
-              :label="perm.name"
-              :value="perm.code"
-            />
-          </el-option-group>
-        </el-select>
-        <div class="form-item-tip">选择该用户可以使用的具体功能权限，未选择则使用角色默认权限</div>
+      <el-form-item label="功能权限">
+        <div class="form-item-tip">
+          菜单与操作权限由「菜单权限包 / RBAC 权限包」控制；users.permissions
+          不参与运行时路由守卫，此处不再单独设置功能权限。
+        </div>
       </el-form-item>
       <el-form-item label="部门">
         <el-input
@@ -217,7 +196,6 @@ interface UserFormModel {
   email: string
   is_active: boolean
   organization_id: number | string | null
-  permissions: string[]
 }
 
 /** el-tree-select 的字段映射（与组织树常量同源，避免 value 键再次漏配） */
@@ -232,7 +210,6 @@ defineProps<{
   roleOptions: { value: string; label: string }[]
   dataScopeOptions: { value: string; label: string }[]
   orgTreeOptions: any[]
-  permissionGroups: { category: string; items: { code: string; name: string }[] }[]
   submitting: boolean
   sessions: any[]
   sessionsLoading: boolean
@@ -248,7 +225,6 @@ const emit = defineEmits<{
   (e: 'update:role', value: string): void
   (e: 'update:data_scope', value: string): void
   (e: 'update:organization_id', value: number | string | null): void
-  (e: 'update:permissions', value: string[]): void
   (e: 'update:department', value: string): void
   (e: 'update:phone', value: string): void
   (e: 'update:email', value: string): void

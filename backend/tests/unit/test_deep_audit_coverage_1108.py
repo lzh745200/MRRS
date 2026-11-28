@@ -328,7 +328,7 @@ def test_import_legacy_blocks_self_and_wildcard_and_foreign_org():
     svc = PermissionPackageService(db=MagicMock())
     caller = SimpleNamespace(id=2, organization_id=1)
     user = _legacy_user(id=2)
-    stats: dict = {}
+    stats: dict = {"user_legacy_updated": 0}
     errors: list = []
 
     with patch.object(svc, "_resolve_user_by_username_or_id", return_value=user), patch.object(
@@ -338,7 +338,7 @@ def test_import_legacy_blocks_self_and_wildcard_and_foreign_org():
     ):
         svc._import_user_legacy(
             [{"username": "bob", "permissions": "*:*"}], stats, errors, merge_mode=True,
-            allow_privileged=False, caller=caller,
+            allow_privileged=False, caller=caller, apply_legacy_privileges=True,
         )
     assert any("调用者自身" in e for e in errors)
 
@@ -354,7 +354,8 @@ def test_import_legacy_blocks_self_and_wildcard_and_foreign_org():
     ):
         svc2._import_user_legacy(
             [{"username": "carol", "permissions": "", "organization_id": 99}],
-            {}, errors2, merge_mode=True, allow_privileged=False, caller=caller,
+            {"user_legacy_updated": 0}, errors2, merge_mode=True, allow_privileged=False,
+            caller=caller, apply_legacy_privileges=True,
         )
     assert any("不在调用者管辖范围" in e for e in errors2)
 
@@ -370,7 +371,7 @@ def test_import_legacy_blocks_self_and_wildcard_and_foreign_org():
         svc2._import_user_legacy(
             [{"username": "dave", "permissions": "*:*"}],
             {"user_legacy_updated": 0}, errors3, merge_mode=True,
-            allow_privileged=False, caller=caller,
+            allow_privileged=False, caller=caller, apply_legacy_privileges=True,
         )
     assert any("通配权限" in e for e in errors3)
     assert user3.permissions == ""

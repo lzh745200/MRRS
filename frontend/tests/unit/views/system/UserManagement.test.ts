@@ -319,7 +319,7 @@ describe('挂载与初始化', () => {
     ])
   })
 
-  it('loadFormOptions：角色/范围/权限项由后端覆盖本地兜底', async () => {
+  it('loadFormOptions：角色/数据范围由后端覆盖本地兜底', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/users/form-options') {
         return Promise.resolve({
@@ -340,24 +340,14 @@ describe('挂载与初始化', () => {
     const vm = wrapper.vm as any
     expect(vm.roleOptions).toEqual([{ value: 'admin', label: '系统管理员' }])
     expect(vm.dataScopeOptions).toEqual([{ value: 'org', label: '仅本组织' }])
-    expect(vm.permissionGroups).toEqual([
-      {
-        category: '操作',
-        items: [
-          { code: 'data:view', name: '数据查看' },
-          { code: 'data:edit', name: '数据编辑' },
-        ],
-      },
-    ])
   })
 
-  it('loadFormOptions：兼容无 data 包装的响应，并为缺省分类补“其他”', async () => {
+  it('loadFormOptions：兼容无 data 包装的响应', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/users/form-options') {
         return Promise.resolve({
           roles: [{ value: 'viewer', label: '访客' }],
           data_scopes: [{ value: 'self', label: '仅自己' }],
-          permissions: [{ code: 'data:view', name: '数据查看' }],
         })
       }
       return defaultGetImpl(url)
@@ -366,9 +356,6 @@ describe('挂载与初始化', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.roleOptions).toEqual([{ value: 'viewer', label: '访客' }])
-    expect(vm.permissionGroups).toEqual([
-      { category: '其他', items: [{ code: 'data:view', name: '数据查看' }] },
-    ])
   })
 
   it('loadFormOptions：接口异常 → 保留本地兜底选项', async () => {
@@ -381,7 +368,6 @@ describe('挂载与初始化', () => {
     const vm = wrapper.vm as any
     expect(vm.roleOptions).toHaveLength(4)
     expect(vm.dataScopeOptions).toHaveLength(4)
-    expect(vm.permissionGroups.length).toBeGreaterThan(0)
   })
 
   it('loadOrgTree：返回非数组 → 置空', async () => {
@@ -515,16 +501,24 @@ describe('挂载与初始化', () => {
     ])
   })
 
-  it('角色选项恒为 4 个：登录响应把全部管理员标记 is_superuser=true，前端不做超管选项过滤', async () => {
-    // 契约依据：backend/app/api/v1/auth/auth.py:348 ——
-    // is_superuser = user.is_superuser or normalize_role(user.role) in ADMIN_ROLES，
-    // 部门级 admin（role=admin）登录后 store 里 is_superuser 恒为 true，
-    // 前端无法用 is_superuser 区分部门级与真正的超管。
-    // 因此「按 is_superuser 隐藏 super_admin 选项」是永不生效的死分支
-    // （测试曾用生产环境不可能出现的 is_superuser=false 状态制造假绿）。
-    // 正确口径：前端恒展示 4 角色，创建超管由后端 403 拦截。
+  it('非超管：角色选项隐藏 super_admin，仅保留 admin/user/viewer', async () => {
+    // 口径：仅超级管理员可管理超管账号（后端 _assert_can_manage_super_admin 403），
+    // 前端对非超管直接隐藏该选项，避免“提交后才被拒绝”。
     const original = authState.user
     authState.user = { role: 'admin', is_superuser: false } as any
+    try {
+      const wrapper = mountComp()
+      await flushPromises()
+      const roles = (wrapper.vm as any).roleOptions as { value: string }[]
+      expect(roles.map((r) => r.value)).toEqual(['admin', 'user', 'viewer'])
+    } finally {
+      authState.user = original
+    }
+  })
+
+  it('超管：角色选项保留全部 4 个系统角色', async () => {
+    const original = authState.user
+    authState.user = { role: 'super_admin', is_superuser: true } as any
     try {
       const wrapper = mountComp()
       await flushPromises()
@@ -705,20 +699,21 @@ describe('搜索 / 重置 / 分页', () => {
 })
 
 describe('字典映射函数', () => {
-  it('getRoleTagType 全映射与未知兜底', async () => {
+  it('getRoleTagType 全映射（历史值先归一化）与未知兜底', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.getRoleTagType('super_admin')).toBe('danger')
     expect(vm.getRoleTagType('admin')).toBe('danger')
-    expect(vm.getRoleTagType('approval_leader')).toBe('warning')
-    expect(vm.getRoleTagType('manager')).toBe('warning')
+    // 历史值 manager/approval_leader → admin、operator → user
+    expect(vm.getRoleTagType('approval_leader')).toBe('danger')
+    expect(vm.getRoleTagType('manager')).toBe('danger')
     expect(vm.getRoleTagType('operator')).toBe('success')
     expect(vm.getRoleTagType('viewer')).toBe('info')
     expect(vm.getRoleTagType('whatever')).toBe('info')
   })
 
-  it('getRoleName 全映射与未知透传', async () => {
+  it('getRoleName 全映射、历史值归一化与未知 fail-closed', async () => {
     const wrapper = mountComp()
     await flushPromises()
     const vm = wrapper.vm as any
@@ -729,7 +724,7 @@ describe('字典映射函数', () => {
     expect(vm.getRoleName('operator')).toBe('普通用户')
     expect(vm.getRoleName('user')).toBe('普通用户')
     expect(vm.getRoleName('viewer')).toBe('访客')
-    expect(vm.getRoleName('custom_role')).toBe('custom_role')
+    expect(vm.getRoleName('custom_role')).toBe('未知角色')
   })
 
   it('getDataScopeName 全映射、未知透传与空值兜底', async () => {
@@ -878,7 +873,6 @@ describe('新增 / 编辑 / 提交', () => {
       data_scope: 'org',
       is_active: true,
       organization_id: null,
-      permissions: [],
     })
   })
 
@@ -940,7 +934,6 @@ describe('新增 / 编辑 / 提交', () => {
     vm.formData.username = 'newbie'
     vm.formData.full_name = '新人'
     vm.formData.password = 'Init!23456789'
-    vm.formData.permissions = ['data:view', 'data:edit']
     vm.userFormRef = { validate: (cb: any) => cb(true) }
     // 与真实 POST /users 契约一致：只返回用户字段，不含 password
     mockPost.mockResolvedValueOnce({
@@ -956,9 +949,10 @@ describe('新增 / 编辑 / 提交', () => {
       expect.objectContaining({
         username: 'newbie',
         password: 'Init!23456789',
-        permissions: 'data:view,data:edit',
       })
     )
+    // users.permissions 无运行时路由守卫，表单已不再收集该字段
+    expect(mockPost.mock.calls[0][1] as Record<string, unknown>).not.toHaveProperty('permissions')
     expect(ElMessage.success).toHaveBeenCalledWith(
       expect.stringContaining('初始密码: Init!23456789')
     )

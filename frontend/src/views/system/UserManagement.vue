@@ -1,10 +1,13 @@
 <template>
   <div class="user-management">
-    <PageHeader title="用户与角色" subtitle="管理系统用户、角色与权限分配" />
+    <PageHeader
+      title="用户与角色"
+      subtitle="管理系统用户、系统角色（users.role）与 RBAC 权限配置包"
+    />
     <!-- 用户/角色 Tab 切换 -->
     <el-tabs v-model="activeTab" class="user-role-tabs" @tab-change="handleTabChange">
       <el-tab-pane label="用户列表" name="users" />
-      <el-tab-pane label="角色管理" name="roles" />
+      <el-tab-pane label="权限包角色（RBAC）" name="roles" />
     </el-tabs>
 
     <el-card v-if="activeTab === 'users'" class="search-card">
@@ -101,7 +104,6 @@
       :role-options="roleOptions"
       :data-scope-options="dataScopeOptions"
       :org-tree-options="orgTreeOptions"
-      :permission-groups="permissionGroups"
       :submitting="submitting"
       :sessions="userSessions"
       :sessions-loading="sessionsLoading"
@@ -113,7 +115,6 @@
       @update:role="formData.role = $event"
       @update:data_scope="formData.data_scope = $event"
       @update:organization_id="formData.organization_id = $event"
-      @update:permissions="formData.permissions = $event"
       @update:department="formData.department = $event"
       @update:phone="formData.phone = $event"
       @update:email="formData.email = $event"
@@ -157,8 +158,12 @@
       @export="doExportPermissionPackage"
     />
 
-    <!-- ========== 角色管理 Tab ========== -->
+    <!-- ========== 权限包角色（RBAC）Tab ========== -->
     <div v-if="activeTab === 'roles'" class="role-section">
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
+        RBAC 角色仅用于权限配置包（菜单与操作权限），不会修改用户的系统角色（users.role）；
+        系统角色请在「用户列表」中分配。
+      </el-alert>
       <RoleManagement />
     </div>
   </div>
@@ -191,7 +196,7 @@ import PendingUsersDialog from './components/PendingUsersDialog.vue'
 import ResetPasswordDialog from './components/ResetPasswordDialog.vue'
 import PermissionPackExportDialog from './components/PermissionPackExportDialog.vue'
 import UserFormDialog from './components/UserFormDialog.vue'
-import { roleLabel } from '@/utils/roleAccess'
+import { roleLabel, normalizeRole, isSuperAdminUser, SYSTEM_ROLE_OPTIONS } from '@/utils/roleAccess'
 import { unwrapList } from '@/utils/unwrapList'
 
 const authStore = useAuthStore()
@@ -273,7 +278,6 @@ const formData = reactive({
   email: '',
   is_active: true,
   organization_id: null as number | string | null,
-  permissions: [] as string[],
 })
 
 import { normalizeTreeNodes } from '@/utils/treeNormalizer'
@@ -310,22 +314,13 @@ async function loadFormOptions() {
     const res: any = await get('/users/form-options')
     const payload = res?.data ?? res
     if (Array.isArray(payload?.roles) && payload.roles.length) {
-      roleOptions.value = payload.roles.map((r: any) => ({ value: r.value, label: r.label }))
+      allRoleOptions.value = payload.roles.map((r: any) => ({ value: r.value, label: r.label }))
     }
     if (Array.isArray(payload?.data_scopes) && payload.data_scopes.length) {
       dataScopeOptions.value = payload.data_scopes.map((s: any) => ({
         value: s.value,
         label: s.label,
       }))
-    }
-    if (Array.isArray(payload?.permissions) && payload.permissions.length) {
-      const groups = new Map<string, { code: string; name: string }[]>()
-      for (const perm of payload.permissions) {
-        const category = String(perm.category || '其他')
-        if (!groups.has(category)) groups.set(category, [])
-        groups.get(category)!.push({ code: perm.code, name: perm.name })
-      }
-      permissionGroups.value = Array.from(groups, ([category, items]) => ({ category, items }))
     }
   } catch {
     // 兜底选项已初始化；不弹错，避免页面首次加载被非关键接口打断。
@@ -354,64 +349,19 @@ const resetPwdForm = reactive({
   newPassword: '',
 })
 
-// Permission groups for UI grouping - 与后端 /users/permissions/options 保持一致
-const DEFAULT_PERMISSION_GROUPS = [
-  {
-    category: '系统',
-    items: [
-      { code: 'system:manage', name: '系统管理' },
-      { code: 'user:manage', name: '用户管理' },
-      { code: 'org:manage', name: '组织管理' },
-      { code: 'role:manage', name: '角色管理' },
-    ],
-  },
-  {
-    category: '数据',
-    items: [
-      { code: 'village:manage', name: '村庄管理' },
-      { code: 'project:manage', name: '项目管理' },
-      { code: 'fund:manage', name: '资金管理' },
-      { code: 'report:manage', name: '报表管理' },
-    ],
-  },
-  {
-    category: '操作',
-    items: [
-      { code: 'data:view', name: '数据查看' },
-      { code: 'data:create', name: '数据创建' },
-      { code: 'data:edit', name: '数据编辑' },
-      { code: 'data:delete', name: '数据删除' },
-      { code: 'data:export', name: '数据导出' },
-      { code: 'data:import', name: '数据导入' },
-    ],
-  },
-  {
-    category: '审批',
-    items: [
-      { code: 'approve:view', name: '查看审批' },
-      { code: 'approve:submit', name: '提交审批' },
-      { code: 'approve:process', name: '处理审批' },
-    ],
-  },
-]
-const permissionGroups = ref(DEFAULT_PERMISSION_GROUPS)
+// 系统角色选项的唯一来源（utils/roleAccess）：恰好 4 个，RBAC 角色不在此列。
+const allRoleOptions = ref<{ value: string; label: string }[]>([...SYSTEM_ROLE_OPTIONS])
 
-// 角色选项：精简为 4 个实用角色（users.role 体系）
-// 兼容映射：approval_leader/manager→管理员级，operator→普通用户
-const ALL_ROLE_OPTIONS = [
-  { value: 'super_admin', label: '超级管理员' },
-  { value: 'admin', label: '系统管理员' },
-  { value: 'user', label: '普通用户' },
-  { value: 'viewer', label: '访客' },
-] as const
-
-// 契约口径（2026-10-31 对抗评审 + 契约修复）：登录响应此前对 role∈ADMIN_ROLES
-// 的账号统一标记 is_superuser=true，前端无法用 is_superuser 区分部门级管理员与超管，
-// 按 is_superuser 隐藏「超级管理员」选项是永不生效的死分支。后端现已修正为
-// 严格口径（auth.py _user_info_is_superuser：仅 DB 标志或 role=='super_admin'），
-// 但选项仍恒为 4 个（简洁且无损）：部门级管理员选择超管时由后端
-// _assert_can_manage_super_admin 403 拦截，前端不做隐藏。
-const roleOptions = ref<{ value: string; label: string }[]>([...ALL_ROLE_OPTIONS])
+/**
+ * 仅超级管理员可管理超级管理员账号（后端 _assert_can_manage_super_admin 403）。
+ * 非超管在 UI 上直接隐藏「超级管理员」选项，避免提交后才被拒绝；
+ * 超管始终看到 4 项（口径与后端 auth.py _user_info_is_superuser 一致）。
+ */
+const isSuperAdmin = computed(() => isSuperAdminUser(authStore.user))
+const roleOptions = computed(() => {
+  if (isSuperAdmin.value) return allRoleOptions.value
+  return allRoleOptions.value.filter((option) => option.value !== 'super_admin')
+})
 
 // 角色选项固定使用 users.role 体系（4 个实用角色）。
 // 注意：不再用 /rbac/roles（RbacRole 表）覆盖选项——
@@ -461,13 +411,11 @@ const getRoleTagType = (role: string): 'info' | 'primary' | 'success' | 'warning
   const types: Record<string, 'info' | 'primary' | 'success' | 'warning' | 'danger'> = {
     super_admin: 'danger',
     admin: 'danger',
-    approval_leader: 'warning',
-    manager: 'warning',
-    operator: 'success',
     user: 'success',
     viewer: 'info',
   }
-  return types[role] || 'info'
+  // 历史角色值先归一化（manager/approval_leader→admin、operator→user），只认四类系统角色
+  return types[normalizeRole(role)] || 'info'
 }
 
 // 与待审核弹窗、四角色契约共用同一展示名（历史角色值在 roleLabel 内归一化）
@@ -626,7 +574,6 @@ const handleAdd = async () => {
     email: '',
     is_active: true,
     organization_id: null,
-    permissions: [],
   })
   dialogVisible.value = true
   // 组织可能在其它页签刚创建/改名：每次打开都刷新，避免只靠 onMounted 的旧快照。
@@ -681,7 +628,6 @@ const handleSubmit = async () => {
           data_scope: formData.data_scope,
           organization_id: toOrgIdPayload(formData.organization_id),
           is_active: formData.is_active,
-          permissions: formData.permissions?.join(',') || '',
         })
         // 后端出于安全不回传密码；创建成功后展示管理员刚提交/自动生成的密码，
         // 避免“初始密码”提示分支永远不可达（旧实现读 res.data.data 是错误契约）。

@@ -535,7 +535,6 @@ The 2026-07 coverage sprint introduced **244 failing tests** written against ass
 | Endpoint | Limit | Window |
 |----------|-------|--------|
 | `/auth/login` | 5 | 60s |
-| `/auth/register` | 3 | 60s |
 | `/auth/refresh` | 10 | 60s |
 | `/auth/csrf-token` | 30 | 60s |
 

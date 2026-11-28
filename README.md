@@ -1,14 +1,27 @@
 # 帮扶管理信息系统
 
-> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.66
+> 乡村振兴 — 完全离线的单机版桌面应用 | 多机协同数据同步 | v1.18.67
 
-![Version](https://img.shields.io/badge/version-1.18.66-blue)
+![Version](https://img.shields.io/badge/version-1.18.67-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20ARM64-orange)
-![Tests](https://img.shields.io/badge/tests-23%2C748-brightgreen)
+![Tests](https://img.shields.io/badge/tests-23%2C781-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
 
-## 本版亮点（v1.18.65）
+## 本版亮点（v1.18.67）
+
+- 🔑 **账号开通包开箱即用（v1.18.66 起）**：`ACCOUNT_PACKAGE_ENABLED` 默认开启；首次签发自动生成并
+  持久化 Ed25519 密钥，不再要求配置 `ACCOUNT_PACKAGE_SIGNING_KEY`；包内嵌签发公钥，导入端首次
+  通过**指纹带外核对**建立信任，之后不再重复询问。
+- 👥 **角色收敛为四类**：超级管理员 / 系统管理员 / 普通用户 / 访客；中文标签、数据范围与账号包
+  可用角色统一收敛到 `backend/app/core/constants.py`，历史角色由 `role_normalize_001` 迁移清洗。
+- 🚫 **自助注册下线**：删除 `POST /auth/register` 与 `SELF_REGISTER_MODE`；账号只能由管理员创建
+  或通过账号开通包离线导入；前端不再展示注册入口，通行码仅用于机器码绑定。
+- 🧩 **RBAC 边界澄清**：RBAC 角色仅服务权限包，不影响 `users.role`；权限包导入默认不写账号级
+  角色/数据范围/权限，管理员可显式 `apply_legacy_privileges=true` 兼容恢复。
+- 🧪 后端 **16,178** / 前端 **351 files / 7,603 tests** / Electron **23** 全绿。
+
+## 历史亮点（v1.18.65）
 
 - 🛡 **矩阵菜单按角色收窄（T05）**：授权矩阵可见页再按角色默认页/组子项/控制台页签收窄，
   普通用户不再看到管理员专属页面；用户级 `allowed_menus` 仍只能进一步收窄。
@@ -366,8 +379,8 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **16,156 用例**, 0 skipped（本地 12 段全量；CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
-| 前端测试 | **7,592 passed**（351 个 `.test.ts`），0 失败 |
+| 后端测试 | **16,178 用例**, 0 skipped（本地 12 段全量；CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
+| 前端测试 | **7,603 passed**（351 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
 | 前端覆盖率 | **100%**（门禁 `vitest.config.ts` 12 组 glob 阈值 ×100） |
@@ -379,7 +392,7 @@
 | Pre-commit | ruff（变更文件）+ flake8/bandit/vue-tsc（推送前） |
 | CI/CD | PR Checks + Nightly Full Suite + Codecov |
 | Sass | 1.101.0（modern-compiler API） |
-| 角色体系 | 4 核心角色 (super_admin/admin/user/viewer) |
+| 角色体系 | 固定 4 角色 (super_admin/admin/user/viewer)；RBAC 角色仅服务权限包 |
 | UI 设计系统 | **UI v2.0**：主题 3 套（军绿默认 / 深色大屏 / 户外高对比）+ 显示偏好 4 档（字号/密度/高对比/简化，localStorage `ui:prefs`）+ 三档场景预设（标准/紧凑/演示，首次启动按视口自适应）+ 统一 Token/组件类 |
 | 前端质量门禁 | 视觉回归基线 44 个关键页面（`tests/e2e/visual`）+ Token 契约测试（`tests/unit/ui`）+ 硬编码色棘轮 **121**（39 个文件；基线 345 → 121，只紧不松） |
 
@@ -387,8 +400,8 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-11-28（v1.18.65）— 后端 **16,156** 用例（12 段串行 **16,156 passed / 0 skipped**；
-> CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,592 用例**、
+> **上次全量验证**: 2026-11-28（v1.18.67）— 后端 **16,178** 用例（12 段串行 **16,178 passed / 0 skipped**；
+> CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,603 用例**、
 > Electron 外壳 **23 用例**；质量门禁脚本 **42/42 PASS**。
 > 覆盖率语句 **100.00%**（50,046/50,046）；分支 **100.00%**（12,784/12,784，0 partial）。
 > flake8 app 0 / vue-tsc 0 / 源码 eslint 0；Alembic 单 head（73 版本）；
@@ -477,10 +490,10 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 16,156（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 16,178（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
-| 前端单元测试 | Vitest | 7,592（351 文件） | API/Store/Component/Composable/Utils |
+| 前端单元测试 | Vitest | 7,603（351 文件） | API/Store/Component/Composable/Utils |
 | E2E 测试 | Playwright | 154+ 流程（17 个 spec） | Login/Dashboard/Projects/Approval/Funds/导航正确性/响应时间 |
 | 视觉回归 | Playwright | 44 个关键页面（DOM 结构快照，非像素；含 30 个 tab 与 4 个表单） | 工作台/帮扶村/项目/经费/一户一档/影像库/消费帮扶/系统管理/数据校验/大屏 等 |
 | UI Token 契约 | Vitest | `tests/unit/ui/ui-tokens.test.ts` | 主题 3 套/字号缩放/密度/高对比/简化/大屏字号档/全局类 |

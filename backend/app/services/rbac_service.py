@@ -692,14 +692,24 @@ class RBACService:
     # ------------------------------------------------------------------
 
     def _has_admin_role(self, user_id: str, db: Session) -> bool:
-        """检查是否有管理员角色"""
+        """检查用户是否持有管理员权限（admin:all），而不是叫 "admin" 的角色。
+
+        2026-11-28 边界收口：RBAC 角色可由权限包/API 自建，按 name == "admin"
+        会把任意同名自建角色当成系统管理员。此处与
+        ``_compute_user_permissions_with_restrictions`` 的 admin:all 展开口径一致：
+        任一有效角色持有 admin:all 即为管理员（角色名无关）。同时兼容历史
+        ``Permission.ADMIN_ALL`` 常量值与直接落库的 "admin:all" 字面量。
+        """
         now = _utcnow()
+        admin_all = getattr(Permission.ADMIN_ALL, "value", Permission.ADMIN_ALL)
+        admin_all_values = {"admin:all", str(admin_all)}
         count = (
             db.query(sa_func.count(RbacRole.id))
             .join(UserRole, RbacRole.id == UserRole.role_id)
+            .join(RolePermission, RolePermission.role_id == RbacRole.id)
             .filter(
                 UserRole.user_id == int(user_id),
-                RbacRole.name == "admin",
+                RolePermission.permission.in_(admin_all_values),
                 RbacRole.is_active == True,  # noqa: E712
                 (UserRole.expires_at.is_(None) | (UserRole.expires_at > now)),
             )

@@ -15,21 +15,33 @@ const ROLE_NORMALIZE_MAP: Record<string, string> = {
   operator: 'user',
 }
 
-/** 四类固定角色与历史值的展示名（单一事实源）。 */
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: '超级管理员',
-  admin: '系统管理员',
-  user: '普通用户',
-  viewer: '访客',
-  approval_leader: '系统管理员',
-  manager: '系统管理员',
-  operator: '普通用户',
-}
+/** 四类系统角色（users.role）的唯一合法取值；RBAC 角色不属于系统角色。 */
+export const SYSTEM_ROLE_VALUES = ['super_admin', 'admin', 'user', 'viewer'] as const
+export type SystemRole = (typeof SYSTEM_ROLE_VALUES)[number]
 
-/** 角色展示名：四类固定角色 + 历史值兼容；未知值原样透传。 */
+/** 系统角色下拉选项（value + label），全站唯一来源；RBAC 角色不得混入。 */
+export const SYSTEM_ROLE_OPTIONS: ReadonlyArray<{ value: SystemRole; label: string }> = [
+  { value: 'super_admin', label: '超级管理员' },
+  { value: 'admin', label: '系统管理员' },
+  { value: 'user', label: '普通用户' },
+  { value: 'viewer', label: '访客' },
+]
+
+/**
+ * 四类系统角色的展示名（单一事实源，由 SYSTEM_ROLE_OPTIONS 派生）。
+ *
+ * 历史值（approval_leader/manager/operator）不在此表中重复登记 ——
+ * roleLabel 先 normalizeRole 归一化再查表；未知值 fail-closed 展示「未知角色」，
+ * 不会被当作管理员（isAdminUser 同样只认 ADMIN_ROLES）。
+ */
+const ROLE_LABELS: Record<string, string> = Object.fromEntries(
+  SYSTEM_ROLE_OPTIONS.map((option) => [option.value, option.label])
+)
+
+/** 角色展示名：四类系统角色 + 历史值归一化；未知值 fail-closed 展示「未知角色」。 */
 export function roleLabel(role?: string | null): string {
   if (!role) return '-'
-  return ROLE_LABELS[normalizeRole(role)] || role
+  return ROLE_LABELS[normalizeRole(role)] ?? '未知角色'
 }
 
 /** 角色优先级（数字越小权限越高） */
@@ -91,6 +103,23 @@ export function isAdminUser(user?: AdminCheckUser | null): boolean {
     // 检查 is_superuser 标志
     if (target.is_superuser === true) return true
     return false
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 是否为超级管理员（严格口径，与后端 core/permission_utils.is_superuser 一致）：
+ * 仅 `is_superuser === true` 或 `role` 归一化后等于 `super_admin`。
+ *
+ * 部门级 admin 不是超级管理员 —— 用于「非超管不得在 UI 里选择/管理超管账号」。
+ */
+export function isSuperAdminUser(user?: AdminCheckUser | null): boolean {
+  try {
+    const target = user === undefined ? AuthStorage.getUser() : user
+    if (!target) return false
+    if (target.is_superuser === true) return true
+    return normalizeRole(target.role) === 'super_admin'
   } catch {
     return false
   }

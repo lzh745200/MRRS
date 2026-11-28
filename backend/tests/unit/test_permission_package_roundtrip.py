@@ -17,7 +17,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock, patch
 
 from app.models import Base
 from app.models.rbac import RbacRole, RolePermission, UserPermission, UserRole
@@ -238,3 +239,230 @@ class TestImportApiContract:
         body = resp.json().get("data") or resp.json()
         assert body.get("saved_file_name"), "必须返回 saved_file_name"
         assert body.get("file_name"), "必须返回 file_name 兼容字段"
+
+
+# ==================== 2026-11-28：账号级遗留权限默认不落库 ====================
+
+
+def _write_legacy_package(path, *, roles=None, user_legacy=None):
+    """构造最小合法权限包（1.0 格式，无 content_checksum）。"""
+    manifest = {
+        "version": "1.0",
+        "export_time": "2026-01-01T00:00:00+00:00",
+        "user_count": len(user_legacy or []),
+        "role_count": len(roles or []),
+    }
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps(manifest))
+        zf.writestr("data/roles.json", json.dumps(roles or []))
+        zf.writestr("data/user_roles.json", "[]")
+        zf.writestr("data/user_permissions.json", "[]")
+        zf.writestr("data/user_menus.json", "[]")
+        zf.writestr("data/user_legacy.json", json.dumps(user_legacy or []))
+        zf.writestr("data/organizations.json", "[]")
+    return str(path)
+
+
+def _legacy_entry(role="super_admin", data_scope="self", permissions="*"):
+    return {
+        "username": "bob",
+        "role": role,
+        "permissions": permissions,
+        "data_scope": data_scope,
+        "is_superuser": False,
+        "organization_id": None,
+        "organization_code": None,
+    }
+
+
+def _db_with_bob(data_scope="org", role="user", permissions="keep:perm"):
+    Session, engine = _make_db()
+    db = Session()
+    bob = User(
+        username="bob", full_name="Bob", hashed_password="x",
+        role=role, data_scope=data_scope, permissions=permissions, is_active=True,
+    )
+    db.add(bob)
+    db.commit()
+    return db, engine, bob.id
+
+
+class TestLegacyPrivilegeOptIn:
+    def test_legacy_privileges_skipped_by_default(self, tmp_path):
+        db, engine, bob_id = _db_with_bob()
+        pkg = _write_legacy_package(
+            tmp_path / "skip.zip", user_legacy=[_legacy_entry()],
+        )
+        try:
+            result = PermissionPackageService(db).confirm_import(pkg)
+            assert result["success"] is True, result.get("errors")
+            assert result["legacy_privileges_skipped"] == 1
+            assert any("apply_legacy_privileges" in w for w in result["warnings"]), result
+            bob = db.query(User).filter(User.id == bob_id).one()
+            assert (bob.role, bob.data_scope, bob.permissions) == (
+                "user", "org", "keep:perm",
+            ), "默认导入绝不能静默改写账号级角色/数据范围/权限"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_apply_legacy_privileges_true_restores_v1(self, tmp_path):
+        db, engine, bob_id = _db_with_bob()
+        pkg = _write_legacy_package(
+            tmp_path / "apply.zip",
+            user_legacy=[_legacy_entry(
+                role="admin", data_scope="org_children", permissions="report:read",
+            )],
+        )
+        try:
+            result = PermissionPackageService(db).confirm_import(
+                pkg, apply_legacy_privileges=True,
+            )
+            assert result["success"] is True, result.get("errors")
+            assert result["legacy_privileges_skipped"] == 0
+            bob = db.query(User).filter(User.id == bob_id).one()
+            assert (bob.role, bob.data_scope, bob.permissions) == (
+                "admin", "org_children", "report:read",
+            )
+        finally:
+            db.close()
+            engine.dispose()
+
+    @pytest.mark.parametrize("scope", ["all", "org_children", "org", "self"])
+    def test_four_data_scopes_roundtrip_without_downgrade(self, tmp_path, scope):
+        db, engine, bob_id = _db_with_bob(data_scope="org")
+        pkg = _write_legacy_package(
+            tmp_path / f"scope_{scope}.zip",
+            user_legacy=[_legacy_entry(
+                role="user", data_scope=scope, permissions="",
+            )],
+        )
+        try:
+            result = PermissionPackageService(db).confirm_import(
+                pkg, apply_legacy_privileges=True,
+            )
+            assert result["success"] is True, result.get("errors")
+            bob = db.query(User).filter(User.id == bob_id).one()
+            assert bob.data_scope == scope, f"{scope} 不得被静默降级为 org"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_package_role_gets_non_empty_code(self, tmp_path):
+        db, engine, _ = _db_with_bob()
+        pkg = _write_legacy_package(
+            tmp_path / "role_code.zip",
+            roles=[{
+                "id": 1, "name": "自定义角色", "description": "d",
+                "is_system": False, "is_active": True, "priority": 100,
+                "permissions": [],
+            }],
+        )
+        try:
+            result = PermissionPackageService(db).confirm_import(pkg)
+            assert result["success"] is True, result.get("errors")
+            role = db.query(RbacRole).filter(RbacRole.name == "自定义角色").one()
+            assert role.code and role.code.strip(), "包内角色缺 code 时必须派生非空 code"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_existing_role_code_not_overwritten_by_empty(self, tmp_path):
+        db, engine, _ = _db_with_bob()
+        keeper = RbacRole(
+            name="village_officer", code="KEEP_CODE", description="d",
+            is_system=False, is_active=True, priority=50,
+        )
+        db.add(keeper)
+        db.commit()
+        pkg = _write_legacy_package(
+            tmp_path / "role_keep.zip",
+            roles=[{
+                "id": 1, "name": "village_officer", "code": "", "description": "d",
+                "is_system": False, "is_active": True, "priority": 50,
+                "permissions": [],
+            }],
+        )
+        try:
+            result = PermissionPackageService(db).confirm_import(pkg, mode="merge")
+            assert result["success"] is True, result.get("errors")
+            db.expire_all()
+            role = db.query(RbacRole).filter(RbacRole.name == "village_officer").one()
+            assert role.code == "KEEP_CODE", "空 code 不得覆盖既有非空 code"
+        finally:
+            db.close()
+            engine.dispose()
+
+
+class TestConfirmApiLegacyFlag:
+    """API 层：apply_legacy_privileges 默认 false，仅管理员可置 true。"""
+
+    @staticmethod
+    def _call(tmp_path, current_user, **overrides):
+        from app.api.v1 import permission_package as pp_module
+
+        package = tmp_path / "api_flag.zip"
+        package.write_bytes(b"PK\x03\x04stub")
+        service = MagicMock()
+        service.confirm_import.return_value = {"success": True}
+        kwargs = dict(
+            file_name="api_flag.zip",
+            body=SimpleNamespace(overwrite_existing=True, mode=None),
+            current_user=current_user,
+            db=MagicMock(),
+            request=Mock(),
+            force=False,
+        )
+        kwargs.update(overrides)
+        with (
+            patch.object(pp_module, "_assert_package_import_principal", return_value=True),
+            patch.object(
+                pp_module, "_resolve_package_upload_path", return_value=str(package)
+            ),
+            patch.object(pp_module, "assert_not_duplicate", return_value=("sum", None)),
+            patch.object(pp_module, "PermissionPackageService", return_value=service),
+            patch.object(pp_module, "write_work_log"),
+            patch.object(pp_module, "record_import"),
+        ):
+            resp = pp_module.confirm_import_permission_package(**kwargs)
+        return resp, service
+
+    def test_flag_defaults_to_false_and_is_passed(self, tmp_path):
+        admin = Mock(id=1, username="admin", role="admin", is_superuser=False)
+        resp, service = self._call(tmp_path, admin)
+        assert resp.status_code == 200
+        assert service.confirm_import.call_args.kwargs[
+            "apply_legacy_privileges"
+        ] is False
+
+    def test_flag_true_is_passed_for_admin(self, tmp_path):
+        admin = Mock(id=1, username="admin", role="admin", is_superuser=False)
+        resp, service = self._call(
+            tmp_path, admin, apply_legacy_privileges=True,
+        )
+        assert resp.status_code == 200
+        assert service.confirm_import.call_args.kwargs[
+            "apply_legacy_privileges"
+        ] is True
+
+    def test_non_admin_cannot_enable_flag(self, tmp_path):
+        from fastapi import HTTPException
+
+        from app.api.v1 import permission_package as pp_module
+
+        viewer = Mock(id=2, username="v", role="viewer", is_superuser=False)
+        with patch.object(
+            pp_module, "_assert_package_import_principal", return_value=False
+        ):
+            with pytest.raises(HTTPException) as exc:
+                pp_module.confirm_import_permission_package(
+                    file_name="pkg.zip",
+                    body=SimpleNamespace(overwrite_existing=True, mode=None),
+                    current_user=viewer,
+                    db=MagicMock(),
+                    request=Mock(),
+                    force=False,
+                    apply_legacy_privileges=True,
+                )
+        assert exc.value.status_code == 403
+        assert "apply_legacy_privileges" in exc.value.detail

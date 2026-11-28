@@ -35,7 +35,6 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
     phone_number: Optional[str] = Field(None, max_length=20)
     is_active: Optional[bool] = None
-    role_id: Optional[int] = None
     password: Optional[str] = Field(None, min_length=12)
 
 

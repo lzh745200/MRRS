@@ -3,13 +3,14 @@
     <el-card class="generate-card" shadow="hover" style="margin-bottom: 20px">
       <template #header>
         <div class="card-header">
-          <span>为指定机器生成通行码（跨机器注册）</span>
+          <span>为指定机器生成通行码（设备绑定 / 换机授权）</span>
         </div>
       </template>
 
       <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px">
-        用户在新机器上通过「获取机器码」页面复制机器码，管理员在此输入该机器码
-        即可生成通行码。用户凭通行码即可在新机器注册登录，无需共享数据库。
+        已开通账号在新设备登录前，需完成设备绑定 / 换机授权：用户在新设备上通过
+        「获取机器码」页面复制机器码，管理员在此输入该机器码即可生成通行码。
+        用户凭通行码即可在新设备登录，无需共享数据库。
       </el-alert>
 
       <el-form ref="machineFormRef" :model="machineForm" :rules="machineRules" label-width="100px">
@@ -56,7 +57,7 @@
                 复制
               </el-button>
             </div>
-            <div class="result-tip">请将通行码提供给用户，用于在新机器注册</div>
+            <div class="result-tip">请将通行码提供给用户，用于在新设备完成绑定</div>
           </div>
         </el-form-item>
       </el-form>
@@ -274,7 +275,7 @@ import { format } from '@/utils'
 const generateFormRef = ref<FormInstance>()
 const machineFormRef = ref<FormInstance>()
 
-// 机器码通行码表单（跨机器注册场景）
+// 机器码通行码表单（设备绑定 / 换机授权场景）
 const machineForm = reactive({
   machine_code: '',
   description: '',
@@ -323,7 +324,7 @@ function handleResetMachineForm() {
 async function handleDelete(row: OrganizationPassCodeResponse) {
   try {
     await ElMessageBox.confirm(
-      `确定删除该通行证码记录吗？删除后该通行证码将无法再用于注册。`,
+      `确定删除该通行证码记录吗？删除后该通行证码将无法再用于设备绑定。`,
       '删除确认',
       {
         confirmButtonText: '确定',

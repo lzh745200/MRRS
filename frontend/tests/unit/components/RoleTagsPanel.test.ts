@@ -30,7 +30,8 @@ vi.mock('@/api/request', () => ({
   get: (...a: any[]) => mocks.get(...a),
   post: (...a: any[]) => mocks.post(...a),
   apiRequest: (...a: any[]) => mocks.apiRequest(...a),
-  getCsrfToken: vi.fn(() => Promise.resolve("test-csrf"))}))
+  getCsrfToken: vi.fn(() => Promise.resolve('test-csrf')),
+}))
 
 vi.mock('element-plus', () => ({ ElMessage: mocks.message, ElMessageBox: mocks.messageBox }))
 vi.mock('@/utils/logger', () => ({ logger: mocks.logger }))
@@ -91,7 +92,9 @@ function mountPanel(props: Record<string, unknown> = {}) {
 describe('RoleTagsPanel.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGet.mockResolvedValue({ data: [{ id: 'r1', name: '管理员', description: 'x', is_system: true }] })
+    mockGet.mockResolvedValue({
+      data: [{ id: 'r1', name: '管理员', description: 'x', is_system: true }],
+    })
     mockPost.mockResolvedValue({})
     mockApiRequest.mockResolvedValue({})
     // 撤销角色需二次确认：默认确认通过
@@ -103,7 +106,7 @@ describe('RoleTagsPanel.vue', () => {
     await (wrapper.vm as any).loadAssignedRoles()
     await flushPromises()
 
-    // 已分配 r1（系统角色）
+    // 已分配 r1（内置 RBAC 角色）
     expect(mockGet).toHaveBeenCalledWith('/rbac/user/1/roles')
     const tags = wrapper.findAll('span.stub-tag')
     expect(tags).toHaveLength(1)
@@ -176,11 +179,15 @@ describe('RoleTagsPanel.vue', () => {
 
   it('assignRole 成功：post + 刷新 + emit assigned + 成功提示', async () => {
     mockGet
-      .mockResolvedValueOnce({ data: [{ id: 'r1', name: '管理员', description: 'x', is_system: true }] })
-      .mockResolvedValue({ data: [
-        { id: 'r1', name: '管理员', description: 'x', is_system: true },
-        { id: 'r2', name: '帮扶员', description: '帮扶相关' },
-      ] })
+      .mockResolvedValueOnce({
+        data: [{ id: 'r1', name: '管理员', description: 'x', is_system: true }],
+      })
+      .mockResolvedValue({
+        data: [
+          { id: 'r1', name: '管理员', description: 'x', is_system: true },
+          { id: 'r2', name: '帮扶员', description: '帮扶相关' },
+        ],
+      })
     const wrapper = mountPanel({ userId: 1, allRoles })
     await (wrapper.vm as any).loadAssignedRoles()
     await flushPromises()
@@ -253,7 +260,7 @@ describe('RoleTagsPanel.vue', () => {
 
   // ── 2026-09-30 深审修复：撤销角色二次确认 ──
 
-  it('removeRole 先二次确认（系统角色提示影响面），确认后才发撤销请求', async () => {
+  it('removeRole 先二次确认（内置 RBAC 角色提示影响面），确认后才发撤销请求', async () => {
     const wrapper = mountPanel({ userId: 1, allRoles })
     await (wrapper.vm as any).loadAssignedRoles()
     await flushPromises()
@@ -261,7 +268,7 @@ describe('RoleTagsPanel.vue', () => {
     await flushPromises()
 
     expect(mocks.messageBox.confirm).toHaveBeenCalledWith(
-      '「管理员」是系统角色，撤销可能影响该用户既有权限。确认移除？',
+      '「管理员」是内置 RBAC 角色，撤销可能影响该用户经权限包获得的权限。确认移除？',
       '移除角色',
       { type: 'warning', confirmButtonText: '确认移除', cancelButtonText: '取消' }
     )
@@ -281,7 +288,7 @@ describe('RoleTagsPanel.vue', () => {
     expect(wrapper.emitted('removed')).toBeUndefined()
   })
 
-  it('非系统角色的确认文案不含"系统角色"字样', async () => {
+  it('非内置 RBAC 角色的确认文案不含“系统角色”字样', async () => {
     mockGet.mockResolvedValueOnce({ data: [{ id: 'r2', name: '帮扶员' }] })
     const wrapper = mountPanel({ userId: 1, allRoles })
     await (wrapper.vm as any).loadAssignedRoles()

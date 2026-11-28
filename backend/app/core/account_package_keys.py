@@ -111,7 +111,7 @@ def local_private_key(*, create: bool = False) -> str:
             generate=lambda: private_hex,
             require_persisted=True,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 统一转为可读的密钥错误
         raise AccountPackageKeyError(
             "无法生成并持久化本机签发密钥，请检查数据目录写入权限"
         ) from exc
@@ -209,7 +209,7 @@ def trusted_key_info() -> List[dict]:
 def _write_trusted_keys(keys: List[str]) -> None:
     try:
         runtime_secrets.set_secret(TRUSTED_PUBKEYS_NAME, json.dumps(keys))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 统一转为可读的密钥错误
         raise AccountPackageKeyError("无法持久化信任公钥列表，请检查数据目录写入权限") from exc
 
 

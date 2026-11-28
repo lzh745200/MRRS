@@ -178,6 +178,7 @@ import { getOrganizationDetail, getOrganizationMembers } from '@/api/organizatio
 
 import { format } from '@/utils'
 import { AuthStorage } from '@/utils/authStorage'
+import { normalizeRole, roleLabel as formatRoleLabel } from '@/utils/roleAccess'
 const { pushSafe } = useRouterSafe()
 const currentUser = AuthStorage.getUser() as Record<string, any> | null
 const canIssuePackage = computed(
@@ -233,28 +234,18 @@ const formatLevel = (level: any): string => {
   return levelStr
 }
 
-const roleLabel = (role: string): string => {
-  const map: Record<string, string> = {
-    super_admin: '超级管理员',
-    admin: '管理员',
-    manager: '经理',
-    approval_leader: '审批领导',
-    user: '普通用户',
-    viewer: '访客',
-  }
-  return map[role] || role || '未知'
-}
+// 系统角色展示名统一走 @/utils/roleAccess（四类系统角色单一事实源）；
+// 历史值 manager/approval_leader 由 roleLabel 归一化，不再出现“经理/审批领导”等旧称。
+const roleLabel = (role: string): string => (role ? formatRoleLabel(role) : '未知')
 
 const roleTagType = (role: string): 'primary' | 'success' | 'warning' | 'info' | 'danger' => {
   const map: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
     super_admin: 'danger',
     admin: 'warning',
-    manager: 'success',
-    approval_leader: 'primary',
     user: 'info',
     viewer: 'info',
   }
-  return map[role] || 'info'
+  return map[normalizeRole(role)] || 'info'
 }
 
 const loadData = async () => {

@@ -7,7 +7,12 @@ from app.models.rbac import RbacRole, UserRole as UR, UserPermission as UP
 from app.models.user import User
 from app.services.permission_package_service import PermissionPackageService
 
-from tests.unit.test_permission_package_roundtrip import two_machines  # noqa: F401
+from tests.unit.test_permission_package_roundtrip import (  # noqa: F401
+    _db_with_bob,
+    _legacy_entry,
+    _write_legacy_package,
+    two_machines,
+)
 
 
 class TestPartialExportAndMerge:
@@ -75,3 +80,55 @@ class TestPartialExportAndMerge:
             os.unlink(zip_path)
         except OSError:
             pass
+
+    def test_merge_with_opt_in_keeps_non_default_account_fields(self, tmp_path):
+        """显式恢复遗留权限时，merge 仍只填空/默认值，不覆盖既有账号配置。"""
+        db, engine, bob_id = _db_with_bob(
+            data_scope="org_children", role="admin", permissions="existing:perm",
+        )
+        pkg = _write_legacy_package(
+            tmp_path / "merge_keep.zip",
+            user_legacy=[
+                _legacy_entry(
+                    role="super_admin", data_scope="all", permissions="from:package",
+                )
+            ],
+        )
+        try:
+            result = PermissionPackageService(db).confirm_import(
+                pkg, mode="merge", apply_legacy_privileges=True,
+            )
+            assert result["success"] is True, result.get("errors")
+            bob = db.query(User).filter(User.id == bob_id).one()
+            assert (bob.role, bob.data_scope, bob.permissions) == (
+                "admin", "org_children", "existing:perm",
+            ), "merge 语义不得覆盖目标机既有非默认账号权限"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_merge_with_opt_in_fills_empty_account_fields(self, tmp_path):
+        """显式恢复遗留权限时，merge 对空/默认账号字段执行填充（v1 语义）。"""
+        db, engine, bob_id = _db_with_bob(
+            data_scope="org", role="user", permissions="",
+        )
+        pkg = _write_legacy_package(
+            tmp_path / "merge_fill.zip",
+            user_legacy=[
+                _legacy_entry(
+                    role="admin", data_scope="self", permissions="from:package",
+                )
+            ],
+        )
+        try:
+            result = PermissionPackageService(db).confirm_import(
+                pkg, mode="merge", apply_legacy_privileges=True,
+            )
+            assert result["success"] is True, result.get("errors")
+            bob = db.query(User).filter(User.id == bob_id).one()
+            assert (bob.role, bob.data_scope, bob.permissions) == (
+                "admin", "self", "from:package",
+            )
+        finally:
+            db.close()
+            engine.dispose()

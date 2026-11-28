@@ -2,10 +2,13 @@ import { describe, it, expect, vi } from 'vitest'
 import { AuthStorage } from '@/utils/authStorage'
 import {
   ADMIN_ROLES,
+  SYSTEM_ROLE_OPTIONS,
+  SYSTEM_ROLE_VALUES,
   ROLE_PRIORITY,
   normalizeRole,
   getEffectiveRoles,
   isAdminUser,
+  isSuperAdminUser,
   canViewDeleted,
   hasAllowedRole,
   hasMinRole,
@@ -96,7 +99,9 @@ describe('roleAccess utility', () => {
   it('canAccessMenu supports combined roles + minRole', () => {
     expect(canAccessMenu('admin', { roles: ['admin'], minRole: 'manager' })).toBe(true)
     expect(canAccessMenu('viewer', { roles: ['viewer'], minRole: 'operator' })).toBe(false)
-    expect(canAccessMenu('operator', { roles: ['manager', 'admin'], minRole: 'viewer' })).toBe(false)
+    expect(canAccessMenu('operator', { roles: ['manager', 'admin'], minRole: 'viewer' })).toBe(
+      false
+    )
   })
 
   it('getRoleFromLocalStorage returns default when no user', () => {
@@ -164,7 +169,7 @@ describe('isAdminUser / canViewDeleted', () => {
     expect(isAdminUser()).toBe(false)
   })
 
-  it('用户无 role 字段 → user.role || \'\' 兜底为 false', () => {
+  it("用户无 role 字段 → user.role || '' 兜底为 false", () => {
     setAuthUser({})
     expect(isAdminUser()).toBe(false)
   })
@@ -262,7 +267,7 @@ describe('getRoleFromLocalStorage 补充', () => {
     expect(getRoleFromLocalStorage()).toBe('user')
   })
 
-  it('roleLabel：四类固定角色 + 历史值归一化 + 未知值透传 + 空值', () => {
+  it('roleLabel：四类固定角色 + 历史值归一化 + 未知值 fail-closed + 空值', () => {
     expect(roleLabel('super_admin')).toBe('超级管理员')
     expect(roleLabel('admin')).toBe('系统管理员')
     expect(roleLabel('user')).toBe('普通用户')
@@ -270,7 +275,72 @@ describe('getRoleFromLocalStorage 补充', () => {
     expect(roleLabel('manager')).toBe('系统管理员')
     expect(roleLabel('approval_leader')).toBe('系统管理员')
     expect(roleLabel('operator')).toBe('普通用户')
-    expect(roleLabel('custom_role')).toBe('custom_role')
+    // 未知/遗留值不得原样透传成"看起来像角色"的文案，更不得展示为管理员
+    expect(roleLabel('custom_role')).toBe('未知角色')
+    expect(roleLabel('ghost')).toBe('未知角色')
     expect(roleLabel()).toBe('-')
+  })
+})
+
+describe('SYSTEM_ROLE_OPTIONS / SYSTEM_ROLE_VALUES 单一事实源', () => {
+  it('恰好四类系统角色，标签与全站口径一致', () => {
+    expect(SYSTEM_ROLE_VALUES).toEqual(['super_admin', 'admin', 'user', 'viewer'])
+    expect(SYSTEM_ROLE_OPTIONS).toEqual([
+      { value: 'super_admin', label: '超级管理员' },
+      { value: 'admin', label: '系统管理员' },
+      { value: 'user', label: '普通用户' },
+      { value: 'viewer', label: '访客' },
+    ])
+  })
+
+  it('不含任何 RBAC / 历史角色值', () => {
+    const values = SYSTEM_ROLE_OPTIONS.map((option) => option.value)
+    expect(values).not.toContain('approval_leader')
+    expect(values).not.toContain('manager')
+    expect(values).not.toContain('operator')
+    // RBAC 角色（权限包）不是系统角色
+    expect(values.every((value) => (SYSTEM_ROLE_VALUES as readonly string[]).includes(value))).toBe(
+      true
+    )
+  })
+
+  it('每个选项的 label 与 roleLabel 一致（且不为未知角色）', () => {
+    for (const option of SYSTEM_ROLE_OPTIONS) {
+      expect(roleLabel(option.value)).toBe(option.label)
+      expect(roleLabel(option.value)).not.toBe('未知角色')
+    }
+  })
+})
+
+describe('isSuperAdminUser：严格超管口径', () => {
+  it('无用户 → false', () => {
+    sessionStorage.clear()
+    expect(isSuperAdminUser()).toBe(false)
+  })
+
+  it('仅超级管理员角色/标志为 true', () => {
+    expect(isSuperAdminUser({ role: 'super_admin' })).toBe(true)
+    expect(isSuperAdminUser({ role: 'SUPER_ADMIN' })).toBe(true)
+    expect(isSuperAdminUser({ role: 'user', is_superuser: true })).toBe(true)
+    expect(isSuperAdminUser({ role: 'admin' })).toBe(false)
+    expect(isSuperAdminUser({ role: 'manager' })).toBe(false)
+    expect(isSuperAdminUser({ role: 'ghost' })).toBe(false)
+    expect(isSuperAdminUser({ role: 'ghost', is_superuser: false })).toBe(false)
+    expect(isSuperAdminUser(null)).toBe(false)
+  })
+
+  it('读取 AuthStorage 时同样 fail-closed', () => {
+    setAuthUser({ role: 'admin' })
+    expect(isSuperAdminUser()).toBe(false)
+    setAuthUser({ role: 'super_admin' })
+    expect(isSuperAdminUser()).toBe(true)
+  })
+
+  it('AuthStorage.getUser 抛错 → false（catch 分支）', () => {
+    const spy = vi.spyOn(AuthStorage, 'getUser').mockImplementation(() => {
+      throw new Error('boom')
+    })
+    expect(isSuperAdminUser()).toBe(false)
+    spy.mockRestore()
   })
 })

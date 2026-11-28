@@ -12,14 +12,24 @@ ZIP 结构:
   data/user_menus.json    — 用户 allowed_menus 覆盖
   data/user_legacy.json   — User.role, User.permissions, User.data_scope
 
-导入策略：完全替换（mirror mode）。目标电脑的所有权限配置被包内容覆盖。
-用户名匹配用户，不存在则跳过。
+导入策略：默认完全替换（mirror mode）RBAC 角色/权限/菜单/组织；用户名匹配用户，
+不存在则跳过。
+
+边界（2026-11-28 产品边界收口）：`data/user_legacy.json` 中的 `role` /
+`data_scope` / `permissions` 属于**账号级**权限，默认**不落库**（即使包内携带），
+避免导入权限包时静默改写 `users.role` / `users.data_scope`。调用方需显式传
+`apply_legacy_privileges=True` 才恢复 1.0 的全量恢复行为；跳过数量经
+`stats['legacy_privileges_skipped']`、响应字段与 warnings 一并回传。
+
+版本：manifest `version` 当前为 1.1（`CURRENT_VERSION`）。1.0 包继续兼容导入，
+仅对不在 `SUPPORTED_IMPORT_VERSIONS` 内的版本告警。
 """
 
 import hashlib
 import json
 import logging
 import os
+import re
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,7 +49,11 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = "1.0"
+# 权限包 manifest 版本（2026-11-28 由 1.0 升至 1.1）：
+#   1.1 起 user_legacy 的角色/数据范围/权限默认不落库（需 apply_legacy_privileges=true），
+#   角色导入补齐非空 code。1.0 包仍按兼容模式导入。
+CURRENT_VERSION = "1.1"
+SUPPORTED_IMPORT_VERSIONS = ("1.0", CURRENT_VERSION)
 
 # 系统内置角色名 — 导入时不删除/不覆盖
 SYSTEM_ROLE_NAMES = {"super_admin", "admin", "user", "viewer"}
@@ -388,8 +402,16 @@ class PermissionPackageService:
                 # 读取清单
                 manifest = json.loads(read_zip_member(zf, "manifest.json").decode("utf-8"))
                 version = manifest.get("version", "unknown")
-                if version != CURRENT_VERSION:
-                    warnings.append(f"配置包版本 {version} 与当前版本 {CURRENT_VERSION} 不匹配")
+                if version not in SUPPORTED_IMPORT_VERSIONS:
+                    warnings.append(
+                        f"配置包版本 {version} 与支持范围 {SUPPORTED_IMPORT_VERSIONS} 不匹配，"
+                        "将按当前版本格式尽力兼容导入"
+                    )
+                elif version != CURRENT_VERSION:
+                    warnings.append(
+                        f"配置包为旧版 v{version}（当前 v{CURRENT_VERSION}）：账号级"
+                        "遗留权限默认不落库，确认导入时需显式 apply_legacy_privileges=true"
+                    )
 
                 # Phase E：机器码绑定校验
                 allowed_mc = manifest.get("machine_codes")
@@ -516,6 +538,7 @@ class PermissionPackageService:
         mode: Optional[str] = None,
         allow_privileged: bool = True,
         caller: Any = None,
+        apply_legacy_privileges: bool = False,
     ) -> Dict[str, Any]:
         """确认导入权限配置包。
 
@@ -526,6 +549,13 @@ class PermissionPackageService:
         只有「超级管理员」或「空库离线首装（本机来源）」可传 True；部门级 admin
         导入时传 False，包内的 super_admin / data_scope=all 会被收敛为
         admin / org —— 否则 admin 可自造权限包把任意账号（含自己）提成 super_admin。
+
+        apply_legacy_privileges（产品边界，2026-11-28）：是否把包内 user_legacy
+        的 role / data_scope / permissions 写回 users 表。默认 False —— RBAC
+        权限包只管理细粒度角色/权限，不得静默改动账号级角色与数据范围；此时
+        组织归属仍会恢复，跳过数量写入 stats['legacy_privileges_skipped'] 并在
+        返回值 warnings 中显式提示。传 True 恢复 1.0 的全量恢复行为（同样受
+        allow_privileged 收敛约束）。
         """
         if not os.path.exists(file_path) or not zipfile.is_zipfile(file_path):
             return {"success": False, "errors": ["无效的文件"], "message": "无效的文件"}
@@ -613,6 +643,7 @@ class PermissionPackageService:
                 user_legacy_data, stats, errors,
                 merge_mode=merge_mode, allow_privileged=allow_privileged,
                 caller=caller,
+                apply_legacy_privileges=apply_legacy_privileges,
             )
 
             self.db.commit()
@@ -624,6 +655,13 @@ class PermissionPackageService:
                     f"以下 {len(skipped)} 个用户在目标系统中不存在，个人权限/菜单已跳过: "
                     + ", ".join(skipped[:20])
                     + ("..." if len(skipped) > 20 else "")
+                )
+            skipped_legacy = stats.get("legacy_privileges_skipped", 0)
+            if skipped_legacy:
+                warnings.append(
+                    f"已跳过 {skipped_legacy} 个用户的账号级遗留权限（role/data_scope/"
+                    "permissions）：权限包默认不修改账号角色与数据范围；如需按 1.0 "
+                    "行为恢复，请由管理员显式传 apply_legacy_privileges=true"
                 )
             return self._build_import_response(stats, errors, warnings=warnings)
         except Exception:
@@ -669,6 +707,7 @@ class PermissionPackageService:
             "user_roles_skipped": 0, "user_permissions_skipped": 0,
             "user_menus_updated": 0, "user_legacy_updated": 0,
             "organizations_created": 0, "organizations_updated": 0,
+            "legacy_privileges_skipped": 0,
         }
 
     def _clear_existing_data(self):
@@ -810,18 +849,70 @@ class PermissionPackageService:
                 errors.append(f"角色「{role_data.get('name', '未知')}」导入失败: {e}")
         return role_id_map, stats, errors
 
+    @staticmethod
+    def _derive_role_code(name: str) -> str:
+        """由角色名派生 ASCII code（rbac_roles.code 唯一约束，不可为空）。"""
+        base = re.sub(r"[^0-9A-Za-z]+", "_", (name or "").strip().upper()).strip("_")
+        if not base:
+            digest = hashlib.sha1((name or "").encode("utf-8")).hexdigest()[:8].upper()
+            base = f"ROLE_{digest}"
+        return base[:50]
+
+    def _unique_role_code(self, base: str, exclude_id=None) -> str:
+        """给候选 code 消重；冲突时追加确定性短哈希（最多 10 次有界探测）。"""
+        base = (base or "ROLE")[:50]
+        query = self.db.query(RbacRole.id).filter(RbacRole.code == base)
+        if exclude_id is not None:
+            query = query.filter(RbacRole.id != exclude_id)
+        if query.first() is None:
+            return base
+        digest = hashlib.sha1(
+            f"{base}:{exclude_id}".encode("utf-8")
+        ).hexdigest()[:6].upper()
+        candidate = f"{base[:43]}_{digest}"
+        for suffix in range(2, 12):
+            if self.db.query(RbacRole.id).filter(
+                RbacRole.code == candidate
+            ).first() is None:
+                return candidate
+            candidate = f"{base[:40]}_{digest}{suffix}"
+        return candidate
+
+    def _role_code(self, role_data, existing=None) -> str:
+        """计算落库 code：绝不覆盖既有非空 code，缺省时由角色名派生。"""
+        incoming = (role_data.get("code") or "").strip()[:50]
+        if existing is not None:
+            if existing.code:
+                return existing.code
+            if incoming:
+                clash = (
+                    self.db.query(RbacRole.id)
+                    .filter(RbacRole.code == incoming, RbacRole.id != existing.id)
+                    .first()
+                )
+                if clash is None:
+                    return incoming
+            return self._unique_role_code(
+                self._derive_role_code(existing.name), exclude_id=existing.id
+            )
+        return self._unique_role_code(
+            incoming or self._derive_role_code(role_data.get("name", ""))
+        )
+
     def _upsert_role(self, role_data, stats):
-        """创建或更新单个角色。"""
+        """创建或更新单个角色（code 非空且唯一；既有非空 code 不被空值覆盖）。"""
         name = role_data.get("name", "")
         existing = self.db.query(RbacRole).filter(RbacRole.name == name).first()
         if existing:
             existing.description = role_data.get("description", existing.description)
             existing.is_active = role_data.get("is_active", True)
             existing.priority = role_data.get("priority", 100)
+            existing.code = self._role_code(role_data, existing=existing)
             stats["roles_updated"] += 1
             return role_data["id"], existing.id
         new_role = RbacRole(
             name=name,
+            code=self._role_code(role_data),
             description=role_data.get("description"),
             is_system=role_data.get("is_system", False),
             is_active=role_data.get("is_active", True),
@@ -983,12 +1074,16 @@ class PermissionPackageService:
 
     #: 权限包内允许落库的角色/数据范围（SEC-1；与 core.constants 单一源对齐）
     _IMPORTABLE_ROLES = ("super_admin", "admin", "user", "viewer")
-    _IMPORTABLE_DATA_SCOPES = ("all", "org", "own")
+    #: 系统规范四值（core.constants.DATA_SCOPES）；旧包 "own" 归一为 "self"
+    _IMPORTABLE_DATA_SCOPES = ("all", "org_children", "org", "self")
+    _LEGACY_DATA_SCOPE_ALIASES = {"own": "self"}
 
     def _sanitize_legacy_privilege(self, legacy_data, allow_privileged, stats):
         """归一化并收敛权限包内的 role / data_scope（SEC-1，2026-10-31）。
 
         - 未知角色/范围一律回落最小权限（user / org），防脏包破坏判权；
+        - 数据范围使用系统规范四值（all/org_children/org/self），
+          self / org_children 不再被静默降级为 org；旧包 "own" 归一为 "self"；
         - 非特权导入（部门级 admin）不得经包授予 super_admin 或 data_scope=all，
           否则 admin 可自造权限包把任意账号（含自己）提成超管。
         """
@@ -997,7 +1092,8 @@ class PermissionPackageService:
         role = normalize_role(legacy_data.get("role") or "user")
         if role not in self._IMPORTABLE_ROLES:
             role = "user"
-        data_scope = legacy_data.get("data_scope") or "org"
+        raw_scope = str(legacy_data.get("data_scope") or "org").strip().lower()
+        data_scope = self._LEGACY_DATA_SCOPE_ALIASES.get(raw_scope, raw_scope)
         if data_scope not in self._IMPORTABLE_DATA_SCOPES:
             data_scope = "org"
         if not allow_privileged:
@@ -1019,7 +1115,7 @@ class PermissionPackageService:
     # C901：权限包导入的越权边界必须集中在一处审计
     def _import_user_legacy(  # noqa: C901
         self, user_legacy_data, stats, errors, merge_mode=False, allow_privileged=True,
-        caller=None,
+        caller=None, apply_legacy_privileges=False,
     ):
         """导入遗留权限字段。
 
@@ -1027,6 +1123,10 @@ class PermissionPackageService:
         1) 目标用户的新组织必须在调用者子树内（跨组织跳过并记错）；
         2) 不允许修改调用者自身的组织/角色/权限（防自提权）；
         3) 权限串含 ``*:*`` 等通配符时清空（非超管不得授予通配权限）。
+
+        产品边界（2026-11-28）：``apply_legacy_privileges=False``（默认）时
+        **不写** users.role / users.data_scope / users.permissions，只恢复组织
+        归属；每条跳过计入 ``stats['legacy_privileges_skipped']``。
         """
         allowed_org_ids = None
         if not allow_privileged and caller is not None:
@@ -1051,9 +1151,6 @@ class PermissionPackageService:
                 if not user:
                     self._note_missing_username(username)
                     continue
-                role, data_scope = self._sanitize_legacy_privilege(
-                    legacy_data, allow_privileged, stats
-                )
                 # 审计 P1：非超管不得修改调用者自身（防自提权/自换组织）
                 if (
                     not allow_privileged
@@ -1062,24 +1159,39 @@ class PermissionPackageService:
                 ):
                     errors.append(f"用户遗留权限「{username}」：不允许导入时修改调用者自身")
                     continue
-                permissions_value = legacy_data.get("permissions", "")
-                if not allow_privileged and "*" in str(permissions_value or ""):
-                    permissions_value = ""
-                    errors.append(
-                        f"用户遗留权限「{username}」：非超管导入已忽略通配权限"
+                if apply_legacy_privileges:
+                    role, data_scope = self._sanitize_legacy_privilege(
+                        legacy_data, allow_privileged, stats
                     )
-                if merge_mode:
-                    # merge 语义：目标字段为空/默认时才填充，不覆盖既有配置
-                    if not getattr(user, "permissions", ""):
-                        user.permissions = permissions_value
-                    if getattr(user, "data_scope", "org") in (None, "", "org"):
-                        user.data_scope = data_scope
-                    if (getattr(user, "role", "user") or "user") == "user":
+                    permissions_value = legacy_data.get("permissions", "")
+                    if not allow_privileged and "*" in str(permissions_value or ""):
+                        permissions_value = ""
+                        errors.append(
+                            f"用户遗留权限「{username}」：非超管导入已忽略通配权限"
+                        )
+                    if merge_mode:
+                        # merge 语义：目标字段为空/默认时才填充，不覆盖既有配置
+                        if not getattr(user, "permissions", ""):
+                            user.permissions = permissions_value
+                        if getattr(user, "data_scope", "org") in (None, "", "org"):
+                            user.data_scope = data_scope
+                        if (getattr(user, "role", "user") or "user") == "user":
+                            user.role = role
+                    else:
                         user.role = role
+                        user.permissions = permissions_value
+                        user.data_scope = data_scope
                 else:
-                    user.role = role
-                    user.permissions = permissions_value
-                    user.data_scope = data_scope
+                    # 产品边界：权限包只管理 RBAC 细粒度权限，默认不改账号级角色/数据范围
+                    stats["legacy_privileges_skipped"] = (
+                        stats.get("legacy_privileges_skipped", 0) + 1
+                    )
+                    logger.info(
+                        "权限包导入：已跳过 username=%s 的账号级遗留权限"
+                        "（role/data_scope/permissions）；如需恢复请显式启用 "
+                        "apply_legacy_privileges",
+                        username,
+                    )
                 # 恢复组织关联：优先按组织编码匹配（跨机器稳定），
                 # 回退按导出机原始 ID，均失败则置空（用户可通过界面重新指定）
                 org_id = legacy_data.get("organization_id")
@@ -1122,16 +1234,18 @@ class PermissionPackageService:
     def _log_import_result(self, stats):
         logger.info(
             "权限配置包导入完成: 角色创建%d/更新%d, 组织创建%d/更新%d, "
-            "用户角色%d, 用户权限%d, 菜单%d, 遗留%d",
+            "用户角色%d, 用户权限%d, 菜单%d, 遗留%d, 遗留权限跳过%d",
             stats["roles_created"], stats["roles_updated"],
             stats["organizations_created"], stats["organizations_updated"],
             stats["user_roles_assigned"], stats["user_permissions_assigned"],
             stats["user_menus_updated"], stats["user_legacy_updated"],
+            stats.get("legacy_privileges_skipped", 0),
         )
 
     def _build_import_response(self, stats, errors, warnings=None):
         warnings = warnings or []
         skipped = sorted(self._missing_usernames)
+        skipped_legacy = stats.get("legacy_privileges_skipped", 0)
         return {
             "success": True,
             "partial": bool(warnings or errors),
@@ -1148,6 +1262,7 @@ class PermissionPackageService:
             "user_permissions_skipped": stats.get("user_permissions_skipped", 0),
             "user_menus_updated": stats["user_menus_updated"],
             "user_legacy_updated": stats["user_legacy_updated"],
+            "legacy_privileges_skipped": skipped_legacy,
             "errors": errors,
             "message": (
                 f"导入完成: 角色 {stats['roles_created']}新建/{stats['roles_updated']}更新, "
@@ -1156,6 +1271,10 @@ class PermissionPackageService:
                 f"用户权限 {stats['user_permissions_assigned']}, "
                 f"菜单覆盖 {stats['user_menus_updated']}, "
                 f"遗留字段 {stats['user_legacy_updated']}"
+                + (
+                    f"，账号级遗留权限跳过 {skipped_legacy}（默认不修改账号角色/数据范围）"
+                    if skipped_legacy else ""
+                )
             ),
         }
 

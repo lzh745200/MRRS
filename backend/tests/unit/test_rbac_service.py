@@ -109,3 +109,84 @@ class TestLogAccess:
             reason="test",
         )
         # No exception = success
+
+
+class TestAdminShortcutByPermission:
+    """2026-11-28：管理员捷径按 admin:all 权限判定，不看角色名称。
+
+    角色可由权限包/API 自建，按 name == "admin" 判定会把任意同名自建角色
+    当成系统管理员（权限边界漏洞）。
+    """
+
+    @staticmethod
+    def _db():
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import StaticPool
+
+        from app.models import Base
+        from app.models.rbac import RbacRole, RolePermission, UserRole
+        from app.models.user import User
+
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(bind=engine)
+        db = sessionmaker(autocommit=False, autoflush=False, bind=engine)()
+        user = User(
+            username="shortcut_user", full_name="S", hashed_password="x",
+            role="user", is_active=True,
+        )
+        role = RbacRole(
+            name="admin", code="LEGACY_ADMIN_NAME", description="d",
+            is_system=False, is_active=True, priority=100,
+        )
+        db.add_all([user, role])
+        db.flush()
+        db.add(UserRole(user_id=user.id, role_id=role.id))
+        db.add(RolePermission(role_id=role.id, permission="village:read"))
+        db.commit()
+        return db, engine, user.id, role.id
+
+    def test_role_named_admin_without_admin_all_is_not_admin(self):
+        from app.services.rbac_service import RBACService
+
+        db, engine, user_id, _ = self._db()
+        try:
+            assert RBACService()._has_admin_role(str(user_id), db) is False, \
+                "仅凭角色名 admin 不得获得管理员捷径"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_role_with_admin_all_permission_is_admin_regardless_of_name(self):
+        from app.models.rbac import RbacRole, RolePermission
+        from app.services.rbac_service import RBACService
+
+        db, engine, user_id, role_id = self._db()
+        try:
+            db.query(RbacRole).filter(RbacRole.id == role_id).update(
+                {"name": "custom_ops", "code": "CUSTOM_OPS"}
+            )
+            db.add(RolePermission(role_id=role_id, permission="admin:all"))
+            db.commit()
+            assert RBACService()._has_admin_role(str(user_id), db) is True, \
+                "持有 admin:all 的角色应获得管理员捷径，与名称无关"
+        finally:
+            db.close()
+            engine.dispose()
+
+    def test_named_admin_with_admin_all_perm_still_admin(self):
+        from app.models.rbac import RolePermission
+        from app.services.rbac_service import RBACService
+
+        db, engine, user_id, role_id = self._db()
+        try:
+            db.add(RolePermission(role_id=role_id, permission="admin:all"))
+            db.commit()
+            assert RBACService()._has_admin_role(str(user_id), db) is True
+        finally:
+            db.close()
+            engine.dispose()

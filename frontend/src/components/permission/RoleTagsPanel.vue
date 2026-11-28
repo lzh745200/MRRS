@@ -131,11 +131,11 @@ async function assignRole(roleId: string) {
 }
 
 async function removeRole(role: RbacRole) {
-  // 撤销角色是不可逆的授权变更，必须先二次确认；系统角色额外提示影响面
+  // 撤销角色是不可逆的授权变更，必须先二次确认；内置 RBAC 角色额外提示影响面
   try {
     await ElMessageBox.confirm(
       role.is_system
-        ? `「${role.name}」是系统角色，撤销可能影响该用户既有权限。确认移除？`
+        ? `「${role.name}」是内置 RBAC 角色，撤销可能影响该用户经权限包获得的权限。确认移除？`
         : `确认移除角色「${role.name}」？`,
       '移除角色',
       { type: 'warning', confirmButtonText: '确认移除', cancelButtonText: '取消' }

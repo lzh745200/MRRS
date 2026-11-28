@@ -409,3 +409,80 @@ class TestPermissionLists:
         assert data["success"] is True
         assert isinstance(data["categories"], dict) and data["categories"]
 
+
+# ==================== 系统保留角色名/编码（2026-11-28） ====================
+
+
+class TestReservedRoleNames:
+    """RBAC 自建角色不得占用四个系统角色值，避免与 users.role 语义混淆。"""
+
+    @pytest.mark.parametrize(
+        "reserved", ["super_admin", "admin", "user", "viewer", "ADMIN", " User "]
+    )
+    def test_create_role_rejects_system_role_name(self, rbac_client, reserved):
+        _as_user(rbac_client, _user())
+        _use_db(rbac_client, MagicMock())
+        resp = rbac_client.post(
+            "/api/v1/rbac/roles",
+            json={
+                "name": reserved,
+                "description": "d",
+                "permissions": [],
+                "is_system": False,
+            },
+        )
+        assert resp.status_code == 400, resp.text[:300]
+        detail = resp.json()["detail"]
+        assert "系统内置" in detail or "保留" in detail, detail
+
+    @pytest.mark.parametrize("reserved", ["super_admin", "admin", "user", "viewer"])
+    def test_create_role_rejects_system_role_code(self, rbac_client, reserved):
+        _as_user(rbac_client, _user())
+        _use_db(rbac_client, MagicMock())
+        resp = rbac_client.post(
+            "/api/v1/rbac/roles",
+            json={
+                "name": "审计员",
+                "code": reserved,
+                "description": "d",
+                "permissions": [],
+                "is_system": False,
+            },
+        )
+        assert resp.status_code == 400, resp.text[:300]
+        detail = resp.json()["detail"]
+        assert "系统内置" in detail or "保留" in detail, detail
+
+    def test_update_role_rejects_reserved_name(self, rbac_client):
+        _as_user(rbac_client, _user())
+        _use_db(rbac_client, MagicMock())
+        resp = rbac_client.put("/api/v1/rbac/roles/7", json={"name": "admin"})
+        assert resp.status_code == 400, resp.text[:300]
+        detail = resp.json()["detail"]
+        assert "系统内置" in detail or "保留" in detail, detail
+
+    def test_update_role_rejects_reserved_code(self, rbac_client):
+        _as_user(rbac_client, _user())
+        _use_db(rbac_client, MagicMock())
+        resp = rbac_client.put("/api/v1/rbac/roles/7", json={"code": "SUPER_ADMIN"})
+        assert resp.status_code == 400, resp.text[:300]
+        detail = resp.json()["detail"]
+        assert "系统内置" in detail or "保留" in detail, detail
+
+    def test_update_system_role_keeps_reserved_name_allowed(self, rbac_client):
+        """系统角色保留名未变更时，仍可更新描述/权限等其它字段。"""
+        _as_user(rbac_client, _user())
+        _use_db(rbac_client, MagicMock())
+        role = MagicMock()
+        role.name = "admin"
+        role.code = "ADMIN"
+        role.description = "old"
+        sess = _db_with([_q(first=role), _q()])
+        with _tx(sess):
+            resp = rbac_client.put(
+                "/api/v1/rbac/roles/7",
+                json={"name": "admin", "code": "admin", "description": "系统管理员"},
+            )
+        assert resp.status_code == 200, resp.text[:300]
+        assert role.description == "系统管理员"
+

@@ -1,23 +1,23 @@
-"""组织通行码跨机器自验证回归（2026-09-06 R9 生产反馈修复）。
+"""组织 / 机器通行码跨机器自验证回归（2026-09-06 R9 生产反馈修复）。
 
 缺陷：组织通行码为随机数且仅存于管理员本地库，下级单位在自己机器上
-注册时 level 2（DB 匹配）永远查不到 → 跨机器组织注册必败。
-修复：通行码按单位名确定性派生（generate_org_pass_code），注册附带
-org_name 时自验证并在本机 find-or-create 组织与占位记录。
+校验时 level 2（DB 匹配）永远查不到 → 跨机器组织绑定必败。
+修复：通行码按单位名确定性派生（generate_org_pass_code），自验证时在本机
+find-or-create 组织与占位记录；机器特定通行码同理按机器码 HMAC 派生。
+
+自助注册端点已下线（账号由管理员或权限包创建），故本文件直接驱动服务层
+``self_verify_org_pass_code`` / ``verify_pass_code`` / ``activate_machine_code``，
+保留「跨机器通行码 → 本机建档 → 绑定用户」的机器码绑定覆盖。
 """
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.core.database import get_db
-from app.core.security import get_current_user
 from app.models import Base
+from app.models.machine_code import MachineCode
 from app.models.organization import Organization
-from unittest.mock import patch
-
 from app.services.machine_code_service import MachineCodeService
 
 
@@ -45,34 +45,18 @@ def db_session(engine):
 
 
 @pytest.fixture
-def client(db_session):
-    from app.main import app
-
-    async def _override():
-        yield db_session
-
-    _original = app.dependency_overrides.copy()
-    app.dependency_overrides[get_db] = _override
-    yield TestClient(app, raise_server_exceptions=False)
-    app.dependency_overrides = _original
-
-
-@pytest.fixture
-def auth_setup(client):
-    from unittest.mock import MagicMock
-
-    admin = MagicMock()
-    admin.id = 1
-    admin.username = "admin"
-    admin.role = "admin"
-    admin.is_superuser = True
-    admin.organization_id = 1
-
-    async def _mock():
-        return admin
-
-    client.app.dependency_overrides[get_current_user] = _mock
-    yield client
+def fresh_db():
+    """模拟「另一台机器」的全新库：内存库中不含管理员机下发的任何记录。"""
+    other_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=other_engine)
+    session = Session(bind=other_engine)
+    yield session
+    session.close()
+    other_engine.dispose()
 
 
 class TestSelfVerifyGuardBranches:
@@ -118,174 +102,83 @@ class TestDeterministicOrgPassCode:
         assert record.pass_code != svc.generate_org_pass_code("派生组织乙")
 
 
-class TestOrgSelfVerifyRegistration:
-    @pytest.fixture(autouse=True)
-    def _enable_self_register(self, monkeypatch):
-        from app.core.config import settings
+class TestCrossMachinePassCodeBinding:
+    """自助注册下线后，跨机器通行码 → 本机建档 → 绑定用户仍必须可用。"""
 
-        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
-
-    def _csrf_login_headers(self, client):
-        r = client.get("/api/v1/auth/csrf-token")
-        token = (r.json().get("data") or {}).get("csrf_token")
-        r = client.post(
-            "/api/v1/auth/login",
-            json={"username": "admin", "password": "zgcZGC733035#"},
-            headers={"X-CSRF-Token": token},
-        )
-        d = r.json()
-        at = (d.get("data") or {}).get("access_token")
-        return {"Authorization": f"Bearer {at}", "X-CSRF-Token": token}
-
-    def test_cross_machine_org_registration(self, auth_setup, db_session):
-        """跨机器组织注册全链：管理员机生成 → 用户机（无记录）凭通行码+单位名注册。"""
+    def test_self_verify_creates_org_and_pending_record(self, db_session, fresh_db):
+        """管理员机生成组织通行码 → 用户机（无记录）凭通行码 + 单位名自验证建档。"""
         org = Organization(name="跨机器组织")
         db_session.add(org)
         db_session.commit()
         db_session.refresh(org)
-
-        # 管理员机生成组织通行码（确定性）
-        svc = MachineCodeService(db_session)
-        record = svc.create_organization_pass_code(org.id, "4321", False, 1)
-        pass_code = record.pass_code
-
-        # 用户"另一台机器"：全新内存库（模拟无管理员记录）
-        other_engine = create_engine(
-            "sqlite:///:memory:",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+        admin_record = MachineCodeService(db_session).create_organization_pass_code(
+            org.id, "4321", False, 1
         )
-        Base.metadata.create_all(bind=other_engine)
-        other_session = Session(bind=other_engine)
-        _orig = auth_setup.app.dependency_overrides[get_db]
 
-        async def _other_db():
-            yield other_session
+        other_svc = MachineCodeService(fresh_db)
+        record = other_svc.self_verify_org_pass_code(admin_record.pass_code, "跨机器组织")
 
-        auth_setup.app.dependency_overrides[get_db] = _other_db
-        try:
-            r = auth_setup.get("/api/v1/auth/csrf-token")
-            token = (r.json().get("data") or {}).get("csrf_token")
-            r = auth_setup.post(
-                "/api/v1/auth/register",
-                json={
-                    "username": "cross_org_user",
-                    "password": "Cr0ss!Org#2026x",
-                    "pass_code": pass_code,
-                    "org_name": "跨机器组织",
-                },
-                headers={"X-CSRF-Token": token},
-            )
-            assert r.status_code == 200, r.text[:300]
-            access = (r.json().get("data") or {}).get("access_token")
-            assert access
+        assert record is not None
+        created_org = (
+            fresh_db.query(Organization).filter(Organization.name == "跨机器组织").first()
+        )
+        assert created_org is not None, "自验证必须在本机创建组织"
+        assert created_org.path == f"/{created_org.id}/"
+        assert record.organization_id == created_org.id
+        assert record.status == "pending"
 
-            # 本机自动建组织 + 用户绑定
-            other_org = (
-                other_session.query(Organization)
-                .filter(Organization.name == "跨机器组织")
-                .first()
-            )
-            assert other_org is not None, "自验证必须在本机创建组织"
-            from app.models.user import User
-
-            user = (
-                other_session.query(User)
-                .filter(User.username == "cross_org_user")
-                .first()
-            )
-            assert user is not None and user.organization_id == other_org.id
-        finally:
-            auth_setup.app.dependency_overrides[get_db] = _orig
-            other_session.close()
-            other_engine.dispose()
-
-    def test_wrong_org_name_rejected(self, auth_setup, db_session):
-        """跨机器场景下单位名不匹配 → 自验证失败 → 400。"""
+    def test_wrong_org_name_rejected(self, db_session, fresh_db):
+        """单位名与通行码不匹配 → 自验证失败，且不得在本机建组织/记录。"""
         org = Organization(name="真名组织")
         db_session.add(org)
         db_session.commit()
         db_session.refresh(org)
-
-        svc = MachineCodeService(db_session)
-        record = svc.create_organization_pass_code(org.id, "4321", False, 1)
-        pass_code = record.pass_code
-
-        # 用户机：独立空库（无管理员记录，强制走自验证路径）
-        other_engine = create_engine(
-            "sqlite:///:memory:",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+        admin_record = MachineCodeService(db_session).create_organization_pass_code(
+            org.id, "4321", False, 1
         )
-        Base.metadata.create_all(bind=other_engine)
-        other_session = Session(bind=other_engine)
-        _orig = auth_setup.app.dependency_overrides[get_db]
 
-        async def _other_db():
-            yield other_session
+        other_svc = MachineCodeService(fresh_db)
+        assert other_svc.self_verify_org_pass_code(admin_record.pass_code, "假名组织") is None
+        assert fresh_db.query(Organization).count() == 0
+        assert fresh_db.query(MachineCode).count() == 0
 
-        auth_setup.app.dependency_overrides[get_db] = _other_db
-        try:
-            r = auth_setup.get("/api/v1/auth/csrf-token")
-            token = (r.json().get("data") or {}).get("csrf_token")
-            r = auth_setup.post(
-                "/api/v1/auth/register",
-                json={
-                    "username": "wrong_org_user",
-                    "password": "Wr0ng!Org#2026x",
-                    "pass_code": pass_code,
-                    "org_name": "假名组织",
-                },
-                headers={"X-CSRF-Token": token},
-            )
-            assert r.status_code == 400, r.text[:200]
-            from app.models.user import User
-
-            assert (
-                other_session.query(User)
-                .filter(User.username == "wrong_org_user")
-                .first()
-                is None
-            ), "自验证失败不得创建用户"
-        finally:
-            auth_setup.app.dependency_overrides[get_db] = _orig
-            other_session.close()
-            other_engine.dispose()
-
-    def test_machine_specific_pass_code_self_verify_across_machine(
-        self, auth_setup, db_session, monkeypatch
-    ):
-        """机器特定通行码跨机器：管理机为 B 机机器码生成，B 机注册经 HMAC 自验证通过。"""
+    def test_machine_pass_code_cross_machine_binding(self, db_session, fresh_db):
+        """管理机为 B 机机器码生成通行码 → B 机凭自身机器码 HMAC 验证并激活绑定。"""
         target_machine_code = "B" * 64
-        svc = MachineCodeService(db_session)
-        svc.create_machine_code_record(target_machine_code, created_by=1)
-
-        from app.models.machine_code import MachineCode
-
-        record = (
+        admin_svc = MachineCodeService(db_session)
+        admin_svc.create_machine_code_record(target_machine_code, created_by=1)
+        admin_record = (
             db_session.query(MachineCode)
-            .filter_by(machine_code=target_machine_code)
+            .filter(MachineCode.machine_code == target_machine_code)
             .first()
         )
-        pass_code = record.pass_code
+        assert admin_record is not None
+        pass_code = admin_record.pass_code
 
-        r = auth_setup.get("/api/v1/auth/csrf-token")
-        token = (r.json().get("data") or {}).get("csrf_token")
+        # B 机：本机无该记录，仅凭机器码 + 共享密钥重算 HMAC 自验证
+        other_svc = MachineCodeService(fresh_db)
+        local_record = other_svc.verify_pass_code(pass_code, target_machine_code)
+        assert local_record is not None, "跨机器 HMAC 自验证必须生成本机记录"
+        assert local_record.status == "pending"
 
-        # 模拟 B 机：注册时 get_machine_code 返回 B 机机器码（而非本机）
-        with patch(
-            "app.services.machine_code_service.MachineCodeService.get_machine_code",
-            staticmethod(lambda: target_machine_code),
-        ):
-            r = auth_setup.post(
-                "/api/v1/auth/register",
-                json={
-                    "username": "cross_mc_user",
-                    "password": "Cr0ss!MC#2026xx",
-                    "pass_code": pass_code,
-                },
-                headers={"X-CSRF-Token": token},
-            )
-        assert r.status_code == 200, r.text[:300]
-        access = (r.json().get("data") or {}).get("access_token")
-        assert access
+        # 账号开通时认领并绑定机器码（原注册流程的 activate 步骤）
+        assert other_svc.activate_machine_code(
+            local_record, user_id=42, current_machine_code=target_machine_code
+        )
+        fresh_db.refresh(local_record)
+        assert local_record.status == "active"
+        assert local_record.user_id == 42
+        assert local_record.machine_code == target_machine_code
+
+    def test_activation_is_atomic_single_claim(self, db_session):
+        """原子认领：同一通行码第二次激活必须失败（并发开户不得双绑）。"""
+        machine_code = "C" * 64
+        svc = MachineCodeService(db_session)
+        record = svc.create_machine_code_record(machine_code, created_by=1)
+
+        assert svc.activate_machine_code(record, user_id=7, current_machine_code=machine_code)
+        assert not svc.activate_machine_code(
+            record, user_id=8, current_machine_code=machine_code
+        )
+        db_session.refresh(record)
+        assert record.user_id == 7

@@ -364,6 +364,9 @@ def confirm_import_permission_package(
     # 同一校验和的权限包重复确认必须显式声明（追加在末尾，避免打乱既有位置参数调用）
     force: bool = False,
     confirm_password: str = Header("", alias="X-Confirm-Password"),
+    # 2026-11-28 产品边界：默认不把包内 user_legacy 的账号级角色/数据范围/权限
+    # 写回 users 表；仅管理员可显式开启（恢复 1.0 全量恢复行为）。
+    apply_legacy_privileges: bool = False,
 ):
     """
     确认导入权限配置包，将所有权限配置写入数据库。
@@ -374,9 +377,21 @@ def confirm_import_permission_package(
     **离线导入场景**: 与 /import 配套,全新系统登录前即可应用权限包
     （管理员在其他机器导出,新机器导入后获得页面访问权限）。
     未登录调用时仅允许本机来源(127.0.0.1/::1),防止远程未授权导入。
+
+    **账号级遗留权限**: `apply_legacy_privileges=false`（默认）时，包内
+    `user_legacy.json` 的 role / data_scope / permissions **不落库**，返回体
+    `legacy_privileges_skipped` 给出跳过数量并在 `warnings` 中说明；只有管理员
+    传 `true` 才恢复 1.0 的账号级恢复行为。
     """
     # SEC-1：确认阶段会重写全库 RBAC，故非超管调用者只允许「收敛后的导入」
     allow_privileged = _assert_package_import_principal(request, current_user, db)
+
+    # 产品边界：遗留权限恢复会改写 users.role/data_scope，仅管理员可显式开启。
+    if apply_legacy_privileges and not is_admin(current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="仅管理员可启用遗留权限恢复（apply_legacy_privileges）",
+        )
 
     # 已登录管理员确认导入会重写全库 RBAC，必须二次确认；
     # 匿名 pristine 首装路径没有密码可验，沿用原有 loopback 门禁。
@@ -402,6 +417,7 @@ def confirm_import_permission_package(
             mode=body.mode,
             allow_privileged=allow_privileged,
             caller=current_user,
+            apply_legacy_privileges=apply_legacy_privileges,
         )
     finally:
         # Clean up the uploaded file after import (success or failure)

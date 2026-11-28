@@ -31,7 +31,12 @@ from app.core.account_package_authz import (
     validate_menu_selection,
 )
 from app.core.config import settings
-from app.core.constants import FACTORY_ADMIN_PASSWORD, FACTORY_ADMIN_USERNAME
+from app.core.constants import (
+    ACCOUNT_PACKAGE_DATA_SCOPES,
+    ACCOUNT_PACKAGE_ROLES,
+    FACTORY_ADMIN_PASSWORD,
+    FACTORY_ADMIN_USERNAME,
+)
 from app.core.security import PasswordPolicy, get_password_hash
 from app.core.transaction import safe_commit
 from app.models.account_package import AccountPackageAttempt, AccountPackageExport, AccountPackageReceipt
@@ -139,7 +144,7 @@ def _build_export_accounts(
             raise AccountPackageBusinessError(f"用户名已存在: {username}", code="AP_USERNAME_TAKEN", status=409)
         role = str(account.get("role") or "user")
         scope = str(account.get("data_scope") or "org")
-        if role not in ("admin", "user", "viewer") or scope not in ("org", "org_children", "self"):
+        if role not in ACCOUNT_PACKAGE_ROLES or scope not in ACCOUNT_PACKAGE_DATA_SCOPES:
             raise AccountPackageBusinessError("账号角色或数据范围非法", code="AP_INVALID_ROLE")
         initial_password = str(account.get("initial_password") or "").strip()
         if initial_password:
@@ -239,7 +244,7 @@ def _validated_accounts(
         seen.add(username)
         role = str(item.get("role") or "user")
         scope = str(item.get("data_scope") or "org")
-        if role not in ("admin", "user", "viewer") or scope not in ("org", "org_children", "self"):
+        if role not in ACCOUNT_PACKAGE_ROLES or scope not in ACCOUNT_PACKAGE_DATA_SCOPES:
             raise AccountPackageBusinessError("账号角色或数据范围非法", code="AP_INVALID_ROLE")
         cleaned.append(
             {

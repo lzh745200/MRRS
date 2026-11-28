@@ -79,14 +79,14 @@ class TestAuthComprehensive:
         assert resp.status_code in (200, 401)  # auth enforcement pending
 
     def test_register_requires_admin(self, client, user_headers):
-        """注册需要有效的通行码，缺少通行码应返回422"""
+        """自助注册已下线，账号只能由管理员或权限包创建"""
         resp = client.post("/api/v1/auth/register", json={
             "username": "hackeruser",
             "email": "hacker@test.com",
             "full_name": "非法用户",
             "password": "Hack@12345",
         }, headers=user_headers)
-        assert resp.status_code == 422  # 缺少 pass_code 字段
+        assert resp.status_code in (404, 405)  # 路由不存在
 
     def test_me_endpoint_returns_user_data(self, client, admin_headers, admin_user):
         """/auth/me 返回当前用户完整信息"""

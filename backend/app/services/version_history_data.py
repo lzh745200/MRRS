@@ -4796,4 +4796,70 @@ VERSION_HISTORY_DATA = [
             "三份 docs/*.pptx 同步到 v1.18.65：版本号、发布日期（2026-11-28）与测试口径（16,156 / 7,592 / 23,748）更新。",
         ],
     },
+    {
+        "version": "1.18.66",
+        "date": "2026-11-28",
+        "description": "账号开通包开箱即用：默认启用、自动签发密钥、指纹确认信任",
+        "features": [
+            (
+                "账号开通包默认启用：ACCOUNT_PACKAGE_ENABLED 默认改为 true，安装后无需再配置环境变量；首次打开「账号开通包」页面或首次签到时自动生成 Ed25519 签发密钥，"
+                "持久化到本机runtime_secrets.json，并派生公钥/指纹，不再要求手工配置 ACCOUNT_PACKAGE_SIGNING_KEY。"
+            ),
+            (
+                "包内嵌签发公钥 + 指纹确认：签名头新增 signer_public_key（参与签名），未预置公钥的机器也能验证包完整性；导入预览返回签发机指纹与 trust_required，目标机必"
+                "须通过独立渠道核对指纹并勾选确认，确认成功后才把该公钥写入本机信任列表，后续同签发机导入不再逐次核对。"
+            ),
+            (
+                "密钥/信任管理接口：GET /account-packages/signing-keys、POST /account-packages/signing-keys/trusted、DELET"
+                "E /account-packages/signing-keys/trusted/{fingerprint}；系统页面新增「本机签发密钥 / 信任签发机」面板，可复制公钥、指纹，增删信任。"
+            ),
+            "预登录导入页支持指纹确认：全新机器在登录前导入账号包时展示签发机指纹，未核对不得确认导入。",
+            (
+                "新增 backend/tests/unit/test_account_package_auto_signing.py（9 例）与跨机信任、API 密钥管理回归；自检 _check_pack"
+                "age_signing 改为读取密钥模块，不再误报缺公钥。"
+            ),
+            "“当前不可签发：账号开通包功能未启用”：根因是默认关闭 + 空签名私钥；现默认启用并自动生成，安装版无需 .env/环境变量即可签发。",
+            "旧包（无内嵌公钥）仍可导入：需预置 ACCOUNT_PACKAGE_PUBKEY 或已信任的签发机公钥；未配置任何公钥时继续 fail-closed 并提示“无法确认账号包来源”。",
+            (
+                "更新 .env.example 与 docs/账号开通包-双机离线演练清单.md：无需环境变量、首次自动生成密钥、指纹核对流程与通过标准；CLAUDE.md 端点/用例数字同步（865 端"
+                "点 / 16,168 用例）。"
+            ),
+            (
+                "后端 16,168 用例收集；账号包/自检相关 89 例、相邻账号包链路 34 例通过；前端账号包与登录前导入 227 例（9 文件）通过，vue-tsc --noEmit、ESLint "
+                "通过。"
+            ),
+        ],
+    },
+    {
+        "version": "1.18.67",
+        "date": "2026-11-28",
+        "description": "角色收敛为四类、下线自助注册、RBAC 边界澄清",
+        "features": [
+            (
+                "固定四类系统角色并单一来源：super_admin（超级管理员）/ admin（系统管理员）/user（普通用户）/ viewer（访客）。中文标签、描述、数据范围与选项统一由backen"
+                "d/app/core/constants.py 的 ROLE_LABELS / ROLE_DESCRIPTIONS / DATA_SCOPES 派生；GET /users/form-opt"
+                "ions 与前端共享同一份数据，页面不再各写一套标签。"
+            ),
+            (
+                "彻底下线自助注册：删除 POST /auth/register 及仅其使用的 helper、SELF_REGISTER_MODE、public-config.self_register_e"
+                "nabled、CSRF/写路由表/路由鉴权白名单；登录页“首次使用”引导改为“机器码 → 权限包 → 管理员开通账号”，通行码只用于机器码绑定/激活，不再出现“注册”措辞。"
+            ),
+            (
+                "RBAC 与账号角色边界：rbac_roles / rbac_user_roles 仅服务权限配置包，不再影响users.role；RBAC 角色名/码禁止占用四类系统角色；管理员判定改为"
+                "按 admin:all 权限，不再凭同名角色；前端 RBAC 页签更名「权限包角色（RBAC）」并说明边界。"
+            ),
+            (
+                "权限包导入默认不写账号级权限：apply_legacy_privileges 默认 false，导入只恢复组织归属，不再直接改 users.role / data_scope / perm"
+                "issions；确需恢复 v1 遗留权限须管理员显式开启（非管理员 403）。数据范围统一为 all / org_children / org / self，own 归一为 self。"
+            ),
+            (
+                "历史角色值清洗：新增迁移 role_normalize_001，将 approval_leader / manager → admin、operator → user、空值 → user，"
+                "data_scope 的 own → self、空值 → org；未知角色原样保留。"
+            ),
+            "前端角色选项：非超管不再看到 super_admin 选项；未知角色 fail-closed 显示「未知角色」，不再误判为管理员；删除无运行时守卫的“功能权限”表单。",
+            "移除死字段 UserUpdate.role_id。",
+            "更新 CLAUDE.md、AGENTS.md、API 文档、数据字典与部署文档中关于注册、角色、权限包的描述。",
+            "本版包含 v1.18.66 的账号开通包开箱即用修复；安装版升级后即可直接签发，无需配置签名环境变量。",
+        ],
+    },
 ]

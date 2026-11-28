@@ -1,7 +1,6 @@
 """
 认证 API 集成测试 — auth flow API changed
 """
-import pytest
 from unittest.mock import patch
 
 
@@ -70,47 +69,16 @@ class TestLogin:
         assert data["data"]["user"]["is_active"] is True
 
 
-class TestRegister:
-    @pytest.fixture(autouse=True)
-    def _enable_self_register(self, monkeypatch):
-        """注册链路用例需显式开启注册（默认 off 由专门用例覆盖）。"""
-        from app.core.config import settings
+class TestRegisterRemoved:
+    """自助注册已下线：端点不存在（账号由管理员或权限包创建）。"""
 
-        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
-
-    """注册接口测试"""
-
-    def test_register_success(self, client):
-        """测试注册端点可访问（FastAPI 并发兼容）"""
-        try:
-            resp = client.post("/api/v1/auth/register", json={
-                "username": "testuser", "email": "test@example.com",
-                "full_name": "测试用户", "password": "Test@123456", "pass_code": "test",
-            })
-            assert resp.status_code in (200, 400, 401, 422)
-        except TypeError:
-            pass  # FastAPI concurrency compatibility
-
-    def test_register_validation_short_password(self, client):
-        """测试注册密码验证（FastAPI 并发兼容）"""
-        try:
-            resp = client.post("/api/v1/auth/register", json={
-                "username": "testuser2", "email": "test2@example.com",
-                "full_name": "测试用户2", "password": "short", "pass_code": "test",
-            })
-            assert resp.status_code in (422, 400)
-        except TypeError:
-            pass  # FastAPI concurrency compatibility
-
-    def test_register_without_auth(self, client):
-        """未提供有效通行码注册应返回 422（缺少必需字段）"""
+    def test_register_endpoint_absent(self, client):
         resp = client.post("/api/v1/auth/register", json={
-            "username": "noauth",
-            "email": "noauth@example.com",
-            "full_name": "无权用户",
-            "password": "NoAuth@123",
+            "username": "testuser", "email": "test@example.com",
+            "full_name": "测试用户", "password": "Test@123456", "pass_code": "test",
         })
-        assert resp.status_code == 422  # 缺少 pass_code 字段
+        # 路由已删除：404（不存在）/ 405（方法不允许），绝不是业务 403
+        assert resp.status_code in (404, 405)
 
 
 class TestLogout:

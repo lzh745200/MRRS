@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "帮扶管理信息系统"
     # 优先从环境变量 PROJECT_VERSION 读取（Electron 从 package.json 注入），
     # 未设置时使用硬编码默认值
-    PROJECT_VERSION: str = "1.18.66"
+    PROJECT_VERSION: str = "1.18.67"
     API_PREFIX: str = "/api/v1"
     SECRET_KEY: str = ""  # 自动生成并持久化到 runtime_secrets.json（无需手动配置）
     ALGORITHM: str = "HS256"
@@ -105,17 +105,13 @@ class Settings(BaseSettings):
     # 密钥派生方式: "pbkdf2" (PBKDF2-SHA256, 200000迭代, 推荐) | "raw" (直接使用密钥)
     ENCRYPTION_KEY_DERIVATION: str = "pbkdf2"
 
-    # 通行码 HMAC 自验证密钥（跨机器注册，ADR-0004 / W1 不变量 #5）。
-    # 多实例部署若需“管理员在 A 机为 B 机签发通行码、用户在 B 机自助注册”，
+    # 通行码 HMAC 自验证密钥（跨机器通行码校验，ADR-0004 / W1 不变量 #5）。
+    # 多实例部署若需「管理员在 A 机为 B 机签发通行码、B 机校验通行码并绑定机器码」，
     # 必须在所有实例配置同一密钥。与 ENCRYPTION_KEY 不同，此密钥不可每机自动生成
     # （跨机验证要求共享同一秘密），故仅提供配置入口，缺失时启动告警而不自动派生。
     #
-    # 安全基线（W24 决策 2026-10-19，与 ENVIRONMENT 无关）：
-    #   **留空 + 非回环来源的自助注册 = fail-closed 403**（api/v1/auth/auth.py 的
-    #   _enforce_register_source_gate）。原因：留空时 HMAC 用随安装包分发的内置常量
-    #   密钥，掌握安装包者可离线为自己机器计算通行码、绕过管理员开户自助注册。
-    #   回环来源（单机桌面开箱，HOST=127.0.0.1）不受影响，保持原行为；
-    #   已配置本密钥的部署行为完全不变（保留 R9 跨机注册产品能力）。
+    # 留空时回退到随安装包分发的内置常量密钥（仅够单机使用，掌握安装包者可离线
+    # 计算通行码）；多机 / 上下级 / 介质传输部署应在所有实例显式配置同一随机密钥。
     PASS_CODE_SECRET: str = ""
 
     # 数据库连接池配置
@@ -163,8 +159,6 @@ class Settings(BaseSettings):
     BCRYPT_ROUNDS: int = 12  # OWASP 建议 12 轮以上
     PASSWORD_EXPIRE_DAYS: int = 90  # 密码有效期（天）
     CONFIRM_PASSWORD_ENFORCED: bool = True  # 高风险操作二次确认（测试环境跳过，生产默认开启）
-    # 自助注册开关：off（默认；单机 + 上下级 + 介质传输场景推荐）/ controlled（允许凭通行码注册）
-    SELF_REGISTER_MODE: str = "off"
     MAX_FAILED_LOGIN_ATTEMPTS: int = 5  # 最大登录失败次数
     ACCOUNT_LOCKOUT_MINUTES: int = 30  # 账户锁定时长（分钟）
 
@@ -436,21 +430,19 @@ class Settings(BaseSettings):
             logging.getLogger(__name__).error(f"加载加密密钥失败: {e}，回退到环境变量")
 
     def _warn_missing_pass_code_secret(self) -> None:
-        """ADR-0004 / W24：未配置 PASS_CODE_SECRET 的部署告警（启动期，仅 production）。
+        """ADR-0004：未配置 PASS_CODE_SECRET 的部署告警（启动期，仅 production）。
 
-        安全基线（2026-10-19 决策，与 ENVIRONMENT 无关）：非回环来源的自助注册在
-        未配置本密钥时 fail-closed 403（见 api/v1/auth/auth.py 的来源门禁）；回环来源
-        （单机桌面开箱）不受影响。此密钥不可像 ENCRYPTION_KEY 那样每机自动生成
-        （跨机验证要求多实例共享同一秘密），故仅告警提示部署方按需显式配置。
+        PASS_CODE_SECRET 仍用于跨机器通行码的 HMAC 自验证（machine_code_service）。
+        留空时回退到随安装包分发的内置常量密钥：单机可用，但多机 / 上下级 /
+        介质传输部署应显式配置同一随机密钥，否则签发的通行码无法跨机校验。
         """
         if self.ENVIRONMENT == "production" and not self.PASS_CODE_SECRET:
             import logging
 
             logging.getLogger(__name__).warning(
-                "PASS_CODE_SECRET 未配置：非回环来源的自助注册已 fail-closed 拒绝"
-                "（W24 2026-10-19 安全基线）；跨机器注册若需保留，"
-                "请在所有实例统一配置同一随机 PASS_CODE_SECRET。"
-                "回环来源（单机桌面开箱）不受影响。"
+                "PASS_CODE_SECRET 未配置：跨机器通行码校验将回退到内置常量密钥；"
+                "多机 / 上下级 / 介质传输部署请在所有实例统一配置同一随机 PASS_CODE_SECRET。"
+                "单机桌面开箱不受影响。"
             )
 
     def model_post_init(self, __context) -> None:

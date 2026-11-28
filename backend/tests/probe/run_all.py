@@ -16,7 +16,7 @@ from pathlib import Path
 PROBE_DIR = Path(__file__).resolve().parent
 
 PROBES = [
-    ("r1", "probe_r1_passcode_register.py", "通行码注册/refresh 轮换/异步导出/权限包/数据同步"),
+    ("r1", "probe_r1_passcode_register.py", "refresh 轮换/异步导出/权限包/数据同步（组织通行码绑定；自助注册已下线）"),
     ("r2", "probe_r2_approval_reports_map.py", "审批流/报表模板/地图离线瓦片/消息待办/监控健康"),
     ("r3", "probe_r3_funds_state_yearly_rbac.py", "经费状态机/村年度板块/RBAC/系统配置调度/数据包链"),
     ("r4", "probe_r4_policy_school_worklog_2fa.py", "政策/学校/项目/工作日志/通知/2FA/资料/订阅/模板上传"),

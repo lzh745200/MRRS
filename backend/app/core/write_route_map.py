@@ -34,7 +34,6 @@ EXEMPT_PREFIXES: tuple = (
     "/api/v1/auth/change-password",
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/verify-2fa",
-    "/api/v1/auth/register",         # 公开注册（是否放开由业务开关控制，与单位授权无关）
     "/api/v1/feedback",              # 匿名可提交，无单位归属
     "/api/v1/org-grants/import",     # 授权包导入：自举路径，被拦则无法更新授权
     "/api/v1/control-packages/import",

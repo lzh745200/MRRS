@@ -11,7 +11,7 @@ const OUT = path.resolve('../.scratch/w26-fix/shots')
 fs.mkdirSync(OUT, { recursive: true })
 
 const cfg = {
-  data: { self_register_enabled: true, lockout_minutes: 30, max_failed_attempts: 5 },
+  data: { lockout_minutes: 30, max_failed_attempts: 5 },
 }
 
 const results = []
@@ -91,17 +91,19 @@ async function open(opts = {}) {
   const subSize = await page.locator('.brand-subtitle').evaluate((el) => parseFloat(getComputedStyle(el).fontSize))
   check('品牌标题字号 > 副标题', titleSize > subSize, `title=${titleSize} sub=${subSize}`)
 
-  // 注册入口存在（配置开启）
+  // 首次使用引导三步齐全（系统不提供自助注册）
   await page.click('.first-use-toggle')
   await page.waitForTimeout(250)
+  const stepTitles = await page.locator('.step-title').allTextContents()
   const stepBtns = await page.locator('.step-btn').allTextContents()
   check(
     '首次使用引导三步齐全',
-    stepBtns.some((t) => t.includes('机器码')) &&
-      stepBtns.some((t) => t.includes('权限包')) &&
-      stepBtns.some((t) => t.includes('注册')),
-    stepBtns.map((t) => t.trim()).join(' | ')
+    stepTitles.some((t) => t.includes('机器码')) &&
+      stepTitles.some((t) => t.includes('权限包')) &&
+      stepTitles.some((t) => t.includes('管理员开通')),
+    stepTitles.map((t) => t.trim()).join(' | ')
   )
+  check('引导不再出现注册入口', !stepBtns.some((t) => t.includes('注册')), stepBtns.map((t) => t.trim()).join(' | '))
   const bullets = await page.locator('.first-use-steps li').count()
   check('引导为 3 条编号步骤', bullets === 3, `li=${bullets}`)
 
@@ -155,7 +157,7 @@ async function open(opts = {}) {
   await page.close()
 }
 
-// ── fail-closed ───────────────────────────────────────
+// ── 公开配置失败：登录页仍可用，且不暴露注册入口 ─────
 {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
   await page.route('**/api/v1/auth/public-config*', (r) => r.abort())
@@ -165,7 +167,7 @@ async function open(opts = {}) {
   await page.waitForTimeout(300)
   const regBtn = await page.locator('.step-btn', { hasText: '注册账户' }).count()
   const note = (await page.locator('.step-note').first().textContent()) || ''
-  check('配置失败 → 注册入口隐藏并给说明', regBtn === 0 && note.includes('联系管理员'), note.trim())
+  check('配置失败 → 无注册入口且账号说明可读', regBtn === 0 && note.includes('联系管理员'), note.trim())
   await page.screenshot({ path: path.join(OUT, '05-fail-closed.png') })
   await page.close()
 }

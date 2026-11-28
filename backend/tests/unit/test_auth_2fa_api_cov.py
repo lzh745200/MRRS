@@ -9,8 +9,6 @@ Mock 风格与 test_auth_auth_api.py 保持一致。
 
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
-
 
 def _make_user(**kwargs):
     user = Mock()
@@ -261,7 +259,6 @@ from datetime import datetime, timedelta, timezone  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
 import app.api.v1.auth.auth as auth_mod  # noqa: E402
-from app.core.exceptions import UserAlreadyExistsError  # noqa: E402
 
 
 class TestHandleFailedLoginLockout:
@@ -369,43 +366,3 @@ class TestLogoutDirectCall:
         assert result == {"code": 200, "message": "登出成功"}
         mock_tm.revoke_token.assert_any_call("badtoken")
         mock_tm.revoke_token.assert_any_call("rt2")
-
-
-class TestRegisterCreateUserReraise:
-    @pytest.fixture(autouse=True)
-    def _enable_self_register(self, monkeypatch):
-        """这些用例验证注册业务分支，需显式开启（默认 off 由专门用例覆盖）。"""
-        from app.core.config import settings
-
-        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
-
-    """try 块内 create_user 抛 UserAlreadyExistsError → except 透传（836 行）"""
-
-    prefix = "/api/v1/auth"
-
-    @patch("app.api.v1.auth.auth.check_rate_limit", new_callable=AsyncMock)
-    @patch("app.api.v1.auth.auth.get_client_ip", return_value="127.0.0.1")
-    @patch("app.api.v1.auth.auth.PasswordPolicy")
-    @patch("app.services.machine_code_service.MachineCodeService")
-    @patch("app.api.v1.auth.auth.UserService")
-    def test_create_user_raises_reraises(
-        self, mock_usr_svc, mock_mc_cls, mock_policy, mock_ip, mock_rl, client
-    ):
-        mock_rl.return_value = True
-        mock_policy.validate_username.return_value = (True, "")
-        mock_policy.validate.return_value = (True, "")
-        mc_instance = Mock()
-        mc_instance.get_machine_code.return_value = "mcode123"
-        mc_instance.verify_pass_code.return_value = Mock()
-        mock_mc_cls.return_value = mc_instance
-        usr_instance = Mock()
-        usr_instance.get_user_by_username.return_value = None
-        usr_instance.get_user_by_email.return_value = None
-        usr_instance.create_user.side_effect = UserAlreadyExistsError("newuser")
-        mock_usr_svc.return_value = usr_instance
-
-        response = client.post(
-            f"{self.prefix}/register",
-            json={"username": "newuser", "password": "Str0ng!Pass123", "pass_code": "code123"},
-        )
-        assert response.status_code == 409

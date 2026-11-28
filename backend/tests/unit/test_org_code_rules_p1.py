@@ -152,35 +152,8 @@ class TestOrganizationCodeRules:
         assert dup.status_code == 400
 
 
-# ── 3. 注册开关与公开配置 ─────────────────────────────────────────────
-class TestSelfRegisterGate:
-    def test_register_closed_by_default(self, client, monkeypatch):
-        from app.api.v1.auth import auth as auth_module
-
-        async def _allow(**_kwargs):
-            return True
-
-        monkeypatch.setattr(auth_module, "check_rate_limit", _allow)
-        monkeypatch.setattr(auth_module, "get_client_ip", lambda _r: "127.0.0.1")
-        resp = client.post(
-            "/api/v1/auth/register",
-            json={"username": "newbie", "password": "Str0ng!Pass123", "pass_code": "x"},
-        )
-        assert resp.status_code == 403
-        assert "自助注册" in resp.text
-
-    def test_public_config_reflects_mode(self, client, monkeypatch):
-        from app.core.config import settings
-
-        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "off", raising=False)
-        off = client.get("/api/v1/auth/public-config")
-        assert off.status_code == 200
-        assert off.json()["data"]["self_register_enabled"] is False
-
-        monkeypatch.setattr(settings, "SELF_REGISTER_MODE", "controlled", raising=False)
-        on = client.get("/api/v1/auth/public-config")
-        assert on.json()["data"]["self_register_enabled"] is True
-
+# ── 3. 登录页公开配置（注册已下线）─────────────────────────────────────────────
+class TestPublicConfig:
     def test_public_config_exposes_lockout_policy(self, client, monkeypatch):
         """W27 登录页 UI：前端需要锁定策略才能显示倒计时。
 
@@ -204,7 +177,13 @@ class TestSelfRegisterGate:
     def test_public_config_does_not_leak_org_identity(self, client):
         """登录前不泄露部署单位身份，也不返回不存在的"全局 2FA"字段。"""
         data = client.get("/api/v1/auth/public-config").json()["data"]
-        for forbidden in ("org_name", "org_code", "organization", "two_factor_required"):
+        for forbidden in (
+            "self_register_enabled",
+            "org_name",
+            "org_code",
+            "organization",
+            "two_factor_required",
+        ):
             assert forbidden not in data
 
 

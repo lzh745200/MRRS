@@ -1,8 +1,8 @@
 {
-  "version": "1.18.66",
+  "version": "1.18.67",
   "build": "20261128",
   "release_date": "2026-11-28",
-  "description": "权限闭环：矩阵按角色收窄、数据范围统一、账号首登改密",
+  "description": "角色收敛为四类、下线自助注册、RBAC 边界澄清",
   "features": [
     "安装 TEMP 兜底：Helper 同目录查找 + Install-MRRS.cmd；",
     "刷新令牌统一为 30 天长期会话；",

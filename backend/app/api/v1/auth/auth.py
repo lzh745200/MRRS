@@ -3,9 +3,10 @@
 
 提供用户认证相关的API接口，包括：
 - 用户登录
-- 用户注册
 - 令牌刷新
 - 登出
+
+账号不再支持自助注册：账号由管理员或权限包创建。
 """
 
 import logging
@@ -20,18 +21,16 @@ from app.core.constants import normalize_role
 from app.core.database import get_db
 from app.core.response import success_response
 from app.core.transaction import safe_commit
-from app.core.exceptions import InvalidCredentialsError, UserAlreadyExistsError
-from app.core.exceptions import ValidationError as BizValidationError
-from app.core.security import PasswordPolicy, build_auth_claims, check_rate_limit, get_client_ip
+from app.core.exceptions import InvalidCredentialsError
+from app.core.security import build_auth_claims, check_rate_limit, get_client_ip
 from app.core.security import enforce_credential_not_expired
 from app.core.security import get_current_user as _get_current_user
 from app.core.security import is_local_request
 from app.core.security import verify_password
 from app.core.token_manager import token_manager
 from app.schemas.auth import LoginData, LoginRequest, LoginResponse, TwoFactorLoginVerifyRequest, UserInfo
-from app.schemas.user import UserCreate
 from app.services.user_service import UserService
-from app.utils.audit_logger import AuditAction, AuditLevel, AuditLogger
+from app.utils.audit_logger import AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +56,6 @@ def _user_info_is_superuser(user) -> bool:
 # 登录专用速率限制参数：同一 IP 每分钟最多 5 次
 _LOGIN_RATE_LIMIT = 5
 _LOGIN_RATE_WINDOW = 60  # 秒
-
-# 注册专用速率限制参数：同一 IP 每分钟最多 3 次
-_REGISTER_RATE_LIMIT = 3
-_REGISTER_RATE_WINDOW = 60  # 秒
 
 # Token刷新速率限制参数：同一 IP 每分钟最多 10 次
 _REFRESH_RATE_LIMIT = 10
@@ -90,58 +85,6 @@ def _check_account_lockout(
     from app.services.lockout_service import get_lockout_service
     svc = get_lockout_service()
     svc.check_locked(user, username, db, now=now)
-
-
-# ── 注册来源门禁（W24 安全决策，2026-10-19，Lead 拍板）──
-# 背景（P1-5 审计）：未配置 PASS_CODE_SECRET 时，通行码 HMAC 使用随安装包分发的
-# 内置常量密钥；掌握安装包者可离线为自己的机器计算通行码，绕过管理员开户，
-# 自助注册 is_active=True 账号。
-# 决策：保留跨机注册产品能力（R9），但「非回环来源 + 未配置密钥」fail-closed；
-# 回环来源（单机桌面开箱）行为不变；已配置 PASS_CODE_SECRET 的部署行为完全不变。
-# 来源判定复用 core.security.get_client_ip：默认只取 TCP 对端地址，绝不信任可伪造
-# 的 X-Forwarded-For（否则伪造 127.0.0.1 即可绕过本门禁）；仅当部署显式配置
-# TRUST_PROXY_HEADERS=True（可信反向代理之后）才按代理头解析真实来源。
-# "testclient" 是 Starlette TestClient 的对端 host，与 middleware/request_logger 的
-# _DEFAULT_TRUSTED_PROXIES 口径一致（既有注册用例全部经 TestClient 驱动，
-# 不纳入会被整体误拦）。
-_REGISTER_LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "testclient"})
-
-
-def _is_local_register_source(request: Request) -> bool:
-    """自助注册来源是否为本机（受信回环 / TestClient）。"""
-    return get_client_ip(request) in _REGISTER_LOCAL_HOSTS
-
-
-def _enforce_register_source_gate(request: Request, username: str, pass_code_secret: str) -> None:
-    """注册来源门禁：非回环来源 + 未配置 PASS_CODE_SECRET → 403（fail-closed）。
-
-    独立成函数的原因：① 安全判定可独立单测；② 不给 register_user 增加分支
-    （该端点 C901 复杂度已 13，flake8 阈值为 16）。
-    """
-    if _is_local_register_source(request) or pass_code_secret:
-        return
-    client_ip = get_client_ip(request)
-    logger.warning(
-        "拒绝非本机自助注册（未配置 PASS_CODE_SECRET）: username=%s ip=%s",
-        username,
-        client_ip,
-    )
-    AuditLogger.log(
-        action=AuditAction.REGISTER_DENIED_UNTRUSTED,
-        username=username,
-        resource_type="auth",
-        details={
-            "reason": "non_loopback_register_without_pass_code_secret",
-            "client_ip": client_ip,
-        },
-        level=AuditLevel.WARNING,
-        ip_address=client_ip,
-        user_agent=request.headers.get("user-agent"),
-    )
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="服务器未配置 PASS_CODE_SECRET，禁止非本机自助注册，请联系管理员",
-    )
 
 
 router = APIRouter(prefix="/auth", tags=["认证"])
@@ -182,34 +125,6 @@ def _handle_failed_login(
         failure_reason=f"{failure_reason}（失败{failed_count}次）",
     )
     return failed_count
-
-
-def _discard_orphan_user(db, user) -> None:
-    """清除注册失败后残留的半成品用户（W15 深审 #3）。
-
-    UserService.create_user 内部自行提交（safe_commit + refresh），注册流程
-    后续步骤（通行码认领、组织绑定、令牌签发）失败时无法整体回滚事务，
-    会在 users 表留下无通行码绑定的孤儿账号。这里显式回滚并删除该用户，
-    使注册具备"全成功或全不落库"的原子语义。
-    """
-    if user is None:
-        return
-    try:
-        db.rollback()
-    except Exception:
-        logger.debug("注册失败清理：回滚会话失败", exc_info=True)
-    try:
-        db.delete(user)
-        safe_commit(db)
-        logger.info("已清理注册失败的孤儿账号: id=%s", getattr(user, "id", None))
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            logger.debug("注册失败清理：二次回滚失败", exc_info=True)
-        logger.error(
-            "清理注册失败的孤儿账号失败: id=%s", getattr(user, "id", None), exc_info=True,
-        )
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -934,210 +849,19 @@ async def get_csrf_token(request: Request, response: Response) -> dict:
 async def public_config() -> Any:
     """登录页需要的公开配置（**不含任何敏感信息**，可公开）。
 
-    W27 登录页 UI 优化：原实现只返回 ``self_register_enabled``，导致两个实际缺陷：
+    产品不提供自助注册（账号由管理员或权限包创建），故本端点**不再**返回
+    ``self_register_enabled``。只保留登录页必需的**非敏感**策略参数：
 
-    1. **注册入口死链** —— 前端从不调用本端点，"注册账户"永远显示，
-       而 ``SELF_REGISTER_MODE`` 默认 ``"off"``，点进去必然被拒；
-    2. **锁定/限流没有倒计时** —— 后端返回 ``423 账户已锁定，请X分钟后再试``
-       与 ``429 登录尝试过于频繁``，但前端无法得知锁定*时长*与*阈值*，
-       只能干巴巴显示一行字，用户不知道还要等多久、再错几次会被锁。
-
-    故补两个**非敏感**字段（纯策略参数，登录前本就该可见）：
-    ``lockout_minutes`` / ``max_failed_attempts``。
+    ``lockout_minutes`` / ``max_failed_attempts`` —— 后端会返回
+    ``423 账户已锁定，请X分钟后再试`` 与 ``429 登录尝试过于频繁``，
+    前端据此显示锁定倒计时与剩余尝试次数。
 
     刻意**不**返回的字段（避免"看着有、其实假"）：
     * 单位名称 / 单位码等组织信息 —— 登录前不泄露部署单位身份；
     * 全局"是否强制 2FA" —— 本系统 2FA 是**按用户**开启（``users.two_factor_enabled``），
       不存在全局开关；硬造一个恒为 false 的字段只会误导调用方。
     """
-    mode = str(getattr(_settings, "SELF_REGISTER_MODE", "off")).lower()
     return success_response(data={
-        "self_register_enabled": mode == "controlled",
         "lockout_minutes": int(_LOCKOUT_MINUTES),
         "max_failed_attempts": int(_MAX_FAILED_ATTEMPTS),
     })
-
-
-@router.post("/register", response_model=LoginResponse)
-async def register_user(
-    request: Request,
-    username: str = Body(..., description="用户名"),
-    password: str = Body(..., description="密码"),
-    pass_code: str = Body(..., description="通行码（激活码）"),
-    full_name: Optional[str] = Body(None, description="姓名"),
-    email: Optional[str] = Body(None, description="邮箱"),
-    org_name: Optional[str] = Body(None, description="单位名称（组织通行码跨机器注册时填写）"),
-    db: Session = Depends(get_db),
-) -> Any:
-    """用户注册（通过通行码）
-
-    普通用户可以使用管理员提供的通行码进行注册。
-    注册成功后，用户账户将绑定到当前机器。
-
-    Args:
-        username: 用户名
-        password: 密码
-        pass_code: 通行码（由管理员生成）
-        full_name: 姓名（可选）
-        email: 邮箱（可选）
-        db: 数据库会话
-
-    Returns:
-        LoginResponse: 注册成功后返回的访问令牌
-
-    Raises:
-        HTTPException: 通行码无效、用户名已存在、密码不符合策略
-    """
-    from app.services.machine_code_service import MachineCodeService
-
-    # 注册速率限制
-    client_ip = get_client_ip(request)
-    is_allowed = await check_rate_limit(
-        key=f"register:{client_ip}",
-        request=request,
-        limit=_REGISTER_RATE_LIMIT,
-        window=_REGISTER_RATE_WINDOW,
-    )
-    if not is_allowed:
-        logger.warning("注册速率限制触发: IP=%s", client_ip)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="注册尝试过于频繁，请稍后再试",
-        )
-
-    # ── 来源门禁（W24 安全决策，2026-10-19）──
-    # 非回环来源 + 未配置 PASS_CODE_SECRET → 403（详见 _enforce_register_source_gate）。
-    _enforce_register_source_gate(request, username, _settings.PASS_CODE_SECRET)
-    # 自助注册默认关闭：单机 + 介质传输场景下，账号应由管理员创建
-    if str(getattr(_settings, "SELF_REGISTER_MODE", "off")).lower() != "controlled":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="系统已关闭自助注册，请联系管理员创建账号",
-        )
-
-    # 用户名验证
-    is_valid, msg = PasswordPolicy.validate_username(username)
-    if not is_valid:
-        raise BizValidationError(message=msg, field="username")
-
-    # 密码验证（传入用户名做弱密码检查）
-    is_valid, msg = PasswordPolicy.validate(password, username=username)
-    if not is_valid:
-        raise BizValidationError(message=msg, field="password")
-
-    # 获取当前机器码
-    machine_service = MachineCodeService(db)
-    current_machine_code = machine_service.get_machine_code()
-
-    # 验证通行码（去除首尾空白，防止复制粘贴带入空格）
-    machine_record = machine_service.verify_pass_code(pass_code.strip(), current_machine_code)
-    if not machine_record and org_name:
-        # 组织通行码跨机器自验证：下级单位机器本地库无管理员生成的记录，
-        # 凭"通行码 + 单位名称"重算确定性通行码比对，本机自动建组织与记录
-        machine_record = machine_service.self_verify_org_pass_code(
-            pass_code, org_name
-        )
-    if not machine_record:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "通行码无效或已被使用。请核对：①通行码需完整输入（连字符可省略）；"
-                "②每个通行码仅可激活一台机器；③组织通行码跨机器注册请填写单位名称；"
-                "④机器通行码请确认已将注册机器的机器码提供给管理员生成通行码。"
-            ),
-        )
-
-    user_service = UserService(db)
-
-    # 检查用户名是否已存在
-    if user_service.get_user_by_username(username):
-        raise UserAlreadyExistsError(username)
-
-    # 检查邮箱唯一性
-    if email and user_service.get_user_by_email(email):
-        raise BizValidationError(message="该邮箱已被注册", field="email")
-
-    # 跟踪已落库的注册用户：任何后续步骤失败都要把它清掉（W15 深审 #3）
-    created_user = None
-
-    try:
-        # 创建用户数据
-        user_create = UserCreate(
-            username=username,
-            password=password,
-            email=email or f"{username}@local.system",
-            full_name=full_name or username,
-            role_id=None,
-            is_active=True,
-            is_superuser=False,
-        )
-
-        # 创建新用户（create_user 期望 dict；model_dump 转换 pydantic 对象）
-        user = user_service.create_user(user_create.model_dump())
-        created_user = user
-
-        # 激活机器码（绑定到用户；组织通行码记录的 machine_code 是占位串，
-        # 必须改绑为注册机器的真实机器码，否则登录侧机器校验恒拒绝）
-        # 原子认领：返回 False 表示通行码已被并发注册抢先激活——
-        # 交由统一异常清理删除刚创建的用户（create_user 内部已提交）并返回 400
-        claimed = machine_service.activate_machine_code(
-            machine_record, user.id, current_machine_code=current_machine_code
-        )
-        if not claimed:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="通行码已被使用（可能被并发注册抢先激活），请重新获取通行码",
-            )
-
-        # 如果通行码关联了组织，自动绑定用户到该组织
-        if machine_record.organization_id:
-            user.organization_id = machine_record.organization_id
-            safe_commit(db)
-            logger.info(
-                "用户 %s 已自动绑定到组织 id=%s",
-                user.username,
-                machine_record.organization_id,
-            )
-
-        # 创建双 Token（注册即登录语义：LoginResponse 契约与 /auth/login 对齐，
-        # 带可轮换 refresh_token，否则新用户「记住登录」持久化 refresh 分支恒缺失）
-        tokens = token_manager.create_token_pair(
-            user.username,
-            extra_claims=build_auth_claims(user),
-        )
-        access_token = tokens["access_token"]
-        refresh_token_str = tokens["refresh_token"]
-
-        user_info = UserInfo(
-            id=user.id,
-            username=user.username,
-            email=user.email,
-            full_name=user.full_name,
-            role=user.role or "user",
-            is_active=user.is_active if user.is_active is not None else True,
-            is_superuser=_user_info_is_superuser(user),
-            allowed_menus=getattr(user, "allowed_menus_list", None),
-            allowed_menus_list=getattr(user, "allowed_menus_list", None),
-        )
-
-        logger.info(f"用户注册成功: username={username}, machine_code={current_machine_code[:16]}...")
-
-        return LoginResponse(
-            code=200,
-            data=LoginData(access_token=access_token, token_type="bearer", user=user_info),
-            message="注册成功",
-            refresh_token=refresh_token_str,
-        )
-
-    except (HTTPException, UserAlreadyExistsError, BizValidationError):
-        # 业务性失败（含并发认领失败）同样必须清除已落库的半成品用户
-        _discard_orphan_user(db, created_user)
-        raise
-    except Exception as e:
-        # 原子性：注册链路上任何非预期异常都回滚并删除已创建用户，不留孤儿账号
-        _discard_orphan_user(db, created_user)
-        logger.error("注册用户失败: %s", e, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="注册失败，请稍后重试",
-        )

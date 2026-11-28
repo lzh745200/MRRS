@@ -9,16 +9,16 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 from app.core.transaction import safe_commit
-from app.core.constants import ALL_ROLES
+from app.core.constants import ALL_ROLES, DATA_SCOPES
 
 logger = logging.getLogger(__name__)
 
-# 校验用完整角色集合（含兼容的历史角色值）
+# 校验用完整角色集合（仅 4 个合法值；历史值由调用入口 normalize_role 归一化）
 VALID_ROLES = list(ALL_ROLES)
 
-# 数据范围四值（与 app/api/v1/auth/users.py 的 VALID_SCOPES 同口径）。
+# 数据范围四值（单一源 constants.DATA_SCOPES）。
 # 账号开通包导入时必须重新校验，不信任包内声明（见 deliverables/账号开通包实施方案.md §十六-5/6）。
-VALID_DATA_SCOPES = ("all", "org", "org_children", "self")
+VALID_DATA_SCOPES = DATA_SCOPES
 
 _BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2y$")
 
