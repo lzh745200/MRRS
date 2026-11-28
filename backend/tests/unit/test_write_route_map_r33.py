@@ -100,6 +100,24 @@ class TestUnmappedRoutes:
         routes = [SimpleNamespace(methods={"POST"}, path="/api/v1/funds")]
         assert unmapped_write_routes(routes) == []
 
+    def test_account_package_bootstrap_routes_exempt(self):
+        """账号开通包是自举路径：登录前导入没有用户可归属单位，签发/撤销仅超管。
+
+        不豁免的话，守卫切到 enforce 后这四个写接口会被判"未配置模块授权映射"而拒绝，
+        `scripts/report_unmapped_write_routes.py` 也无法清零。
+        """
+        from app.core.write_route_map import is_exempt
+
+        for path in (
+            "/api/v1/account-packages/preview",
+            "/api/v1/account-packages/confirm",
+            "/api/v1/account-packages/export",
+            "/api/v1/account-packages/abc/revoke",
+        ):
+            assert is_exempt(path)
+        # 按路径边界匹配：相似前缀不得被顺带豁免
+        assert not is_exempt("/api/v1/account-packages-extra/confirm")
+
 
 class TestRuleTable:
     def test_rules_are_unique_prefixes(self):

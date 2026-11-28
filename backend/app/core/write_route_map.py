@@ -38,6 +38,9 @@ EXEMPT_PREFIXES: tuple = (
     "/api/v1/feedback",              # 匿名可提交，无单位归属
     "/api/v1/org-grants/import",     # 授权包导入：自举路径，被拦则无法更新授权
     "/api/v1/control-packages/import",
+    # 账号开通包：全新机器在登录前导入（没有用户可归属单位，无法受矩阵约束），
+    # 签发/撤销仅超管（矩阵本就对其豁免），已初始化机器的导入另有管理员 + 二次确认把关。
+    "/api/v1/account-packages",
     "/api/v1/health",
     "/health",
 )
