@@ -1389,7 +1389,32 @@ def _get_user_accessible_menu_keys(user: User, db: Session, matrix=None) -> set[
     if matrix is None:
         matrix = get_grant_matrix(db, user)
     if matrix.active:
-        keys = matrix.visible_keys()
+        visible = matrix.visible_keys()
+        # T05：矩阵是上级对单位的授权上限，单位内再按角色收窄 ——
+        # 普通用户不应看到管理员专属页面（接口层本就有角色校验，菜单全量下发
+        # 只会制造"看得见点不动"的假入口）。沿用角色默认同一套 roles 口径。
+        role_keys = _get_role_default_menu_keys(user.role)
+        role = normalize_role(user.role)
+
+        def _role_ok(entry: dict[str, Any]) -> bool:
+            allowed_roles = entry.get("roles")
+            return allowed_roles is None or role in allowed_roles
+
+        keys = {k for k in visible if k in role_keys or k == _DASHBOARD_MENU_KEY}
+        for entry in MENU_DEFINITIONS:
+            kind = entry.get("kind")
+            if kind == "group" and entry["key"] in visible:
+                # 组 key 被勾选 → children 按各自 roles 下发（组本身 roles 只约束
+                # 角色默认路径；矩阵路径下与 _filter_entry 的"任一 child 可见即组可见"对齐）
+                for child in entry.get("children") or []:
+                    if _role_ok(child):
+                        keys.add(child["key"])
+            elif kind == "console" and entry["key"] in visible:
+                # 控制台整页勾选 → 全部子页签可见（既有语义），但 admin 专属 tab
+                # 不得漏给普通用户
+                for tab in entry.get("tabs") or []:
+                    if _role_ok(tab):
+                        keys.add(tab["key"])
         # 工作台是登录后的落地页，缺了会白屏，故恒定可见
         keys.add(_DASHBOARD_MENU_KEY)
         # getattr 兜底（与 auth.py 的 allowed_menus_list 口径一致）：该端点是

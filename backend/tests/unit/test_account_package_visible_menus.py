@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 import app.models as models
 from app.api.v1.menus import (
+    MENU_DEFINITIONS,
     _PUBLIC_ACCESS_KEYS,
     _build_sections,
     _get_role_default_menu_keys,
@@ -126,11 +127,19 @@ def test_checked_pages_decide_imported_account_menus(tmp_path):
     for username in ("unit_admin", "staff"):
         user = target.query(User).filter(User.username == username).first()
         keys = _get_user_accessible_menu_keys(user, target)
-        # 勾选的页面全部可见，未勾选的页面一个都不可见
-        assert granted_pages <= keys
+        # T05：矩阵授权再按角色收窄 —— 勾选页中属于该角色的部分可见，
+        # admin 专属页（如控制台）不会漏给普通用户；未勾选的页面一个都不可见。
+        role_keys = _get_role_default_menu_keys(user.role)
+        expected_pages = {k for k in granted_pages if k in role_keys or k == "dashboard"}
+        assert expected_pages <= keys
         assert not keys & ungranted_pages
-        # 组装后的导航结构里确实带着勾选的页面（工作台不进 sections，单独恒定可见）
-        assert (granted_pages - {"dashboard"}) <= set(
+        assert not (keys - granted_pages - {"dashboard"} - {
+            t["key"]
+            for e in MENU_DEFINITIONS
+            for t in (e.get("tabs") or []) + (e.get("children") or [])
+        })
+        # 组装后的导航结构里确实带着该角色可见的勾选页面（工作台恒定可见）
+        assert (expected_pages - {"dashboard"}) <= set(
             _visible_keys(_build_sections(keys))
         )
         assert user.allowed_menus is None

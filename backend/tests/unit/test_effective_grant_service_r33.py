@@ -225,11 +225,20 @@ class TestCache:
 
 class TestMenusIntegration:
     def test_matrix_active_uses_grants_only(self, db, monkeypatch):
-        """矩阵生效时不再强制并入公开模块（上级"收掉"的意图必须生效）。"""
+        """矩阵生效时不再强制并入公开模块（上级"收掉"的意图必须生效）。
+
+        T05 起组 key 被勾选会按角色展开 children（与 _filter_entry 组语义一致），
+        故 funds 组的全角色子项也可见；断言改为"只来自矩阵 + 工作台"。
+        """
         matrix = GrantMatrix(active=True, levels={"projects": "edit", "funds": "view"})
         monkeypatch.setattr(egs, "get_grant_matrix", lambda _db, _u: matrix)
         keys = menus._get_user_accessible_menu_keys(_user(), MagicMock())
-        assert keys == {"projects", "funds", "dashboard"}
+        funds_children = {
+            c["key"]
+            for e in menus.MENU_DEFINITIONS if e["key"] == "funds"
+            for c in e.get("children") or []
+        }
+        assert keys == {"projects", "funds", "dashboard"} | funds_children
         assert "policies" not in keys
 
     def test_preparsed_matrix_skips_resolver_and_is_used(self, db, monkeypatch):
@@ -253,3 +262,85 @@ class TestMenusIntegration:
         keys = menus._get_user_accessible_menu_keys(_user(), MagicMock())
         assert "policies" in keys
         assert len(keys) >= len(menus._PUBLIC_ACCESS_KEYS)
+
+
+class TestMatrixRoleNarrowing:
+    """T05：矩阵授权再受角色边界约束。
+
+    矩阵是上级对**单位**的授权上限；单位内普通用户不应因此看到管理员专属页面
+    （接口层本就有角色校验，菜单却全量下发 → “看得见点不动”的假入口）。
+    收窄沿用菜单定义的 roles（与角色默认同一口径），保留三条既有语义：
+    工作台恒定可见、控制台整页勾选展开全部子页签、矩阵激活不并入公开页。
+    """
+
+    # 一个覆盖三种形态的矩阵：普通页面 + 分组父 key + 控制台整页 key
+    LEVELS = {
+        "projects": "edit",          # 全角色页面
+        "funds": "view",             # group（roles=None），children 全角色
+        "system-console-org": "edit",  # console（admin/super_admin）
+        "audit": "view",             # admin/super_admin 独立页面
+        "data-logs": "view",         # admin/super_admin 历史兼容 key
+    }
+
+    def _keys(self, role, allowed=None):
+        matrix = GrantMatrix(active=True, levels=dict(self.LEVELS))
+        return menus._get_user_accessible_menu_keys(
+            _user(role=role, allowed=allowed), MagicMock(), matrix=matrix
+        )
+
+    def test_normal_user_loses_admin_only_pages(self):
+        keys = self._keys("user")
+        assert {"projects", "funds", "dashboard"} <= keys
+        assert "audit" not in keys
+        assert "data-logs" not in keys
+        assert "system-console-org" not in keys
+        # 控制台的 admin 子页签也不得借整页勾选漏给普通用户
+        assert "users-orgs" not in keys and "roles" not in keys
+
+    def test_viewer_narrowed_same_as_user(self):
+        assert self._keys("viewer") == self._keys("user")
+
+    def test_admin_keeps_granted_admin_pages(self):
+        keys = self._keys("admin")
+        assert {"audit", "data-logs", "system-console-org"} <= keys
+        # 控制台整页勾选 → 全部子页签可见（既有语义不变）
+        assert "users-orgs" in keys and "roles" in keys
+
+    def test_legacy_role_values_normalized(self):
+        # manager/approval_leader → admin；operator → user（normalize_role 口径）
+        assert self._keys("manager") == self._keys("admin")
+        assert self._keys("operator") == self._keys("user")
+
+    def test_group_children_follow_own_roles(self):
+        # 分组父 key 被勾选时，children 按各自 roles 收窄（与 _filter_entry 的组语义一致）。
+        # approval 组本身是 admin/super_admin：普通用户连组带 admin 子项都看不到，
+        # 但 roles=None 的 approval-my（我的申请）仍应可见。
+        matrix = GrantMatrix(active=True, levels={"approval": "edit"})
+        user_keys = menus._get_user_accessible_menu_keys(_user(), MagicMock(), matrix=matrix)
+        admin_keys = menus._get_user_accessible_menu_keys(_user(role="admin"), MagicMock(), matrix=matrix)
+        assert "approval" not in user_keys
+        assert "approval-overview" not in user_keys
+        assert "approval-my" in user_keys
+        entry = next(e for e in menus.MENU_DEFINITIONS if e["key"] == "approval")
+        child_keys = {c["key"] for c in entry.get("children") or []}
+        assert "approval" in admin_keys and child_keys <= admin_keys
+
+    def test_console_all_roles_tab_survives_for_user(self):
+        # about/feedback/help 等 roles=None 的子页签：普通用户勾整页时仍可见
+        matrix = GrantMatrix(active=True, levels={"system-console-about": "view"})
+        keys = menus._get_user_accessible_menu_keys(_user(), MagicMock(), matrix=matrix)
+        assert "help" in keys or "about" in keys
+        assert "admin-dashboard" not in keys
+
+    def test_dashboard_constant_even_if_role_filtered(self):
+        matrix = GrantMatrix(active=True, levels={"audit": "view"})
+        keys = menus._get_user_accessible_menu_keys(_user(), MagicMock(), matrix=matrix)
+        assert keys == {"dashboard"}
+
+    def test_user_allowed_narrowing_still_applies_after_role_filter(self):
+        keys = self._keys("admin", allowed=["projects"])
+        assert keys == {"projects", "dashboard"}
+
+    def test_public_keys_not_merged_in_matrix_mode(self):
+        keys = self._keys("user")
+        assert "policies" not in keys
