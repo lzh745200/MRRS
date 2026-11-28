@@ -73,6 +73,9 @@ export default defineConfig({
         // 绝对路径中的空格若写成 %20，SQLAlchemy 不会解码，会在 C:\ 下创建
         // 名为 "military-Rural%20Revitalization-system" 的幻影目录并新建空库。
         DATABASE_URL: 'sqlite:///./data/e2e_test.db',
+        // E2E 串行跑 199 个用例，多个流程都走真实登录；限流（5 次/分钟/IP）
+        // 会让后段用例稳定 429。限流本身由后端单测覆盖，这里只关闭 E2E 实例。
+        RATE_LIMIT_ENABLED: 'false',
       },
     },
     {

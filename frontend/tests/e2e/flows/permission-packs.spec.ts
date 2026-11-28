@@ -147,10 +147,10 @@ test('权限包绑定用户后，菜单按包解析（包内可见、包外不�
     // 改密二次确认 → 成功后强制回登录页，必须用新口令重新登录
     await page.locator('.el-message-box__btns .el-button--primary').click()
     await page.waitForURL(/\/login/, { timeout: 15000 })
-    await page
-      .locator('input[placeholder*="用户名"], input[type="text"]')
-      .first()
-      .fill(USERNAME)
+    // window.location.href 的整页跳转在 URL 变化后仍会重载，必须等登录表单就绪再填，
+    // 否则输入会被重载清空（表现为回到 /login 且输入框为空）。
+    await expect(page.locator('input[placeholder="请输入用户名"]')).toBeVisible({ timeout: 15000 })
+    await page.locator('input[placeholder="请输入用户名"]').fill(USERNAME)
     await page.locator('input[type="password"]').fill(PACK_USER_NEW_PASSWORD)
     await page.locator('button[type="submit"]').click()
   }
