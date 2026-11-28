@@ -19,7 +19,7 @@
   或通过账号开通包离线导入；前端不再展示注册入口，通行码仅用于机器码绑定。
 - 🧩 **RBAC 边界澄清**：RBAC 角色仅服务权限包，不影响 `users.role`；权限包导入默认不写账号级
   角色/数据范围/权限，管理员可显式 `apply_legacy_privileges=true` 兼容恢复。
-- 🧪 后端 **16,193** / 前端 **351 files / 7,607 tests** / Electron **23** 全绿。
+- 🧪 后端 **16,206** / 前端 **351 files / 7,607 tests** / Electron **23** 全绿。
 
 ## 历史亮点（v1.18.65）
 
@@ -379,7 +379,7 @@
 
 | 指标 | 结果 |
 |------|------|
-| 后端测试 | **16,193 用例**, 0 skipped（本地 12 段全量；CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
+| 后端测试 | **16,206 用例**, 0 skipped（本地 12 段全量；CI 4 分片矩阵为最终口径；含行+分支覆盖率 100% 门禁） |
 | 前端测试 | **7,607 passed**（351 个 `.test.ts`），0 失败 |
 | 后端覆盖率 | **100%**（可覆盖集口径，门禁 `backend/.coveragerc` fail_under=100） |
 | 分支覆盖 | **100%**（`.coveragerc` `branch=True` 严格门禁 + 棘轮基线 100.0） |
@@ -400,7 +400,7 @@
 | 深审台账 | OCR 2026-09-17 全量审查的 358 条 critical/high 已逐条复核（LIVE 337 条），本轮处置与遗留见 `deliverables/ocr-findings-ledger-2026-09-30.md` |
 | 真实 HTTP 探测 | 11 个探针脚本（`backend/tests/probe/`，覆盖认证/帮扶村/学校/经费/项目/政策/组织/报表/备份/审批/数据包），**与运行时刻/时区无关**（v1.12.11 起 `probe_r10` 的 `next_send_at` 断言按本地语义解析带偏移的 ISO） |
 
-> **上次全量验证**: 2026-11-28（v1.18.67）— 后端 **16,193** 用例（12 段串行 **16,193 passed / 0 skipped**；
+> **上次全量验证**: 2026-11-28（v1.18.67）— 后端 **16,206** 用例（12 段串行 **16,206 passed / 0 skipped**；
 > CI 4 分片矩阵为最终口径）、前端 **351 个 `.test.ts` / 7,607 用例**、
 > Electron 外壳 **23 用例**；质量门禁脚本 **42/42 PASS**。
 > 覆盖率语句 **100.00%**（50,046/50,046）；分支 **100.00%**（12,784/12,784，0 partial）。
@@ -490,7 +490,7 @@ cd frontend && npm install && npm run dev
 
 | 测试类型 | 工具 | 数量 | 覆盖范围 |
 |---------|------|------|---------|
-| 后端测试（全量） | pytest | 16,193（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
+| 后端测试（全量） | pytest | 16,206（0 skipped；行/分支覆盖率 100%） | API/Service/Core/Model/Utils 全覆盖 |
 | 后端集成测试 | pytest | 8 套 | Auth/Users/Policies/Search/Audit/API |
 | 后端安全测试 | pytest | 3 套 | Data Isolation/Audit/Retry |
 | 前端单元测试 | Vitest | 7,607（351 文件） | API/Store/Component/Composable/Utils |

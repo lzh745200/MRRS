@@ -145,3 +145,111 @@ def test_open_still_rejects_tampered_header_when_using_embedded_key() -> None:
     raw[-1] ^= 0xFF
     with pytest.raises(Exception):
         open_package(raw, password="Passw0rd-123", public_key_hex=None)
+
+class TestSigningKeyEdgeBranches:
+    """补齐 account_package_keys 的防御分支（CI 100% 覆盖率门禁）。"""
+
+    def test_invalid_private_key_parse_is_wrapped(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        def _boom(_value):
+            raise ValueError("boom")
+
+        monkeypatch.setattr(keys, "derive_public_key", _boom)
+        monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_SIGNING_KEY", "a" * 64)
+        with pytest.raises(AccountPackageKeyError, match="无法解析"):
+            keys.local_private_key(create=True)
+
+    def test_trusted_keys_ignore_corrupt_json(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        secrets_file.write_text("{not-json", encoding="utf-8")
+        monkeypatch.setattr(keys.runtime_secrets, "get_secret", lambda _name: "{not-json")
+        assert keys._runtime_trusted_keys() == []
+
+    def test_trusted_keys_ignore_non_list_json(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        monkeypatch.setattr(keys.runtime_secrets, "get_secret", lambda _name: '{"a": 1}')
+        assert keys._runtime_trusted_keys() == []
+
+    def test_trusted_keys_skip_invalid_entries(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        monkeypatch.setattr(keys.runtime_secrets, "get_secret", lambda _name: '["bad"]')
+        assert keys._runtime_trusted_keys() == []
+
+    def test_generate_persist_failure_is_wrapped(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        def _boom(**_kwargs):
+            raise OSError("readonly")
+
+        monkeypatch.setattr(keys.runtime_secrets, "get_or_create_secret", _boom)
+        with pytest.raises(AccountPackageKeyError, match="写入权限"):
+            keys.local_private_key(create=True)
+
+    def test_signing_key_source_none(self, secrets_file):
+        import app.core.account_package_keys as keys
+
+        assert keys.signing_key_source() == "none"
+
+    def test_env_pubkey_invalid_is_skipped(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_PUBKEY", "bad")
+        assert keys.trusted_public_keys() == []
+
+    def test_verification_extra_invalid_is_skipped(self, secrets_file):
+        import app.core.account_package_keys as keys
+
+        _, public = generate_keypair()
+        assert public in keys.verification_public_keys(["bad", public])
+
+    def test_remove_empty_fingerprint_returns_false(self, secrets_file):
+        assert remove_trusted_public_key("") is False
+
+    def test_write_trusted_keys_failure_is_wrapped(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        def _boom(*_args, **_kwargs):
+            raise OSError("readonly")
+
+        monkeypatch.setattr(keys.runtime_secrets, "set_secret", _boom)
+        with pytest.raises(AccountPackageKeyError, match="写入权限"):
+            keys.add_trusted_public_key(generate_keypair()[1])
+
+    def test_signing_key_info_reports_state_and_source(self, secrets_file, monkeypatch):
+        import app.core.account_package_keys as keys
+
+        assert keys.signing_key_info(create=False) == {
+            "public_key": "",
+            "fingerprint": "",
+            "source": "none",
+            "ready": False,
+        }
+        private_hex = local_private_key(create=True)
+        public_hex = derive_public_key(private_hex)
+        info = keys.signing_key_info(create=False)
+        assert info["ready"] is True
+        assert info["public_key"] == public_hex
+        assert info["fingerprint"] == key_fingerprint(public_hex)
+        assert info["source"] == "runtime"
+
+        monkeypatch.setattr(settings, "ACCOUNT_PACKAGE_SIGNING_KEY", private_hex)
+        assert keys.signing_key_info(create=False)["source"] == "environment"
+
+    def test_add_trusted_public_key_is_idempotent(self, secrets_file):
+        import app.core.account_package_keys as keys
+
+        _, public_hex = generate_keypair()
+        keys.add_trusted_public_key(public_hex)
+        keys.add_trusted_public_key(public_hex)
+        assert keys.trusted_key_info() == [
+            {"public_key": public_hex, "fingerprint": key_fingerprint(public_hex)}
+        ]
+
+    def test_dedupe_skips_blank_entries(self):
+        import app.core.account_package_keys as keys
+
+        assert keys._dedupe(["", "A", "A", "B"]) == ["A", "B"]
