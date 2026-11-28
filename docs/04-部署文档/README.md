@@ -103,7 +103,7 @@
 - 安装包与校验值以 GitHub Release `v1.18.65` 页面为准；升级前请先备份
   `backend/data/rural_revitalization.db` 与上传目录。
 
-## 上一版发布物（v1.18.34，2026-11-02）
+## 历史发布物（v1.18.34，2026-11-02）
 
 GitHub Release [v1.18.34](https://github.com/lzh745200/MRRS/releases/tag/v1.18.34) 产出（Windows x64 + 麒麟 ARM64）：
 
